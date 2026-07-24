@@ -1,0 +1,19 @@
+{
+  "assets_copied": false,
+  "case_count": 83,
+  "case_ids_sha256": "d02c69e3fd7c2fc96001201ffdaf422cdf2c73363a10641e9f1cee9babe9262e",
+  "removed_case_fields": [
+    "input_views",
+    "physical_parameters",
+    "text",
+    "view_a_split"
+  ],
+  "renamed_fields": {
+    "physical_parameters": "physics"
+  },
+  "schema_version": "2.0",
+  "source_assets_mutated": false,
+  "source_manifest": "/root/Steven/physics_video_benchmark/data/manifests/cases.jsonl",
+  "source_view_a": "/root/Steven/physics_video_benchmark/data/splits/view_a.json",
+  "source_view_b": "/root/Steven/physics_video_benchmark/data/splits/view_b_seed42_g5.json"
+}

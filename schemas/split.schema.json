@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Frozen benchmark split",
+  "type": "object",
+  "required": ["schema_version", "view", "case_set_sha256", "scenes"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "view": {"enum": ["A", "B"]},
+    "case_set_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "seed": {"type": "integer"},
+    "group_count": {"type": "integer", "minimum": 1},
+    "scenes": {"type": "object"}
+  }
+}

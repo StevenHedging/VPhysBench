@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "weights": {"common_sense": 0.25, "prediction": 0.45, "visual_judgment": 0.30},
+  "aggregation_policy": "require_all_applicable",
+  "plugins": {
+    "common_sense": {"type": "placeholder_vlm_judge", "enabled": false},
+    "prediction": {"type": "placeholder_scene_segmenter", "enabled": false},
+    "visual_judgment": {"type": "placeholder_perceptual_vlm", "enabled": false}
+  }
+}

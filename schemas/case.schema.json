@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://physbench.local/schemas/case.schema.json",
+  "title": "Physics video benchmark case",
+  "type": "object",
+  "required": ["schema_version", "case_id", "scene_id", "view_a_split", "physical_parameters", "appearance", "text", "assets", "has_real_reference_video", "ood", "provenance", "input_views"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "case_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]+$"},
+    "scene_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]+$"},
+    "view_a_split": {"enum": ["train", "test_id", "test_ood1"]},
+    "physical_parameters": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/quantity"}
+    },
+    "appearance": {"type": "object"},
+    "temporal": {
+      "type": "object",
+      "required": ["encoded_to_physical_speed", "time_scale", "annotation_source"],
+      "properties": {
+        "encoded_to_physical_speed": {"type": "number", "exclusiveMinimum": 0},
+        "time_scale": {"enum": ["real_time", "slow_motion", "fast_motion", "unknown"]},
+        "annotation_source": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "alignment": {
+      "type": "object",
+      "required": ["version", "method", "source_start_frame", "source_start_time_s_approx", "review_status", "audit_record", "source_frame_zero_exception"],
+      "properties": {
+        "version": {"type": "string", "minLength": 1},
+        "method": {"const": "decoded_source_frame_trim"},
+        "source_start_frame": {"type": "integer", "minimum": 0},
+        "source_start_time_s_approx": {"type": "number", "minimum": 0},
+        "review_status": {"const": "visually_verified"},
+        "audit_record": {"type": "string", "minLength": 1},
+        "source_frame_zero_exception": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "text": {
+      "type": "object",
+      "required": ["description"],
+      "properties": {"description": {"type": "string"}, "prompt": {"type": "string"}}
+    },
+    "assets": {
+      "type": "object",
+      "required": ["first_frame", "reference_video", "physics_reference_video"],
+      "properties": {
+        "first_frame": {"type": ["string", "null"]},
+        "reference_video": {"type": ["string", "null"]},
+        "physics_reference_video": {"type": ["string", "null"]},
+        "source_video": {"type": ["string", "null"]},
+        "subject_mask": {"type": ["string", "null"]}
+      }
+    },
+    "has_real_reference_video": {"type": "boolean"},
+    "ood": {
+      "type": "object",
+      "required": ["level", "factors"],
+      "properties": {
+        "level": {"enum": ["id", "ood1"]},
+        "factors": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["source_kind", "parent_case_id"],
+      "properties": {
+        "source_kind": {"enum": ["real_capture", "synthetic_first_frame"]},
+        "parent_case_id": {"type": ["string", "null"]},
+        "generator": {"type": ["object", "null"]}
+      }
+    },
+    "input_views": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"type": "object"}
+    }
+  },
+  "$defs": {
+    "quantity": {
+      "type": "object",
+      "required": ["value", "unit", "annotated"],
+      "properties": {
+        "value": {"type": ["number", "string", "null"]},
+        "unit": {"type": "string"},
+        "annotated": {"type": "boolean"}
+      }
+    }
+  },
+  "additionalProperties": false
+}

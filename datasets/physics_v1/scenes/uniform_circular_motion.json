@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "scene_id": "uniform_circular_motion",
+  "display_name": "匀速圆周运动",
+  "id_parameters": ["angular_velocity"],
+  "unannotated_parameters": ["initial_position"],
+  "ood1_factors": ["background", "disk_color", "moving_object"],
+  "constraints": ["Initial position is intentionally not annotated"],
+  "metric_spec": {
+    "common_sense_checks": ["closed circular path", "stable rotation direction", "approximately uniform angular speed"],
+    "prediction_subjects": ["moving_object", "rotation_center"],
+    "prediction_quantities": ["angular trajectory", "angular velocity", "radius stability"],
+    "visual_attributes": ["disk color", "object identity", "center stability"]
+  }
+}

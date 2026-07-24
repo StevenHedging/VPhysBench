@@ -1,0 +1,27 @@
+{
+  "case_set_sha256": "a303713ba53630939e587cbd6f56a3722c9cd91bec6a2e9ff014f9900f4dd37a",
+  "group_count": 2,
+  "scenes": {
+    "free_fall": {
+      "group_1": [
+        "fall_ood_mat_001",
+        "fall_id_001"
+      ],
+      "group_2": [
+        "fall_train_001"
+      ]
+    },
+    "pendulum": {
+      "group_1": [
+        "pend_ood_bg_001",
+        "pend_train_001"
+      ],
+      "group_2": [
+        "pend_id_001"
+      ]
+    }
+  },
+  "schema_version": "1.0",
+  "seed": 42,
+  "view": "B"
+}

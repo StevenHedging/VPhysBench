@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Per-case evaluation result",
+  "type": "object",
+  "required": ["case_id", "metrics", "final_score", "metric_coverage"],
+  "properties": {
+    "case_id": {"type": "string"},
+    "metrics": {"type": "object"},
+    "final_score": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "metric_coverage": {"type": "number", "minimum": 0, "maximum": 1}
+  }
+}

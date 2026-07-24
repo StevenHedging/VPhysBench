@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Physics scene definition",
+  "type": "object",
+  "required": ["schema_version", "scene_id", "display_name", "id_parameters", "ood1_factors", "metric_spec"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "scene_id": {"type": "string"},
+    "display_name": {"type": "string"},
+    "id_parameters": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "unannotated_parameters": {"type": "array", "items": {"type": "string"}},
+    "ood1_factors": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "constraints": {"type": "array", "items": {"type": "string"}},
+    "metric_spec": {"type": "object"}
+  }
+}

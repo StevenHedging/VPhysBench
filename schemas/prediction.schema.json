@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Prediction record",
+  "type": "object",
+  "required": ["job_id", "case_id", "baseline_id", "prompt_profile_id", "evaluation_partition", "status", "video_path", "manual_scores"],
+  "properties": {
+    "job_id": {"type": "string"},
+    "case_id": {"type": "string"},
+    "baseline_id": {"type": "string"},
+    "prompt_profile_id": {"enum": ["generic", "physics_natural"]},
+    "evaluation_partition": {"type": "string"},
+    "status": {"enum": ["planned", "staged", "complete", "failed", "placeholder"]},
+    "video_path": {"type": ["string", "null"]},
+    "evaluation_reference_video": {"type": ["string", "null"]},
+    "visual_reference_video": {"type": ["string", "null"]},
+    "manual_scores": {
+      "type": "object",
+      "properties": {
+        "common_sense": {"type": "number", "minimum": 0, "maximum": 1},
+        "prediction": {"type": "number", "minimum": 0, "maximum": 1},
+        "visual_judgment": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    }
+  }
+}

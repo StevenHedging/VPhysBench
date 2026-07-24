@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Physics benchmark task",
+  "type": "object",
+  "required": ["schema_version", "task_id", "mode", "view", "selection", "ood2"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "task_id": {"type": "string"},
+    "mode": {"enum": ["finetune_and_eval", "zero_shot_eval"]},
+    "view": {"enum": ["A", "B"]},
+    "selection": {"type": "object"},
+    "ood2": {"const": {"enabled": false}}
+  }
+}

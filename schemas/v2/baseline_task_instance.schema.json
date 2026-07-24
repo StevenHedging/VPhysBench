@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sealed Baseline Task Instance",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "instance_id",
+    "instance_digest",
+    "identity",
+    "semantics",
+    "canonical_plan",
+    "source",
+    "adaptations",
+    "training",
+    "inference",
+    "execution_graph",
+    "cache_bindings",
+    "baseline_payload"
+  ],
+  "properties": {
+    "schema_version": {"const": "2.1"},
+    "instance_id": {"type": "string", "minLength": 1},
+    "instance_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "identity": {
+      "type": "object",
+      "required": [
+        "dataset",
+        "task",
+        "baseline",
+        "task_builder",
+        "data_adapter",
+        "canonical_plan_digest"
+      ]
+    },
+    "semantics": {
+      "type": "object",
+      "required": ["family", "conditioning", "scene_ids"]
+    },
+    "canonical_plan": {"type": "object"},
+    "source": {
+      "type": "object",
+      "required": ["asset_root", "cases"]
+    },
+    "adaptations": {"type": "array"},
+    "training": {"type": ["object", "null"]},
+    "inference": {
+      "type": "object",
+      "required": ["predictor", "jobs"]
+    },
+    "execution_graph": {
+      "type": "object",
+      "required": ["operations"]
+    },
+    "cache_bindings": {"type": "array"},
+    "baseline_payload": {
+      "description": "Opaque payload interpreted only by the target Baseline",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

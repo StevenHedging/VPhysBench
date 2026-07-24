@@ -1,0 +1,175 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "physics_natural",
+  "display_name": "Natural-language physical conditioning",
+  "language": "en",
+  "includes_physical_parameters": true,
+  "scenes": {
+    "pendulum": {
+      "base_prompt": "A fixed-camera real-world laboratory video of a simple pendulum released from rest at the first frame. The support and camera remain stationary, and the bob swings naturally under gravity.",
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {
+          "name": "string_length",
+          "required": true,
+          "expected_unit": "m",
+          "precision": 3,
+          "template": "the string length is {value} meters"
+        },
+        {
+          "name": "bob_radius",
+          "required": true,
+          "expected_unit": "m",
+          "precision": 3,
+          "template": "the spherical bob radius is {value} meters"
+        },
+        {
+          "name": "pendulum_length",
+          "required": false,
+          "expected_unit": "m",
+          "precision": 3,
+          "template": "the pivot-to-bob-center pendulum length is {value} meters"
+        },
+        {
+          "name": "initial_angle",
+          "required": true,
+          "expected_unit": "deg",
+          "precision": 1,
+          "template": "the initial release angle is {value} degrees"
+        }
+      ]
+    },
+    "free_fall": {
+      "base_prompt": "A fixed-camera real-world laboratory video of a spherical ball released from rest in free fall. The camera remains stationary, and the ball accelerates vertically downward under gravity at the true physical time scale.",
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {
+          "name": "initial_height",
+          "required": true,
+          "expected_unit": "m",
+          "precision": 2,
+          "template": "the initial vertical drop height is {value} meters"
+        },
+        {
+          "name": "ball_radius",
+          "required": true,
+          "expected_unit": "m",
+          "precision": 4,
+          "template": "the ball radius is {value} meters"
+        },
+        {
+          "name": "ball_mass",
+          "required": false,
+          "expected_unit": "kg",
+          "precision": 5,
+          "template": "the ball mass is {value} kilograms"
+        },
+        {
+          "name": "initial_velocity",
+          "required": false,
+          "expected_unit": "m/s",
+          "precision": 3,
+          "template": "the initial vertical velocity is {value} meters per second"
+        }
+      ]
+    },
+    "collision_1d": {
+      "base_prompt": "A fixed-camera real-world laboratory video of a one-dimensional central collision among three aligned balls. At frame 0, all three balls are visible, with ball 1 on the left. Ball 1 moves toward initially stationary balls 2 and 3. The camera and track remain stationary, and the collision unfolds at the true physical time scale.",
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {
+          "name": "striker_initial_velocity",
+          "required": true,
+          "expected_unit": "m/s",
+          "precision": 4,
+          "template": "the striker initial velocity is {value} meters per second"
+        },
+        {
+          "name": "ball_1_mass",
+          "required": false,
+          "expected_unit": "kg",
+          "precision": 5,
+          "template": "ball 1 mass is {value} kilograms"
+        },
+        {
+          "name": "ball_1_radius",
+          "required": false,
+          "expected_unit": "m",
+          "precision": 5,
+          "template": "ball 1 radius is {value} meters"
+        },
+        {
+          "name": "ball_2_mass",
+          "required": false,
+          "expected_unit": "kg",
+          "precision": 5,
+          "template": "ball 2 mass is {value} kilograms"
+        },
+        {
+          "name": "ball_2_radius",
+          "required": false,
+          "expected_unit": "m",
+          "precision": 5,
+          "template": "ball 2 radius is {value} meters"
+        },
+        {
+          "name": "ball_3_mass",
+          "required": false,
+          "expected_unit": "kg",
+          "precision": 5,
+          "template": "ball 3 mass is {value} kilograms"
+        },
+        {
+          "name": "ball_3_radius",
+          "required": false,
+          "expected_unit": "m",
+          "precision": 5,
+          "template": "ball 3 radius is {value} meters"
+        }
+      ]
+    },
+    "decelerated_slide": {
+      "base_prompt": "A fixed-camera real-world laboratory video of a block sliding along a horizontal surface and slowing down due to kinetic friction. The camera and surface remain stationary, and the motion unfolds at the true physical time scale.",
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {
+          "name": "initial_velocity",
+          "required": true,
+          "expected_unit": "m/s",
+          "precision": 3,
+          "template": "the block initial velocity is {value} meters per second"
+        },
+        {
+          "name": "friction_coefficient",
+          "required": true,
+          "expected_unit": "1",
+          "precision": 3,
+          "template": "the kinetic friction coefficient is {value}"
+        }
+      ]
+    },
+    "uniform_circular_motion": {
+      "base_prompt": "A fixed-camera real-world laboratory video of an object undergoing uniform circular motion around a fixed center. The apparatus and camera remain stationary, and the rotation unfolds at the true physical time scale.",
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {
+          "name": "angular_velocity",
+          "required": true,
+          "expected_unit": "rad/s",
+          "precision": 3,
+          "template": "the angular velocity is {value} radians per second"
+        }
+      ]
+    }
+  }
+}

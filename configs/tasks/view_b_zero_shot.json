@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "task_id": "official_view_b_zero_shot_v1",
+  "mode": "zero_shot_eval",
+  "view": "B",
+  "selection": {
+    "scene_ids": "all",
+    "groups": "all",
+    "case_ids": []
+  },
+  "prompts": {
+    "eval_profiles": ["generic", "physics_natural"]
+  },
+  "ood2": {"enabled": false},
+  "seeds": [42]
+}

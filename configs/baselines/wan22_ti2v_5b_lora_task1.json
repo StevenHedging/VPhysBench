@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "wan22_ti2v_5b_lora_task1",
+  "adapter": "wan22_lora",
+  "input_view": "auto_i2v_from_case_or_video",
+  "capabilities": {"train": false, "finetune": true, "generate": true},
+  "supported_scenes": "all",
+  "require_image_condition": true,
+  "require_lora_checkpoint": true,
+  "initial_lora_checkpoint": null,
+  "runtime": {
+    "project_root": "/root/Steven/wan22_pendulum_pipeline",
+    "python": "/root/miniconda3/envs/dlp/bin/python",
+    "model_base": "/root/Steven/wan22_pendulum_pipeline/models",
+    "cuda_visible_devices": "0,1",
+    "diffsynth_commit": "fb337fbb90945ff829de69dbd44ded618f73e889"
+  },
+  "media_adapter": {
+    "width": 480,
+    "height": 832,
+    "fps": 24,
+    "max_frames": 121,
+    "min_frames": 5,
+    "spatial_policy": "aspect_preserving_fit_and_pad",
+    "temporal_policy": "restore_case_physical_time_then_timestamp_resample_without_loop",
+    "pad_color": "black"
+  },
+  "lora": {
+    "algorithm": "FlowMatch SFT + LoRA",
+    "rank": 32,
+    "target_modules": "q,k,v,o,ffn.0,ffn.2",
+    "learning_rate": 0.0001,
+    "dataset_repeat": 10,
+    "num_epochs": 5,
+    "gradient_accumulation": 1,
+    "num_workers": 4,
+    "seed": 42,
+    "precision": "bf16",
+    "gradient_checkpointing": true
+  },
+  "generation": {
+    "num_inference_steps": 50,
+    "cfg_scale": 5.0,
+    "lora_alpha": 1.0,
+    "tiled": true,
+    "quality": 5,
+    "negative_prompt": "camera shake, changing apparatus identity, discontinuous motion, flicker, blur, text, watermark, low quality"
+  },
+  "description": "Task-1 baseline: jointly finetune a new WAN2.2-TI2V-5B LoRA on the selected View-A train cases, then evaluate ID and OOD1."
+}

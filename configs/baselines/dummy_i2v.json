@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "dummy_i2v",
+  "adapter": "dummy",
+  "input_view": "i2v",
+  "capabilities": {"train": false, "finetune": true, "generate": true},
+  "description": "No-model placeholder used for contract and orchestration tests"
+}

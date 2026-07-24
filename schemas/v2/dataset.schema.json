@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Physics video Dataset bundle",
+  "type": "object",
+  "required": ["schema_version", "dataset_id", "cases", "asset_root", "scene_catalog", "views"],
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "dataset_id": {"type": "string"},
+    "cases": {"type": "string"},
+    "asset_root": {"type": "string"},
+    "scene_catalog": {"type": "string"},
+    "views": {
+      "type": "object",
+      "required": ["view_a", "view_b"],
+      "properties": {
+        "view_a": {"type": "string"},
+        "view_b": {"type": "string"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

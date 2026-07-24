@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "replace_with_model_name",
+  "adapter": "command",
+  "input_view": "i2v",
+  "capabilities": {"train": false, "finetune": true, "generate": true},
+  "commands": {
+    "finetune": ["python", "path/to/train.py", "--job", "{job_json}"],
+    "generate": ["python", "path/to/infer.py", "--job", "{job_json}"]
+  }
+}
