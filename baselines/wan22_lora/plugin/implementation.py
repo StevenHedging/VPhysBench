@@ -6,18 +6,24 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from ..baseline_api.interfaces import BaselinePlugin, DataAdapter, TaskBuilder
-from ..baselines.wan22_lora import Wan22LoraAdapter
-from ..baselines.wan22_media import Wan22MediaAdapter
-from ..domain import (
+from physbench.baseline_api.interfaces import BaselinePlugin, DataAdapter, TaskBuilder
+from physbench.baselines.wan22_lora import Wan22LoraAdapter
+from physbench.baselines.wan22_media import Wan22MediaAdapter
+from physbench.domain import (
     AtomicPlan,
     BaselineBundle,
     BaselineTaskInstance,
     DatasetSnapshot,
     TaskSpec,
 )
-from ..io import canonical_sha256, load_jsonl, write_json, write_jsonl
-from ..prompts import PromptRegistry
+from physbench.io import (
+    canonical_sha256,
+    load_jsonl,
+    sha256_file,
+    write_json,
+    write_jsonl,
+)
+from physbench.prompts import PromptRegistry
 
 
 class Wan22DataAdapter(DataAdapter):
@@ -25,8 +31,14 @@ class Wan22DataAdapter(DataAdapter):
 
     REQUIRED_STAGES = {"spatial", "temporal", "paradigm", "text", "physics"}
 
-    def __init__(self, config: dict[str, Any], bundle_root: Path):
+    def __init__(
+        self,
+        config: dict[str, Any],
+        bundle_root: Path,
+        implementation_digest: str,
+    ):
         self.config = config
+        self.implementation_digest = implementation_digest
         missing = self.REQUIRED_STAGES - set(config)
         if missing:
             raise ValueError(f"WAN data adapter missing stages: {sorted(missing)}")
@@ -42,16 +54,27 @@ class Wan22DataAdapter(DataAdapter):
     def stage_fingerprints(self) -> dict[str, str]:
         profiles = self.registry.snapshot(["generic", "physics"])["profiles"]
         return {
-            "spatial": canonical_sha256(self.config["spatial"]),
-            "temporal": canonical_sha256(self.config["temporal"]),
-            "paradigm": canonical_sha256(self.config["paradigm"]),
+            "spatial": canonical_sha256({
+                "config": self.config["spatial"],
+                "implementation": self.implementation_digest,
+            }),
+            "temporal": canonical_sha256({
+                "config": self.config["temporal"],
+                "implementation": self.implementation_digest,
+            }),
+            "paradigm": canonical_sha256({
+                "config": self.config["paradigm"],
+                "implementation": self.implementation_digest,
+            }),
             "text": canonical_sha256({
                 "config": self.config["text"],
                 "generic_profile": profiles["generic"],
+                "implementation": self.implementation_digest,
             }),
             "physics": canonical_sha256({
                 "config": self.config["physics"],
                 "physics_profile": profiles["physics"],
+                "implementation": self.implementation_digest,
             }),
         }
 
@@ -231,11 +254,62 @@ class Wan22TaskBuilder(TaskBuilder):
 
     def __init__(self, bundle: BaselineBundle):
         self.bundle = bundle
+        self._dependency_fingerprints = (
+            self._compute_dependency_fingerprints()
+        )
         components = bundle.value["components"]
         builder_config = components["task_builder"]["config"]
+        implementation_digest = canonical_sha256({
+            name: digest
+            for name, digest in self.dependency_fingerprints.items()
+            if name in {
+                "plugin/implementation.py",
+                "src/physbench/baselines/wan22_lora.py",
+                "src/physbench/baselines/wan22_media.py",
+            }
+        })
         self.data_adapter = Wan22DataAdapter(
-            builder_config["data_adapter"], bundle.root
+            builder_config["data_adapter"],
+            bundle.root,
+            implementation_digest,
         )
+
+    @staticmethod
+    def _compute_dependency_fingerprints() -> dict[str, str]:
+        repository_root = Path(__file__).resolve().parents[3]
+        paths = {
+            "plugin/implementation.py": Path(__file__),
+            "src/physbench/baselines/wan22_lora.py": (
+                repository_root / "src" / "physbench" / "baselines"
+                / "wan22_lora.py"
+            ),
+            "src/physbench/baselines/wan22_media.py": (
+                repository_root / "src" / "physbench" / "baselines"
+                / "wan22_media.py"
+            ),
+            "scripts/wan22_generate.py": (
+                repository_root / "scripts" / "wan22_generate.py"
+            ),
+            "scripts/wan22_generate_batch.py": (
+                repository_root / "scripts" / "wan22_generate_batch.py"
+            ),
+            "scripts/plot_wan22_loss.py": (
+                repository_root / "scripts" / "plot_wan22_loss.py"
+            ),
+        }
+        missing = [str(path) for path in paths.values() if not path.is_file()]
+        if missing:
+            raise FileNotFoundError(
+                f"WAN Baseline runtime dependencies missing: {missing}"
+            )
+        return {
+            name: sha256_file(path)
+            for name, path in sorted(paths.items())
+        }
+
+    @property
+    def dependency_fingerprints(self) -> dict[str, str]:
+        return dict(self._dependency_fingerprints)
 
     @property
     def fingerprint(self) -> str:
@@ -246,6 +320,9 @@ class Wan22TaskBuilder(TaskBuilder):
             "trainer": components["trainer"],
             "predictor": components["predictor"],
             "model": self.bundle.value.get("model", {}),
+            "bundle_digest": self.bundle.digest,
+            "deployment_digest": self.bundle.deployment_digest,
+            "runtime_dependencies": self.dependency_fingerprints,
         })
 
     def describe(self) -> dict[str, Any]:
@@ -255,6 +332,7 @@ class Wan22TaskBuilder(TaskBuilder):
             "ownership": "baseline",
             "build_is_side_effect_free": True,
             "canonical_plan_owner": "benchmark",
+            "runtime_dependency_fingerprints": self.dependency_fingerprints,
             "data_adapter": self.data_adapter.describe(),
             "output": "BaselineTaskInstance",
         }
@@ -396,7 +474,9 @@ class Wan22TaskBuilder(TaskBuilder):
                 },
                 "baseline": {
                     "baseline_id": self.bundle.baseline_id,
+                    "baseline_version": self.bundle.baseline_version,
                     "digest": self.bundle.digest,
+                    "deployment_digest": self.bundle.deployment_digest,
                 },
                 "task_builder": {
                     "type": self.TYPE,
@@ -585,6 +665,11 @@ class Wan22BaselinePlugin(BaselinePlugin):
             raise ValueError("task instance targets a different baseline")
         if identity["baseline"]["digest"] != self.bundle.digest:
             raise ValueError("task instance baseline snapshot digest mismatch")
+        if (
+            identity["baseline"].get("deployment_digest")
+            != self.bundle.deployment_digest
+        ):
+            raise ValueError("task instance baseline deployment digest mismatch")
         if (
             identity["task_builder"]["fingerprint"]
             != self.task_builder.fingerprint

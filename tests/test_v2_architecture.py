@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,7 +11,7 @@ from physbench.baseline_api import load_baseline_bundle, load_baseline_plugin
 from physbench.data_layout import V2_DATASET
 from physbench.datasets import load_dataset_v2
 from physbench.domain import TaskSpec
-from physbench.io import canonical_sha256
+from physbench.io import canonical_sha256, load_json, write_json
 from physbench.tasks import load_task_v2, plan_atomic_task
 
 
@@ -86,14 +86,23 @@ class V2ArchitectureTests(unittest.TestCase):
         self.assertNotIn("condition_adapter", self.bundle.value["components"])
         self.assertNotIn("data_adapter", self.bundle.value["components"])
         self.assertIn("task_builder", self.bundle.value["components"])
+        dependencies = self.plugin.task_builder.describe()[
+            "runtime_dependency_fingerprints"
+        ]
+        self.assertIn(
+            "src/physbench/baselines/wan22_media.py", dependencies
+        )
+        self.assertIn("scripts/wan22_generate_batch.py", dependencies)
 
-    def test_v2_bundle_rejects_public_condition_adapter(self) -> None:
-        value = copy.deepcopy(self.bundle.value)
-        value["components"]["condition_adapter"] = {"type": "legacy"}
+    def test_bundle_rejects_public_condition_adapter(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "baseline.json"
-            path.write_text(json.dumps(value), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "not a v2 component"):
+            root = Path(temporary) / "wan22"
+            shutil.copytree(self.bundle.root, root)
+            path = root / "baseline.json"
+            value = load_json(path)
+            value["components"]["condition_adapter"] = {"type": "legacy"}
+            write_json(path, value)
+            with self.assertRaisesRegex(ValueError, "not a public"):
                 load_baseline_bundle(path)
 
     def test_generic_adaptation_cannot_observe_physics(self) -> None:

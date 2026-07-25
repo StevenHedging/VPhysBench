@@ -75,7 +75,9 @@ def _render_atomic_report(
         f"- Dataset：`{run['dataset_id']}` / `{run['dataset_digest']}`\n",
         f"- Task：`{run['task_id']}` / `{run['task_family']}`\n",
         f"- Conditioning：`{run['conditioning']}`\n",
-        f"- Baseline：`{run['baseline_id']}` / `{run['baseline_digest']}`\n",
+        f"- Baseline：`{run['baseline_id']}` / bundle "
+        f"`{run['baseline_digest']}` / deployment "
+        f"`{run['baseline_deployment_digest']}`\n",
         f"- Task instance：`{run['task_instance_id']}` / "
         f"`{run['task_instance_digest']}`\n",
         f"- Training seed：`{run['training_seed']}`\n",
@@ -159,6 +161,7 @@ def run_atomic(
         run_dir / "predictions",
         run_dir / "evaluation",
         run_dir / "artifacts",
+        run_dir / "logs",
     ):
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -207,6 +210,7 @@ def run_atomic(
         "dataset": dataset.digest,
         "task": task.digest,
         "baseline": baseline.digest,
+        "baseline_deployment": baseline.deployment_digest,
         "task_builder": plugin.task_builder.fingerprint,
         "task_instance": instance.digest,
         "data_adapter": plugin.task_builder.data_adapter.fingerprint,
@@ -265,7 +269,9 @@ def run_atomic(
         "task_family": task.family,
         "conditioning": task.conditioning,
         "baseline_id": baseline.baseline_id,
+        "baseline_version": baseline.baseline_version,
         "baseline_digest": baseline.digest,
+        "baseline_deployment_digest": baseline.deployment_digest,
         "task_instance_id": instance.instance_id,
         "task_instance_digest": instance.digest,
         "task_builder_fingerprint": plugin.task_builder.fingerprint,
@@ -374,7 +380,10 @@ def run_matrix(
         "matrix_id": matrix_id,
         "elements": ["dataset", "task", "baseline"],
         "dataset": str(Path(dataset_path).resolve()),
-        "baseline": str(Path(baseline_path).resolve()),
+        "baseline": str(baseline.descriptor_path),
+        "baseline_id": baseline.baseline_id,
+        "baseline_digest": baseline.digest,
+        "baseline_deployment_digest": baseline.deployment_digest,
         "task_builder_fingerprint": plugin.task_builder.fingerprint,
         "tasks": [str(task.path) for task in tasks],
         "task_instances": [

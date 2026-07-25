@@ -2,39 +2,34 @@
 
 ## 1. 原子 Task
 
-正式任务位于 `tasks/official/five_scene_*.json`。每个 TaskSpec 使用 schema `2.0`，
-只描述 Benchmark 意图：
+正式任务位于 `tasks/official/five_scene_*.json`。TaskSpec 使用 schema `2.0`，
+只表达 Benchmark 意图：任务族、conditioning、数据视图、case 选择、seed 和评估协议。
+模型路径、分辨率、prompt 模板、训练器参数都不属于 TaskSpec。
 
-```json
-{
-  "family": "finetune_eval",
-  "conditioning": "physics",
-  "dataset_id": "physics_video_five_scene_v3",
-  "dataset_view": "view_a",
-  "selection": {
-    "scene_ids": ["pendulum", "free_fall", "collision_1d",
-                  "inclined_plane_slide", "uniform_circular_motion"],
-    "eval_partitions": ["test_id", "test_ood1"]
-  },
-  "seeds": {"training": [42], "inference": [42]},
-  "evaluation": {"protocol": "scene_default_v1"}
-}
-```
+四个正式组合是：
 
-一个 Task 只能有一个 family 和一个 conditioning。不同条件不能在同一 AtomicRun
-中混合。
+| family | conditioning | Dataset View | 训练 |
+| --- | --- | --- | --- |
+| `finetune_eval` | `generic` | View A | 是 |
+| `finetune_eval` | `physics` | View A | 是 |
+| `direct_eval` | `generic` | View B | 否 |
+| `direct_eval` | `physics` | View B | 否 |
 
-## 2. CanonicalTaskPlan
+一个 Task 只能包含一个 family 和一个 conditioning。generic/physics 的对照实验必须
+产生两个独立 AtomicRun。
 
-Planner 校验 Dataset ID、View、scene、partition、OOD2 和 seed 后生成计划：
+## 2. Benchmark-owned CanonicalTaskPlan
+
+Planner 校验 Dataset ID、View、scene、partition、OOD2 和 seed 后产生
+`CanonicalTaskPlan`：
 
 ```text
-plan
-├── task_id
-├── family
-├── conditioning
+canonical_plan
+├── dataset_id / dataset_digest
+├── task_id / family / conditioning
 ├── scene_ids
-├── training_case_ids
+├── train_case_ids
+├── training_seed
 └── jobs[]
     ├── job_id
     ├── case_id
@@ -44,166 +39,218 @@ plan
     └── seed
 ```
 
-`jobs` 是 prediction 和 evaluation 的唯一主表。Baseline 不能丢弃难例后重新构造
-评测清单。
+`jobs` 是 prediction 和 evaluation 的唯一主表。Baseline 只能把这份计划编译成模型
+原生输入，不能重新抽样、丢弃难例或替换 partition。通用宿主会在 TaskBuilder 返回后
+逐字比较 canonical plan 并验证其 SHA-256。
 
-## 3. Baseline bundle
+## 3. 自注册 Baseline Bundle v3
 
-Baseline bundle 使用 schema `2.0`：
+每个 Baseline 是 `baselines/` 下的一个独立目录。核心通过
+`baselines/*/baseline.json` 自动发现，不 import 目录中的代码：
 
 ```text
-baseline
-├── baseline_id
-├── plugin
-├── supported_scenes
-├── capabilities
-├── model
-├── runtime
-└── components
-    ├── task_builder
-    ├── trainer
-    └── predictor
+baselines/<name>/
+├── baseline.json
+├── README.md
+├── baseline.local.example.json
+├── baseline.local.json              # 可选，本机配置，必须忽略提交
+├── plugin/
+│   └── main.py
+└── ...                              # 模型私有代码、profile 和配置
 ```
 
-能力检查必须在 materialization 前完成：
+schema `3.0` 的最小 manifest：
 
-- family 是否支持；
-- conditioning 是否支持；
-- scene 是否完整覆盖；
-- `finetune_eval` 是否支持 fine-tuning；
-- `direct_eval` 的冻结 checkpoint 是否存在且可读。
+```json
+{
+  "schema_version": "3.0",
+  "baseline_id": "my_video_baseline",
+  "baseline_version": "1.0.0",
+  "implementation": {
+    "kind": "command",
+    "protocol": "physbench-baseline-v1",
+    "entrypoint": ["{python}", "plugin/main.py"],
+    "fingerprint_paths": [
+      "plugin/**/*.py",
+      "profiles/*.json"
+    ]
+  },
+  "capabilities": {
+    "task_families": ["finetune_eval", "direct_eval"],
+    "conditioning": ["generic", "physics"]
+  }
+}
+```
 
-## 4. TaskBuilder 接口
+核心 Registry 只认识通用实现类型 `command`，不认识 WAN、CogVideoX 或任何具体模型名。
+因此加入新 Baseline 不需要修改 `src/physbench/baseline_api/registry.py`。
 
-TaskBuilder 是 Baseline 所有的编译器：
+### 发现与引用
+
+`--baseline` 支持三种等价引用：
+
+```text
+my_video_baseline
+baselines/my_video_baseline
+baselines/my_video_baseline/baseline.json
+```
+
+按 ID 引用时，重复 `baseline_id` 会立即报错。不存在的路径不会被误当作 ID。
+
+### 两类指纹
+
+Bundle v3 明确区分可移植实现和本机部署：
+
+```text
+bundle digest
+= canonical(manifest + fingerprint_paths 中每个文件的相对路径和 SHA-256)
+
+deployment digest
+= canonical(应用 baseline.local.json 后的 manifest)
+```
+
+插件代码或 profile 改变会使 bundle digest 改变。本机 checkpoint、模型根目录、Python
+或 GPU 设置改变会使 deployment digest 改变。两者都进入 TaskBuilder 和
+BaselineTaskInstance 身份，避免“代码相同但实际模型不同”或“配置相同但代码已变”。
+
+`baseline.local.json` 只允许覆盖 `runtime` 和 `model`；覆盖 capabilities、
+implementation、ID 或版本会被拒绝。
+
+## 4. Command Protocol
+
+通用宿主使用临时 request/response JSON 文件调用 Bundle：
+
+```bash
+python plugin/main.py --request request.json --response response.json
+```
+
+协议固定为 `physbench-baseline-v1`，包含四个操作：
+
+| operation | 输入 | 输出 |
+| --- | --- | --- |
+| `describe` | Bundle snapshot | TaskBuilder/DataAdapter 描述和指纹 |
+| `adapt_case` | case、conditioning、role | 可审计 adaptation record |
+| `build_task_instance` | Dataset、Task、canonical plan | sealed instance document |
+| `run_task` | sealed instance、run_dir、执行开关 | training stage、predictions |
+
+`{python}` 由宿主替换为当前 Benchmark Python。工作目录固定为 Bundle root，Bundle 内
+相对路径不会依赖调用者所在目录。入口脚本和 fingerprint glob 禁止绝对路径、`..` 与
+符号链接逃逸。
+
+发现阶段只读取 JSON。只有显式 `inspect`、`validate`、`task-build` 或运行任务时才会
+执行 Bundle command。
+
+## 5. TaskBuilder 与 DataAdapter
+
+Benchmark 核心保留抽象接口，命令型 Baseline 通过 proxy 实现：
 
 ```python
-build(
-    dataset_snapshot,
-    task_spec,
-    canonical_plan,
-    baseline_bundle,
-) -> BaselineTaskInstance
+TaskBuilder.build(dataset, task)
+  -> Benchmark planner creates CanonicalTaskPlan
+  -> command build_task_instance(...)
+  -> host verifies identity and seal
+  -> BaselineTaskInstance
 ```
 
-编译步骤：
+Baseline 自己负责：
 
-1. 校验 bundle 能力和 Dataset/Task 一致性；
-2. 绑定 Dataset 资产，不复制权威文件；
-3. 调用 Baseline 私有 DataAdapter；
-4. 生成训练输入和每个 inference job 的 `native_inputs`；
-5. 构建 operation DAG；
-6. 冻结所有 snapshot、adaptation audit 和 artifact 引用；
-7. 计算 canonical SHA-256 指纹。
+1. 检查 family、conditioning、scene 和模型部署能力；
+2. 绑定 Dataset 资产但不修改它们；
+3. 通过 DataAdapter 构建训练与评测输入；
+4. 生成训练节点、推理 jobs、operation DAG 和 artifact 引用；
+5. 把模型专有数据限制在 `native_inputs` 与 `baseline_payload`；
+6. 返回确定性、已封印的 TaskInstance；
+7. 执行 TaskInstance 并为每个 job 返回 prediction record。
 
-同一组输入必须确定性地产生相同 TaskInstance 指纹。
+通用宿主负责验证：
 
-## 5. BaselineTaskInstance
+- Dataset ID/digest 与 Task ID/digest 未变；
+- baseline ID、bundle digest、deployment digest 未变；
+- TaskBuilder/DataAdapter fingerprint 与 `describe` 一致；
+- canonical plan 内容和 digest 未变；
+- `instance_digest` 正确；
+- 执行时使用的是同一 Baseline 部署。
 
-公共 envelope 使用 schema `2.0`，模型专有数据必须放在不透明 payload 中：
+## 6. BaselineTaskInstance
+
+公共 envelope 使用 schema `2.1`：
 
 ```text
 task_instance
-├── schema_version
-├── instance_id
-├── dataset
-├── task
-├── baseline
+├── instance_id / instance_digest
+├── identity
+│   ├── dataset
+│   ├── task
+│   ├── baseline
+│   │   ├── baseline_id / baseline_version
+│   │   ├── digest
+│   │   └── deployment_digest
+│   ├── task_builder
+│   ├── data_adapter
+│   └── canonical_plan_digest
+├── semantics
 ├── canonical_plan
+├── source
 ├── adaptations
-├── native_jobs
-├── operations
-├── artifacts
-└── fingerprint
+├── training
+├── inference.jobs
+├── execution_graph
+├── cache_bindings
+└── baseline_payload
 ```
 
-执行器读取实例前重新计算指纹。任何对 jobs、prompt、媒体绑定、checkpoint 或 DAG 的
-修改都会使实例失效。
+修改 jobs、conditioning、媒体绑定、checkpoint、DAG 或 identity 后，实例 seal 都会
+失效。
 
-## 6. Generic 与 Physics 配对
+## 7. 接入新 Baseline
 
-配对任务必须满足：
+接入流程不需要修改核心源码：
 
-```text
-same DatasetSnapshot
-same family
-same selected cases
-same partitions
-same seeds
-same media transforms
-different conditioning adaptation only
-```
+1. 新建 `baselines/<name>/`。
+2. 编写 Bundle v3 `baseline.json`，给出全局唯一的 `baseline_id`。
+3. 实现 `physbench-baseline-v1` 四个操作。
+4. 把所有 Bundle 自有、会影响输出的代码和配置加入 `fingerprint_paths`；不可避免的
+   外部代码依赖必须逐文件进入 TaskBuilder fingerprint 和 `describe` 审计。
+5. 提供 `baseline.local.example.json`，把机器路径放入被忽略的
+   `baseline.local.json`。
+6. 让 generic adapter 不观察 `case.physics`；physics adapter记录使用字段。
+7. 为 canonical plan 不变性、TaskBuilder 确定性、部署指纹、数据不可变性和失败状态
+   增加测试。
+8. 不在 Baseline 内定义正式 evaluator；只输出 `predictions`。
 
-generic 分支禁止读取 `case.physics`。physics 分支可将允许的结构化值写入模型原生条件，
-但必须记录使用了哪些字段和模板。
-
-## 7. Operation DAG
-
-`finetune_eval`：
-
-```text
-materialize_train
-→ fine_tune
-→ bind_checkpoint
-→ materialize_inference
-→ generate
-→ evaluate
-```
-
-`direct_eval`：
-
-```text
-bind_frozen_checkpoint
-→ materialize_inference
-→ generate
-→ evaluate
-```
-
-每个 operation 明确声明输入 artifact、输出 artifact 和执行组件。运行状态不能代替
-TaskInstance；失败恢复仍必须从相同 sealed 实例继续。
-
-## 8. 接入新 Baseline
-
-1. 在 `baselines/<name>/baseline.json` 声明 bundle。
-2. 在 `src/physbench/baseline_plugins/` 注册 plugin。
-3. 实现 TaskBuilder 和 DataAdapter。
-4. 将模型专有字段限制在 `native_inputs`。
-5. 让 predictor 产生冻结 `predictions.jsonl`：
+Prediction 的最低执行边界：
 
 ```json
 {
   "job_id": "...",
   "case_id": "...",
+  "baseline_id": "...",
+  "evaluation_partition": "test_id",
   "status": "complete",
   "video_path": "/absolute/path/to/video.mp4"
 }
 ```
 
-6. 不在 Baseline 中实现正式 evaluator。
-7. 增加以下测试：
-   - bundle 能力拒绝；
-   - TaskBuilder 确定性；
-   - generic 不读取 physics；
-   - 配对任务共享 case plan；
-   - TaskInstance 篡改检测；
-   - predictor 缺失和失败状态。
-
-## 9. 命令
+## 8. 管理与运行命令
 
 ```bash
+# 只扫描 manifests，不执行插件
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline list
+
+# 解析本地覆盖并查看组件描述
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline inspect wan22_ti2v_5b_lora_r32_v3
+
+# 验证 manifest、代码指纹和 command endpoint
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline validate wan22_ti2v_5b_lora_r32_v3
+
+# 编译 sealed TaskInstance
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
   --dataset datasets/physics_video/releases/3.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval_generic.json \
-  --baseline baselines/wan22_lora/baseline.json \
+  --baseline wan22_ti2v_5b_lora_r32_v3 \
   --output /tmp/task_instance.json
-```
-
-```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  atomic-run \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval_physics.json \
-  --baseline baselines/wan22_lora/baseline.json \
-  --output-root runs_v2
 ```

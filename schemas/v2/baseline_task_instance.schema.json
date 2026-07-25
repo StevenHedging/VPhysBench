@@ -33,7 +33,27 @@
         "task_builder",
         "data_adapter",
         "canonical_plan_digest"
-      ]
+      ],
+      "properties": {
+        "baseline": {
+          "type": "object",
+          "required": [
+            "baseline_id",
+            "baseline_version",
+            "digest",
+            "deployment_digest"
+          ],
+          "properties": {
+            "baseline_id": {"type": "string", "minLength": 1},
+            "baseline_version": {"type": "string", "minLength": 1},
+            "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "deployment_digest": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
+      }
     },
     "semantics": {
       "type": "object",

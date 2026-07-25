@@ -1,7 +1,16 @@
 {
-  "schema_version": "2.0",
-  "baseline_id": "wan22_ti2v_5b_lora_r32_v2",
-  "plugin": "wan22_lora",
+  "schema_version": "3.0",
+  "baseline_id": "wan22_ti2v_5b_lora_r32_v3",
+  "baseline_version": "1.0.0",
+  "implementation": {
+    "kind": "command",
+    "protocol": "physbench-baseline-v1",
+    "entrypoint": ["{python}", "plugin/main.py"],
+    "fingerprint_paths": [
+      "plugin/*.py",
+      "task_builder/data_adapter/profiles/*.json"
+    ]
+  },
   "description": "Static WAN2.2-TI2V-5B + FlowMatch LoRA baseline bundle.",
   "supported_scenes": [
     "pendulum",
@@ -19,14 +28,14 @@
   },
   "model": {
     "base_model": "WAN2.2-TI2V-5B",
-    "frozen_lora_checkpoint": "/root/Steven/physics_video_benchmark/runs/three_scene_wan22_lora_r32_e10_buckets_trainseen2_seed42_8gpu_20260721/artifacts/wan22/checkpoints/step-410.safetensors"
+    "frozen_lora_checkpoint": null
   },
   "runtime": {
-    "project_root": "/root/Steven/wan22_pendulum_pipeline",
-    "python": "/root/miniconda3/envs/dlp/bin/python",
-    "model_base": "/root/Steven/wan22_pendulum_pipeline/models",
-    "cuda_visible_devices": "0,1,2,3,4,5,6,7",
-    "accelerate_config": "/root/Steven/wan22_pendulum_pipeline/configs/accelerate/lora_8gpu.yaml",
+    "project_root": ".",
+    "python": "python",
+    "model_base": "models",
+    "cuda_visible_devices": "0",
+    "accelerate_config": null,
     "diffsynth_commit": "fb337fbb90945ff829de69dbd44ded618f73e889"
   },
   "components": {

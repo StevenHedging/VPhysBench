@@ -34,6 +34,8 @@ sealed BaselineTaskInstance
 - View B：不训练，按确定性分组直接评测全部 case。
 - `finetune_eval/direct_eval × generic/physics` 四种原子任务。
 - Baseline 私有 DataAdapter，支持模型原生文本、首帧、时空规格和物理信息注入。
+- Baseline Bundle v3 自动发现；新增模型只需加入一个符合协议的目录。
+- 便携实现指纹与机器部署指纹分离，代码、profile、checkpoint 均可追踪。
 - 五个 scene-local evaluator，以物理状态相似度作为正式分数。
 - Jensen 风格物理主体 IoU 曲线，以及场景专属几何或实例诊断。
 - Task 级严格 coverage：缺失 case 不会被静默计零，也不会被部分均值掩盖。
@@ -77,6 +79,16 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 ## 编译和运行任务
 
+列出并验证自动发现的 Baseline：
+
+```bash
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline list
+
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline validate wan22_ti2v_5b_lora_r32_v3
+```
+
 只编译 sealed TaskInstance：
 
 ```bash
@@ -84,7 +96,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
   --dataset datasets/physics_video/releases/3.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval_physics.json \
-  --baseline baselines/wan22_lora/baseline.json \
+  --baseline wan22_ti2v_5b_lora_r32_v3 \
   --output /tmp/wan22_physics_task_instance.json
 ```
 
@@ -95,7 +107,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
   --dataset datasets/physics_video/releases/3.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval_generic.json \
-  --baseline baselines/wan22_lora/baseline.json \
+  --baseline wan22_ti2v_5b_lora_r32_v3 \
   --output-root runs_v2
 ```
 
@@ -122,9 +134,10 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 physics_video_benchmark/
 ├── datasets/                 # 唯一权威数据根
 ├── tasks/official/           # 四类五场景原子任务
-├── baselines/wan22_lora/     # Baseline bundle、TaskBuilder 配置和 profiles
+├── baselines/                # 自注册 Bundle、插件、配置与本机部署模板
 ├── configs/evaluation/       # Scene evaluator 协议
-├── schemas/v2/               # 当前公共 JSON Schema
+├── schemas/v2/               # Dataset、Task、TaskInstance JSON Schema
+├── schemas/v3/               # Baseline Bundle JSON Schema
 ├── src/physbench/            # 数据、任务、编排、评估和 CLI
 ├── tests/                    # 核心与 scene evaluator 回归测试
 ├── docs/                     # 当前架构与操作文档

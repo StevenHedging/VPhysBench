@@ -129,6 +129,12 @@ class TaskBuilderContractTests(unittest.TestCase):
             self.assertEqual("planned", run["status"])
             self.assertTrue((run_dir / "task_builder.json").is_file())
             self.assertTrue((run_dir / "frozen" / "assets.lock.json").is_file())
+            self.assertTrue(
+                (
+                    run_dir / "logs" / "baseline_command"
+                    / "run_task.stderr.log"
+                ).is_file()
+            )
 
 
 if __name__ == "__main__":

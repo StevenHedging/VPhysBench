@@ -1,122 +1,134 @@
 # 系统架构
 
-## 1. 领域对象
-
-Benchmark 由五个不可混淆的领域对象构成。
+## 1. 领域对象与所有权
 
 | 对象 | 所有者 | 负责内容 | 不负责内容 |
 | --- | --- | --- | --- |
-| DatasetSnapshot | Dataset | case、资产、物理标注、View、哈希 | 模型 prompt、tensor、缓存 |
+| DatasetSnapshot | Dataset | case、资产、物理标注、View、哈希 | prompt、tensor、模型 cache |
 | TaskSpec | Benchmark | case 选择、任务族、conditioning、seed、评估协议 | 模型执行参数 |
-| Baseline bundle | Baseline | 能力声明、TaskBuilder、DataAdapter、trainer、predictor | 修改 Dataset |
-| BaselineTaskInstance | TaskBuilder | 冻结 jobs、模型原生输入、DAG、指纹 | 动态重新选 case |
-| AtomicRun | Orchestrator | 执行、predictions、evaluation、状态 | 合并不同任务条件 |
+| CanonicalTaskPlan | Benchmark | train/eval case 与 job 主表 | 模型输入 |
+| Baseline Bundle | Baseline | 实现、能力、TaskBuilder、DataAdapter、trainer、predictor | 修改 Dataset |
+| BaselineTaskInstance | Baseline TaskBuilder | 原生输入、operation DAG、artifact 绑定、seal | 改写 canonical plan |
+| AtomicRun | Orchestrator | 执行、prediction、evaluation、状态 | 混合不同任务条件 |
 
-它们的依赖方向是单向的：
+依赖方向：
 
 ```text
 DatasetSnapshot ─┐
-TaskSpec ─────────┼─> CanonicalTaskPlan ─┐
-Baseline bundle ─┘                       ├─> BaselineTaskInstance
-                                        │
-                                        └─> AtomicRun
-                                              ├─> predictions
-                                              └─> evaluation
+                  ├─> Benchmark CanonicalTaskPlan ─┐
+TaskSpec ─────────┘                                │
+                                                   ├─> BaselineTaskInstance
+Baseline Bundle ──> command host ─> TaskBuilder ───┘
+                                                        │
+                                                        ▼
+                                                    AtomicRun
+                                                        │
+                                           predictions.jsonl
+                                                        │
+                                                        ▼
+                                            Benchmark TaskEvaluator
 ```
 
-Dataset 不认识 Baseline；Task 不携带模型输入；Evaluator 不由 Baseline 实现。
+Dataset 不认识 Baseline；Task 不携带模型输入；Baseline 不定义正式 evaluator。
 
 ## 2. Dataset 边界
 
-正式 Dataset 是 `physics_video_five_scene_v3`：
+正式 Dataset：
 
 ```text
 datasets/physics_video/releases/3.0.0/dataset.json
 ```
 
-Descriptor 只引用版本内 metadata，并通过 `asset_root` 指向统一资产根。加载器会冻结：
+Dataset loader 冻结 descriptor、cases、scene catalog、View A/B、asset lock 和所有引用
+资产。Case 只包含模型无关事实：scene、物理量、环境、OOD、时间语义、资产和来源。
+Prompt、模型尺寸、embedding、训练 metadata 和派生媒体都不能写入 Dataset。
 
-- descriptor 和 release 指纹；
-- `cases.jsonl`；
-- scene catalog；
-- View A / View B；
-- `assets.lock.json`；
-- 所有被引用资产的相对路径和 SHA-256。
+## 3. Task 与 canonical plan
 
-Case 只包含模型无关事实：scene、物理量、环境、OOD 信息、时间语义、资产和来源。
-Prompt、模型尺寸、latent、embedding、训练 metadata 均不属于 Dataset。
+TaskSpec 使用 schema `2.0`。Planner 根据 Dataset View 产生不可由 Baseline 修改的
+`CanonicalTaskPlan`。四类正式任务：
 
-## 3. Task 规划
-
-TaskSpec 使用 schema `2.0`。Planner 根据 Dataset View 产生
-`CanonicalTaskPlan`，其 `jobs` 是后续推理和评估的主表。
-
-四类正式任务：
-
-| family | conditioning | 数据视图 | 是否训练 |
+| family | conditioning | View | 训练 |
 | --- | --- | --- | --- |
-| `finetune_eval` | `generic` | View A | 是 |
-| `finetune_eval` | `physics` | View A | 是 |
-| `direct_eval` | `generic` | View B | 否 |
-| `direct_eval` | `physics` | View B | 否 |
+| `finetune_eval` | `generic` | A | 是 |
+| `finetune_eval` | `physics` | A | 是 |
+| `direct_eval` | `generic` | B | 否 |
+| `direct_eval` | `physics` | B | 否 |
 
-同一 family 下 generic 与 physics 必须共享 case、partition、seed 和生成规格。
-它们只允许在 Baseline 私有条件适配阶段发生差异。
+同一 family 的 generic/physics 共享 case、partition、seed 和媒体约束，只能在
+Baseline 私有条件适配阶段产生差异。
 
-## 4. Baseline-owned TaskBuilder
+## 4. Baseline Bundle v3
 
-核心 Planner 只回答“评哪些 case”。TaskBuilder 回答“该 Baseline 如何执行”。
-
-TaskBuilder 输入：
+Baseline 集成边界是目录，而不是核心源码分支：
 
 ```text
-DatasetSnapshot + TaskSpec + CanonicalTaskPlan + Baseline bundle
+baselines/<name>/
+├── baseline.json                    # portable contract
+├── baseline.local.json              # optional local deployment
+├── plugin/main.py                   # command endpoint
+└── implementation/config/profiles
 ```
 
-输出是不可变 `BaselineTaskInstance`：
+Registry 扫描 `baselines/*/baseline.json`，仅解析 manifest，不 import 插件。manifest
+声明 `implementation.kind=command` 和 `protocol=physbench-baseline-v1`。具体模型名
+永远不进入核心 Registry。
+
+两个独立身份防止复现实验时混淆：
+
+- bundle digest：manifest + 声明的实现文件和配置文件 SHA-256；
+- deployment digest：应用本地 `runtime/model` 覆盖后的配置 SHA-256。
+
+代码、profile、checkpoint、Python 或外部模型路径发生变化时，对应身份会改变并进入
+TaskInstance。
+
+## 5. 进程隔离与 Command Host
+
+通用宿主通过 request/response JSON 文件调用 Bundle command。支持：
 
 ```text
-envelope
-├── dataset_snapshot
-├── task_snapshot
-├── baseline_snapshot
-├── canonical_plan
-├── native_jobs
-├── operation_dag
-├── adaptations
-└── fingerprint
+describe
+adapt_case
+build_task_instance
+run_task
 ```
 
-`native_jobs` 可携带任意 Baseline 私有输入，但必须位于
-`baseline_payload`/`native_inputs` 边界内。公共 orchestration 不解释模型 tensor。
+这一边界有三个目的：
 
-## 5. Operation DAG
+1. 新 Baseline 只需新增目录，不修改或 import 核心 Registry；
+2. Baseline 依赖和全局状态不会进入 Benchmark planner/evaluator 进程；
+3. 输入输出可序列化、可审计，canonical plan 与 identity 可在核心侧复验。
 
-`finetune_eval` 的典型 DAG：
+Bundle entrypoint 必须位于自身目录，工作目录固定为 Bundle root。发现 manifest 不会
+执行代码；只有显式验证、构建或运行时才启动 command。
+
+当前 `{python}` 使用 Benchmark 的 `phybench` Python 启动协议 endpoint。模型需要不同
+环境时，由 Bundle 的执行器使用 `runtime.python` 启动外部训练或推理进程。
+
+## 6. TaskBuilder 与封印验证
+
+核心 Planner 只回答“评哪些 case”；Baseline-owned TaskBuilder 回答“模型如何执行”。
 
 ```text
-materialize_training_inputs
-→ fine_tune
-→ materialize_inference_inputs
-→ generate
-→ evaluate
+DatasetSnapshot + TaskSpec + CanonicalTaskPlan + Baseline Bundle
+→ Baseline DataAdapter
+→ training/inference native inputs
+→ operation DAG
+→ sealed BaselineTaskInstance
 ```
 
-`direct_eval`：
+通用宿主收到 instance 后验证：
 
-```text
-resolve_frozen_checkpoint
-→ materialize_inference_inputs
-→ generate
-→ evaluate
-```
+- Dataset、Task、Baseline 与 deployment identity；
+- TaskBuilder/DataAdapter fingerprints；
+- canonical plan 内容与 digest；
+- instance canonical SHA-256。
 
-操作引用的是符号 artifact，而不是运行前猜测的文件路径。执行器必须先验证
-TaskInstance 指纹，防止 jobs、conditioning 或 checkpoint 被静默替换。
+任何一项不匹配都会在创建 run 目录之前失败。
 
-## 6. DataAdapter
+## 7. DataAdapter 与 cache
 
-DataAdapter 是 Baseline 内部组件，当前统一分成：
+DataAdapter 属于 Baseline，负责：
 
 1. 空间适配；
 2. 时间适配；
@@ -124,73 +136,96 @@ DataAdapter 是 Baseline 内部组件，当前统一分成：
 4. 文本条件适配；
 5. 物理信息注入。
 
-每个阶段都产生结构化审计。媒体派生物写入内容寻址、不可变 cache；同一输入和配置
-得到相同 key。generic 分支在适配期间不得读取 case 的 `physics`。
+每个阶段都产生结构化审计。媒体派生物写入内容寻址、不可变 cache；同一 source、
+实现和配置产生同一 key。generic 分支不能观察 `case.physics`。physics 分支可读取
+白名单字段，但必须记录值、单位、模板和原生注入位置。
 
-## 7. AtomicRun
+## 8. Operation DAG
 
-AtomicRun 冻结一个不可混合组合：
+`finetune_eval`：
 
 ```text
-DatasetSnapshot × AtomicTask × BaselineSnapshot × Seeds
+materialize training inputs
+→ fine-tune
+→ bind artifact://train/model
+→ materialize inference inputs
+→ generate
+→ evaluate
 ```
 
-标准目录：
+`direct_eval`：
+
+```text
+bind baseline://frozen_model
+→ materialize inference inputs
+→ generate
+→ evaluate
+```
+
+操作引用符号 artifact，而不是运行前猜测的“最新文件”。执行器必须使用与实例身份相同
+的 deployment。
+
+## 9. AtomicRun
+
+AtomicRun 冻结：
+
+```text
+DatasetSnapshot × AtomicTask × Baseline Bundle × Deployment × Seeds
+```
+
+标准输出：
 
 ```text
 runs_v2/<run_id>/
 ├── run.json
-├── task_instance.json
-├── plan.json
+├── frozen/
+├── task_instance/
+├── component_fingerprints.json
+├── adaptations/
+├── training/
+├── jobs/
 ├── predictions.jsonl
 ├── artifacts/
-├── logs/
 └── evaluation/
-    ├── manifest.json
-    ├── case_results.jsonl
-    ├── task_result.json
-    └── cases/<job_id>/
 ```
 
-`predictions.jsonl` 是 Baseline 与 Benchmark evaluator 的硬边界。Baseline 完成生成后
-不得自行定义正式分数。
+`predictions.jsonl` 是 Baseline 与 Benchmark evaluator 的硬边界。run 同时记录 portable
+bundle digest 和 deployment digest。
 
-## 8. Scene-aware evaluation
+## 10. Scene-aware evaluation
 
-TaskEvaluator 以冻结 `plan.jobs` 为主表，按 `scene_id` 调度 CaseEvaluator。
+TaskEvaluator 以冻结 `canonical_plan.jobs` 为主表，按 `scene_id` 调度
+CaseEvaluator：
 
 ```text
 prediction video
 → common media timeline
 → scene observation/masks
-→ scene-local state
+→ scene-local physical state
 → reference similarity score
-→ Task strict aggregation
+→ strict Task aggregation
 ```
 
-公共层负责媒体采样、SAM2、mask 质量、质心/实例跟踪、轴/圆拟合和曲线；
-scene 模块负责主体提示、状态提取、质量阈值和评分。
-
-正式分数满足自反性：
+公共层负责媒体采样、SAM2、mask 质量、跟踪、几何拟合和曲线；scene 模块负责主体
+prompt、状态提取、质量阈值和评分。正式分数满足：
 
 ```text
 S(reference, reference) = 1
 ```
 
-参考视频自身的噪声或物理残差只作为诊断；相似度只能由 reference 与 prediction 的
-差值产生。详细定义见 [EVALUATION.md](EVALUATION.md)。
+无 GT 的 OOD case 只使用协议允许的物理一致性与诊断，不伪造 reference。
 
-## 9. 不变量
-
-实现和扩展必须持续满足：
+## 11. 系统不变量
 
 1. `datasets/` 是唯一权威数据根。
-2. Dataset 不保存模型条件或模型缓存。
+2. Dataset 不保存模型条件、模型缓存或生成结果。
 3. TaskSpec 不包含 Baseline 私有执行细节。
-4. generic 适配不能观察结构化物理标注。
-5. TaskInstance 在执行前后使用同一指纹。
-6. 缺失 prediction 必须产生显式 case 状态。
-7. 部分 coverage 不能产生正式 Task score。
-8. GT-dependent 诊断不能在无 GT 时伪造。
-9. 相同参考输入的 case score 必须精确为 1。
-10. 每次外部数据或模型变换必须留下可重放 provenance。
+4. Registry 不包含具体模型名或 import 分支。
+5. Baseline 不能修改 canonical plan。
+6. generic 适配不能观察结构化物理标注。
+7. TaskInstance 执行前后使用同一 bundle 和 deployment identity。
+8. 缺失 prediction 必须产生显式 case 状态。
+9. 部分 coverage 不能产生正式 Task score。
+10. GT-dependent 诊断不能在无 GT 时伪造。
+11. 相同参考输入的 case score 必须精确为 1。
+12. 外部数据或模型变换必须留下可重放 provenance。

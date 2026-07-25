@@ -6,6 +6,11 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .baseline_api import (
+    discover_baseline_bundles,
+    load_baseline_bundle,
+    load_baseline_plugin,
+)
 from .io import load_json, load_jsonl, write_json
 from .datasets import load_dataset_v2
 from .orchestration import (
@@ -195,6 +200,63 @@ def _matrix_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _baseline_list(args: argparse.Namespace) -> int:
+    discovered = discover_baseline_bundles(args.root)
+    records = []
+    for baseline_id, path in sorted(discovered.items()):
+        value = load_json(path)
+        records.append({
+            "baseline_id": baseline_id,
+            "baseline_version": value.get("baseline_version"),
+            "implementation_kind": value.get("implementation", {}).get("kind"),
+            "descriptor_path": str(path),
+        })
+    print(json.dumps(records, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
+
+
+def _baseline_inspect(args: argparse.Namespace) -> int:
+    bundle = load_baseline_bundle(args.baseline, baselines_root=args.root)
+    plugin = load_baseline_plugin(bundle)
+    result = {
+        "baseline_id": bundle.baseline_id,
+        "baseline_version": bundle.baseline_version,
+        "descriptor_path": str(bundle.descriptor_path),
+        "root": str(bundle.root),
+        "bundle_digest": bundle.digest,
+        "deployment_digest": bundle.deployment_digest,
+        "local_override_applied": (
+            bundle.root / "baseline.local.json"
+        ).is_file(),
+        "implementation": bundle.value["implementation"],
+        "capabilities": bundle.value["capabilities"],
+        "supported_scenes": bundle.value.get("supported_scenes", "all"),
+        "model": bundle.value.get("model", {}),
+        "runtime": bundle.value.get("runtime", {}),
+        "components": bundle.value.get("components", {}),
+        "task_builder": plugin.task_builder.describe(),
+        "data_adapter": plugin.task_builder.data_adapter.describe(),
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
+
+
+def _baseline_validate(args: argparse.Namespace) -> int:
+    bundle = load_baseline_bundle(args.baseline, baselines_root=args.root)
+    plugin = load_baseline_plugin(bundle)
+    result = {
+        "status": "valid",
+        "baseline_id": bundle.baseline_id,
+        "baseline_version": bundle.baseline_version,
+        "bundle_digest": bundle.digest,
+        "deployment_digest": bundle.deployment_digest,
+        "task_builder_fingerprint": plugin.task_builder.fingerprint,
+        "data_adapter_fingerprint": plugin.task_builder.data_adapter.fingerprint,
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="physbench")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -330,6 +392,30 @@ def build_parser() -> argparse.ArgumentParser:
     matrix.add_argument("--execute", action="store_true")
     matrix.add_argument("--stop-after-training", action="store_true")
     matrix.set_defaults(func=_matrix_run)
+
+    baseline = sub.add_parser(
+        "baseline", help="discover and validate self-registering Baseline Bundles"
+    )
+    baseline_sub = baseline.add_subparsers(
+        dest="baseline_command", required=True
+    )
+    baseline_list = baseline_sub.add_parser(
+        "list", help="list discovered manifests without executing Baseline code"
+    )
+    baseline_list.add_argument("--root")
+    baseline_list.set_defaults(func=_baseline_list)
+    baseline_inspect = baseline_sub.add_parser(
+        "inspect", help="inspect a Baseline Bundle and its declared components"
+    )
+    baseline_inspect.add_argument("baseline")
+    baseline_inspect.add_argument("--root")
+    baseline_inspect.set_defaults(func=_baseline_inspect)
+    baseline_validate = baseline_sub.add_parser(
+        "validate", help="validate a manifest, fingerprints and command endpoint"
+    )
+    baseline_validate.add_argument("baseline")
+    baseline_validate.add_argument("--root")
+    baseline_validate.set_defaults(func=_baseline_validate)
     return parser
 
 

@@ -47,10 +47,16 @@ class BaselineBundle:
     root: Path
     value: dict[str, Any]
     digest: str
+    deployment_digest: str
+    descriptor_path: Path
 
     @property
     def baseline_id(self) -> str:
         return str(self.value["baseline_id"])
+
+    @property
+    def baseline_version(self) -> str:
+        return str(self.value["baseline_version"])
 
 
 @dataclass(frozen=True)

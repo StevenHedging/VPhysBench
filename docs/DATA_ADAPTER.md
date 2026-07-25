@@ -5,6 +5,10 @@
 DataAdapter 属于 Baseline，不属于 Dataset 或 Benchmark 核心。它将冻结 case 转换为
 模型原生输入，同时保证媒体派生可重现、generic/physics 条件隔离可验证。
 
+在 Bundle v3 中，核心持有 `CommandDataAdapterProxy`；实际实现位于 Baseline 目录，
+通过 `physbench-baseline-v1/adapt_case` 返回 adaptation record。核心只验证接口、
+fingerprint 和隔离不变量，不解释模型原生 payload。
+
 ```text
 frozen case + frozen job + adapter config
 → native_inputs + adaptation audit + immutable cache artifacts
@@ -67,7 +71,7 @@ Cache key 至少包含：
 
 ```text
 source asset SHA-256
-+ adapter implementation/version
++ materialization implementation digest
 + spatial config
 + temporal config
 + input paradigm config
@@ -75,6 +79,10 @@ source asset SHA-256
 
 文本差异不能使媒体 materialization 失效。缓存目录是 immutable；同 key 内容不一致
 必须报错，不能覆盖。
+
+完整 DataAdapter fingerprint 覆盖五个阶段；materialization fingerprint 只覆盖空间、
+时间和输入范式阶段。Bundle portable digest 另行覆盖 endpoint、完整实现和 profiles，
+因此文本变化仍会使 TaskBuilder/TaskInstance 身份变化，但不会无意义地重建媒体 cache。
 
 ## 5. WAN2.2 当前配置
 

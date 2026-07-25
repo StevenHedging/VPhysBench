@@ -14,8 +14,8 @@ WAN 执行：
 /root/miniconda3/envs/dlp
 ```
 
-不要混用：Benchmark 环境负责 Dataset、TaskBuilder、OpenCV、SAM2 和 evaluator；
-WAN 环境由 Baseline bundle 调用。
+不要混用：Benchmark 环境负责 Dataset、通用 command host、TaskBuilder 协议、
+OpenCV、SAM2 和 evaluator；WAN 模型环境只由 Bundle 内执行器调用。
 
 ## 2. 安装
 
@@ -57,7 +57,7 @@ PYTHONPATH=src:tests /root/miniconda3/envs/phybench/bin/python \
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
-  -m compileall -q src tests
+  -m compileall -q src tests baselines/wan22_lora/plugin
 git diff --check
 ```
 
@@ -82,20 +82,49 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 完整验收读取 468 个锁定文件，耗时取决于磁盘。
 
-## 5. 编译任务
+## 5. Baseline 发现与部署验收
+
+只读取 manifests：
+
+```bash
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline list
+```
+
+解析 `baseline.local.json` 并查看 portable/deployment identity：
+
+```bash
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline inspect wan22_ti2v_5b_lora_r32_v3
+```
+
+调用 command endpoint 并验证组件指纹：
+
+```bash
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline validate wan22_ti2v_5b_lora_r32_v3
+```
+
+新机器必须先从 `baselines/wan22_lora/baseline.local.example.json` 创建
+`baseline.local.json`。不要把机器绝对路径写回 portable manifest。
+
+## 6. 编译任务
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
   --dataset datasets/physics_video/releases/3.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval_generic.json \
-  --baseline baselines/wan22_lora/baseline.json \
+  --baseline wan22_ti2v_5b_lora_r32_v3 \
   --output /tmp/task_instance.json
 ```
 
 重复执行后比较 fingerprint，结果必须稳定。
 
-## 6. AtomicRun
+`--baseline` 也可传 Bundle 目录或 manifest 路径。重复执行后比较 instance、bundle 和
+deployment fingerprint，结果必须稳定。
+
+## 7. AtomicRun
 
 冻结但不执行：
 
@@ -104,13 +133,13 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
   --dataset datasets/physics_video/releases/3.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval_physics.json \
-  --baseline baselines/wan22_lora/baseline.json \
+  --baseline wan22_ti2v_5b_lora_r32_v3 \
   --output-root runs_v2
 ```
 
 确认实例、路径、checkpoint 和 GPU 后加 `--execute`。
 
-## 7. 重新评估
+## 8. 重新评估
 
 Prediction 修复或拷贝完成后：
 
@@ -121,7 +150,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 评估会覆盖 run 内当前 evaluation 输出，但不会修改 prediction 或 Dataset。
 
-## 8. 结果检查
+## 9. 结果检查
 
 ```text
 evaluation/task_result.json
@@ -145,7 +174,23 @@ evaluation/cases/<job_id>/per_frame.csv
 evaluation/cases/<job_id>/physical_subject_iou_curve.png
 ```
 
-## 9. 常见错误
+## 10. 常见错误
+
+### `unknown baseline ID`
+
+运行 `physbench baseline list`。确认目录直接位于 `baselines/` 下、文件名为
+`baseline.json` 且 `baseline_id` 全局唯一。路径引用不存在时不会回退为 ID。
+
+### `Baseline command produced no response`
+
+先运行 `baseline validate`。检查 entrypoint 位于 Bundle 内、使用 Benchmark
+`phybench` Python 可 import `physbench`，并确认 endpoint 无语法错误。模型 runtime
+Python 不是协议 endpoint Python。
+
+### `task instance targets a different Baseline deployment`
+
+构建实例后 `baseline.local.json`、portable manifest、插件代码或 profile 已改变。
+重新构建 TaskInstance；不要复用旧实例绕过 digest 检查。
 
 ### `prediction_video_missing`
 
@@ -175,15 +220,16 @@ reference mask 作为 prediction mask。
 这是严格 coverage 的预期行为。查看 `status_counts` 和缺失 case；不要使用
 `observed_mean_score` 冒充正式分数。
 
-## 10. 发布检查单
+## 11. 发布检查单
 
 1. 工作树只包含本次有意修改。
 2. Dataset hash 验收通过。
-3. TaskBuilder 配对计划测试通过。
-4. 五 scene scorer 恒等性与扰动测试通过。
-5. 五 scene 真实自比为 1。
-6. 空 mask 的 observed ratio 正确。
-7. 系统测试与 phybench 环境完整测试通过。
-8. 文档链接无断链。
-9. `git diff --check` 通过。
-10. 提交后工作树干净。
+3. Baseline discovery、command endpoint 和两类 digest 验收通过。
+4. TaskBuilder 配对计划与 canonical-plan 防篡改测试通过。
+5. 五 scene scorer 恒等性与扰动测试通过。
+6. 五 scene 真实自比为 1。
+7. 空 mask 的 observed ratio 正确。
+8. 系统测试与 phybench 环境完整测试通过。
+9. 文档链接无断链。
+10. `git diff --check` 通过。
+11. 提交后工作树干净。
