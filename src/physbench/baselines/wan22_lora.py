@@ -377,7 +377,11 @@ class Wan22LoraAdapter(BaselineAdapter):
                     scene_id=case["scene_id"],
                 )
 
-        num_frames = reference_record["target_frames"] if reference_record else self.media.max_frames
+        num_frames = (
+            reference_record["generation_target_frames"]
+            if reference_record
+            else self.media.max_frames
+        )
         output = (
             run_dir / "predictions" / job["prompt_profile_id"] / f"{job['job_id']}.mp4"
         )

@@ -26,6 +26,9 @@ from physbench.io import (
 from physbench.prompts import PromptRegistry
 
 
+RESOURCE_ROOT = Path(__file__).resolve().parent / "resources"
+
+
 class Wan22DataAdapter(DataAdapter):
     """WAN-owned, five-stage Case-to-model adaptation pipeline."""
 
@@ -42,7 +45,16 @@ class Wan22DataAdapter(DataAdapter):
         missing = self.REQUIRED_STAGES - set(config)
         if missing:
             raise ValueError(f"WAN data adapter missing stages: {sorted(missing)}")
-        profile_dir = bundle_root / config["text"]["profiles_dir"]
+        profile_set = config["text"].get("profile_set")
+        profile_dir = (
+            RESOURCE_ROOT / profile_set
+            if profile_set
+            else bundle_root / config["text"]["profiles_dir"]
+        )
+        if not profile_dir.is_dir():
+            raise FileNotFoundError(
+                f"WAN data-adapter profile set not found: {profile_dir}"
+            )
         self.registry = PromptRegistry(profile_dir)
         if set(self.registry.profiles) != {"generic", "physics"}:
             raise ValueError(
@@ -263,7 +275,12 @@ class Wan22TaskBuilder(TaskBuilder):
             name: digest
             for name, digest in self.dependency_fingerprints.items()
             if name in {
-                "plugin/implementation.py",
+                "src/physbench/baseline_plugins/wan22.py",
+                "src/physbench/baseline_plugins/resources/"
+                "five_scene_i2v_v1/generic.json",
+                "src/physbench/baseline_plugins/resources/"
+                "five_scene_i2v_v1/physics.json",
+                "src/physbench/baseline_api/endpoint.py",
                 "src/physbench/baselines/wan22_lora.py",
                 "src/physbench/baselines/wan22_media.py",
             }
@@ -278,7 +295,19 @@ class Wan22TaskBuilder(TaskBuilder):
     def _compute_dependency_fingerprints() -> dict[str, str]:
         repository_root = Path(__file__).resolve().parents[3]
         paths = {
-            "plugin/implementation.py": Path(__file__),
+            "src/physbench/baseline_plugins/wan22.py": Path(__file__),
+            "src/physbench/baseline_plugins/resources/"
+            "five_scene_i2v_v1/generic.json": (
+                RESOURCE_ROOT / "five_scene_i2v_v1" / "generic.json"
+            ),
+            "src/physbench/baseline_plugins/resources/"
+            "five_scene_i2v_v1/physics.json": (
+                RESOURCE_ROOT / "five_scene_i2v_v1" / "physics.json"
+            ),
+            "src/physbench/baseline_api/endpoint.py": (
+                repository_root / "src" / "physbench" / "baseline_api"
+                / "endpoint.py"
+            ),
             "src/physbench/baselines/wan22_lora.py": (
                 repository_root / "src" / "physbench" / "baselines"
                 / "wan22_lora.py"
@@ -317,7 +346,7 @@ class Wan22TaskBuilder(TaskBuilder):
         return canonical_sha256({
             "type": self.TYPE,
             "data_adapter": self.data_adapter.fingerprint,
-            "trainer": components["trainer"],
+            "trainer": components.get("trainer"),
             "predictor": components["predictor"],
             "model": self.bundle.value.get("model", {}),
             "bundle_digest": self.bundle.digest,
@@ -361,11 +390,20 @@ class Wan22TaskBuilder(TaskBuilder):
                     f"baseline does not support scenes {sorted(unknown)}"
                 )
         if task.family == "direct_eval":
-            checkpoint = value.get("model", {}).get("frozen_lora_checkpoint")
+            model = value.get("model", {})
+            checkpoint = model.get("frozen_lora_checkpoint")
             if checkpoint and not Path(checkpoint).is_file():
                 raise FileNotFoundError(
                     f"frozen LoRA checkpoint not found: {checkpoint}"
                 )
+            expected_digest = model.get("checkpoint_sha256")
+            if checkpoint and expected_digest:
+                actual_digest = sha256_file(checkpoint)
+                if actual_digest != expected_digest:
+                    raise ValueError(
+                        "frozen LoRA checkpoint digest mismatch: "
+                        f"expected={expected_digest}, actual={actual_digest}"
+                    )
 
     def compile(
         self,
@@ -414,6 +452,10 @@ class Wan22TaskBuilder(TaskBuilder):
         training = None
         operations = []
         if task.family == "finetune_eval":
+            if "trainer" not in components:
+                raise ValueError(
+                    "finetune_eval baseline requires a trainer component"
+                )
             training = {
                 "operation_id": "train",
                 "case_ids": train_ids,
@@ -537,7 +579,9 @@ class Wan22BaselinePlugin(BaselinePlugin):
         components = value["components"]
         frozen_checkpoint = value.get("model", {}).get("frozen_lora_checkpoint")
         is_training = instance_value["semantics"]["family"] == "finetune_eval"
-        trainer_config = copy.deepcopy(components["trainer"]["config"])
+        trainer_config = copy.deepcopy(
+            components.get("trainer", {}).get("config", {})
+        )
         if is_training:
             trainer_config["seed"] = int(instance_value["training"]["seed"])
         cache_binding = instance_value["cache_bindings"][0]

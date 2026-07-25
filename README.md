@@ -41,6 +41,18 @@ sealed BaselineTaskInstance
 - Task 级严格 coverage：缺失 case 不会被静默计零，也不会被部分均值掩盖。
 - 可审计的 Dataset、TaskInstance、prediction、evaluator 和 run 指纹。
 
+当前自动发现的 Baseline：
+
+| baseline ID | 模型身份 | 支持任务 | 可比性 |
+| --- | --- | --- | --- |
+| `wan22_ti2v_5b_lora_r32_v3` | WAN2.2 + View A LoRA | `finetune_eval`, `direct_eval` | 按正式任务执行 |
+| `cosmos3_nano_i2v` | Cosmos3-Nano base snapshot | `direct_eval` | base pretrained |
+| `wan22_g15_sparse_motion_r32_e20` | G15 step-2840 frozen LoRA | `direct_eval` | 仅诊断；训练源与 v3 重叠 |
+
+G15 的 source-aware audit 记录了 176/214 个见过的源 case，因此全量分数不能与无泄漏
+Baseline 横向排名。详见 Bundle 内的
+`baselines/wan22_g15_sparse_motion/provenance/benchmark_overlap_v3.json`。
+
 ## 环境
 
 Benchmark 的正式虚拟环境是：
@@ -87,6 +99,12 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   baseline validate wan22_ti2v_5b_lora_r32_v3
+
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline validate cosmos3_nano_i2v
+
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline validate wan22_g15_sparse_motion_r32_e20
 ```
 
 只编译 sealed TaskInstance：
@@ -125,7 +143,8 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 - [TaskBuilder 与 Baseline 接入](docs/TASKS.md)
 - [DataAdapter 与条件隔离](docs/DATA_ADAPTER.md)
 - [五场景评估协议](docs/EVALUATION.md)
-- [WAN2.2 + LoRA baseline](docs/WAN22.md)
+- [WAN2.2、View A LoRA 与 G15 baseline](docs/WAN22.md)
+- [Cosmos3-Nano I2V baseline](docs/COSMOS3.md)
 - [运行、验证与故障排查](docs/OPERATIONS.md)
 
 ## 仓库结构
@@ -134,11 +153,11 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 physics_video_benchmark/
 ├── datasets/                 # 唯一权威数据根
 ├── tasks/official/           # 四类五场景原子任务
-├── baselines/                # 自注册 Bundle、插件、配置与本机部署模板
+├── baselines/                # 三个自注册 Bundle、插件、配置与本机部署模板
 ├── configs/evaluation/       # Scene evaluator 协议
 ├── schemas/v2/               # Dataset、Task、TaskInstance JSON Schema
 ├── schemas/v3/               # Baseline Bundle JSON Schema
-├── src/physbench/            # 数据、任务、编排、评估和 CLI
+├── src/physbench/            # 数据、任务、编排、评估、共享模型族支持和 CLI
 ├── tests/                    # 核心与 scene evaluator 回归测试
 ├── docs/                     # 当前架构与操作文档
 └── runs_v2/                  # AtomicRun 输出

@@ -121,6 +121,41 @@ class Wan22MediaAdapter:
             )
         return frames
 
+    def generation_frame_count(
+        self,
+        source_probe: dict[str, Any],
+        *,
+        speed_factor: float = 1.0,
+    ) -> int:
+        """Return a valid model length whose last timestamp covers the source.
+
+        A video with N frames at ``fps`` ends at timestamp ``(N-1)/fps``.
+        Reusing the number of safely decodable reference frames for generation
+        can therefore leave the prediction one timestamp short. Generation has
+        no source-frame decoding constraint, so round upward to the next
+        ``4n+1`` length, capped by the model maximum.
+        """
+        if speed_factor <= 0:
+            raise ValueError("speed_factor must be positive")
+        duration = source_probe.get("duration_s")
+        if duration is None:
+            frames, fps = source_probe.get("frames"), source_probe.get("fps")
+            if frames is None or not fps:
+                raise ValueError("cannot infer source duration")
+            duration = max(0.0, (float(frames) - 1.0) / float(fps))
+        physical_duration = float(duration) / speed_factor
+        timestamp_steps = int(
+            math.ceil(physical_duration * self.fps - 1e-9)
+        )
+        frames = timestamp_steps + 1
+        remainder = (frames - 1) % 4
+        if remainder:
+            frames += 4 - remainder
+        frames = min(self.max_frames, frames)
+        if frames < self.min_frames:
+            frames = self.min_frames
+        return frames
+
     def _spatial_filter(self, width: int, height: int) -> str:
         return (
             f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
@@ -145,6 +180,13 @@ class Wan22MediaAdapter:
         # lossless source merely to count frames; output verification still uses an exact count.
         source_probe = self.probe(source, count_frames=False) if exists else None
         frames = self.frame_count(source_probe, speed_factor=speed_factor) if source_probe else self.max_frames
+        generation_frames = (
+            self.generation_frame_count(
+                source_probe, speed_factor=speed_factor
+            )
+            if source_probe
+            else self.max_frames
+        )
         profile = self.profile(scene_id)
         width, height = int(profile["width"]), int(profile["height"])
         temporal_filters = []
@@ -181,6 +223,7 @@ class Wan22MediaAdapter:
             "output": str(output),
             "output_probe": output_probe,
             "target_frames": frames,
+            "generation_target_frames": generation_frames,
             "aspect_ratio_bucket": profile,
             "time_mapping": {
                 "start_s": 0.0,

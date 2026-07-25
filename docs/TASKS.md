@@ -116,6 +116,10 @@ BaselineTaskInstance 身份，避免“代码相同但实际模型不同”或�
 `baseline.local.json` 只允许覆盖 `runtime` 和 `model`；覆盖 capabilities、
 implementation、ID 或版本会被拒绝。
 
+仓库内被多个 Bundle 复用的实现不复制进每个目录，而由 TaskBuilder 对共享文件逐个
+计算 SHA-256，写入 `runtime_dependency_fingerprints`。因此 bundle digest 负责
+Bundle-local 边界，TaskBuilder fingerprint 负责完整可执行依赖；两者不能互相替代。
+
 ## 4. Command Protocol
 
 通用宿主使用临时 request/response JSON 文件调用 Bundle：
@@ -208,7 +212,8 @@ task_instance
 
 1. 新建 `baselines/<name>/`。
 2. 编写 Bundle v3 `baseline.json`，给出全局唯一的 `baseline_id`。
-3. 实现 `physbench-baseline-v1` 四个操作。
+3. 实现 `physbench-baseline-v1` 四个操作；可使用
+   `physbench.baseline_api.endpoint.main` 作为无模型逻辑的协议分发器。
 4. 把所有 Bundle 自有、会影响输出的代码和配置加入 `fingerprint_paths`；不可避免的
    外部代码依赖必须逐文件进入 TaskBuilder fingerprint 和 `describe` 审计。
 5. 提供 `baseline.local.example.json`，把机器路径放入被忽略的
@@ -217,6 +222,12 @@ task_instance
 7. 为 canonical plan 不变性、TaskBuilder 确定性、部署指纹、数据不可变性和失败状态
    增加测试。
 8. 不在 Baseline 内定义正式 evaluator；只输出 `predictions`。
+9. 若模型已有训练语料，按 source identity 审计 Dataset 重叠；有污染的预训练模型
+   必须声明 diagnostic/non-comparable。
+
+已有模型族应复用一个经过测试的共享实现。例如两个 WAN Bundle 的入口都调用
+`src/physbench/baseline_plugins/wan22.py`，不会复制 DataAdapter、media adapter 或
+executor。全新模型族可以把实现放在自己的 Bundle 中；核心 Registry 无需改动。
 
 Prediction 的最低执行边界：
 
@@ -254,3 +265,14 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --baseline wan22_ti2v_5b_lora_r32_v3 \
   --output /tmp/task_instance.json
 ```
+
+## 9. 当前 Bundle 与能力
+
+| baseline ID | family | conditioning | 备注 |
+| --- | --- | --- | --- |
+| `wan22_ti2v_5b_lora_r32_v3` | `finetune_eval`, `direct_eval` | generic, physics | View A LoRA 基线 |
+| `cosmos3_nano_i2v` | `direct_eval` | generic, physics | base Cosmos3-Nano |
+| `wan22_g15_sparse_motion_r32_e20` | `direct_eval` | generic, physics | 冻结 G15，诊断型 |
+
+TaskBuilder 会在创建 run 前拒绝 manifest 未声明的 family。特别地，Cosmos 和 G15
+收到 `finetune_eval` 时必须失败；它们不会伪造空训练阶段来绕过 View A 语义。

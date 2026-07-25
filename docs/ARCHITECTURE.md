@@ -67,7 +67,7 @@ baselines/<name>/
 ├── baseline.json                    # portable contract
 ├── baseline.local.json              # optional local deployment
 ├── plugin/main.py                   # command endpoint
-└── implementation/config/profiles
+└── implementation/config/provenance # 按模型需要
 ```
 
 Registry 扫描 `baselines/*/baseline.json`，仅解析 manifest，不 import 插件。manifest
@@ -79,8 +79,26 @@ Registry 扫描 `baselines/*/baseline.json`，仅解析 manifest，不 import �
 - bundle digest：manifest + 声明的实现文件和配置文件 SHA-256；
 - deployment digest：应用本地 `runtime/model` 覆盖后的配置 SHA-256。
 
-代码、profile、checkpoint、Python 或外部模型路径发生变化时，对应身份会改变并进入
-TaskInstance。
+Bundle 内代码和配置进入 bundle digest；本机 checkpoint、Python 与外部模型路径进入
+deployment digest。Bundle 复用的仓库内模型族实现、公共 profile 和 runner 逐文件进入
+TaskBuilder 的 `runtime_dependency_fingerprints`。大 checkpoint 不要求每次全量扫描，但
+必须在 portable manifest 中声明稳定 revision 或 digest，并在 build 前验证轻量身份文件
+或 checkpoint digest。三层身份都进入 TaskInstance，避免共享代码成为指纹盲区。
+
+当前结构：
+
+```text
+baselines/wan22_lora/                 # View A 可微调 WAN Bundle
+baselines/wan22_g15_sparse_motion/    # 冻结 G15 诊断 Bundle
+baselines/cosmos3_nano_i2v/           # 自包含 Cosmos 插件
+src/physbench/baseline_plugins/wan22.py
+                                       # 两个 WAN Bundle 唯一共享实现
+src/physbench/baseline_plugins/resources/five_scene_i2v_v1/
+                                       # 公平复用的五场景 prompt profiles
+```
+
+共享实现是减少同模型族复制的扩展点，不是 Registry 分支。Registry 仍只认识
+`command`。
 
 ## 5. 进程隔离与 Command Host
 
@@ -213,9 +231,24 @@ prompt、状态提取、质量阈值和评分。正式分数满足：
 S(reference, reference) = 1
 ```
 
-无 GT 的 OOD case 只使用协议允许的物理一致性与诊断，不伪造 reference。
+无同 case GT 的 OOD case 只能使用 Dataset 明确登记、物理标注逐项相同的 parent
+reference；没有可信 parent 时返回 `no_trustworthy_physics_reference`，不伪造
+reference，也不产生正式 case score。
 
-## 11. 系统不变量
+## 11. 预训练污染与可比性
+
+模型部署身份与评测资格是两件事。若冻结模型的历史训练数据与 Dataset 重叠：
+
+1. Bundle 仍可注册并复现实验；
+2. manifest 必须标为 diagnostic/non-comparable；
+3. source-aware audit 必须处理“同源素材、不同 case ID”；
+4. 全量结果不能进入无泄漏排行榜；
+5. clean subset 必须显式列出，不能把部分结果称为正式 Task score。
+
+G15 的审计结果是 176/214 个源 case 重叠；精确 case ID 只能发现其中 45 个，因此不能
+作为污染判据。
+
+## 12. 系统不变量
 
 1. `datasets/` 是唯一权威数据根。
 2. Dataset 不保存模型条件、模型缓存或生成结果。
@@ -229,3 +262,4 @@ S(reference, reference) = 1
 10. GT-dependent 诊断不能在无 GT 时伪造。
 11. 相同参考输入的 case score 必须精确为 1。
 12. 外部数据或模型变换必须留下可重放 provenance。
+13. 训练源重叠必须按 source identity 审计，不能只比较 case ID。

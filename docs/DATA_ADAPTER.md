@@ -5,8 +5,9 @@
 DataAdapter 属于 Baseline，不属于 Dataset 或 Benchmark 核心。它将冻结 case 转换为
 模型原生输入，同时保证媒体派生可重现、generic/physics 条件隔离可验证。
 
-在 Bundle v3 中，核心持有 `CommandDataAdapterProxy`；实际实现位于 Baseline 目录，
-通过 `physbench-baseline-v1/adapt_case` 返回 adaptation record。核心只验证接口、
+在 Bundle v3 中，核心持有 `CommandDataAdapterProxy`；实际实现位于 Bundle，或位于
+同模型族共用且被显式指纹化的支持模块。它通过
+`physbench-baseline-v1/adapt_case` 返回 adaptation record。核心只验证接口、
 fingerprint 和隔离不变量，不解释模型原生 payload。
 
 ```text
@@ -31,6 +32,10 @@ frozen case + frozen job + adapter config
 - 保存 source indices、时间戳和截取区间；
 - 不把 GT 帧注入生成结果。
 
+“可解码 reference 帧数”和“生成视频需要覆盖的时间戳数”必须分开：前者向下取合法
+帧数以禁止伪造 source frame，后者向上取合法帧数以保证 prediction 的最后时间戳覆盖
+评估区间。只比较容器 duration 会产生一帧偏差。
+
 ### 输入范式
 
 - T2V：文本；
@@ -41,8 +46,9 @@ frozen case + frozen job + adapter config
 
 ### 文本适配
 
-文本 profile 位于 Baseline bundle 内。它负责 scene 描述、模型风格和负面条件，不改变
-Dataset 事实。
+文本 profile 由 Baseline 选择并进入完整依赖指纹。当前 WAN 与 Cosmos 为保证输入对照
+公平，共用 `five_scene_i2v_v1`；模型专属 profile 也可以放在自己的 Bundle 内。profile
+负责 scene 描述与物理白名单，不改变 Dataset 事实。
 
 ### 物理注入
 
@@ -81,8 +87,9 @@ source asset SHA-256
 必须报错，不能覆盖。
 
 完整 DataAdapter fingerprint 覆盖五个阶段；materialization fingerprint 只覆盖空间、
-时间和输入范式阶段。Bundle portable digest 另行覆盖 endpoint、完整实现和 profiles，
-因此文本变化仍会使 TaskBuilder/TaskInstance 身份变化，但不会无意义地重建媒体 cache。
+时间和输入范式阶段。Bundle-local 文件进入 portable digest，共享实现/profile 进入
+TaskBuilder runtime dependency fingerprint。因此文本变化仍会使
+TaskBuilder/TaskInstance 身份变化，但不会无意义地重建媒体 cache。
 
 ## 5. WAN2.2 当前配置
 
@@ -107,7 +114,25 @@ source asset SHA-256
 输入范式为 I2V。physics profile 把结构化值追加到
 `native_inputs.text.prompt`；generic profile 明确禁止详细物理字段。
 
-## 6. 审计输出
+## 6. Cosmos3-Nano 当前配置
+
+Cosmos 同样使用 Dataset `assets.first_frame`，但不先生成 WAN 宽高像素副本，而是把
+源资产与 Cosmos-native shape token 交给其预处理器：
+
+| scene | resolution | aspect ratio |
+| --- | ---: | --- |
+| pendulum | 480p | `9,16` |
+| free_fall | 480p | `9,16` |
+| collision_1d | 480p | `16,9` |
+| inclined_plane_slide | 480p | `16,9` |
+| uniform_circular_motion | 480p | `4,3` |
+
+时间规格固定为 24 FPS、121 帧，满足 `4n+1`。这不要求 GT 与生成视频同分辨率或同
+帧数；统一 timeline、letterbox 和 reference-bounded sampling 属于 evaluator。
+Cosmos generic/physics 仍使用同一 first-frame 资产和 generation shape，仅 prompt
+stage 不同。
+
+## 7. 审计输出
 
 每个 adaptation 至少记录：
 

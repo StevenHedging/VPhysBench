@@ -122,8 +122,38 @@ class Wan22MediaTests(unittest.TestCase):
             self.assertEqual(8.0, record["time_mapping"]["encoded_to_physical_speed"])
             self.assertAlmostEqual(1.0, record["time_mapping"]["physical_duration_s"], places=2)
             self.assertEqual(21, record["target_frames"])
+            self.assertEqual(25, record["generation_target_frames"])
             self.assertIn("setpts=PTS/8", " ".join(record["command"]))
             self.assertEqual(21, record["output_probe"]["frames"])
+
+    def test_generation_length_covers_reference_last_timestamp(self) -> None:
+        adapter = Wan22MediaAdapter({
+            "width": 96,
+            "height": 160,
+            "fps": 24,
+            "max_frames": 121,
+            "min_frames": 5,
+            "pad_color": "black",
+        })
+        source_probe = {
+            "duration_s": 4.421,
+            "frames": 943,
+            "fps": 213.30819981149858,
+        }
+        reference_frames = adapter.frame_count(source_probe)
+        generation_frames = adapter.generation_frame_count(source_probe)
+
+        self.assertEqual(105, reference_frames)
+        self.assertEqual(109, generation_frames)
+        self.assertLess(
+            (reference_frames - 1) / adapter.fps,
+            source_probe["duration_s"],
+        )
+        self.assertGreaterEqual(
+            (generation_frames - 1) / adapter.fps,
+            source_probe["duration_s"],
+        )
+        self.assertEqual(1, generation_frames % 4)
 
 
 class Wan22OrchestrationTests(unittest.TestCase):

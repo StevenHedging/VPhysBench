@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "profile_id": "physics",
-  "display_name": "WAN structured-physics-to-text injection",
+  "display_name": "Five-scene structured-physics-to-text injection",
   "language": "en",
   "includes_physical_parameters": true,
   "scenes": {

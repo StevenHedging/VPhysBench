@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "profile_id": "generic",
-  "display_name": "WAN generic scene-process text adaptation",
+  "display_name": "Five-scene generic I2V text adaptation",
   "language": "en",
   "includes_physical_parameters": false,
   "scenes": {

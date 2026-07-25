@@ -14,8 +14,14 @@ WAN 执行：
 /root/miniconda3/envs/dlp
 ```
 
+Cosmos3 执行：
+
+```text
+/root/Nico/cosmos/packages/cosmos3/.venv
+```
+
 不要混用：Benchmark 环境负责 Dataset、通用 command host、TaskBuilder 协议、
-OpenCV、SAM2 和 evaluator；WAN 模型环境只由 Bundle 内执行器调用。
+OpenCV、SAM2 和 evaluator；WAN/Cosmos 模型环境只由各自 Bundle executor 调用。
 
 ## 2. 安装
 
@@ -57,7 +63,10 @@ PYTHONPATH=src:tests /root/miniconda3/envs/phybench/bin/python \
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
-  -m compileall -q src tests baselines/wan22_lora/plugin
+  -m compileall -q src tests \
+  baselines/wan22_lora/plugin \
+  baselines/wan22_g15_sparse_motion/plugin \
+  baselines/cosmos3_nano_i2v/plugin
 git diff --check
 ```
 
@@ -101,12 +110,19 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 调用 command endpoint 并验证组件指纹：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline validate wan22_ti2v_5b_lora_r32_v3
+for baseline_id in \
+  wan22_ti2v_5b_lora_r32_v3 \
+  cosmos3_nano_i2v \
+  wan22_g15_sparse_motion_r32_e20
+do
+  PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+    baseline validate "$baseline_id"
+done
 ```
 
-新机器必须先从 `baselines/wan22_lora/baseline.local.example.json` 创建
-`baseline.local.json`。不要把机器绝对路径写回 portable manifest。
+新机器必须先从目标 Bundle 的 `baseline.local.example.json` 创建
+`baseline.local.json`。不要把机器绝对路径写回 portable manifest。Cosmos build 会
+验证轻量 snapshot identity；G15 task build 会验证完整 154 MiB LoRA SHA-256。
 
 ## 6. 编译任务
 
@@ -138,6 +154,15 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```
 
 确认实例、路径、checkpoint 和 GPU 后加 `--execute`。
+
+Cosmos 一个 job 默认同时占用四张 GPU；WAN 为每张可用 GPU 创建一个常驻 worker。
+运行前用 `nvidia-smi` 检查实际空闲设备，并通过 local override 改 GPU 列表。修改后
+deployment digest 会变化，必须重新 build。
+
+G15 是污染审计明确的 diagnostic baseline。全量 AtomicRun 可用于复现和诊断，但
+`evaluation_score` 不得进入无泄漏排名。clean subset 必须明确选择
+`provenance/benchmark_overlap_v3.json` 所述 source-unseen case，且覆盖率不是完整
+Task coverage。
 
 ## 8. 重新评估
 
@@ -192,6 +217,22 @@ Python 不是协议 endpoint Python。
 构建实例后 `baseline.local.json`、portable manifest、插件代码或 profile 已改变。
 重新构建 TaskInstance；不要复用旧实例绕过 digest 检查。
 
+### `baseline does not support task family finetune_eval`
+
+Cosmos3 base 与冻结 G15 都是 direct-only，这是能力约束，不是部署错误。使用
+`five_scene_direct_eval_{generic,physics}.json`。只有
+`wan22_ti2v_5b_lora_r32_v3` 当前支持 View A fine-tuning。
+
+### `Cosmos3 checkpoint identity mismatch`
+
+local checkpoint 不是 manifest 声明的 base snapshot，或 identity 文件已变化。不要
+覆盖 digest；为另一个 snapshot/SFT 建立新的 baseline ID。
+
+### `frozen LoRA checkpoint digest mismatch`
+
+G15 local path 没有指向 step-2840，或文件损坏。预期 SHA-256 在 manifest 与
+provenance audit 中各保存一份。
+
 ### `prediction_video_missing`
 
 Prediction record 的 `video_path` 为空、相对到错误目录或文件不存在。修复 record/path，
@@ -200,6 +241,9 @@ Prediction record 的 `video_path` 为空、相对到错误目录或文件不存
 ### `insufficient_duration`
 
 生成视频没有覆盖协议物理区间。检查 predictor 时长、容器 FPS 和时间戳。
+不要通过补 GT 首帧、复制末帧或放宽 evaluator tolerance 处理。WAN 当前分别记录
+`target_frames`（reference derivative）与 `generation_target_frames`（prediction
+coverage）；若两者被旧产物错误混用，应重新生成。
 
 ### `motion_prompt_failed`
 
@@ -225,7 +269,7 @@ reference mask 作为 prediction mask。
 1. 工作树只包含本次有意修改。
 2. Dataset hash 验收通过。
 3. Baseline discovery、command endpoint 和两类 digest 验收通过。
-4. TaskBuilder 配对计划与 canonical-plan 防篡改测试通过。
+4. 三个 Bundle 的能力拒绝、TaskBuilder 配对计划与 canonical-plan 防篡改测试通过。
 5. 五 scene scorer 恒等性与扰动测试通过。
 6. 五 scene 真实自比为 1。
 7. 空 mask 的 observed ratio 正确。
@@ -233,3 +277,4 @@ reference mask 作为 prediction mask。
 9. 文档链接无断链。
 10. `git diff --check` 通过。
 11. 提交后工作树干净。
+12. 预训练数据重叠 audit 已复核，诊断结果没有混入正式可比结果。

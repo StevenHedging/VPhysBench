@@ -1,14 +1,14 @@
 {
   "schema_version": "3.0",
-  "baseline_id": "wan22_ti2v_5b_lora_r32_v3",
+  "baseline_id": "wan22_g15_sparse_motion_r32_e20",
   "baseline_version": "1.0.0",
   "implementation": {
     "kind": "command",
     "protocol": "physbench-baseline-v1",
     "entrypoint": ["{python}", "plugin/main.py"],
-    "fingerprint_paths": ["plugin/*.py"]
+    "fingerprint_paths": ["plugin/*.py", "provenance/*.json"]
   },
-  "description": "Static WAN2.2-TI2V-5B + FlowMatch LoRA baseline bundle.",
+  "description": "Frozen G15 WAN2.2-TI2V-5B sparse-motion LoRA; diagnostic direct-eval baseline with explicit benchmark-overlap audit.",
   "supported_scenes": [
     "pendulum",
     "free_fall",
@@ -17,15 +17,24 @@
     "uniform_circular_motion"
   ],
   "capabilities": {
-    "task_families": ["finetune_eval", "direct_eval"],
+    "task_families": ["direct_eval"],
     "conditioning": ["generic", "physics"],
     "train": false,
-    "finetune": true,
+    "finetune": false,
     "generate": true
   },
   "model": {
     "base_model": "WAN2.2-TI2V-5B",
-    "frozen_lora_checkpoint": null
+    "adapter": "LoRA-r32-qkv-o-ffn",
+    "frozen_lora_checkpoint": null,
+    "checkpoint_sha256": "cd19f851133c8370def00991fa778a3bfb581e35713842438ba068495912906f",
+    "checkpoint_step": 2840,
+    "training_recipe": "20 epochs, sparse tube FlowMatch boost=1.0, five-scene corpus",
+    "evaluation_eligibility": {
+      "classification": "diagnostic_pretrained",
+      "official_comparable": false,
+      "reason": "The frozen training corpus overlaps benchmark v3 source trials; see provenance/benchmark_overlap_v3.json."
+    }
   },
   "runtime": {
     "project_root": ".",
@@ -61,7 +70,10 @@
                 "landscape": {
                   "width": 832,
                   "height": 480,
-                  "scene_ids": ["collision_1d", "inclined_plane_slide"]
+                  "scene_ids": [
+                    "collision_1d",
+                    "inclined_plane_slide"
+                  ]
                 }
               }
             }
@@ -94,27 +106,6 @@
             "policy": "content_addressed_shared_immutable"
           }
         }
-      }
-    },
-    "trainer": {
-      "type": "diffsynth_flowmatch_lora_v1",
-      "config": {
-        "algorithm": "FlowMatch SFT + LoRA",
-        "rank": 32,
-        "target_modules": "q,k,v,o,ffn.0,ffn.2",
-        "learning_rate": 0.0001,
-        "dataset_repeat": 4,
-        "num_epochs": 10,
-        "save_steps": 41,
-        "scene_balancing": "oversample_each_scene_to_largest",
-        "gradient_accumulation": 1,
-        "num_workers": 4,
-        "seed": 42,
-        "precision": "bf16",
-        "gradient_checkpointing": true,
-        "optimizer": "AdamW",
-        "scheduler": "ConstantLR",
-        "weight_decay": 0.01
       }
     },
     "predictor": {
