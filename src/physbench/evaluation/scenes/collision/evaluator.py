@@ -12,7 +12,7 @@ from ...common.artifacts import (
 )
 from ...common.base import ReferenceCaseEvaluator, SceneAnalysis
 from ...common.errors import SceneAnalysisError
-from ...common.masks.quality import mask_iou
+from ...common.masks.quality import observed_mask_iou, summarize_mask_ious
 from ...common.masks.sam2 import Sam2VideoSegmenter
 from ...common.tracking import extract_centroid_trace
 from ...contracts import CaseEvaluationRequest
@@ -22,7 +22,7 @@ from .scoring import extract_collision_trace, score_collision
 
 class CollisionCaseEvaluator(ReferenceCaseEvaluator):
     evaluator_id = "collision_1d_state"
-    evaluator_version = "1.0"
+    evaluator_version = "1.1"
     scene_id = "collision_1d"
     primary_score = "collision_1d_state_similarity"
 
@@ -129,12 +129,14 @@ class CollisionCaseEvaluator(ReferenceCaseEvaluator):
             config=self.config["scoring"],
         )
         union_ious = [
-            mask_iou(reference_union[index], prediction_union[index])
+            observed_mask_iou(
+                reference_union[index], prediction_union[index]
+            )
             for index in range(len(times_s))
         ]
         instance_ious = [
             [
-                mask_iou(
+                observed_mask_iou(
                     reference_instances[object_index][frame_index],
                     prediction_instances[object_index][frame_index],
                 )
@@ -142,13 +144,44 @@ class CollisionCaseEvaluator(ReferenceCaseEvaluator):
             ]
             for frame_index in range(len(times_s))
         ]
+        union_iou_summary = summarize_mask_ious(union_ious)
+        per_instance_summaries = [
+            summarize_mask_ious(
+                [
+                    instance_ious[frame_index][object_index]
+                    for frame_index in range(len(times_s))
+                ]
+            )
+            for object_index in range(3)
+        ]
+        all_observed_instance_ious = [
+            value
+            for frame_values in instance_ious
+            for value in frame_values
+            if value is not None
+        ]
         rows = []
         for frame_index, time_s in enumerate(times_s):
             row = {
                 "frame": frame_index,
                 "time_s": time_s,
                 "physical_subject_iou": union_ious[frame_index],
-                "mean_instance_iou": float(np.mean(instance_ious[frame_index])),
+                "mean_instance_iou": (
+                    float(
+                        np.mean(
+                            [
+                                value
+                                for value in instance_ious[frame_index]
+                                if value is not None
+                            ]
+                        )
+                    )
+                    if any(
+                        value is not None
+                        for value in instance_ious[frame_index]
+                    )
+                    else None
+                ),
             }
             for object_index in range(3):
                 row[f"instance_{object_index + 1}_iou"] = instance_ious[
@@ -189,16 +222,19 @@ class CollisionCaseEvaluator(ReferenceCaseEvaluator):
             metrics={
                 "collision_1d_state_similarity": state_score,
                 "physical_subject_mask_iou": {
-                    "mean": float(np.mean(union_ious)),
-                    "minimum": float(np.min(union_ious)),
-                    "maximum": float(np.max(union_ious)),
+                    **union_iou_summary,
                     "role": "diagnostic_not_primary_score",
                 },
                 "matched_instance_mask_iou": {
-                    "mean": float(np.mean(instance_ious)),
-                    "per_instance_mean": np.mean(
-                        np.asarray(instance_ious), axis=0
-                    ).tolist(),
+                    "mean": float(np.mean(all_observed_instance_ious)),
+                    "per_instance_mean": [
+                        summary["mean"]
+                        for summary in per_instance_summaries
+                    ],
+                    "per_instance_observed_frame_ratio": [
+                        summary["observed_frame_ratio"]
+                        for summary in per_instance_summaries
+                    ],
                     "role": "identity_preservation_diagnostic",
                 },
                 "annotation_policy": {

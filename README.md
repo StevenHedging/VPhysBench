@@ -1,96 +1,135 @@
 # Physics Video Benchmark
 
-> 新实验建议使用 v2 的 `Dataset × AtomicTask × Baseline` 架构。设计和命令见
-> [Benchmark v2 架构](docs/ARCHITECTURE_V2.md)；Baseline 的任务编译边界见
-> [TaskBuilder 架构](docs/TASK_BUILDER_ARCHITECTURE.md)；模型输入适配契约见
-> [统一 Data Adapter 架构](docs/DATA_ADAPTER_ARCHITECTURE.md)。所有权威数据统一位于
-> `datasets/`；原有 `configs/`、v1 release 和 `runs/` 作为兼容层与历史记录保留。
+Physics Video Benchmark 是一个面向物理视频生成模型的五场景、训推一体评测框架。
+当前唯一正式数据快照是
+`datasets/physics_video/releases/3.0.0/dataset.json`，包含：
 
-一个面向物理视频生成模型的“训推一体 / 调推一体”Benchmark 骨架。它把数据、
-划分、任务、模型输入适配和评测解耦，支持：
+- 单摆 `pendulum`
+- 自由落体 `free_fall`
+- 一维对心碰撞 `collision_1d`
+- 斜面下滑 `inclined_plane_slide`
+- 匀速圆周运动 `uniform_circular_motion`
 
-- **视图 A**：多 scene 训练或微调后，评测 `test_id` 和 `test_ood1`。
-- **视图 B**：不训练，按 scene 内确定性随机、尽量等量的 `group_1..n` 直接评测。
-- **多输入 baseline**：T2V、I2V/TI2V 以及外部命令式模型均通过统一适配层接入。
-- **Baseline-owned TaskBuilder**：每个 Baseline 将不可变的 `DatasetSnapshot + TaskSpec`
-  编译为本模型可执行、带 SHA-256 封印的 `BaselineTaskInstance`；训练器和预测器只消费该实例。
-- **Scene-aware 物理评测**：五个正式 scene 均按各自物理状态打分，并统一输出
-  物理主体 mask IoU 诊断；Task 级评估严格检查 coverage。
-- **可复现运行**：每次运行冻结 task、baseline、数据指纹、job plan、预测清单和报告。
-- **条件受控消融**：case/视频与模型输入解耦；当前 v2 Task 提供 `generic` 和
-  `physics`，由 Baseline 的 TaskBuilder 调用其内部 DataAdapter 生成输入；第一类任务
-  分别训练独立 Adapter，并共享数据划分、首帧、seed 与生成超参。
+系统把数据、任务、模型适配、生成和评估分成明确边界：
 
-OOD2 暂不开放。配置若请求 OOD2，校验器会明确报错，避免把不合理的跨任务测试混入结果。
+```text
+DatasetSnapshot
+  + Atomic TaskSpec
+  + Baseline bundle
+        │
+        ▼
+Baseline-owned TaskBuilder
+        │
+        ▼
+sealed BaselineTaskInstance
+        │
+        ├── optional fine-tuning
+        ├── generation
+        └── benchmark-owned scene evaluation
+```
 
-## 快速自测
+## 核心能力
 
-项目只使用 Python 标准库，不需要安装依赖：
+- View A：训练或微调后评测数值 ID 与环境 OOD1。
+- View B：不训练，按确定性分组直接评测全部 case。
+- `finetune_eval/direct_eval × generic/physics` 四种原子任务。
+- Baseline 私有 DataAdapter，支持模型原生文本、首帧、时空规格和物理信息注入。
+- 五个 scene-local evaluator，以物理状态相似度作为正式分数。
+- Jensen 风格物理主体 IoU 曲线，以及场景专属几何或实例诊断。
+- Task 级严格 coverage：缺失 case 不会被静默计零，也不会被部分均值掩盖。
+- 可审计的 Dataset、TaskInstance、prediction、evaluator 和 run 指纹。
+
+## 环境
+
+Benchmark 的正式虚拟环境是：
+
+```text
+/root/miniconda3/envs/phybench
+```
+
+核心规划与数据测试可用普通 Python。视频 evaluator 需要：
 
 ```bash
 cd /root/Steven/physics_video_benchmark
-make test
-make smoke
+/root/miniconda3/envs/phybench/bin/pip install -e ".[scene-evaluation]"
+/root/miniconda3/envs/phybench/bin/pip install -e /root/Jensen/Eval/sam2-main
 ```
 
-当前五场景 release（仍使用 v2 数据契约）常用命令：
+SAM2 当前来自 `/root/Jensen/Eval/sam2-main`。未编译 `_C` 后处理扩展时会出现警告，
+官方 fallback 仍可运行，但部署环境应优先完成官方扩展安装。
+
+## 快速验证
 
 ```bash
-# 只编译，不训练或推理；输出可审计的 sealed task instance
-PYTHONPATH=src python3 -m physbench task-build \
+# 核心测试；缺少 scene-evaluation extras 时相关测试会明确 skip
+make test
+
+# 正式环境中的完整测试
+PYTHONPATH=src:tests /root/miniconda3/envs/phybench/bin/python \
+  -m unittest discover -s tests -v
+
+# 数据资产逐字节验收
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  validate-dataset \
+  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
+  --check-asset-hashes
+```
+
+## 编译和运行任务
+
+只编译 sealed TaskInstance：
+
+```bash
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  task-build \
   --dataset datasets/physics_video/releases/3.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval_physics.json \
   --baseline baselines/wan22_lora/baseline.json \
   --output /tmp/wan22_physics_task_instance.json
+```
 
-# atomic-run 总是先执行同一个 TaskBuilder 编译步骤；不加 --execute 只做计划/暂存
-PYTHONPATH=src python3 -m physbench atomic-run \
+创建 AtomicRun；不加 `--execute` 只冻结计划和输入：
+
+```bash
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  atomic-run \
   --dataset datasets/physics_video/releases/3.0.0/dataset.json \
-  --task tasks/official/five_scene_finetune_eval_physics.json \
+  --task tasks/official/five_scene_direct_eval_generic.json \
   --baseline baselines/wan22_lora/baseline.json \
   --output-root runs_v2
 ```
 
-v1 兼容命令：
+对已有 AtomicRun 重新评估：
 
 ```bash
-PYTHONPATH=src python3 -m physbench validate --manifest examples/fixtures/cases.jsonl
-PYTHONPATH=src python3 -m physbench split --view A --manifest examples/fixtures/cases.jsonl --output /tmp/view_a.json
-PYTHONPATH=src python3 -m physbench split --view B --manifest examples/fixtures/cases.jsonl --groups 2 --seed 42 --output /tmp/view_b.json
-PYTHONPATH=src python3 -m physbench run --task examples/fixtures/task_view_a.json --baseline configs/baselines/dummy_i2v.json --manifest examples/fixtures/cases.jsonl --split examples/fixtures/view_a.json --output-root runs
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  evaluate --run-dir runs_v2/<run_id>
 ```
 
-真实数据到位后，只需按 [数据契约](docs/DATA_CONTRACT.md) 写 `cases.jsonl`，无需修改核心代码。
-提示词模板、最终解析文本及其 SHA-256 会随每个 run 冻结。
-两类提示词的训练/推理展开规则见 [提示词条件设计](docs/PROMPT_CONDITIONING.md)。
+## 文档
 
-已有 WAN2.2-TI2V-5B + LoRA 已作为专用 baseline 接入，包含视图 A 联合微调、视图 B 冻结 LoRA、首帧映射和不同视频规格的模型侧只读适配。见 [WAN2.2 + LoRA 文档](docs/WAN22_LORA_BASELINE.md)。
+- [系统架构](docs/ARCHITECTURE.md)
+- [数据集与划分](docs/DATASET.md)
+- [TaskBuilder 与 Baseline 接入](docs/TASKS.md)
+- [DataAdapter 与条件隔离](docs/DATA_ADAPTER.md)
+- [五场景评估协议](docs/EVALUATION.md)
+- [WAN2.2 + LoRA baseline](docs/WAN22.md)
+- [运行、验证与故障排查](docs/OPERATIONS.md)
 
-真实单摆、碰撞、自由落体、斜面下滑和匀速圆周运动数据的命名解释、时间尺度、
-官方划分与审计方式见 [真实数据导入记录](docs/REAL_DATA_IMPORT.md)。
-五类 case evaluator、Task 聚合、参考模式与评估产物见
-[Scene-aware Evaluation](docs/EVALUATION_ARCHITECTURE.md)。
-
-运行正式视频评估需安装评估依赖与 Meta 官方 SAM2：
-
-```bash
-pip install -e ".[scene-evaluation]"
-pip install -e /path/to/facebookresearch/sam2
-```
-
-## 项目结构
+## 仓库结构
 
 ```text
 physics_video_benchmark/
-├── datasets/             # 唯一数据根：权威资产、来源审计与版本化 release
-├── tasks/                # v2：四类原子 Task 与 OOD2 recipe
-├── baselines/            # v2：静态 Baseline bundle、内置 TaskBuilder 与模型侧适配配置
-├── configs/              # scene、task、baseline、metric 配置
-├── docs/                 # 设计、数据、评测和接入文档
-├── examples/fixtures/    # 不依赖真实视频的端到端测试数据
-├── schemas/              # JSON Schema 数据契约
-├── src/physbench/        # CLI、划分、任务、适配、评测、报告
-├── tests/                # 标准库 unittest
-├── runs/                 # v1 历史运行
-└── runs_v2/              # v2 AtomicRun 产物
+├── datasets/                 # 唯一权威数据根
+├── tasks/official/           # 四类五场景原子任务
+├── baselines/wan22_lora/     # Baseline bundle、TaskBuilder 配置和 profiles
+├── configs/evaluation/       # Scene evaluator 协议
+├── schemas/v2/               # 当前公共 JSON Schema
+├── src/physbench/            # 数据、任务、编排、评估和 CLI
+├── tests/                    # 核心与 scene evaluator 回归测试
+├── docs/                     # 当前架构与操作文档
+└── runs_v2/                  # AtomicRun 输出
 ```
+
+权威数据资产只能写入 `datasets/`。Baseline 重采样、缩放、抽帧、特征和模型缓存必须
+写入内容寻址 cache 或 run 目录，不能回写 Dataset。

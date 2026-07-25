@@ -8,6 +8,12 @@ from .media import (
     probe_video,
     sample_video,
 )
+from .similarity import (
+    bounded_ratio_similarity,
+    exponential_delta_similarity,
+    relative_delta,
+    scaled_delta,
+)
 
 __all__ = [
     "SampledVideo",
@@ -16,4 +22,8 @@ __all__ = [
     "VideoProtocolError",
     "probe_video",
     "sample_video",
+    "bounded_ratio_similarity",
+    "exponential_delta_similarity",
+    "relative_delta",
+    "scaled_delta",
 ]

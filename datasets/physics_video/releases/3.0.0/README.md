@@ -1,25 +1,35 @@
 # Physics Video Dataset 3.0.0
 
-该 release 在 2.0.0 的单摆、一维碰撞、自由落体基础上增加：
+这是当前正式五场景 DatasetSnapshot：
 
-- 95 条标注完整并完成启动帧对齐的斜面下滑；
-- 36 条标注完整的匀速圆周运动。
+```text
+dataset_id: physics_video_five_scene_v3
+cases:      214
+assets:     468
+```
 
-`cases.jsonl` 和 View B 覆盖全部 214 条 case。View A 使用显式
-`coverage=subset`：旧三场景划分保持不变，新场景只选取能形成纯数值 ID 与纯环境
-OOD1 对照的代表性 case；可靠重复和混合因素 case 仍保留在 Dataset 与 View B。
+文件：
 
-重建与验收：
+- `dataset.json`：唯一加载入口；
+- `release.json`：Dataset 与资产集合 digest；
+- `cases.jsonl`：214 个 schema 2.0 case；
+- `assets.lock.json`：468 个引用资产的锁；
+- `scenes/*.json`：物理量、环境因素和 metric spec；
+- `views/view_a.json`：训练主导的 ID/OOD1 对照；
+- `views/view_b.json`：覆盖全部 case 的直接评测分组；
+- `expansion_audit.json`：release 完整性审计，不作为运行输入。
+
+View A 覆盖 187 个纯对照 case。未进入 View A 的 15 个斜面 case 和 12 个圆周 case
+仍由 View B 覆盖；它们不会被误标为 ID 或 OOD1。
+
+验收：
 
 ```bash
-conda run -n phybench python scripts/align_inclined_plane.py --propose --workers 6
-# 检查 provenance/alignment/inclined_plane_start_v1/review/
-conda run -n phybench python scripts/align_inclined_plane.py --accept-proposals
-conda run -n phybench python scripts/align_inclined_plane.py --materialize --workers 4
-python3 scripts/import_20260723_scenes.py
-python3 scripts/build_dataset_asset_lock.py \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json
-PYTHONPATH=src python3 -m physbench validate-dataset \
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  validate-dataset \
   --dataset datasets/physics_video/releases/3.0.0/dataset.json \
   --check-asset-hashes
 ```
+
+数量、物理字段和划分规则见
+[数据集文档](../../../../docs/DATASET.md)。

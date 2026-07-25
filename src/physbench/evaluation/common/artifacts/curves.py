@@ -25,16 +25,20 @@ def save_iou_curve(
     path: Path,
     *,
     times_s: list[float],
-    ious: list[float],
+    ious: list[float | None],
     case_id: str,
     scene_name: str,
 ) -> None:
     plt = _pyplot()
     x = np.arange(len(ious))
     fig, axis = plt.subplots(figsize=(20, 6))
+    plotted_ious = np.asarray(
+        [np.nan if value is None else float(value) for value in ious],
+        dtype=np.float64,
+    )
     axis.plot(
         x,
-        np.asarray(ious),
+        plotted_ious,
         marker="o",
         markersize=3,
         linewidth=1.5,

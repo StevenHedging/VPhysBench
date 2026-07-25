@@ -9,6 +9,7 @@ import numpy as np
 from ...common.errors import SceneAnalysisError
 from ...common.fitting import exponential_similarity, fit_polynomial, normalized_rmse
 from ...common.geometry import AxisModel, fit_axis
+from ...common.similarity import bounded_ratio_similarity, scaled_delta
 from ...common.tracking import CentroidTrace, interpolate_trace
 
 
@@ -138,16 +139,21 @@ def score_incline(
     time_score = exponential_similarity(
         time_error, scale=float(config["descent_time_error_scale"])
     )
-    contact_score = exponential_similarity(
+    cross_track_error = scaled_delta(
+        reference.cross_track_std_ratio,
         prediction.cross_track_std_ratio,
         scale=float(config["cross_track_scale"]),
     )
-    orientation_score = exponential_similarity(
+    orientation_error = scaled_delta(
+        reference.orientation_std_deg,
         prediction.orientation_std_deg,
         scale=float(config["orientation_std_scale_deg"]),
     )
-    monotonic_score = max(
-        0.0, min(1.0, prediction.monotonic_progress_ratio)
+    contact_score = exponential_similarity(cross_track_error)
+    orientation_score = exponential_similarity(orientation_error)
+    monotonic_score = bounded_ratio_similarity(
+        reference.monotonic_progress_ratio,
+        prediction.monotonic_progress_ratio,
     )
     constraint_score = (
         0.45 * contact_score + 0.35 * monotonic_score + 0.2 * orientation_score
@@ -176,12 +182,25 @@ def score_incline(
         "reference_descent_time_s": reference.descent_time_s,
         "prediction_descent_time_s": prediction.descent_time_s,
         "descent_time_normalized_error": time_error,
+        "reference_axis_explained_ratio": reference.axis.explained_ratio,
         "prediction_axis_explained_ratio": prediction.axis.explained_ratio,
+        "reference_cross_track_std_ratio": reference.cross_track_std_ratio,
         "prediction_cross_track_std_ratio": prediction.cross_track_std_ratio,
+        "cross_track_scaled_error": cross_track_error,
+        "reference_orientation_std_deg": reference.orientation_std_deg,
         "prediction_orientation_std_deg": prediction.orientation_std_deg,
+        "orientation_std_scaled_error": orientation_error,
+        "reference_monotonic_progress_ratio": (
+            reference.monotonic_progress_ratio
+        ),
         "prediction_monotonic_progress_ratio": (
             prediction.monotonic_progress_ratio
         ),
+        "monotonic_progress_absolute_error": abs(
+            prediction.monotonic_progress_ratio
+            - reference.monotonic_progress_ratio
+        ),
+        "reference_quadratic_rmse_ratio": reference.quadratic_rmse_ratio,
         "prediction_quadratic_rmse_ratio": prediction.quadratic_rmse_ratio,
         "weights_used": {
             name: weights[name] / denominator for name in components

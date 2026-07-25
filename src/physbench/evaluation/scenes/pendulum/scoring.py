@@ -9,7 +9,11 @@ from typing import Any
 import numpy as np
 
 from ...common.artifacts.curves import save_iou_curve as _save_iou_curve
-from ...common.masks.quality import mask_iou
+from ...common.masks.quality import observed_mask_iou
+from ...common.similarity import (
+    exponential_delta_similarity,
+    scaled_delta,
+)
 
 
 class TraceQualityError(RuntimeError):
@@ -198,10 +202,26 @@ def score_traces(
 
     drift_scale = float(scoring_config["pivot_drift_scale"])
     length_scale = float(scoring_config["length_cv_scale"])
-    pivot_score = float(
-        math.exp(-prediction.pivot_drift_ratio / drift_scale)
+    pivot_drift_error = scaled_delta(
+        reference.pivot_drift_ratio,
+        prediction.pivot_drift_ratio,
+        scale=drift_scale,
     )
-    length_score = float(math.exp(-prediction.length_cv / length_scale))
+    length_cv_error = scaled_delta(
+        reference.length_cv,
+        prediction.length_cv,
+        scale=length_scale,
+    )
+    pivot_score = exponential_delta_similarity(
+        reference.pivot_drift_ratio,
+        prediction.pivot_drift_ratio,
+        scale=drift_scale,
+    )
+    length_score = exponential_delta_similarity(
+        reference.length_cv,
+        prediction.length_cv,
+        scale=length_scale,
+    )
     structural_score = 0.5 * (pivot_score + length_score)
 
     configured_weights = {
@@ -229,8 +249,12 @@ def score_traces(
         "reference_period_s": reference.period_s,
         "prediction_period_s": prediction.period_s,
         "period_relative_error": period_relative_error,
+        "reference_pivot_drift_ratio": reference.pivot_drift_ratio,
         "prediction_pivot_drift_ratio": prediction.pivot_drift_ratio,
+        "pivot_drift_scaled_error": pivot_drift_error,
+        "reference_length_cv": reference.length_cv,
         "prediction_length_cv": prediction.length_cv,
+        "length_cv_scaled_error": length_cv_error,
         "weights_used": {
             name: configured_weights[name] / denominator for name in components
         },
@@ -245,12 +269,14 @@ def write_per_frame_csv(
     prediction_masks: list[np.ndarray],
     reference: PendulumTrace,
     prediction: PendulumTrace,
-) -> list[float]:
+) -> list[float | None]:
     path.parent.mkdir(parents=True, exist_ok=True)
-    ious: list[float] = []
+    ious: list[float | None] = []
     rows: list[dict[str, Any]] = []
     for index, time_s in enumerate(times_s):
-        iou = mask_iou(reference_masks[index], prediction_masks[index])
+        iou = observed_mask_iou(
+            reference_masks[index], prediction_masks[index]
+        )
         ious.append(iou)
         rows.append(
             {
@@ -280,7 +306,7 @@ def save_iou_curve(
     path: Path,
     *,
     times_s: list[float],
-    ious: list[float],
+    ious: list[float | None],
     case_id: str,
 ) -> None:
     _save_iou_curve(

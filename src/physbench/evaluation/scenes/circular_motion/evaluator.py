@@ -11,7 +11,7 @@ from ...common.artifacts import (
 )
 from ...common.base import ReferenceCaseEvaluator, SceneAnalysis
 from ...common.geometry import rectify_circle_masks
-from ...common.masks.quality import mask_iou
+from ...common.masks.quality import observed_mask_iou, summarize_mask_ious
 from ...common.tracking import extract_instance_tracks
 from ...contracts import CaseEvaluationRequest
 from .observation import green_disk_object_masks
@@ -20,7 +20,7 @@ from .scoring import extract_orbit_traces, score_orbits
 
 class CircularMotionCaseEvaluator(ReferenceCaseEvaluator):
     evaluator_id = "uniform_circular_motion_state"
-    evaluator_version = "1.0"
+    evaluator_version = "1.1"
     scene_id = "uniform_circular_motion"
     primary_score = "uniform_circular_motion_state_similarity"
 
@@ -86,7 +86,7 @@ class CircularMotionCaseEvaluator(ReferenceCaseEvaluator):
             config=self.config["scoring"],
         )
         original_ious = [
-            mask_iou(
+            observed_mask_iou(
                 reference_tracks.union_masks[index],
                 prediction_tracks.union_masks[index],
             )
@@ -105,9 +105,13 @@ class CircularMotionCaseEvaluator(ReferenceCaseEvaluator):
             radius_px=prediction_outer.radius_px,
         )
         rectified_ious = [
-            mask_iou(reference_rectified[index], prediction_rectified[index])
+            observed_mask_iou(
+                reference_rectified[index], prediction_rectified[index]
+            )
             for index in range(len(times_s))
         ]
+        original_iou_summary = summarize_mask_ious(original_ious)
+        rectified_iou_summary = summarize_mask_ious(rectified_ious)
         rows = []
         for frame_index, time_s in enumerate(times_s):
             row = {
@@ -159,15 +163,11 @@ class CircularMotionCaseEvaluator(ReferenceCaseEvaluator):
             metrics={
                 "uniform_circular_motion_state_similarity": state_score,
                 "physical_subject_mask_iou": {
-                    "mean": float(np.mean(original_ious)),
-                    "minimum": float(np.min(original_ious)),
-                    "maximum": float(np.max(original_ious)),
+                    **original_iou_summary,
                     "role": "diagnostic_not_primary_score",
                 },
                 "orbit_rectified_mask_iou": {
-                    "mean": float(np.mean(rectified_ious)),
-                    "minimum": float(np.min(rectified_ious)),
-                    "maximum": float(np.max(rectified_ious)),
+                    **rectified_iou_summary,
                     "role": "center_and_scale_normalized_diagnostic",
                 },
                 "annotation_diagnostic": {

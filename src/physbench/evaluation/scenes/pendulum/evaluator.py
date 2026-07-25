@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 
 from ....io import canonical_sha256, sha256_file
+from ...common.masks.quality import summarize_mask_ious
 from ...contracts import CaseEvaluationRequest, CaseEvaluationResult
 from .scoring import (
     TraceQualityError,
@@ -20,7 +21,7 @@ from .timeline import VideoProtocolError, sample_video
 
 class PendulumCaseEvaluator:
     evaluator_id = "pendulum_state"
-    evaluator_version = "1.0"
+    evaluator_version = "1.1"
     scene_id = "pendulum"
 
     def __init__(self, config: dict[str, Any]):
@@ -264,6 +265,7 @@ class PendulumCaseEvaluator:
                 ious=ious,
                 case_id=request.case["case_id"],
             )
+            iou_summary = summarize_mask_ious(ious)
         except VideoProtocolError as exc:
             return self._unavailable(
                 request, evaluator, exc.code, str(exc)
@@ -281,9 +283,7 @@ class PendulumCaseEvaluator:
             metrics={
                 "pendulum_state_similarity": state_score,
                 "physical_subject_mask_iou": {
-                    "mean": float(np.mean(ious)),
-                    "minimum": float(np.min(ious)),
-                    "maximum": float(np.max(ious)),
+                    **iou_summary,
                     "definition": "intersection / union of SAM2-segmented reference and generation physical-subject masks",
                     "role": "diagnostic_not_primary_score",
                 },

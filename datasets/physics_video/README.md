@@ -1,21 +1,31 @@
-# Physics Video dataset
+# Physics Video Dataset
 
-本目录将物理视频的实际资产、来源证据和版本化 DatasetSnapshot 收拢在同一数据集合中。
+当前 Dataset `physics_video_five_scene_v3` 包含 214 个 case：
 
 ```text
-assets/          immutable source and canonical media
-provenance/      import records, source documents, alignment reviews
-releases/1.0.0/  v1 compatibility manifest and views
-releases/2.0.0/  prompt-free v2 Dataset and assets.lock.json
-releases/3.0.0/  five-scene Dataset, subset-capable View A, complete View B
+assets/          权威 source/canonical 媒体
+provenance/      来源、标注、导入和对齐证据
+releases/3.0.0/  当前 descriptor、case、View、scene 和 asset lock
 ```
+
+运行时必须从 `releases/3.0.0/dataset.json` 加载，不能绕过 descriptor 直接拼接
+`cases.jsonl` 与资产目录。
 
 发布流程：
 
-1. 导入或审核资产；
-2. 用场景导入器生成 native v2-contract release metadata；
-3. 运行 `scripts/build_dataset_asset_lock.py --dataset <release>/dataset.json`；
-4. 使用 `validate-dataset --check-asset-hashes` 完整验收。
+1. 把新来源放入 `_incoming` 或明确的 source archive；
+2. 校验原始标注与视频成员对应关系；
+3. materialize canonical asset；
+4. 生成 case、scene 和 View metadata；
+5. 生成 `assets.lock.json`；
+6. 运行 `validate-dataset --check-asset-hashes`；
+7. 冻结 release digest。
 
-3.0.0 由 2.0.0 扩展而来；新增数据的重建入口是
-`scripts/align_inclined_plane.py` 和 `scripts/import_20260723_scenes.py`。
+斜面和圆周导入脚本：
+
+```text
+scripts/align_inclined_plane.py
+scripts/import_20260723_scenes.py
+```
+
+详细字段、数量和划分见 [数据集文档](../../docs/DATASET.md)。

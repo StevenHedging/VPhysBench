@@ -3,6 +3,8 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+from ..errors import SceneAnalysisError
+
 
 def mask_iou(reference: np.ndarray, prediction: np.ndarray) -> float:
     reference_binary = reference > 0
@@ -14,6 +16,36 @@ def mask_iou(reference: np.ndarray, prediction: np.ndarray) -> float:
         np.logical_and(reference_binary, prediction_binary).sum()
     )
     return float(intersection / union)
+
+
+def observed_mask_iou(
+    reference: np.ndarray, prediction: np.ndarray
+) -> float | None:
+    """Return IoU only when at least one subject mask is observed."""
+    reference_binary = reference > 0
+    prediction_binary = prediction > 0
+    union = int(np.logical_or(reference_binary, prediction_binary).sum())
+    if union == 0:
+        return None
+    intersection = int(
+        np.logical_and(reference_binary, prediction_binary).sum()
+    )
+    return float(intersection / union)
+
+
+def summarize_mask_ious(ious: list[float | None]) -> dict[str, float]:
+    observed = [float(value) for value in ious if value is not None]
+    if not observed:
+        raise SceneAnalysisError(
+            "no_observed_mask_iou",
+            "no frame contains an observed reference or prediction mask",
+        )
+    return {
+        "mean": float(np.mean(observed)),
+        "minimum": float(np.min(observed)),
+        "maximum": float(np.max(observed)),
+        "observed_frame_ratio": float(len(observed) / len(ious)),
+    }
 
 
 def largest_component(mask: np.ndarray, *, minimum_area: int = 1) -> np.ndarray:

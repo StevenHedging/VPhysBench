@@ -1,10 +1,24 @@
 # Datasets
 
-`datasets/` 是仓库唯一的权威数据根。
+`datasets/` 是仓库唯一权威数据根。当前正式入口：
 
-- `_incoming/`：尚未验收、不得被 Benchmark 直接引用的导入材料；
-- `physics_video/assets/`：按 scene/case 组织的不可变源资产与 canonical 资产；
-- `physics_video/provenance/`：来源文档、导入记录与人工审核证据；
-- `physics_video/releases/`：不可变的 Dataset metadata、View 和资产锁。
+```text
+physics_video/releases/3.0.0/dataset.json
+```
 
-模型侧重采样、缩放、抽帧和特征文件必须写入 `cache/` 或 run 目录，不能回写这里。
+目录职责：
+
+- `physics_video/assets/`：逐 scene/case 组织的 source 与 canonical 媒体；
+- `physics_video/provenance/`：导入来源、原始标注和对齐审核；
+- `physics_video/releases/3.0.0/`：Dataset descriptor、cases、scene、View 和 asset lock。
+
+禁止写入：
+
+- Baseline 重采样视频；
+- resize/pad 首帧；
+- embedding、latent 或模型特征；
+- 训练 metadata；
+- run 输出。
+
+这些派生内容必须写入内容寻址 cache 或 `runs_v2/`。完整契约见
+[数据集文档](../docs/DATASET.md)。

@@ -12,7 +12,7 @@ from ...common.artifacts import (
 from ...common.base import ReferenceCaseEvaluator, SceneAnalysis
 from ...common.errors import SceneAnalysisError
 from ...common.masks.motion import build_motion_prompt
-from ...common.masks.quality import mask_iou
+from ...common.masks.quality import observed_mask_iou, summarize_mask_ious
 from ...common.masks.sam2 import Sam2VideoSegmenter
 from ...common.tracking import extract_centroid_trace
 from ...contracts import CaseEvaluationRequest
@@ -21,7 +21,7 @@ from .scoring import extract_free_fall_trace, score_free_fall
 
 class FreeFallCaseEvaluator(ReferenceCaseEvaluator):
     evaluator_id = "free_fall_state"
-    evaluator_version = "1.0"
+    evaluator_version = "1.1"
     scene_id = "free_fall"
     primary_score = "free_fall_state_similarity"
 
@@ -108,9 +108,12 @@ class FreeFallCaseEvaluator(ReferenceCaseEvaluator):
             config=self.config["scoring"],
         )
         ious = [
-            mask_iou(reference_masks[index], prediction_masks[index])
+            observed_mask_iou(
+                reference_masks[index], prediction_masks[index]
+            )
             for index in range(len(times_s))
         ]
+        iou_summary = summarize_mask_ious(ious)
         rows = [
             {
                 "frame": index,
@@ -168,9 +171,7 @@ class FreeFallCaseEvaluator(ReferenceCaseEvaluator):
             metrics={
                 "free_fall_state_similarity": state_score,
                 "physical_subject_mask_iou": {
-                    "mean": float(np.mean(ious)),
-                    "minimum": float(np.min(ious)),
-                    "maximum": float(np.max(ious)),
+                    **iou_summary,
                     "role": "diagnostic_not_primary_score",
                 },
                 "reference_physics_diagnostic": {

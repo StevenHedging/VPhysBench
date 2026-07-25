@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from physbench.evaluation.contracts import CaseEvaluationResult
@@ -13,6 +14,11 @@ try:
     import numpy as np
 
     from physbench.evaluation.common.geometry import fit_axis, fit_circle
+    from physbench.evaluation.common.masks import (
+        mask_iou,
+        observed_mask_iou,
+        summarize_mask_ious,
+    )
     from physbench.evaluation.common.tracking import CentroidTrace, InstanceTracks
     from physbench.evaluation.scenes.circular_motion.scoring import (
         extract_orbit_traces,
@@ -32,7 +38,6 @@ try:
     )
     from physbench.evaluation.scenes.pendulum.scoring import (
         extract_trace,
-        mask_iou,
         save_iou_curve,
         score_traces,
     )
@@ -122,6 +127,11 @@ class SceneEvaluationTests(unittest.TestCase):
         trace = extract_trace(
             masks, times, quality_config=quality, period_config=period
         )
+        trace = replace(
+            trace,
+            pivot_drift_ratio=0.07,
+            length_cv=0.12,
+        )
         result = score_traces(
             trace,
             trace,
@@ -137,17 +147,40 @@ class SceneEvaluationTests(unittest.TestCase):
                 },
             },
         )
-        self.assertGreater(result["score"], 0.95)
+        self.assertEqual(1.0, result["score"])
         self.assertAlmostEqual(
             1.0, result["components"]["angle_trajectory"]
         )
         self.assertAlmostEqual(1.0, result["components"]["period"])
         self.assertAlmostEqual(1.0, result["components"]["amplitude"])
         self.assertIsNotNone(trace.period_s)
+        degraded = score_traces(
+            trace,
+            replace(trace, pivot_drift_ratio=0.12, length_cv=0.2),
+            scoring_config={
+                "minimum_angle_scale_deg": 5.0,
+                "pivot_drift_scale": 0.03,
+                "length_cv_scale": 0.05,
+                "weights": {
+                    "angle_trajectory": 0.6,
+                    "period": 0.2,
+                    "amplitude": 0.1,
+                    "structural_consistency": 0.1,
+                },
+            },
+        )
+        self.assertLess(degraded["score"], 1.0)
 
     def test_empty_masks_do_not_receive_perfect_iou(self) -> None:
         empty = np.zeros((8, 8), np.uint8)
         self.assertEqual(0.0, mask_iou(empty, empty))
+        self.assertIsNone(observed_mask_iou(empty, empty))
+        observed = empty.copy()
+        observed[2:4, 2:4] = 255
+        self.assertEqual(1.0, observed_mask_iou(observed, observed))
+        summary = summarize_mask_ious([None, 1.0])
+        self.assertEqual(1.0, summary["mean"])
+        self.assertEqual(0.5, summary["observed_frame_ratio"])
 
     def test_jensen_style_iou_curve_is_written(self) -> None:
         _, times = self._pendulum_masks()
@@ -185,7 +218,12 @@ class SceneEvaluationTests(unittest.TestCase):
         )
 
     def test_identical_free_fall_trace_scores_one(self) -> None:
-        trace = self._free_fall_trace()
+        trace = replace(
+            self._free_fall_trace(),
+            horizontal_drift_ratio=0.07,
+            downward_progress_ratio=0.8,
+            quadratic_rmse_ratio=0.05,
+        )
         result = score_free_fall(
             trace,
             trace,
@@ -202,7 +240,28 @@ class SceneEvaluationTests(unittest.TestCase):
                 },
             },
         )
-        self.assertAlmostEqual(1.0, result["score"])
+        self.assertEqual(1.0, result["score"])
+        degraded = score_free_fall(
+            trace,
+            replace(
+                trace,
+                horizontal_drift_ratio=0.15,
+                downward_progress_ratio=0.5,
+            ),
+            config={
+                "trajectory_error_scale": 0.15,
+                "acceleration_error_scale": 0.35,
+                "impact_time_error_scale": 0.15,
+                "horizontal_drift_scale": 0.08,
+                "weights": {
+                    "vertical_trajectory": 0.5,
+                    "normalized_acceleration": 0.25,
+                    "impact_time": 0.15,
+                    "motion_constraints": 0.1,
+                },
+            },
+        )
+        self.assertLess(degraded["score"], 1.0)
 
     def test_upward_motion_is_penalized_as_non_free_fall(self) -> None:
         reference = self._free_fall_trace()
@@ -260,6 +319,12 @@ class SceneEvaluationTests(unittest.TestCase):
             times.tolist(),
             minimum_span_px=10.0,
         )
+        trace = replace(
+            trace,
+            cross_track_std_ratio=0.04,
+            orientation_std_deg=9.0,
+            monotonic_progress_ratio=0.85,
+        )
         result = score_incline(
             trace,
             trace,
@@ -277,8 +342,31 @@ class SceneEvaluationTests(unittest.TestCase):
                 },
             },
         )
-        self.assertGreater(result["score"], 0.99)
+        self.assertEqual(1.0, result["score"])
         self.assertGreater(trace.axis.explained_ratio, 0.999)
+        degraded = score_incline(
+            trace,
+            replace(
+                trace,
+                cross_track_std_ratio=0.09,
+                orientation_std_deg=18.0,
+                monotonic_progress_ratio=0.6,
+            ),
+            config={
+                "trajectory_error_scale": 0.18,
+                "acceleration_error_scale": 0.4,
+                "descent_time_error_scale": 0.18,
+                "cross_track_scale": 0.05,
+                "orientation_std_scale_deg": 12.0,
+                "weights": {
+                    "along_plane_trajectory": 0.5,
+                    "normalized_acceleration": 0.25,
+                    "descent_time": 0.15,
+                    "contact_and_pose_constraints": 0.1,
+                },
+            },
+        )
+        self.assertLess(degraded["score"], 1.0)
 
     def test_circular_motion_uses_relative_angle_and_scores_identity(self) -> None:
         times = np.arange(41, dtype=np.float64) / 8.0
@@ -295,6 +383,13 @@ class SceneEvaluationTests(unittest.TestCase):
             union_masks=[np.zeros((160, 200), np.uint8) for _ in times],
         )
         trace = extract_orbit_traces(tracks, times.tolist())
+        trace = [
+            replace(
+                trace[0],
+                circle=replace(trace[0].circle, radial_cv=0.08),
+                angular_fit_rmse_rad=0.3,
+            )
+        ]
         result = score_orbits(
             trace,
             trace,
@@ -312,9 +407,33 @@ class SceneEvaluationTests(unittest.TestCase):
                 },
             },
         )
-        self.assertGreater(result["score"], 0.999)
+        self.assertEqual(1.0, result["score"])
         self.assertAlmostEqual(0.95, trace[0].angular_velocity_rad_s, places=3)
         self.assertAlmostEqual(0.0, trace[0].relative_angle_rad[0])
+        degraded = score_orbits(
+            trace,
+            [
+                replace(
+                    trace[0],
+                    circle=replace(trace[0].circle, radial_cv=0.16),
+                    angular_fit_rmse_rad=0.5,
+                )
+            ],
+            config={
+                "angular_trajectory_scale_rad": 0.35,
+                "angular_velocity_error_scale": 0.25,
+                "radial_cv_scale": 0.08,
+                "angular_fit_rmse_scale_rad": 0.2,
+                "radius_configuration_scale": 0.12,
+                "weights": {
+                    "angular_trajectory": 0.5,
+                    "angular_velocity": 0.25,
+                    "orbit_geometry": 0.15,
+                    "uniform_motion": 0.1,
+                },
+            },
+        )
+        self.assertLess(degraded["score"], 1.0)
 
     def test_identical_collision_trace_scores_one(self) -> None:
         times = np.arange(33, dtype=np.float64) / 16.0
@@ -337,6 +456,11 @@ class SceneEvaluationTests(unittest.TestCase):
             minimum_span_px=10.0,
             velocity_window_fraction=0.2,
         )
+        trace = replace(
+            trace,
+            momentum_residual_ratio=0.45,
+            cross_track_std_ratio=0.025,
+        )
         result = score_collision(
             trace,
             trace,
@@ -356,8 +480,32 @@ class SceneEvaluationTests(unittest.TestCase):
                 },
             },
         )
-        self.assertGreater(result["score"], 0.999)
+        self.assertEqual(1.0, result["score"])
         self.assertAlmostEqual(1.0, trace.effective_restitution, places=6)
+        degraded = score_collision(
+            trace,
+            replace(
+                trace,
+                momentum_residual_ratio=0.65,
+                cross_track_std_ratio=0.055,
+            ),
+            config={
+                "trajectory_error_scale": 0.12,
+                "event_time_error_scale": 0.1,
+                "velocity_error_scale": 0.25,
+                "momentum_residual_scale": 0.2,
+                "restitution_error_scale": 0.25,
+                "cross_track_scale": 0.03,
+                "weights": {
+                    "instance_trajectories": 0.45,
+                    "contact_event_time": 0.15,
+                    "pre_post_velocities": 0.2,
+                    "collision_physics": 0.15,
+                    "one_dimensional_constraint": 0.05,
+                },
+            },
+        )
+        self.assertLess(degraded["score"], 1.0)
 
     def test_task_evaluator_uses_frozen_jobs_as_primary_table(self) -> None:
         plan = {
@@ -434,6 +582,7 @@ class SceneEvaluationTests(unittest.TestCase):
         for scene_id, primary_score in expected.items():
             description = registry.resolve(scene_id).describe()
             self.assertTrue(description["implemented"])
+            self.assertEqual("1.1", description["version"])
             self.assertEqual(primary_score, description["primary_score"])
 
 

@@ -8,6 +8,7 @@ import numpy as np
 from ...common.errors import SceneAnalysisError
 from ...common.fitting import exponential_similarity, normalized_rmse
 from ...common.geometry import AxisModel, fit_axis
+from ...common.similarity import scaled_delta
 
 
 @dataclass(frozen=True)
@@ -165,14 +166,16 @@ def score_collision(
     velocity_score = exponential_similarity(
         velocity_error, scale=float(config["velocity_error_scale"])
     )
-    momentum_score = exponential_similarity(
+    momentum_error = scaled_delta(
+        reference.momentum_residual_ratio,
         prediction.momentum_residual_ratio,
         scale=float(config["momentum_residual_scale"]),
     )
-    if (
-        reference.effective_restitution is None
-        or prediction.effective_restitution is None
-    ):
+    momentum_score = exponential_similarity(momentum_error)
+    if reference.effective_restitution is None:
+        restitution_score: float | None = None
+        restitution_error = None
+    elif prediction.effective_restitution is None:
         restitution_score = 0.0
         restitution_error = None
     else:
@@ -184,11 +187,17 @@ def score_collision(
             restitution_error,
             scale=float(config["restitution_error_scale"]),
         )
-    conservation_score = 0.6 * momentum_score + 0.4 * restitution_score
-    one_dimensional_score = exponential_similarity(
+    conservation_score = (
+        momentum_score
+        if restitution_score is None
+        else 0.6 * momentum_score + 0.4 * restitution_score
+    )
+    cross_track_error = scaled_delta(
+        reference.cross_track_std_ratio,
         prediction.cross_track_std_ratio,
         scale=float(config["cross_track_scale"]),
     )
+    one_dimensional_score = exponential_similarity(cross_track_error)
     components = {
         "instance_trajectories": trajectory_score,
         "contact_event_time": event_score,
@@ -220,15 +229,23 @@ def score_collision(
             prediction.post_velocity_normalized_s.tolist()
         ),
         "velocity_normalized_error": velocity_error,
+        "reference_momentum_residual_ratio": (
+            reference.momentum_residual_ratio
+        ),
         "prediction_momentum_residual_ratio": (
             prediction.momentum_residual_ratio
         ),
+        "momentum_residual_scaled_error": momentum_error,
         "reference_effective_restitution": reference.effective_restitution,
         "prediction_effective_restitution": prediction.effective_restitution,
         "effective_restitution_relative_error": restitution_error,
+        "reference_cross_track_std_ratio": (
+            reference.cross_track_std_ratio
+        ),
         "prediction_cross_track_std_ratio": (
             prediction.cross_track_std_ratio
         ),
+        "cross_track_scaled_error": cross_track_error,
         "weights_used": {
             name: weights[name] / denominator for name in components
         },

@@ -1,26 +1,26 @@
-# Assets
+# Canonical Assets
 
-真实数据按 `assets/<scene_id>/<case_id>/` 组织：
+资产按 `assets/<scene_id>/<case_id>/` 组织：
 
 ```text
 <case_id>/
-├── source/
-│   ├── reference.mov          # 碰撞：逐字节保存的原始视频
-│   ├── source_slowmo.mp4      # 自由落体：原始 8 倍慢放源
-│   └── first_frame_source.png # 碰撞对齐前首帧证据
+├── source/                 # 可选，原始逐字节文件
 └── canonical/
-    ├── reference.mp4          # Benchmark 使用的真实时间参考视频
-    └── first_frame.png|jpg    # 由 reference 派生或审核通过的首帧
+    ├── reference.mp4       # Benchmark 物理时间 reference
+    └── first_frame.png     # 与 reference frame 0 一致
 ```
 
-多个 case 来自同一个大压缩包时，原始字节只在
-`assets/source_archives/<capture_batch>/` 保存一次；case 的 `source_archive`
-与 `provenance.source_locator.member` 共同定位原始成员，canonical 资产仍按
-`scene_id/case_id` 独立组织。这样避免为每条 case 重复保存整个来源。
+批量压缩来源只在 `assets/source_archives/<batch>/` 保存一次。Case 使用
+`assets.source_archive` 与 `provenance.source_locator.member` 定位原始成员。
 
-文件哈希、来源压缩包成员、原始媒体探测值和时间尺度标注见
-`../provenance/imports/import_audit.jsonl`；release 使用的文件由
-`../releases/<version>/assets.lock.json` 封印。baseline 所需的尺寸、FPS、帧数和时间尺度变换必须写入
-各自的运行缓存，不得回写本目录。自由落体是明确的数据侧例外：`reference.mp4` 已通过
-无重编码的两遍时间戳 remux 恢复真实时间，manifest 因而标注速度因子 `1.0`；原始慢放
-字节仍完整保存在 `source/source_slowmo.mp4`。
+Canonical 规则：
+
+- 文件路径相对 `datasets/physics_video/`；
+- reference 容器时间戳表达 case `temporal` 声明的物理时间；
+- first frame 与 reference 解码帧 0 一致；
+- 斜面 reference 从审核后的启动附近帧开始；
+- 自由落体 source 慢放字节保留，canonical reference 已恢复物理时间；
+- 文件被 `releases/3.0.0/assets.lock.json` 封印；
+- 任何模型侧媒体转换不得回写本目录。
+
+来源与审核信息位于 `../provenance/`，运行时只使用 release 冻结的路径。

@@ -7,6 +7,7 @@ import numpy as np
 
 from ...common.errors import SceneAnalysisError
 from ...common.fitting import exponential_similarity, fit_polynomial, normalized_rmse
+from ...common.similarity import bounded_ratio_similarity, scaled_delta
 from ...common.tracking import CentroidTrace
 
 
@@ -96,11 +97,16 @@ def score_free_fall(
     impact_score = exponential_similarity(
         impact_error, scale=float(config["impact_time_error_scale"])
     )
-    drift_score = exponential_similarity(
+    drift_error = scaled_delta(
+        reference.horizontal_drift_ratio,
         prediction.horizontal_drift_ratio,
         scale=float(config["horizontal_drift_scale"]),
     )
-    direction_score = max(0.0, min(1.0, prediction.downward_progress_ratio))
+    drift_score = exponential_similarity(drift_error)
+    direction_score = bounded_ratio_similarity(
+        reference.downward_progress_ratio,
+        prediction.downward_progress_ratio,
+    )
     constraint_score = 0.5 * (drift_score + direction_score)
     components = {
         "vertical_trajectory": trajectory_score,
@@ -126,8 +132,16 @@ def score_free_fall(
         "reference_impact_time_s": reference.impact_time_s,
         "prediction_impact_time_s": prediction.impact_time_s,
         "impact_time_normalized_error": impact_error,
+        "reference_horizontal_drift_ratio": reference.horizontal_drift_ratio,
         "prediction_horizontal_drift_ratio": prediction.horizontal_drift_ratio,
+        "horizontal_drift_scaled_error": drift_error,
+        "reference_downward_progress_ratio": reference.downward_progress_ratio,
         "prediction_downward_progress_ratio": prediction.downward_progress_ratio,
+        "downward_progress_absolute_error": abs(
+            prediction.downward_progress_ratio
+            - reference.downward_progress_ratio
+        ),
+        "reference_quadratic_rmse_ratio": reference.quadratic_rmse_ratio,
         "prediction_quadratic_rmse_ratio": prediction.quadratic_rmse_ratio,
         "weights_used": {
             name: weights[name] / denominator for name in components

@@ -7,6 +7,7 @@ import numpy as np
 
 from ...common.fitting import exponential_similarity, normalized_rmse
 from ...common.geometry import CircleModel, fit_circle
+from ...common.similarity import scaled_delta
 from ...common.tracking import InstanceTracks
 
 
@@ -78,14 +79,18 @@ def score_orbits(
         omega_score = exponential_similarity(
             omega_error, scale=float(config["angular_velocity_error_scale"])
         )
-        circularity_score = exponential_similarity(
+        circularity_error = scaled_delta(
+            reference_orbit.circle.radial_cv,
             prediction_orbit.circle.radial_cv,
             scale=float(config["radial_cv_scale"]),
         )
-        uniformity_score = exponential_similarity(
+        uniformity_error = scaled_delta(
+            reference_orbit.angular_fit_rmse_rad,
             prediction_orbit.angular_fit_rmse_rad,
             scale=float(config["angular_fit_rmse_scale_rad"]),
         )
+        circularity_score = exponential_similarity(circularity_error)
+        uniformity_score = exponential_similarity(uniformity_error)
         object_metrics.append(
             {
                 "angle_trajectory_score": angle_score,
@@ -100,10 +105,16 @@ def score_orbits(
                     prediction_orbit.angular_velocity_rad_s
                 ),
                 "angular_velocity_relative_error": omega_error,
+                "reference_radial_cv": reference_orbit.circle.radial_cv,
                 "prediction_radial_cv": prediction_orbit.circle.radial_cv,
+                "radial_cv_scaled_error": circularity_error,
+                "reference_angular_fit_rmse_rad": (
+                    reference_orbit.angular_fit_rmse_rad
+                ),
                 "prediction_angular_fit_rmse_rad": (
                     prediction_orbit.angular_fit_rmse_rad
                 ),
+                "angular_fit_rmse_scaled_error": uniformity_error,
             }
         )
     reference_radii = np.asarray(

@@ -13,7 +13,7 @@ from ...common.base import ReferenceCaseEvaluator, SceneAnalysis
 from ...common.errors import SceneAnalysisError
 from ...common.geometry import rectify_axis_masks
 from ...common.masks.motion import build_motion_prompt
-from ...common.masks.quality import mask_iou
+from ...common.masks.quality import observed_mask_iou, summarize_mask_ious
 from ...common.masks.sam2 import Sam2VideoSegmenter
 from ...common.tracking import extract_centroid_trace
 from ...contracts import CaseEvaluationRequest
@@ -22,7 +22,7 @@ from .scoring import extract_incline_trace, score_incline
 
 class InclinedPlaneCaseEvaluator(ReferenceCaseEvaluator):
     evaluator_id = "inclined_plane_state"
-    evaluator_version = "1.0"
+    evaluator_version = "1.1"
     scene_id = "inclined_plane_slide"
     primary_score = "inclined_plane_state_similarity"
 
@@ -110,7 +110,9 @@ class InclinedPlaneCaseEvaluator(ReferenceCaseEvaluator):
             config=self.config["scoring"],
         )
         original_ious = [
-            mask_iou(reference_masks[index], prediction_masks[index])
+            observed_mask_iou(
+                reference_masks[index], prediction_masks[index]
+            )
             for index in range(len(times_s))
         ]
         reference_rectified = rectify_axis_masks(
@@ -124,9 +126,13 @@ class InclinedPlaneCaseEvaluator(ReferenceCaseEvaluator):
             span_px=prediction_trace.span_px,
         )
         rectified_ious = [
-            mask_iou(reference_rectified[index], prediction_rectified[index])
+            observed_mask_iou(
+                reference_rectified[index], prediction_rectified[index]
+            )
             for index in range(len(times_s))
         ]
+        original_iou_summary = summarize_mask_ious(original_ious)
+        rectified_iou_summary = summarize_mask_ious(rectified_ious)
         rows = [
             {
                 "frame": index,
@@ -183,15 +189,11 @@ class InclinedPlaneCaseEvaluator(ReferenceCaseEvaluator):
             metrics={
                 "inclined_plane_state_similarity": state_score,
                 "physical_subject_mask_iou": {
-                    "mean": float(np.mean(original_ious)),
-                    "minimum": float(np.min(original_ious)),
-                    "maximum": float(np.max(original_ious)),
+                    **original_iou_summary,
                     "role": "diagnostic_not_primary_score",
                 },
                 "plane_rectified_mask_iou": {
-                    "mean": float(np.mean(rectified_ious)),
-                    "minimum": float(np.min(rectified_ious)),
-                    "maximum": float(np.max(rectified_ious)),
+                    **rectified_iou_summary,
                     "role": "viewpoint_normalized_diagnostic",
                 },
                 "reference_physics_diagnostic": {
