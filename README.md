@@ -14,7 +14,8 @@
 - **多输入 baseline**：T2V、I2V/TI2V 以及外部命令式模型均通过统一适配层接入。
 - **Baseline-owned TaskBuilder**：每个 Baseline 将不可变的 `DatasetSnapshot + TaskSpec`
   编译为本模型可执行、带 SHA-256 封印的 `BaselineTaskInstance`；训练器和预测器只消费该实例。
-- **三类评测**：CommonSense、Prediction、VisualJudgment；当前算法接口和适用性门控已实现，模型相关实现为占位插件。
+- **Scene-aware 物理评测**：五个正式 scene 均按各自物理状态打分，并统一输出
+  物理主体 mask IoU 诊断；Task 级评估严格检查 coverage。
 - **可复现运行**：每次运行冻结 task、baseline、数据指纹、job plan、预测清单和报告。
 - **条件受控消融**：case/视频与模型输入解耦；当前 v2 Task 提供 `generic` 和
   `physics`，由 Baseline 的 TaskBuilder 调用其内部 DataAdapter 生成输入；第一类任务
@@ -67,6 +68,15 @@ PYTHONPATH=src python3 -m physbench run --task examples/fixtures/task_view_a.jso
 
 真实单摆、碰撞、自由落体、斜面下滑和匀速圆周运动数据的命名解释、时间尺度、
 官方划分与审计方式见 [真实数据导入记录](docs/REAL_DATA_IMPORT.md)。
+五类 case evaluator、Task 聚合、参考模式与评估产物见
+[Scene-aware Evaluation](docs/EVALUATION_ARCHITECTURE.md)。
+
+运行正式视频评估需安装评估依赖与 Meta 官方 SAM2：
+
+```bash
+pip install -e ".[scene-evaluation]"
+pip install -e /path/to/facebookresearch/sam2
+```
 
 ## 项目结构
 

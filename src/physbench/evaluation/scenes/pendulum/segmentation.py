@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import tempfile
-from contextlib import nullcontext
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import cv2
 import numpy as np
+
+from ...common.errors import SceneAnalysisError
+from ...common.masks.sam2 import MaskPrompt, Sam2VideoSegmenter
 
 
 class SegmentationError(RuntimeError):
@@ -162,54 +162,13 @@ def build_motion_prompt(
 
 
 class Sam2PendulumSegmenter:
-    """Lazy, reusable SAM2.1 backend."""
+    """Pendulum-specific prompt builder backed by the shared SAM2 adapter."""
 
     def __init__(self, config: dict[str, Any]):
-        self.model_id = str(config["model_id"])
-        self.requested_device = str(config.get("device", "auto"))
-        self._predictor: Any | None = None
-        self._torch: Any | None = None
-        self.device: str | None = None
-
-    def _load(self) -> None:
-        if self._predictor is not None:
-            return
-        try:
-            import torch
-            from sam2.sam2_video_predictor import SAM2VideoPredictor
-        except ImportError as exc:
-            raise SegmentationError(
-                "sam2_dependency_missing",
-                "SAM2 evaluation dependencies are not installed",
-            ) from exc
-        device = self.requested_device
-        if device == "auto":
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-        if device == "cuda" and not torch.cuda.is_available():
-            raise SegmentationError(
-                "cuda_unavailable", "SAM2 evaluator requested CUDA but none is available"
-            )
-        try:
-            predictor = SAM2VideoPredictor.from_pretrained(
-                self.model_id, device=device
-            )
-        except Exception as exc:
-            raise SegmentationError(
-                "sam2_model_load_failed",
-                f"failed to load SAM2 model {self.model_id}: {exc}",
-            ) from exc
-        self._torch = torch
-        self._predictor = predictor
-        self.device = device
+        self._backend = Sam2VideoSegmenter(config)
 
     def describe(self) -> dict[str, Any]:
-        return {
-            "backend": "sam2_video_predictor",
-            "model_id": self.model_id,
-            "requested_device": self.requested_device,
-            "resolved_device": self.device,
-            "reuse_policy": "one_model_instance_per_task_evaluator",
-        }
+        return self._backend.describe()
 
     def segment(
         self,
@@ -219,9 +178,6 @@ class Sam2PendulumSegmenter:
         prompt: MotionPrompt | None = None,
         prompt_source: str = "independent_motion_proposal",
     ) -> tuple[list[np.ndarray], dict[str, Any], MotionPrompt]:
-        self._load()
-        assert self._predictor is not None
-        assert self._torch is not None
         if prompt is None:
             prompt = build_motion_prompt(
                 frames,
@@ -230,96 +186,25 @@ class Sam2PendulumSegmenter:
                 expand=float(proposal_config["box_expand"]),
                 min_box_side=int(proposal_config["min_box_side"]),
             )
-        height, width = frames[0].shape[:2]
-        masks = [np.zeros((height, width), np.uint8) for _ in frames]
-        with tempfile.TemporaryDirectory(prefix="physbench_pendulum_") as temporary:
-            frame_directory = Path(temporary)
-            for index, frame in enumerate(frames):
-                written = cv2.imwrite(
-                    str(frame_directory / f"{index:06d}.jpg"),
-                    frame,
-                    [cv2.IMWRITE_JPEG_QUALITY, 95],
-                )
-                if not written:
-                    raise SegmentationError(
-                        "temporary_frame_write_failed",
-                        f"failed to write temporary SAM2 frame {index}",
-                    )
-            state = self._predictor.init_state(
-                video_path=str(frame_directory),
-                offload_video_to_cpu=True,
-                offload_state_to_cpu=(self.device == "cpu"),
+        common_prompt = MaskPrompt(
+            frame_index=prompt.frame_index,
+            box_xyxy=prompt.box_xyxy,
+            points_xy=prompt.points_xy,
+            point_labels=prompt.point_labels,
+            metadata={
+                "source": prompt_source,
+                "motion_box_xyxy": prompt.motion_box_xyxy.tolist(),
+                "proposal_score": prompt.proposal_score,
+            },
+        )
+        try:
+            masks, backend_metadata = self._backend.segment(
+                frames,
+                prompt=common_prompt,
+                temporary_prefix="physbench_pendulum_",
             )
-            self._predictor.reset_state(state)
-            amp = (
-                self._torch.autocast("cuda", dtype=self._torch.bfloat16)
-                if self.device == "cuda"
-                else nullcontext()
-            )
-            try:
-                with self._torch.inference_mode(), amp:
-                    self._predictor.add_new_points_or_box(
-                        inference_state=state,
-                        frame_idx=prompt.frame_index,
-                        obj_id=1,
-                        box=prompt.box_xyxy,
-                        points=prompt.points_xy,
-                        labels=prompt.point_labels,
-                    )
-                    forward_count = 0
-                    for frame_index, _, logits in (
-                        self._predictor.propagate_in_video(state)
-                    ):
-                        mask = (
-                            (logits[0] > 0.0)
-                            .detach()
-                            .cpu()
-                            .numpy()
-                            .squeeze()
-                            .astype(np.uint8)
-                            * 255
-                        )
-                        if mask.shape != (height, width):
-                            mask = cv2.resize(
-                                mask,
-                                (width, height),
-                                interpolation=cv2.INTER_NEAREST,
-                            )
-                        masks[int(frame_index)] = mask
-                        forward_count += 1
-                    reverse_count = 0
-                    if prompt.frame_index > 0:
-                        for frame_index, _, logits in (
-                            self._predictor.propagate_in_video(
-                                state,
-                                start_frame_idx=prompt.frame_index,
-                                reverse=True,
-                            )
-                        ):
-                            mask = (
-                                (logits[0] > 0.0)
-                                .detach()
-                                .cpu()
-                                .numpy()
-                                .squeeze()
-                                .astype(np.uint8)
-                                * 255
-                            )
-                            if mask.shape != (height, width):
-                                mask = cv2.resize(
-                                    mask,
-                                    (width, height),
-                                    interpolation=cv2.INTER_NEAREST,
-                                )
-                            masks[int(frame_index)] = mask
-                            reverse_count += 1
-            except SegmentationError:
-                raise
-            except Exception as exc:
-                raise SegmentationError(
-                    "sam2_propagation_failed",
-                    f"SAM2 mask propagation failed: {exc}",
-                ) from exc
+        except SceneAnalysisError as exc:
+            raise SegmentationError(exc.code, str(exc)) from exc
 
         motion_top = max(0, int(round(prompt.motion_box_xyxy[1])))
         if motion_top:
@@ -333,7 +218,5 @@ class Sam2PendulumSegmenter:
             "prompt_points_xy": prompt.points_xy.tolist(),
             "prompt_point_labels": prompt.point_labels.tolist(),
             "proposal_score": prompt.proposal_score,
-            "forward_frames": forward_count,
-            "reverse_frames": reverse_count,
-            **self.describe(),
+            **backend_metadata,
         }, prompt

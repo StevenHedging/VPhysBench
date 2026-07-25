@@ -24,6 +24,26 @@ class SceneEvaluatorRegistry:
             from .scenes.pendulum.evaluator import PendulumCaseEvaluator
 
             evaluator: SceneCaseEvaluator = PendulumCaseEvaluator(config)
+        elif evaluator_type == "free_fall_state_v1":
+            from .scenes.free_fall.evaluator import FreeFallCaseEvaluator
+
+            evaluator = FreeFallCaseEvaluator(config)
+        elif evaluator_type == "inclined_plane_state_v1":
+            from .scenes.inclined_plane.evaluator import (
+                InclinedPlaneCaseEvaluator,
+            )
+
+            evaluator = InclinedPlaneCaseEvaluator(config)
+        elif evaluator_type == "uniform_circular_motion_state_v1":
+            from .scenes.circular_motion.evaluator import (
+                CircularMotionCaseEvaluator,
+            )
+
+            evaluator = CircularMotionCaseEvaluator(config)
+        elif evaluator_type == "collision_1d_state_v1":
+            from .scenes.collision.evaluator import CollisionCaseEvaluator
+
+            evaluator = CollisionCaseEvaluator(config)
         elif evaluator_type == "unsupported":
             evaluator = UnsupportedSceneEvaluator(scene_id, config)
         else:

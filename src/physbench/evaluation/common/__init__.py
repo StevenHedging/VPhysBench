@@ -1,6 +1,7 @@
-"""Compatibility exports for the original pendulum module paths."""
+"""Reusable observation, geometry, fitting, and artifact primitives."""
 
-from ...common.media import (
+from .errors import SceneAnalysisError
+from .media import (
     SampledVideo,
     VideoInfo,
     VideoProtocolError,
@@ -10,6 +11,7 @@ from ...common.media import (
 
 __all__ = [
     "SampledVideo",
+    "SceneAnalysisError",
     "VideoInfo",
     "VideoProtocolError",
     "probe_video",

@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Scene-aware evaluation protocol",
+  "type": "object",
+  "required": ["schema_version", "protocol_id", "description", "scenes"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schema_version": {"const": "1.0"},
+    "protocol_id": {"type": "string", "minLength": 1},
+    "description": {"type": "string"},
+    "scenes": {
+      "type": "object",
+      "required": [
+        "pendulum",
+        "collision_1d",
+        "free_fall",
+        "inclined_plane_slide",
+        "uniform_circular_motion"
+      ],
+      "properties": {
+        "pendulum": {
+          "$ref": "#/$defs/pendulum"
+        },
+        "free_fall": {
+          "$ref": "#/$defs/referenceScene"
+        },
+        "inclined_plane_slide": {
+          "$ref": "#/$defs/referenceScene"
+        },
+        "uniform_circular_motion": {
+          "$ref": "#/$defs/referenceScene"
+        },
+        "collision_1d": {
+          "$ref": "#/$defs/referenceScene"
+        }
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {"$ref": "#/$defs/referenceScene"},
+          {
+            "type": "object",
+            "required": ["type"],
+            "properties": {"type": {"const": "unsupported"}}
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "spatial": {
+      "type": "object",
+      "required": ["width", "height", "policy"],
+      "properties": {
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "policy": {"const": "preserve_aspect_ratio_letterbox"},
+        "pad_value": {"type": "integer", "minimum": 0, "maximum": 255}
+      }
+    },
+    "referenceTimeline": {
+      "type": "object",
+      "required": [
+        "fps",
+        "maximum_duration_s",
+        "minimum_duration_s",
+        "minimum_source_fps"
+      ],
+      "properties": {
+        "fps": {"type": "number", "exclusiveMinimum": 0},
+        "maximum_duration_s": {"type": "number", "exclusiveMinimum": 0},
+        "minimum_duration_s": {"type": "number", "exclusiveMinimum": 0},
+        "minimum_source_fps": {"type": "number", "exclusiveMinimum": 0},
+        "duration_tolerance_s": {"type": "number", "minimum": 0}
+      }
+    },
+    "referenceScene": {
+      "type": "object",
+      "required": ["type", "timeline", "spatial", "scoring"],
+      "properties": {
+        "type": {
+          "enum": [
+            "free_fall_state_v1",
+            "inclined_plane_state_v1",
+            "uniform_circular_motion_state_v1",
+            "collision_1d_state_v1"
+          ]
+        },
+        "timeline": {"$ref": "#/$defs/referenceTimeline"},
+        "spatial": {"$ref": "#/$defs/spatial"},
+        "quality": {"type": "object"},
+        "scoring": {
+          "type": "object",
+          "required": ["weights"],
+          "properties": {"weights": {"type": "object"}}
+        }
+      }
+    },
+    "pendulum": {
+      "type": "object",
+      "required": ["type", "timeline", "spatial", "quality", "scoring"],
+      "properties": {
+        "type": {"const": "pendulum_state_v1"},
+        "timeline": {
+          "type": "object",
+          "required": ["fps", "duration_s", "minimum_source_fps"]
+        },
+        "spatial": {"$ref": "#/$defs/spatial"},
+        "quality": {"type": "object"},
+        "scoring": {
+          "type": "object",
+          "required": ["weights"],
+          "properties": {"weights": {"type": "object"}}
+        }
+      }
+    }
+  }
+}

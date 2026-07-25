@@ -8,10 +8,18 @@
 
 要求 `assets.physics_reference_video`。目标流程为：时间对齐 → scene 专属主体分割 → 非物理区域 mask → 轨迹/形状重合与物理量误差。当前接口会检查 GT、预测视频和 segmenter/evaluator 是否齐备；算法插件缺失时不伪造分数。
 
-v2 AtomicRun 已实现 scene-aware Task evaluator。当前单摆 case evaluator 会分别分割
-reference 与 prediction，提取支点、摆球、归一化摆角、周期和振幅；正式 case 分数基于
-物理状态轨迹。每条成功评估的单摆 case 还会输出逐帧物理主体 IoU CSV 和 Jensen 风格
-IoU 曲线。详见 [Scene-aware Evaluation](EVALUATION_ARCHITECTURE.md)。
+v2 AtomicRun 已实现五场景 scene-aware Task evaluator。正式 case 分数来自 scene-local
+物理状态，而不是直接把像素 IoU 当作物理正确性：
+
+- 单摆：摆角轨迹、周期、振幅、支点与摆长稳定性；
+- 自由落体：竖直轨迹、归一化加速度、触地时间与横向漂移；
+- 斜面下滑：斜面局部轨迹、加速度、下降时间、接触与姿态稳定性；
+- 匀速圆周：相对角轨迹、角速度、圆轨道与多物体半径配置；
+- 一维碰撞：三实例轨迹、接触时刻、前后速度、动量与参考轨迹估计的恢复系数。
+
+所有成功 case 都输出逐帧 CSV 和 Jensen 风格物理主体 IoU 曲线；斜面与圆周另有
+几何归一化 IoU，一维碰撞另有 matched instance IoU。详见
+[Scene-aware Evaluation](EVALUATION_ARCHITECTURE.md)。
 
 ## VisualJudgmentMetrics
 
@@ -20,8 +28,9 @@ IoU 曲线。详见 [Scene-aware Evaluation](EVALUATION_ARCHITECTURE.md)。
 ## Scene 专属配置
 
 `configs/scenes/*.json` 定义常识检查、主体、关键物理量和材质属性。
-`configs/evaluation/protocols/*.json` 声明 scene evaluator 和算法配置。当前只实现
-`pendulum`；其他 scene 显式返回 `unsupported`，不会静默记作零分。
+`configs/evaluation/protocols/*.json` 声明 scene evaluator、时间窗、观测质量阈值和
+评分权重。`scene_default_v1` 已覆盖五个正式 scene；未知或显式关闭的 scene 仍返回
+`unsupported`，不会静默记作零分。
 
 ## 聚合
 

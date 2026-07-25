@@ -8,6 +8,9 @@ from typing import Any
 
 import numpy as np
 
+from ...common.artifacts.curves import save_iou_curve as _save_iou_curve
+from ...common.masks.quality import mask_iou
+
 
 class TraceQualityError(RuntimeError):
     def __init__(self, code: str, message: str):
@@ -160,18 +163,6 @@ def extract_trace(
     )
 
 
-def mask_iou(reference: np.ndarray, prediction: np.ndarray) -> float:
-    reference_binary = reference > 0
-    prediction_binary = prediction > 0
-    union = int(np.logical_or(reference_binary, prediction_binary).sum())
-    if union == 0:
-        return 0.0
-    intersection = int(
-        np.logical_and(reference_binary, prediction_binary).sum()
-    )
-    return float(intersection / union)
-
-
 def score_traces(
     reference: PendulumTrace,
     prediction: PendulumTrace,
@@ -292,43 +283,10 @@ def save_iou_curve(
     ious: list[float],
     case_id: str,
 ) -> None:
-    try:
-        import matplotlib
-
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-    except ImportError as exc:
-        raise TraceQualityError(
-            "matplotlib_dependency_missing",
-            "matplotlib is required to save the physical-subject IoU curve",
-        ) from exc
-    x = np.arange(len(ious))
-    fig, axis = plt.subplots(figsize=(20, 6))
-    axis.plot(
-        x,
-        np.asarray(ious),
-        marker="o",
-        markersize=3,
-        linewidth=1.5,
-        label="Physical-subject mask IoU (reference vs generation)",
+    _save_iou_curve(
+        path,
+        times_s=times_s,
+        ious=ious,
+        case_id=case_id,
+        scene_name="Pendulum",
     )
-    axis.set_xlim(0, max(1, len(ious) - 1))
-    axis.set_ylim(0, 1)
-    tick_step = max(1, len(x) // 20)
-    ticks = x[::tick_step]
-    axis.set_xticks(ticks)
-    axis.set_xticklabels(
-        [f"{times_s[index]:.2f}" for index in ticks], fontsize=7
-    )
-    axis.set_yticks(np.linspace(0, 1, 11))
-    axis.set_xlabel("Physical time (s)")
-    axis.set_ylabel("IoU")
-    axis.set_title(
-        f"Pendulum physical-subject IoU over time\n{case_id}"
-    )
-    axis.grid(True, alpha=0.25)
-    axis.legend()
-    fig.tight_layout()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, dpi=180)
-    plt.close(fig)
