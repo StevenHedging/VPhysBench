@@ -16,3 +16,7 @@ V1_VIEW_B = V1_RELEASE_ROOT / "views" / "view_b_seed42_g5.json"
 
 V2_RELEASE_ROOT = PHYSICS_VIDEO_ROOT / "releases" / "2.0.0"
 V2_DATASET = V2_RELEASE_ROOT / "dataset.json"
+
+V3_RELEASE_ROOT = PHYSICS_VIDEO_ROOT / "releases" / "3.0.0"
+V3_DATASET = V3_RELEASE_ROOT / "dataset.json"
+LATEST_DATASET = V3_DATASET

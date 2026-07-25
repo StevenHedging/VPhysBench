@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Task-level scene-aware evaluation",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "task_id",
+    "task_family",
+    "conditioning",
+    "protocol",
+    "status",
+    "expected_jobs",
+    "evaluated_jobs",
+    "coverage",
+    "score",
+    "observed_mean_score",
+    "status_counts",
+    "by_scene",
+    "breakdown"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "task_id": {"type": "string", "minLength": 1},
+    "task_family": {"enum": ["finetune_eval", "direct_eval"]},
+    "conditioning": {"enum": ["generic", "physics"]},
+    "protocol": {
+      "type": "object",
+      "required": ["id", "fingerprint", "path"]
+    },
+    "status": {"enum": ["complete", "partial"]},
+    "expected_jobs": {"type": "integer", "minimum": 0},
+    "evaluated_jobs": {"type": "integer", "minimum": 0},
+    "coverage": {"type": "number", "minimum": 0, "maximum": 1},
+    "score": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "observed_mean_score": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "status_counts": {"type": "object"},
+    "by_scene": {"type": "object"},
+    "breakdown": {"type": "object"},
+    "integrity_issues": {"type": "array"}
+  }
+}

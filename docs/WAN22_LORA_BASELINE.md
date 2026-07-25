@@ -34,8 +34,8 @@ jobs、缓存绑定与 operation DAG。实例中的 `native_inputs` 是 WAN 私�
 
 ## 2. v2 Task 1：视图 A 调推一体
 
-AtomicTask：`tasks/official/finetune_eval_generic.json` 或
-`tasks/official/finetune_eval_physics.json`。
+当前五场景 AtomicTask：`tasks/official/five_scene_finetune_eval_generic.json` 或
+`tasks/official/five_scene_finetune_eval_physics.json`。
 
 1. 读取 task 选中的多 scene `train_case_ids`。
 2. TaskBuilder 为训练和推理 case 生成 WAN-native adaptation record。
@@ -53,8 +53,8 @@ AtomicTask：`tasks/official/finetune_eval_generic.json` 或
 
 ## 3. v2 Task 2：视图 B 零训练评测
 
-AtomicTask：`tasks/official/direct_eval_generic.json` 或
-`tasks/official/direct_eval_physics.json`。可通过 `atomic-run` 的 `--scene-id`、
+当前五场景 AtomicTask：`tasks/official/five_scene_direct_eval_generic.json` 或
+`tasks/official/five_scene_direct_eval_physics.json`。可通过 `atomic-run` 的 `--scene-id`、
 `--group`、`--case-id` 覆盖选择范围。
 
 该模式不在 Benchmark 内训练或微调，直接加载既有
@@ -62,9 +62,11 @@ AtomicTask：`tasks/official/direct_eval_generic.json` 或
 `baseline://frozen_model` 作为模型引用，并生成 `infer → evaluate` DAG；如果 checkpoint
 不存在、scene/conditioning/任务族不受支持，会在运行前拒绝构建，而不是产生无效结果。
 
-当前 bundle 声明支持 `pendulum`、`free_fall` 和 `collision_1d`，冻结 checkpoint 来自
-已发布的三 scene LoRA。若改用某个单 scene checkpoint，应同步收窄
-`supported_scenes`，避免把领域错配结果当成正式 baseline。
+当前 bundle 声明支持 `pendulum`、`free_fall`、`collision_1d`、
+`inclined_plane_slide` 和 `uniform_circular_motion`。冻结 checkpoint 仍来自已发布的
+三 scene LoRA；五场景 `finetune_eval` 会为当前 task 重新训练 Adapter，直接评测时则
+必须明确冻结 checkpoint 的训练域。若改用单 scene checkpoint，应同步收窄
+`supported_scenes`。
 
 ## 4. v2 Case 到 WAN 输入的映射
 
@@ -110,8 +112,8 @@ WAN 执行阶段的兼容派生文件仍位于：
 
 默认策略：
 
-- 空间：支持由 baseline 配置声明 scene 分桶。当前三场景 8 卡配置中，单摆/自由落体进入
-  `480×832` 竖屏桶，碰撞进入 `832×480` 横屏桶；每个桶内保持宽高比缩放再 padding，
+- 空间：支持由 baseline 配置声明 scene 分桶。单摆、自由落体、圆周运动进入
+  `480×832` 竖屏桶，碰撞、斜面运动进入 `832×480` 横屏桶；每个桶内保持宽高比缩放再 padding，
   不拉伸、不裁掉物理主体。原始数据保持只读，不做横竖屏转换。
 - 时间：先按 case 的 `temporal.encoded_to_physical_speed` 恢复物理时间，再依据时间戳重采样为 24 FPS，不用原始帧序号冒充统一时间。
 - 长视频：从真实 `t=0` 取最多 121 帧，对应释放后的统一前缀。
@@ -127,8 +129,8 @@ adapter 仍支持通过非 1 的 `encoded_to_physical_speed` 适配外部慢放�
 
 ```bash
 PYTHONPATH=src python3 -m physbench task-build \
-  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
-  --task tasks/official/finetune_eval_physics.json \
+  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
+  --task tasks/official/five_scene_finetune_eval_physics.json \
   --baseline baselines/wan22_lora/baseline.json \
   --output /tmp/wan22_finetune_physics.instance.json
 ```
@@ -138,8 +140,8 @@ PYTHONPATH=src python3 -m physbench task-build \
 
 ```bash
 PYTHONPATH=src python3 -m physbench atomic-run \
-  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
-  --task tasks/official/finetune_eval_physics.json \
+  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
+  --task tasks/official/five_scene_finetune_eval_physics.json \
   --baseline baselines/wan22_lora/baseline.json \
   --output-root runs_v2
 ```
@@ -148,9 +150,9 @@ PYTHONPATH=src python3 -m physbench atomic-run \
 
 ```bash
 PYTHONPATH=src python3 -m physbench matrix-run \
-  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
-  --task tasks/official/finetune_eval_generic.json \
-  --task tasks/official/finetune_eval_physics.json \
+  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
+  --task tasks/official/five_scene_finetune_eval_generic.json \
+  --task tasks/official/five_scene_finetune_eval_physics.json \
   --baseline baselines/wan22_lora/baseline.json \
   --matrix-id wan22_task1_conditioning_ablation \
   --output-root runs_v2

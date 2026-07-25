@@ -32,20 +32,20 @@ make test
 make smoke
 ```
 
-v2 常用命令：
+当前五场景 release（仍使用 v2 数据契约）常用命令：
 
 ```bash
 # 只编译，不训练或推理；输出可审计的 sealed task instance
 PYTHONPATH=src python3 -m physbench task-build \
-  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
-  --task tasks/official/finetune_eval_physics.json \
+  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
+  --task tasks/official/five_scene_finetune_eval_physics.json \
   --baseline baselines/wan22_lora/baseline.json \
   --output /tmp/wan22_physics_task_instance.json
 
 # atomic-run 总是先执行同一个 TaskBuilder 编译步骤；不加 --execute 只做计划/暂存
 PYTHONPATH=src python3 -m physbench atomic-run \
-  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
-  --task tasks/official/finetune_eval_physics.json \
+  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
+  --task tasks/official/five_scene_finetune_eval_physics.json \
   --baseline baselines/wan22_lora/baseline.json \
   --output-root runs_v2
 ```
@@ -65,7 +65,8 @@ PYTHONPATH=src python3 -m physbench run --task examples/fixtures/task_view_a.jso
 
 已有 WAN2.2-TI2V-5B + LoRA 已作为专用 baseline 接入，包含视图 A 联合微调、视图 B 冻结 LoRA、首帧映射和不同视频规格的模型侧只读适配。见 [WAN2.2 + LoRA 文档](docs/WAN22_LORA_BASELINE.md)。
 
-真实单摆、碰撞和自由落体数据的命名解释、时间尺度、官方划分与审计方式见 [真实数据导入记录](docs/REAL_DATA_IMPORT.md)。
+真实单摆、碰撞、自由落体、斜面下滑和匀速圆周运动数据的命名解释、时间尺度、
+官方划分与审计方式见 [真实数据导入记录](docs/REAL_DATA_IMPORT.md)。
 
 ## 项目结构
 

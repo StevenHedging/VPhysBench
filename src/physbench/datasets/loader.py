@@ -95,8 +95,22 @@ def _validate_views(
         ]
         if len(ids) != len(set(ids)):
             raise ValueError(f"dataset view {view_id} contains duplicate case IDs")
-        if set(ids) != case_ids:
-            raise ValueError(f"dataset view {view_id} must cover the complete case set")
+        unknown = set(ids) - case_ids
+        if unknown:
+            raise ValueError(
+                f"dataset view {view_id} references unknown cases: {sorted(unknown)}"
+            )
+        coverage = view.get("coverage", "complete")
+        if coverage not in {"complete", "subset"}:
+            raise ValueError(
+                f"dataset view {view_id} has invalid coverage={coverage}"
+            )
+        if coverage == "complete" and set(ids) != case_ids:
+            raise ValueError(
+                f"dataset view {view_id} must cover the complete case set"
+            )
+        if coverage == "subset" and not ids:
+            raise ValueError(f"dataset subset view {view_id} cannot be empty")
 
 
 def _load_asset_lock(

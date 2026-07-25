@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Scene-aware case evaluation",
+  "type": "object",
+  "required": [
+    "job_id",
+    "case_id",
+    "scene_id",
+    "evaluator",
+    "status",
+    "score",
+    "reason_code",
+    "metrics",
+    "quality",
+    "artifacts",
+    "provenance",
+    "evaluation_partition",
+    "conditioning",
+    "seed"
+  ],
+  "properties": {
+    "job_id": {"type": "string", "minLength": 1},
+    "case_id": {"type": "string", "minLength": 1},
+    "scene_id": {"type": "string", "minLength": 1},
+    "evaluator": {
+      "type": "object",
+      "required": ["id", "version", "scene_id"]
+    },
+    "status": {
+      "enum": ["evaluated", "unavailable", "unsupported", "error"]
+    },
+    "score": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "reason_code": {"type": ["string", "null"]},
+    "reason": {"type": ["string", "null"]},
+    "metrics": {"type": "object"},
+    "quality": {"type": "object"},
+    "artifacts": {"type": "object"},
+    "provenance": {"type": "object"},
+    "evaluation_partition": {"type": "string"},
+    "conditioning": {"enum": ["generic", "physics"]},
+    "seed": {"type": "integer"}
+  }
+}

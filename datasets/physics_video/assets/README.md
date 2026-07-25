@@ -13,6 +13,11 @@
     └── first_frame.png|jpg    # 由 reference 派生或审核通过的首帧
 ```
 
+多个 case 来自同一个大压缩包时，原始字节只在
+`assets/source_archives/<capture_batch>/` 保存一次；case 的 `source_archive`
+与 `provenance.source_locator.member` 共同定位原始成员，canonical 资产仍按
+`scene_id/case_id` 独立组织。这样避免为每条 case 重复保存整个来源。
+
 文件哈希、来源压缩包成员、原始媒体探测值和时间尺度标注见
 `../provenance/imports/import_audit.jsonl`；release 使用的文件由
 `../releases/<version>/assets.lock.json` 封印。baseline 所需的尺寸、FPS、帧数和时间尺度变换必须写入

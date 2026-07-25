@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "protocol_id": "scene_default_v1",
+  "description": "Scene-aware case evaluation with strict Task-level coverage.",
+  "scenes": {
+    "pendulum": {
+      "type": "pendulum_state_v1",
+      "timeline": {
+        "fps": 16.0,
+        "duration_s": 5.0,
+        "minimum_source_fps": 8.0,
+        "duration_tolerance_s": 0.02
+      },
+      "spatial": {
+        "width": 480,
+        "height": 832,
+        "policy": "preserve_aspect_ratio_letterbox",
+        "pad_value": 0
+      },
+      "sam2": {
+        "model_id": "facebook/sam2.1-hiera-tiny",
+        "device": "auto"
+      },
+      "motion_proposal": {
+        "threshold": 15.0,
+        "min_area": 20,
+        "box_expand": 1.08,
+        "min_box_side": 24
+      },
+      "quality": {
+        "minimum_mask_pixels": 20,
+        "minimum_mask_area_ratio": 0.00005,
+        "maximum_mask_area_ratio": 0.25,
+        "minimum_valid_frame_ratio": 0.9
+      },
+      "period": {
+        "minimum_s": 0.3,
+        "maximum_s": 2.5
+      },
+      "scoring": {
+        "minimum_angle_scale_deg": 5.0,
+        "pivot_drift_scale": 0.03,
+        "length_cv_scale": 0.05,
+        "weights": {
+          "angle_trajectory": 0.6,
+          "period": 0.2,
+          "amplitude": 0.1,
+          "structural_consistency": 0.1
+        }
+      }
+    },
+    "collision_1d": {
+      "type": "unsupported"
+    },
+    "free_fall": {
+      "type": "unsupported"
+    },
+    "inclined_plane_slide": {
+      "type": "unsupported"
+    },
+    "uniform_circular_motion": {
+      "type": "unsupported"
+    }
+  }
+}

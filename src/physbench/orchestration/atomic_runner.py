@@ -10,13 +10,15 @@ from .. import __version__
 from ..baseline_api import load_baseline_bundle, load_baseline_plugin
 from ..datasets import load_dataset_v2
 from ..domain import BaselineTaskInstance, TaskSpec
-from ..io import canonical_sha256, load_json, write_json, write_jsonl
-from ..metrics import evaluate_cases
+from ..evaluation import evaluate_task, load_evaluation_protocol
+from ..io import (
+    canonical_sha256,
+    load_json,
+    load_jsonl,
+    write_json,
+    write_jsonl,
+)
 from ..tasks import load_task_v2
-
-
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_METRICS = PROJECT_ROOT / "configs" / "metrics" / "default.json"
 
 
 def build_task_instance(
@@ -64,6 +66,9 @@ def _state(run_dir: Path, stage: str, **extra: Any) -> None:
 def _render_atomic_report(
     run: dict[str, Any], plan: dict[str, Any], summary: dict[str, Any]
 ) -> str:
+    task_score = (
+        "—" if summary["score"] is None else f"{summary['score']:.4f}"
+    )
     lines = [
         f"# AtomicRun: {run['run_id']}\n\n",
         "```text\nTaskSpec → CanonicalTaskPlan → BaselineTaskInstance → AtomicRun\n```\n\n",
@@ -78,14 +83,17 @@ def _render_atomic_report(
         f"- Inference jobs：`{len(plan['jobs'])}`\n",
         f"- Status：`{run['status']}`\n\n",
         "## Evaluation\n\n",
-        "| Scene / partition / conditioning | Jobs | Scored | Mean score | Coverage |\n",
+        f"- Evaluation status：`{summary['status']}`\n",
+        f"- Evaluation coverage：`{summary['coverage']:.4f}`\n",
+        f"- Task score：`{task_score}`\n\n",
+        "| Scene / partition | Expected | Evaluated | Score | Coverage |\n",
         "|---|---:|---:|---:|---:|\n",
     ]
     for name, item in summary["breakdown"].items():
-        score = "—" if item["mean_score"] is None else f"{item['mean_score']:.4f}"
+        score = "—" if item["score"] is None else f"{item['score']:.4f}"
         lines.append(
-            f"| `{name}` | {item['jobs']} | {item['scored_jobs']} | {score} | "
-            f"{item['mean_metric_coverage']:.4f} |\n"
+            f"| `{name}` | {item['expected_jobs']} | {item['evaluated_jobs']} | "
+            f"{score} | {item['coverage']:.4f} |\n"
         )
     lines.extend([
         "\n## Isolation\n\n",
@@ -114,6 +122,10 @@ def run_atomic(
 ) -> Path:
     dataset = load_dataset_v2(dataset_path, check_assets=check_assets)
     task = load_task_v2(task_path)
+    protocol_id = task.value.get("evaluation", {}).get(
+        "protocol", "scene_default_v1"
+    )
+    evaluation_protocol = load_evaluation_protocol(protocol_id)
     if scene_ids is not None or groups is not None or case_ids is not None:
         value = copy.deepcopy(task.value)
         if scene_ids is not None:
@@ -201,6 +213,7 @@ def run_atomic(
         "data_adapter_materialization": (
             plugin.task_builder.data_adapter.materialization_fingerprint
         ),
+        "evaluation_protocol": evaluation_protocol["fingerprint"],
     })
     write_json(run_dir / "task_builder.json", plugin.task_builder.describe())
     write_json(
@@ -222,10 +235,15 @@ def run_atomic(
     _state(run_dir, "training_complete_or_staged", status=training.get("status"))
     write_jsonl(run_dir / "predictions.jsonl", predictions)
 
-    metrics = load_json(DEFAULT_METRICS)
-    case_metrics, summary = evaluate_cases(
-        list(dataset.cases), predictions, dataset.scene_configs, metrics
+    case_metrics, summary = evaluate_task(
+        plan=plan.value,
+        cases=list(dataset.cases),
+        predictions=predictions,
+        asset_root=dataset.asset_root,
+        protocol=evaluation_protocol,
+        output_dir=run_dir / "evaluation",
     )
+    # Compatibility projections for consumers of the original v2 scaffold.
     write_jsonl(run_dir / "evaluation" / "case_metrics.jsonl", case_metrics)
     write_json(run_dir / "evaluation" / "summary.json", summary)
     status = (
@@ -254,6 +272,9 @@ def run_atomic(
         "training_seed": plan.value["training_seed"],
         "execute": execute,
         "status": status,
+        "evaluation_status": summary["status"],
+        "evaluation_coverage": summary["coverage"],
+        "evaluation_score": summary["score"],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     write_json(run_dir / "run.json", run)
@@ -262,6 +283,41 @@ def run_atomic(
     )
     _state(run_dir, status)
     return run_dir
+
+
+def reevaluate_atomic(run_dir: str | Path) -> dict[str, Any]:
+    """Re-run Benchmark-owned evaluation for a frozen AtomicRun."""
+    directory = Path(run_dir).resolve()
+    plan = load_json(directory / "plan.json")
+    task = load_json(directory / "frozen" / "task.json")
+    cases = load_jsonl(directory / "frozen" / "cases.jsonl")
+    predictions = load_jsonl(directory / "predictions.jsonl")
+    instance = load_json(directory / "task_instance" / "manifest.json")
+    protocol_id = task.get("evaluation", {}).get(
+        "protocol", "scene_default_v1"
+    )
+    protocol = load_evaluation_protocol(protocol_id)
+    case_results, summary = evaluate_task(
+        plan=plan,
+        cases=cases,
+        predictions=predictions,
+        asset_root=instance["source"]["asset_root"],
+        protocol=protocol,
+        output_dir=directory / "evaluation",
+    )
+    write_jsonl(directory / "evaluation" / "case_metrics.jsonl", case_results)
+    write_json(directory / "evaluation" / "summary.json", summary)
+    run_path = directory / "run.json"
+    if run_path.is_file():
+        run = load_json(run_path)
+        run["evaluation_status"] = summary["status"]
+        run["evaluation_coverage"] = summary["coverage"]
+        run["evaluation_score"] = summary["score"]
+        write_json(run_path, run)
+        (directory / "report.md").write_text(
+            _render_atomic_report(run, plan, summary), encoding="utf-8"
+        )
+    return summary
 
 
 def _paired_plan_signature(plan: dict[str, Any]) -> dict[str, Any]:

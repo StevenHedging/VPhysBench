@@ -1,0 +1,143 @@
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+import cv2
+import numpy as np
+
+
+class VideoProtocolError(RuntimeError):
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
+
+@dataclass(frozen=True)
+class VideoInfo:
+    frame_count: int
+    fps: float
+    width: int
+    height: int
+    last_frame_time_s: float
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class SampledVideo:
+    frames: list[np.ndarray]
+    info: VideoInfo
+    sample_times_s: list[float]
+    source_indices: list[int]
+    spatial_transform: dict
+
+
+def probe_video(path: Path) -> VideoInfo:
+    capture = cv2.VideoCapture(str(path))
+    if not capture.isOpened():
+        raise VideoProtocolError("video_open_failed", f"cannot open video: {path}")
+    count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = float(capture.get(cv2.CAP_PROP_FPS))
+    width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    capture.release()
+    if count <= 0 or fps <= 0 or width <= 0 or height <= 0:
+        raise VideoProtocolError(
+            "invalid_video_metadata",
+            f"invalid video metadata for {path}: frames={count}, fps={fps}, "
+            f"size={width}x{height}",
+        )
+    return VideoInfo(
+        frame_count=count,
+        fps=fps,
+        width=width,
+        height=height,
+        last_frame_time_s=(count - 1) / fps,
+    )
+
+
+def _letterbox(
+    frame: np.ndarray,
+    *,
+    width: int,
+    height: int,
+    pad_value: int,
+) -> tuple[np.ndarray, dict]:
+    source_height, source_width = frame.shape[:2]
+    scale = min(width / source_width, height / source_height)
+    resized_width = max(1, int(round(source_width * scale)))
+    resized_height = max(1, int(round(source_height * scale)))
+    interpolation = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
+    resized = cv2.resize(
+        frame, (resized_width, resized_height), interpolation=interpolation
+    )
+    x = (width - resized_width) // 2
+    y = (height - resized_height) // 2
+    canvas = np.full((height, width, 3), pad_value, dtype=np.uint8)
+    canvas[y : y + resized_height, x : x + resized_width] = resized
+    return canvas, {
+        "policy": "preserve_aspect_ratio_letterbox",
+        "scale": scale,
+        "offset_xy": [x, y],
+        "source_size": [source_width, source_height],
+        "target_size": [width, height],
+    }
+
+
+def sample_video(
+    path: Path,
+    *,
+    sample_times_s: list[float],
+    width: int,
+    height: int,
+    pad_value: int = 0,
+    min_source_fps: float = 1.0,
+    duration_tolerance_s: float = 0.02,
+) -> SampledVideo:
+    info = probe_video(path)
+    if info.fps < min_source_fps:
+        raise VideoProtocolError(
+            "source_fps_too_low",
+            f"{path} has {info.fps:g} FPS; minimum is {min_source_fps:g}",
+        )
+    required_end = max(sample_times_s)
+    if info.last_frame_time_s + duration_tolerance_s < required_end:
+        raise VideoProtocolError(
+            "insufficient_duration",
+            f"{path} ends at frame time {info.last_frame_time_s:.6f}s, "
+            f"but protocol requires {required_end:.6f}s",
+        )
+    raw_indices = np.rint(np.asarray(sample_times_s) * info.fps).astype(int)
+    if raw_indices.max(initial=0) >= info.frame_count:
+        raise VideoProtocolError(
+            "insufficient_duration",
+            f"{path} has no source frame for t={required_end:.6f}s",
+        )
+    capture = cv2.VideoCapture(str(path))
+    if not capture.isOpened():
+        raise VideoProtocolError("video_open_failed", f"cannot open video: {path}")
+    frames: list[np.ndarray] = []
+    transform: dict | None = None
+    for index in raw_indices:
+        capture.set(cv2.CAP_PROP_POS_FRAMES, int(index))
+        ok, frame = capture.read()
+        if not ok:
+            capture.release()
+            raise VideoProtocolError(
+                "video_decode_failed", f"failed to decode frame {index} from {path}"
+            )
+        normalized, current_transform = _letterbox(
+            frame, width=width, height=height, pad_value=pad_value
+        )
+        transform = transform or current_transform
+        frames.append(normalized)
+    capture.release()
+    return SampledVideo(
+        frames=frames,
+        info=info,
+        sample_times_s=list(sample_times_s),
+        source_indices=raw_indices.astype(int).tolist(),
+        spatial_transform=transform or {},
+    )

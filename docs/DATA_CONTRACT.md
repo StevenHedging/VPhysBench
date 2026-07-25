@@ -1,5 +1,10 @@
 # 数据契约
 
+当前最新 release 是 `datasets/physics_video/releases/3.0.0/`，使用
+`schema_version=2.0` 的 prompt-free Dataset 契约。“v2”表示数据契约版本，不等于
+release 号；2.0.0 作为原三场景不可变快照保留。下方 Case manifest 小节描述的是
+仍被兼容的 v1 清单。
+
 ## Case manifest
 
 主清单使用 JSON Lines：每行一个独立 case，字段由 `schemas/case.schema.json` 定义。
@@ -46,16 +51,16 @@ PromptProfile 后无法复现实验。
 
 ## 导入建议
 
-权威资产统一存放在 `datasets/physics_video/assets/`。v2 release 必须通过
+权威资产统一存放在 `datasets/physics_video/assets/`。Dataset release 必须通过
 `assets.lock.json` 冻结所有被引用资产的路径、大小和 SHA-256。运行前使用：
 
 ```bash
 PYTHONPATH=src python3 -m physbench validate-dataset \
-  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
+  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
   --check-assets
 
 # 发布前或怀疑资产损坏时执行完整字节校验
 PYTHONPATH=src python3 -m physbench validate-dataset \
-  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
+  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
   --check-asset-hashes
 ```

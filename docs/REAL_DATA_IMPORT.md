@@ -40,6 +40,36 @@
 
 60 cm reference 约 0.33–0.35 秒，对应 5 个合法的 24 fps WAN 帧；80/100 cm 通常对应 9 帧。WAN 只做常规采样，不再执行 8 倍加速，也不会循环、减速或冻结尾帧。
 
+### 斜面下滑
+
+- 标注表含 100 行；95 行能与完整 MOV 成员无歧义对应。`IMG_0305`、
+  `IMG_0348`、`IMG_0382`、`IMG_0383` 是 `.drivedownload` 残缺占位，
+  `IMG_0391` 缺失，全部拒绝导入。压缩包内另有 61 个无表格标注的视频，也不进入
+  Dataset。
+- 固定物理条件为滑块质量 0.08768 kg、动摩擦系数 0.463、重力加速度
+  9.80665 m/s²；数值变量为 32/35/38/41/44° 斜面角度，表格同时给出摩擦力和
+  理论加速度。
+- `scripts/align_inclined_plane.py` 在释放点 ROI 中估计持续运动边界，回退约
+  0.05 秒，并为每条生成“前一时刻／canonical frame 0／后一时刻”三联复核图。
+  复核通过后才冻结 `reviewed_frames.json`，再按精确解码帧号生成 canonical 视频。
+- View A 的已见环境为默认白色、油画、绿色卡纸；黑色泡沫板为未见环境。训练使用
+  32/35/41/44°，38° 为未见数值 ID。选取 train 58、test_id 6、test_ood1 16，
+  训练占 72.5%。其余有效重复和“38° + 黑色背景”交叉组合保留在 Dataset/View B，
+  不混入 View A。
+
+### 匀速圆周运动
+
+- 36 条处理后 60 fps MP4 与标注表全部一一对应；角速度均为 54.55 deg/s。
+  单银色金属方块、单木块、银色方块和木块组合各 12 条，轨道半径为
+  2/4/6/8 cm。
+- View A 训练环境同时包含单银色方块和单木块，使用 2/6/8 cm 半径；4 cm 是
+  环境相同但训练未见的 ID 数值。双物体组成是 OOD1，所用半径均已在训练出现。
+  选取 train 18、test_id 2、test_ood1 4，训练恰占 75%。其余可靠重复仍保留在
+  Dataset/View B。
+- 原始压缩包在 `assets/source_archives/20260723_new_scenes/` 保存一次；各 case
+  使用逐字节成员提取的 canonical MP4，并记录压缩包成员 CRC、目标 SHA-256 和
+ 媒体探测值。
+
 ## 文件与划分
 
 ```text
@@ -53,7 +83,8 @@ datasets/physics_video/
 │   └── alignment/
 └── releases/
     ├── 1.0.0/                        # v1 cases 与 View
-    └── 2.0.0/                        # v2 Dataset 与 assets.lock.json
+    ├── 2.0.0/                        # 三场景 v2 Dataset
+    └── 3.0.0/                        # 五场景 Dataset
 ```
 
 碰撞对齐的可视化复核材料位于 `datasets/physics_video/provenance/alignment/collision_entry_v1/`：`coarse/`、`fine/` 和 `final/` 分别保存粗筛、边界细查和相邻帧终审；`reviewed_frames.json` 是冻结的起始帧映射。
@@ -64,6 +95,13 @@ datasets/physics_video/
 python3 scripts/import_real_dataset.py --scenes collision_1d free_fall
 python3 scripts/apply_collision_entry_alignment.py --workers 8 --threads-per-job 12 --overwrite
 python3 scripts/import_real_dataset.py --scenes pendulum --confirm-pendulum-r2-real-time
+conda run -n phybench python scripts/align_inclined_plane.py --propose --workers 6
+# inspect provenance/alignment/inclined_plane_start_v1/review/
+conda run -n phybench python scripts/align_inclined_plane.py --accept-proposals
+conda run -n phybench python scripts/align_inclined_plane.py --materialize --workers 4
+python3 scripts/import_20260723_scenes.py
+python3 scripts/build_dataset_asset_lock.py \
+  --dataset datasets/physics_video/releases/3.0.0/dataset.json
 PYTHONPATH=src python3 -m physbench validate \
   --manifest datasets/physics_video/releases/1.0.0/cases.jsonl --check-assets
 ```

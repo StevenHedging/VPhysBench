@@ -1,0 +1,25 @@
+{
+  "schema_version": "2.0",
+  "task_id": "five_scene_direct_eval_physics_v3",
+  "family": "direct_eval",
+  "conditioning": "physics",
+  "dataset_id": "physics_video_five_scene_v3",
+  "dataset_view": "view_b",
+  "selection": {
+    "scene_ids": [
+      "pendulum",
+      "free_fall",
+      "collision_1d",
+      "inclined_plane_slide",
+      "uniform_circular_motion"
+    ],
+    "groups": "all",
+    "case_ids": []
+  },
+  "ood2": {"enabled": false},
+  "seeds": {
+    "training": [],
+    "inference": [42]
+  },
+  "evaluation": {"protocol": "scene_default_v1"}
+}

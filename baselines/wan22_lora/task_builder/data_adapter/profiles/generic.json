@@ -16,6 +16,14 @@
     "collision_1d": {
       "base_prompt": "A fixed-camera real-world laboratory video of a one-dimensional central collision among three aligned balls. At frame 0, all three balls are visible, with ball 1 on the left. Ball 1 moves toward initially stationary balls 2 and 3. The camera and track remain stationary, and the collision unfolds at the true physical time scale.",
       "parameter_clauses": []
+    },
+    "inclined_plane_slide": {
+      "base_prompt": "A fixed-camera real-world laboratory video of a block released from rest at the top of a wooden inclined plane. Frame 0 is immediately before or at the onset of sliding. The block accelerates down the track under gravity while maintaining contact with the surface.",
+      "parameter_clauses": []
+    },
+    "uniform_circular_motion": {
+      "base_prompt": "A fixed overhead real-world laboratory video of one or more blocks undergoing uniform circular motion on a green rotating disk. The rotation center and camera remain fixed, and each block maintains an approximately constant orbit radius and angular speed.",
+      "parameter_clauses": []
     }
   }
 }

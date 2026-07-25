@@ -43,6 +43,29 @@
         {"name": "ball_3_mass", "required": false, "expected_unit": "kg", "precision": 5, "template": "ball 3 mass is {value} kilograms"},
         {"name": "ball_3_radius", "required": false, "expected_unit": "m", "precision": 5, "template": "ball 3 radius is {value} meters"}
       ]
+    },
+    "inclined_plane_slide": {
+      "base_prompt": "A fixed-camera real-world laboratory video of a block released from rest at the top of a wooden inclined plane. Frame 0 is immediately before or at the onset of sliding. The block accelerates down the track under gravity while maintaining contact with the surface.",
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "incline_angle", "required": true, "expected_unit": "deg", "precision": 1, "template": "the incline angle is {value} degrees"},
+        {"name": "block_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "the block mass is {value} kilograms"},
+        {"name": "kinetic_friction_coefficient", "required": true, "expected_unit": "1", "precision": 3, "template": "the kinetic friction coefficient is {value}"},
+        {"name": "theoretical_acceleration", "required": true, "expected_unit": "m/s^2", "precision": 4, "template": "the theoretical acceleration down the incline is {value} meters per second squared"}
+      ]
+    },
+    "uniform_circular_motion": {
+      "base_prompt": "A fixed overhead real-world laboratory video of one or more blocks undergoing uniform circular motion on a green rotating disk. The rotation center and camera remain fixed, and each block maintains an approximately constant orbit radius and angular speed.",
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "angular_velocity", "required": true, "expected_unit": "deg/s", "precision": 2, "template": "the angular velocity is {value} degrees per second"},
+        {"name": "object_1_orbit_radius", "required": true, "expected_unit": "m", "precision": 2, "template": "object 1 orbit radius is {value} meters"},
+        {"name": "object_2_orbit_radius", "required": false, "expected_unit": "m", "precision": 2, "template": "object 2 orbit radius is {value} meters"}
+      ]
     }
   }
 }

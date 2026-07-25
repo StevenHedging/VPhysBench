@@ -8,7 +8,12 @@ from pathlib import Path
 
 from .io import load_json, load_jsonl, write_json
 from .datasets import load_dataset_v2
-from .orchestration import build_task_instance, run_atomic, run_matrix
+from .orchestration import (
+    build_task_instance,
+    reevaluate_atomic,
+    run_atomic,
+    run_matrix,
+)
 from .prompts import PromptRegistry, SUPPORTED_PROMPT_PROFILES
 from .runner import reevaluate_run, run_benchmark
 from .splitters import build_view_a, build_view_b
@@ -103,7 +108,12 @@ def _run(args: argparse.Namespace) -> int:
 
 
 def _evaluate(args: argparse.Namespace) -> int:
-    summary = reevaluate_run(args.run_dir, args.scene_config_dir)
+    directory = Path(args.run_dir)
+    summary = (
+        reevaluate_atomic(directory)
+        if (directory / "task_instance" / "manifest.json").is_file()
+        else reevaluate_run(directory, args.scene_config_dir)
+    )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
 

@@ -3,7 +3,13 @@
   "baseline_id": "wan22_ti2v_5b_lora_r32_v2",
   "plugin": "wan22_lora",
   "description": "Static WAN2.2-TI2V-5B + FlowMatch LoRA baseline bundle.",
-  "supported_scenes": ["pendulum", "free_fall", "collision_1d"],
+  "supported_scenes": [
+    "pendulum",
+    "free_fall",
+    "collision_1d",
+    "inclined_plane_slide",
+    "uniform_circular_motion"
+  ],
   "capabilities": {
     "task_families": ["finetune_eval", "direct_eval"],
     "conditioning": ["generic", "physics"],
@@ -40,12 +46,16 @@
                 "portrait": {
                   "width": 480,
                   "height": 832,
-                  "scene_ids": ["pendulum", "free_fall"]
+                  "scene_ids": [
+                    "pendulum",
+                    "free_fall",
+                    "uniform_circular_motion"
+                  ]
                 },
                 "landscape": {
                   "width": 832,
                   "height": 480,
-                  "scene_ids": ["collision_1d"]
+                  "scene_ids": ["collision_1d", "inclined_plane_slide"]
                 }
               }
             }
