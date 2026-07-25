@@ -3,8 +3,8 @@
 > 新实验建议使用 v2 的 `Dataset × AtomicTask × Baseline` 架构。设计和命令见
 > [Benchmark v2 架构](docs/ARCHITECTURE_V2.md)；Baseline 的任务编译边界见
 > [TaskBuilder 架构](docs/TASK_BUILDER_ARCHITECTURE.md)；模型输入适配契约见
-> [统一 Data Adapter 架构](docs/DATA_ADAPTER_ARCHITECTURE.md)。原有 `configs/`、`data/` 和
-> `runs/` 作为 v1 兼容层与历史记录保留。
+> [统一 Data Adapter 架构](docs/DATA_ADAPTER_ARCHITECTURE.md)。所有权威数据统一位于
+> `datasets/`；原有 `configs/`、v1 release 和 `runs/` 作为兼容层与历史记录保留。
 
 一个面向物理视频生成模型的“训推一体 / 调推一体”Benchmark 骨架。它把数据、
 划分、任务、模型输入适配和评测解耦，支持：
@@ -36,15 +36,15 @@ v2 常用命令：
 
 ```bash
 # 只编译，不训练或推理；输出可审计的 sealed task instance
-PYTHONPATH=src python -m physbench task-build \
-  --dataset datasets/physics_v1 \
+PYTHONPATH=src python3 -m physbench task-build \
+  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
   --task tasks/official/finetune_eval_physics.json \
   --baseline baselines/wan22_lora/baseline.json \
   --output /tmp/wan22_physics_task_instance.json
 
 # atomic-run 总是先执行同一个 TaskBuilder 编译步骤；不加 --execute 只做计划/暂存
-PYTHONPATH=src python -m physbench atomic-run \
-  --dataset datasets/physics_v1 \
+PYTHONPATH=src python3 -m physbench atomic-run \
+  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
   --task tasks/official/finetune_eval_physics.json \
   --baseline baselines/wan22_lora/baseline.json \
   --output-root runs_v2
@@ -53,10 +53,10 @@ PYTHONPATH=src python -m physbench atomic-run \
 v1 兼容命令：
 
 ```bash
-PYTHONPATH=src python -m physbench validate --manifest examples/fixtures/cases.jsonl
-PYTHONPATH=src python -m physbench split --view A --manifest examples/fixtures/cases.jsonl --output /tmp/view_a.json
-PYTHONPATH=src python -m physbench split --view B --manifest examples/fixtures/cases.jsonl --groups 2 --seed 42 --output /tmp/view_b.json
-PYTHONPATH=src python -m physbench run --task examples/fixtures/task_view_a.json --baseline configs/baselines/dummy_i2v.json --manifest examples/fixtures/cases.jsonl --split examples/fixtures/view_a.json --output-root runs
+PYTHONPATH=src python3 -m physbench validate --manifest examples/fixtures/cases.jsonl
+PYTHONPATH=src python3 -m physbench split --view A --manifest examples/fixtures/cases.jsonl --output /tmp/view_a.json
+PYTHONPATH=src python3 -m physbench split --view B --manifest examples/fixtures/cases.jsonl --groups 2 --seed 42 --output /tmp/view_b.json
+PYTHONPATH=src python3 -m physbench run --task examples/fixtures/task_view_a.json --baseline configs/baselines/dummy_i2v.json --manifest examples/fixtures/cases.jsonl --split examples/fixtures/view_a.json --output-root runs
 ```
 
 真实数据到位后，只需按 [数据契约](docs/DATA_CONTRACT.md) 写 `cases.jsonl`，无需修改核心代码。
@@ -71,11 +71,10 @@ PYTHONPATH=src python -m physbench run --task examples/fixtures/task_view_a.json
 
 ```text
 physics_video_benchmark/
-├── datasets/             # v2：纯资产、结构化物理标注与 View 索引
+├── datasets/             # 唯一数据根：权威资产、来源审计与版本化 release
 ├── tasks/                # v2：四类原子 Task 与 OOD2 recipe
 ├── baselines/            # v2：静态 Baseline bundle、内置 TaskBuilder 与模型侧适配配置
 ├── configs/              # scene、task、baseline、metric 配置
-├── data/                 # 真实 manifest、划分与资源挂载点
 ├── docs/                 # 设计、数据、评测和接入文档
 ├── examples/fixtures/    # 不依赖真实视频的端到端测试数据
 ├── schemas/              # JSON Schema 数据契约

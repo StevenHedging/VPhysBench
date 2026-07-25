@@ -6,6 +6,7 @@ import unittest
 
 from _paths import ROOT
 from physbench.baseline_api import load_baseline_bundle, load_baseline_plugin
+from physbench.data_layout import V2_DATASET
 from physbench.datasets import load_dataset_v2
 from physbench.domain import BaselineTaskInstance
 from physbench.io import load_json, load_jsonl
@@ -16,7 +17,7 @@ from physbench.tasks import load_task_v2
 class TaskBuilderContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.dataset_path = ROOT / "datasets" / "physics_v1" / "dataset.json"
+        cls.dataset_path = V2_DATASET
         cls.baseline_path = ROOT / "baselines" / "wan22_lora" / "baseline.json"
         cls.dataset = load_dataset_v2(cls.dataset_path, check_assets=True)
         cls.bundle = load_baseline_bundle(cls.baseline_path)
@@ -127,6 +128,7 @@ class TaskBuilderContractTests(unittest.TestCase):
             self.assertEqual(1, len(jobs))
             self.assertEqual("planned", run["status"])
             self.assertTrue((run_dir / "task_builder.json").is_file())
+            self.assertTrue((run_dir / "frozen" / "assets.lock.json").is_file())
 
 
 if __name__ == "__main__":

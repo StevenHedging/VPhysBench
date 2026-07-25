@@ -126,7 +126,11 @@ def _smoke(args: argparse.Namespace) -> int:
 
 
 def _validate_dataset_v2(args: argparse.Namespace) -> int:
-    dataset = load_dataset_v2(args.dataset, check_assets=args.check_assets)
+    dataset = load_dataset_v2(
+        args.dataset,
+        check_assets=args.check_assets or args.check_asset_hashes,
+        check_asset_hashes=args.check_asset_hashes,
+    )
     print(
         f"dataset_id={dataset.dataset_id} cases={len(dataset.cases)} "
         f"scenes={len(dataset.scene_configs)} digest={dataset.digest}"
@@ -271,6 +275,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     validate_v2.add_argument("--dataset", required=True)
     validate_v2.add_argument("--check-assets", action="store_true")
+    validate_v2.add_argument(
+        "--check-asset-hashes",
+        action="store_true",
+        help="also verify every referenced asset against assets.lock.json",
+    )
     validate_v2.set_defaults(func=_validate_dataset_v2)
 
     atomic = sub.add_parser(

@@ -6,13 +6,17 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_MANIFEST = ROOT / "data" / "manifests" / "cases.jsonl"
+sys.path.insert(0, str(ROOT / "src"))
+
+from physbench.data_layout import V1_CASES as DEFAULT_MANIFEST  # noqa: E402
+
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 

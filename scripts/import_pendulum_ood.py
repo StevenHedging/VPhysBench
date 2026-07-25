@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -20,16 +21,21 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE = ROOT.parent
 SOURCE_ROOT = WORKSPACE / "wan22_pendulum_pipeline" / "data" / "ood_eval"
-MANIFEST = ROOT / "data" / "manifests" / "cases.jsonl"
-AUDIT = ROOT / "data" / "manifests" / "pendulum_ood_import_audit.jsonl"
-VIEW_A = ROOT / "data" / "splits" / "view_a.json"
-VIEW_B = ROOT / "data" / "splits" / "view_b_seed42_g5.json"
 
 sys.path.insert(0, str(ROOT / "src"))
 
+from physbench.data_layout import (  # noqa: E402
+    PHYSICS_VIDEO_ASSETS,
+    PHYSICS_VIDEO_PROVENANCE,
+    V1_CASES as MANIFEST,
+    V1_VIEW_A as VIEW_A,
+    V1_VIEW_B as VIEW_B,
+)
 from physbench.io import load_jsonl, write_json, write_jsonl  # noqa: E402
 from physbench.splitters import build_view_a, build_view_b  # noqa: E402
 
+
+AUDIT = PHYSICS_VIDEO_PROVENANCE / "imports" / "pendulum_ood_import_audit.jsonl"
 
 FACTOR_MAP = {
     "background_shift": "background",
@@ -88,12 +94,12 @@ def main() -> int:
         source_frame = WORKSPACE / "wan22_pendulum_pipeline" / metadata["first_frame"]
         suffix = source_frame.suffix.lower()
         destination = (
-            ROOT / "data" / "assets" / "pendulum" / metadata["sample_id"]
+            PHYSICS_VIDEO_ASSETS / "pendulum" / metadata["sample_id"] / "canonical"
             / f"first_frame{suffix}"
         )
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source_frame, destination)
-        frame_asset = f"../assets/pendulum/{metadata['sample_id']}/{destination.name}"
+        frame_asset = os.path.relpath(destination, MANIFEST.parent)
         prompt = parent["text"]["prompt"]
         appearance = copy.deepcopy(parent["appearance"])
         appearance.update({

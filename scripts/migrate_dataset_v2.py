@@ -15,6 +15,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from physbench.io import canonical_sha256, load_json, load_jsonl, write_json, write_jsonl  # noqa: E402
+from physbench.data_layout import (  # noqa: E402
+    V1_CASES,
+    V1_VIEW_A,
+    V1_VIEW_B,
+    V2_RELEASE_ROOT,
+)
 
 
 def dataset_relative(value: str | None) -> str | None:
@@ -78,19 +84,12 @@ def migrate_view(path: Path) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--manifest", type=Path, default=V1_CASES)
+    parser.add_argument("--view-a", type=Path, default=V1_VIEW_A)
     parser.add_argument(
-        "--manifest", type=Path, default=ROOT / "data" / "manifests" / "cases.jsonl"
+        "--view-b", type=Path, default=V1_VIEW_B,
     )
-    parser.add_argument(
-        "--view-a", type=Path, default=ROOT / "data" / "splits" / "view_a.json"
-    )
-    parser.add_argument(
-        "--view-b", type=Path,
-        default=ROOT / "data" / "splits" / "view_b_seed42_g5.json",
-    )
-    parser.add_argument(
-        "--output", type=Path, default=ROOT / "datasets" / "physics_v1"
-    )
+    parser.add_argument("--output", type=Path, default=V2_RELEASE_ROOT)
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
     output = args.output.resolve()
@@ -108,8 +107,10 @@ def main() -> int:
     descriptor = {
         "schema_version": "2.0",
         "dataset_id": "physics_video_three_scene_v2",
+        "release": "2.0.0",
         "cases": "cases.jsonl",
-        "asset_root": "../../data",
+        "asset_root": "../..",
+        "asset_lock": "assets.lock.json",
         "scene_catalog": "scenes",
         "views": {
             "view_a": "views/view_a.json",
@@ -119,9 +120,9 @@ def main() -> int:
     write_json(output / "dataset.json", descriptor)
     write_json(output / "migration_audit.json", {
         "schema_version": "2.0",
-        "source_manifest": str(args.manifest.resolve()),
-        "source_view_a": str(args.view_a.resolve()),
-        "source_view_b": str(args.view_b.resolve()),
+        "source_manifest": "../1.0.0/cases.jsonl",
+        "source_view_a": "../1.0.0/views/view_a.json",
+        "source_view_b": "../1.0.0/views/view_b_seed42_g5.json",
         "case_count": len(cases),
         "case_ids_sha256": canonical_sha256(sorted(case["case_id"] for case in cases)),
         "removed_case_fields": [
@@ -133,6 +134,7 @@ def main() -> int:
         "renamed_fields": {"physical_parameters": "physics"},
         "assets_copied": False,
         "source_assets_mutated": False,
+        "asset_root_migrated_to": "../../assets",
     })
     print(output / "dataset.json")
     return 0

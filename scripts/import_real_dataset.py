@@ -29,15 +29,18 @@ WORKSPACE = ROOT.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from physbench.io import load_jsonl, write_json, write_jsonl  # noqa: E402
+from physbench.data_layout import (  # noqa: E402
+    PHYSICS_VIDEO_ASSETS as ASSET_ROOT,
+    PHYSICS_VIDEO_PROVENANCE,
+    V1_CASES as MANIFEST,
+    V1_VIEW_A as VIEW_A,
+    V1_VIEW_B as VIEW_B,
+)
 from physbench.splitters import build_view_a, build_view_b  # noqa: E402
 
 
-ASSET_ROOT = ROOT / "data" / "assets"
-MANIFEST = ROOT / "data" / "manifests" / "cases.jsonl"
-AUDIT = ROOT / "data" / "manifests" / "import_audit.jsonl"
-VIEW_A = ROOT / "data" / "splits" / "view_a.json"
-VIEW_B = ROOT / "data" / "splits" / "view_b_seed42_g5.json"
-SOURCE_DOCS = ROOT / "data" / "source_docs"
+AUDIT = PHYSICS_VIDEO_PROVENANCE / "imports" / "import_audit.jsonl"
+SOURCE_DOCS = PHYSICS_VIDEO_PROVENANCE / "source_docs"
 
 COLLISION_FALL_ARCHIVE = WORKSPACE / "7_19碰撞_自由落体数据.zip"
 PENDULUM_R2_ARCHIVE = WORKSPACE / "去后缀_处理后_R2_单摆实验.zip"
@@ -102,8 +105,13 @@ def stable_copy(source: Path, destination: Path) -> None:
         raise OSError(f"copy verification failed: {destination}")
 
 
-def asset_path(scene: str, case_id: str, name: str) -> str:
-    return f"../assets/{scene}/{case_id}/{name}"
+def asset_path(
+    scene: str, case_id: str, name: str, *, group: str = "canonical"
+) -> str:
+    return os.path.relpath(
+        ASSET_ROOT / scene / case_id / group / name,
+        MANIFEST.parent,
+    )
 
 
 def base_case(
@@ -357,6 +365,12 @@ def import_collision() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             },
             ood_factors=factors,
         )
+        source_asset = asset_path(
+            "collision_1d", case_id, "reference.mov", group="source"
+        )
+        case["assets"]["source_video"] = source_asset
+        case["assets"]["reference_video"] = source_asset
+        case["assets"]["physics_reference_video"] = source_asset
         audit.append(materialize_case(case, source, source_locator={
             "archive": str(COLLISION_FALL_ARCHIVE), "member": member,
         }))
@@ -419,7 +433,7 @@ def import_free_fall() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             },
         )
         case["assets"]["source_video"] = asset_path(
-            "free_fall", case_id, "source_slowmo.mp4"
+            "free_fall", case_id, "source_slowmo.mp4", group="source"
         )
         audit.append(materialize_time_restored_case(
             case,

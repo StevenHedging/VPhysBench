@@ -23,7 +23,7 @@
 - 32 条真实时间尺度视频，原始 HEVC/MOV 以 `reference.mov` 保持不变；正式训练/评测资产为 `reference_aligned.mp4`。
 - 对每条视频先做粗时间线定位，再以 2 帧步长检查，最后逐帧检查候选帧及其相邻帧；起始帧定义为“最左侧入射球已完整进入画面的最早人工确认帧”。
 - 对齐严格按解码帧号裁切，重置起始 PTS，但保留后续每帧的原始时间戳间隔；不重采样 fps、不改分辨率、不丢弃尾帧。需要裁切的 case 用 libx265 lossless 重编码，源第 0 帧已合格的 case 仅重封装。
-- 每条 case 的 `first_frame.png` 来自对齐视频第 0 帧；manifest 同时记录 `assets.source_video`、正式 reference 与 `alignment` 元数据。逐条源/输出哈希、帧数和首帧像素一致性见 `data/alignment_audits/collision_entry_v1/alignment_audit.jsonl`。
+- 每条 case 的 `first_frame.png` 来自对齐视频第 0 帧；manifest 同时记录 `assets.source_video`、正式 reference 与 `alignment` 元数据。逐条源/输出哈希、帧数和首帧像素一致性见 `datasets/physics_video/provenance/alignment/collision_entry_v1/alignment_audit.jsonl`。
 - `collision_r2_small_steel_medium_steel_large_steel_v07389` 在源第 0 帧时来球已经完整入画，且源文件没有更早帧，因此从第 0 帧开始，这是唯一的 source-frame-zero 例外。
 - 文件名三字分别表示沿运动方向排列的球 1、2、3；小数为球 1 初速度（m/s）。
 - `大/中/小/波` 分别映射为大钢球、中钢球、小钢球、玻璃弹珠。
@@ -43,43 +43,38 @@
 ## 文件与划分
 
 ```text
-data/
-├── assets/
-│   ├── collision_1d/<case_id>/{reference.mov,reference_aligned.mp4,first_frame_source.png,first_frame.png}
-│   ├── free_fall/<case_id>/{source_slowmo.mp4,reference.mp4,first_frame.png}
-│   └── pendulum/<case_id>/{reference.mp4,first_frame.png}
-├── manifests/
-│   ├── cases.jsonl
-│   └── import_audit.jsonl
-├── source_docs/
-│   ├── collision_1d_ball_spec.txt
-│   ├── free_fall_ball_spec.txt
-│   ├── pendulum_annotations.json
-│   └── normalized_ball_specs.json
-└── splits/
-    ├── view_a.json
-    └── view_b_seed42_g5.json
+datasets/physics_video/
+├── assets/<scene_id>/<case_id>/
+│   ├── source/                       # 原始字节与对齐前证据
+│   └── canonical/                    # Benchmark reference 与首帧
+├── provenance/
+│   ├── imports/
+│   ├── source_docs/
+│   └── alignment/
+└── releases/
+    ├── 1.0.0/                        # v1 cases 与 View
+    └── 2.0.0/                        # v2 Dataset 与 assets.lock.json
 ```
 
-碰撞对齐的可视化复核材料位于 `data/alignment_audits/collision_entry_v1/`：`coarse/`、`fine/` 和 `final/` 分别保存粗筛、边界细查和相邻帧终审；`reviewed_frames.json` 是冻结的起始帧映射。
+碰撞对齐的可视化复核材料位于 `datasets/physics_video/provenance/alignment/collision_entry_v1/`：`coarse/`、`fine/` 和 `final/` 分别保存粗筛、边界细查和相邻帧终审；`reviewed_frames.json` 是冻结的起始帧映射。
 
 重建命令：
 
 ```bash
-python scripts/import_real_dataset.py --scenes collision_1d free_fall
-python scripts/apply_collision_entry_alignment.py --workers 8 --threads-per-job 12 --overwrite
-python scripts/import_real_dataset.py --scenes pendulum --confirm-pendulum-r2-real-time
-PYTHONPATH=src python -m physbench validate \
-  --manifest data/manifests/cases.jsonl --check-assets
+python3 scripts/import_real_dataset.py --scenes collision_1d free_fall
+python3 scripts/apply_collision_entry_alignment.py --workers 8 --threads-per-job 12 --overwrite
+python3 scripts/import_real_dataset.py --scenes pendulum --confirm-pendulum-r2-real-time
+PYTHONPATH=src python3 -m physbench validate \
+  --manifest datasets/physics_video/releases/1.0.0/cases.jsonl --check-assets
 ```
 
 WAN 适配 dry-run：
 
 ```bash
-PYTHONPATH=src python -m physbench run \
+PYTHONPATH=src python3 -m physbench run \
   --task configs/tasks/view_a_three_scene_finetune.json \
   --baseline configs/baselines/wan22_ti2v_5b_lora_task1.json \
-  --manifest data/manifests/cases.jsonl \
-  --split data/splits/view_a.json \
+  --manifest datasets/physics_video/releases/1.0.0/cases.jsonl \
+  --split datasets/physics_video/releases/1.0.0/views/view_a.json \
   --output-root runs/import_validation
 ```

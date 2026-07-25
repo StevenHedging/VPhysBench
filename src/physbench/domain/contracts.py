@@ -14,6 +14,7 @@ class DatasetSnapshot:
     cases: tuple[dict[str, Any], ...]
     views: dict[str, dict[str, Any]]
     scene_configs: dict[str, dict[str, Any]]
+    asset_lock: dict[str, Any] | None
     digest: str
     asset_root: Path
 

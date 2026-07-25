@@ -8,6 +8,7 @@ from pathlib import Path
 
 from _paths import ROOT
 from physbench.baseline_api import load_baseline_bundle, load_baseline_plugin
+from physbench.data_layout import V2_DATASET
 from physbench.datasets import load_dataset_v2
 from physbench.domain import TaskSpec
 from physbench.io import canonical_sha256
@@ -18,7 +19,7 @@ class V2ArchitectureTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.dataset = load_dataset_v2(
-            ROOT / "datasets" / "physics_v1" / "dataset.json", check_assets=True
+            V2_DATASET, check_assets=True
         )
         cls.bundle = load_baseline_bundle(
             ROOT / "baselines" / "wan22_lora" / "baseline.json"
@@ -38,6 +39,20 @@ class V2ArchitectureTests(unittest.TestCase):
                     stack.extend(value.values())
                 elif isinstance(value, list):
                     stack.extend(value)
+
+    def test_dataset_release_locks_every_referenced_asset(self) -> None:
+        self.assertIsNotNone(self.dataset.asset_lock)
+        locked = {
+            item["path"] for item in self.dataset.asset_lock["files"]
+        }
+        referenced = {
+            value
+            for case in self.dataset.cases
+            for value in case["assets"].values()
+            if value
+        }
+        self.assertEqual(referenced, locked)
+        self.assertEqual("2.0.0", self.dataset.descriptor["release"])
 
     def test_paired_finetune_tasks_have_identical_data_plan(self) -> None:
         generic = load_task_v2(

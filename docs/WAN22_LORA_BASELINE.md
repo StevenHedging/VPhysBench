@@ -126,8 +126,8 @@ adapter 仍支持通过非 1 的 `encoded_to_physical_speed` 适配外部慢放�
 只构建 sealed task instance，不训练、不推理：
 
 ```bash
-PYTHONPATH=src python -m physbench task-build \
-  --dataset datasets/physics_v1/dataset.json \
+PYTHONPATH=src python3 -m physbench task-build \
+  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
   --task tasks/official/finetune_eval_physics.json \
   --baseline baselines/wan22_lora/baseline.json \
   --output /tmp/wan22_finetune_physics.instance.json
@@ -137,8 +137,8 @@ PYTHONPATH=src python -m physbench task-build \
 不加 `--execute` 时只完成编译、冻结与模型侧计划：
 
 ```bash
-PYTHONPATH=src python -m physbench atomic-run \
-  --dataset datasets/physics_v1/dataset.json \
+PYTHONPATH=src python3 -m physbench atomic-run \
+  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
   --task tasks/official/finetune_eval_physics.json \
   --baseline baselines/wan22_lora/baseline.json \
   --output-root runs_v2
@@ -147,8 +147,8 @@ PYTHONPATH=src python -m physbench atomic-run \
 要做 generic/physics 配对实验，使用两个独立 Task 和两个独立 LoRA：
 
 ```bash
-PYTHONPATH=src python -m physbench matrix-run \
-  --dataset datasets/physics_v1/dataset.json \
+PYTHONPATH=src python3 -m physbench matrix-run \
+  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
   --task tasks/official/finetune_eval_generic.json \
   --task tasks/official/finetune_eval_physics.json \
   --baseline baselines/wan22_lora/baseline.json \
@@ -166,11 +166,11 @@ PYTHONPATH=src python -m physbench matrix-run \
 不执行模型，仅生成全部训练/推理计划：
 
 ```bash
-PYTHONPATH=src python -m physbench run \
+PYTHONPATH=src python3 -m physbench run \
   --task configs/tasks/view_a_three_scene_finetune.json \
   --baseline configs/baselines/wan22_ti2v_5b_lora_three_scene_8gpu_buckets.json \
-  --manifest data/manifests/cases.jsonl \
-  --split data/splits/view_a.json \
+  --manifest datasets/physics_video/releases/1.0.0/cases.jsonl \
+  --split datasets/physics_video/releases/1.0.0/views/view_a.json \
   --output-root runs
 ```
 
@@ -178,11 +178,11 @@ PYTHONPATH=src python -m physbench run \
 Adapter 上评测 `generic` 和 `physics_natural`。也可在命令行显式覆盖：
 
 ```bash
-PYTHONPATH=src python -m physbench run \
+PYTHONPATH=src python3 -m physbench run \
   --task configs/tasks/view_a_three_scene_finetune.json \
   --baseline configs/baselines/wan22_ti2v_5b_lora_three_scene_8gpu_buckets.json \
-  --manifest data/manifests/cases.jsonl \
-  --split data/splits/view_a.json \
+  --manifest datasets/physics_video/releases/1.0.0/cases.jsonl \
+  --split datasets/physics_video/releases/1.0.0/views/view_a.json \
   --train-prompt-profile physics_natural \
   --eval-prompt-profile generic \
   --eval-prompt-profile physics_natural \
@@ -198,11 +198,11 @@ PYTHONPATH=src python -m physbench run \
 回放推理。以下参数抽取每类 2 条，抽样可由 seed 完整复现；设为 `0` 或不传即关闭：
 
 ```bash
-PYTHONPATH=src python -m physbench run \
+PYTHONPATH=src python3 -m physbench run \
   --task configs/tasks/view_a_three_scene_finetune.json \
   --baseline configs/baselines/wan22_ti2v_5b_lora_three_scene_8gpu_buckets.json \
-  --manifest data/manifests/cases.jsonl \
-  --split data/splits/view_a.json \
+  --manifest datasets/physics_video/releases/1.0.0/cases.jsonl \
+  --split datasets/physics_video/releases/1.0.0/views/view_a.json \
   --train-preview-per-scene 2 \
   --train-preview-seed 42 \
   --output-root runs

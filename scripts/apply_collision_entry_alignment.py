@@ -28,14 +28,17 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from physbench.io import load_jsonl, write_json  # noqa: E402
+from physbench.data_layout import (  # noqa: E402
+    PHYSICS_VIDEO_PROVENANCE,
+    V1_CASES as DEFAULT_MANIFEST,
+    V1_VIEW_A as VIEW_A,
+    V1_VIEW_B as VIEW_B,
+)
 from physbench.splitters import build_view_a, build_view_b  # noqa: E402
 
 
-DEFAULT_MANIFEST = ROOT / "data" / "manifests" / "cases.jsonl"
-DEFAULT_REVIEW = ROOT / "data" / "alignment_audits" / "collision_entry_v1" / "reviewed_frames.json"
-DEFAULT_AUDIT_DIR = ROOT / "data" / "alignment_audits" / "collision_entry_v1"
-VIEW_A = ROOT / "data" / "splits" / "view_a.json"
-VIEW_B = ROOT / "data" / "splits" / "view_b_seed42_g5.json"
+DEFAULT_AUDIT_DIR = PHYSICS_VIDEO_PROVENANCE / "alignment" / "collision_entry_v1"
+DEFAULT_REVIEW = DEFAULT_AUDIT_DIR / "reviewed_frames.json"
 ALIGNMENT_VERSION = "collision_entry_v1"
 PROMPT_PREFIX = (
     "A fixed-camera real-world laboratory video of a one-dimensional central collision "
@@ -101,8 +104,8 @@ def encoded_png_hash(path: Path, frame: int) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def relative_asset(case_dir: Path, name: str, manifest: Path) -> str:
-    return os.path.relpath(case_dir / name, manifest.parent)
+def relative_asset(path: Path, manifest: Path) -> str:
+    return os.path.relpath(path, manifest.parent)
 
 
 def run_ffmpeg(source: Path, temporary: Path, start_frame: int, threads: int) -> list[str]:
@@ -131,15 +134,18 @@ def process_case(
     assets = case["assets"]
     source_value = assets.get("source_video") or assets["reference_video"]
     source = (manifest.parent / source_value).resolve()
-    case_dir = source.parent
-    destination = case_dir / "reference_aligned.mp4"
-    temporary = case_dir / ".reference_aligned.partial.mp4"
-    first_frame = case_dir / "first_frame.png"
-    source_first_frame = case_dir / "first_frame_source.png"
+    case_dir = source.parent.parent
+    source_dir = case_dir / "source"
+    canonical_dir = case_dir / "canonical"
+    canonical_dir.mkdir(parents=True, exist_ok=True)
+    destination = canonical_dir / "reference.mp4"
+    temporary = canonical_dir / ".reference.partial.mp4"
+    first_frame = canonical_dir / "first_frame.png"
+    source_first_frame = source_dir / "first_frame_source.png"
     if not source.is_file():
         raise FileNotFoundError(source)
     if source.name != "reference.mov":
-        canonical_source = case_dir / "reference.mov"
+        canonical_source = source_dir / "reference.mov"
         if canonical_source.is_file():
             source = canonical_source
     source_info = probe(source)
@@ -226,12 +232,15 @@ def write_jsonl_atomic(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def update_case(case: dict[str, Any], record: dict[str, Any], manifest: Path) -> None:
-    case_dir = ROOT / Path(record["source_video"]).parent
-    case["assets"]["source_video"] = relative_asset(case_dir, "reference.mov", manifest)
-    aligned = relative_asset(case_dir, "reference_aligned.mp4", manifest)
+    source = ROOT / record["source_video"]
+    case_dir = source.parent.parent
+    case["assets"]["source_video"] = relative_asset(
+        case_dir / "source" / "reference.mov", manifest
+    )
+    aligned = relative_asset(case_dir / "canonical" / "reference.mp4", manifest)
     case["assets"]["reference_video"] = aligned
     case["assets"]["physics_reference_video"] = aligned
-    first = relative_asset(case_dir, "first_frame.png", manifest)
+    first = relative_asset(case_dir / "canonical" / "first_frame.png", manifest)
     case["assets"]["first_frame"] = first
     case["text"]["prompt"] = updated_prompt(case["text"]["prompt"])
     for view in case["input_views"].values():

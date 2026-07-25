@@ -68,8 +68,8 @@ Python 接口接收已经加载并校验的：
 CLI 提供等价的文件 facade：
 
 ```bash
-PYTHONPATH=src python -m physbench task-build \
-  --dataset datasets/physics_v1/dataset.json \
+PYTHONPATH=src python3 -m physbench task-build \
+  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
   --task tasks/official/finetune_eval_physics.json \
   --baseline baselines/wan22_lora/baseline.json \
   --output /tmp/task_instance.json
@@ -151,8 +151,8 @@ runs_v2/<run_id>/
 不加 `--execute` 会完成编译、冻结和模型侧计划；加 `--execute` 才实际训练/推理。
 
 ```bash
-PYTHONPATH=src python -m physbench atomic-run \
-  --dataset datasets/physics_v1/dataset.json \
+PYTHONPATH=src python3 -m physbench atomic-run \
+  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
   --task tasks/official/direct_eval_generic.json \
   --baseline baselines/wan22_lora/baseline.json \
   --output-root runs_v2

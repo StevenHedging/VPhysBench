@@ -327,7 +327,7 @@ WAN 当前通过兼容桥复用已验证的 DiffSynth 训练/推理实现。桥�
 
 ```bash
 PYTHONPATH=src python3 -m physbench task-build \
-  --dataset datasets/physics_v1/dataset.json \
+  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
   --task tasks/official/finetune_eval_physics.json \
   --baseline baselines/wan22_lora/baseline.json \
   --output /tmp/wan22_task_instance.json
@@ -337,7 +337,7 @@ PYTHONPATH=src python3 -m physbench task-build \
 
 ```bash
 PYTHONPATH=src python3 -m physbench atomic-run \
-  --dataset datasets/physics_v1/dataset.json \
+  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
   --task tasks/official/finetune_eval_physics.json \
   --baseline baselines/wan22_lora/baseline.json \
   --output-root runs_v2

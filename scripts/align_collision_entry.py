@@ -26,7 +26,12 @@ from scipy import ndimage
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_MANIFEST = ROOT / "data" / "manifests" / "cases.jsonl"
+import sys
+
+sys.path.insert(0, str(ROOT / "src"))
+
+from physbench.data_layout import V1_CASES as DEFAULT_MANIFEST  # noqa: E402
+
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 ANALYSIS_WIDTH = 400
 ANALYSIS_HEIGHT = 240

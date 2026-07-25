@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from ..domain import DatasetSnapshot
-from ..io import canonical_sha256, load_json, load_jsonl
+from ..io import canonical_sha256, load_json, load_jsonl, sha256_file
 
 
 FORBIDDEN_CASE_KEYS = {
@@ -99,7 +99,63 @@ def _validate_views(
             raise ValueError(f"dataset view {view_id} must cover the complete case set")
 
 
-def load_dataset_v2(path: str | Path, *, check_assets: bool = False) -> DatasetSnapshot:
+def _load_asset_lock(
+    root: Path,
+    descriptor: dict[str, Any],
+    cases: tuple[dict[str, Any], ...],
+) -> dict[str, Any] | None:
+    relative = descriptor.get("asset_lock")
+    if relative is None:
+        return None
+    lock = load_json(root / relative)
+    if lock.get("schema_version") != "1.0":
+        raise ValueError("dataset asset lock must use schema_version=1.0")
+    if lock.get("dataset_id") != descriptor.get("dataset_id"):
+        raise ValueError("dataset asset lock dataset_id mismatch")
+    if lock.get("release") != descriptor.get("release"):
+        raise ValueError("dataset asset lock release mismatch")
+    files = lock.get("files")
+    if not isinstance(files, list):
+        raise ValueError("dataset asset lock files must be a list")
+    paths = [item.get("path") for item in files]
+    if any(not isinstance(path, str) or not path for path in paths):
+        raise ValueError("dataset asset lock contains an invalid path")
+    if len(paths) != len(set(paths)):
+        raise ValueError("dataset asset lock contains duplicate paths")
+    for item in files:
+        path = Path(item["path"])
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError(f"dataset asset lock path must be relative: {path}")
+        if not isinstance(item.get("size_bytes"), int) or item["size_bytes"] < 0:
+            raise ValueError(f"dataset asset lock has invalid size: {path}")
+        digest = item.get("sha256")
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+        ):
+            raise ValueError(f"dataset asset lock has invalid SHA-256: {path}")
+    if lock.get("files_digest") != canonical_sha256(files):
+        raise ValueError("dataset asset lock files_digest mismatch")
+    locked = set(paths)
+    referenced = {
+        value
+        for case in cases
+        for value in case["assets"].values()
+        if value
+    }
+    missing = sorted(referenced - locked)
+    if missing:
+        raise ValueError(f"dataset asset lock misses referenced assets: {missing}")
+    return lock
+
+
+def load_dataset_v2(
+    path: str | Path,
+    *,
+    check_assets: bool = False,
+    check_asset_hashes: bool = False,
+) -> DatasetSnapshot:
     descriptor_path = Path(path).resolve()
     descriptor = load_json(descriptor_path)
     if descriptor.get("schema_version") != "2.0":
@@ -121,18 +177,45 @@ def load_dataset_v2(path: str | Path, *, check_assets: bool = False) -> DatasetS
     }
     _validate_views(cases, views)
     asset_root = (root / descriptor.get("asset_root", ".")).resolve()
-    if check_assets:
+    asset_lock = _load_asset_lock(root, descriptor, cases)
+    if check_asset_hashes and asset_lock is None:
+        raise ValueError("cannot verify asset hashes without an asset lock")
+    locked_by_path = (
+        {item["path"]: item for item in asset_lock["files"]}
+        if asset_lock is not None
+        else {}
+    )
+    if check_assets or check_asset_hashes:
         for case in cases:
             for key, value in case["assets"].items():
-                if value and not (asset_root / value).is_file():
+                if not value:
+                    continue
+                path = (asset_root / value).resolve()
+                try:
+                    path.relative_to(asset_root)
+                except ValueError as exc:
+                    raise ValueError(
+                        f"case {case['case_id']} assets.{key} escapes asset_root"
+                    ) from exc
+                if not path.is_file():
                     raise FileNotFoundError(
-                        f"case {case['case_id']} missing assets.{key}: {asset_root / value}"
+                        f"case {case['case_id']} missing assets.{key}: {path}"
                     )
+                locked = locked_by_path.get(value)
+                if locked and path.stat().st_size != locked["size_bytes"]:
+                    raise ValueError(f"dataset asset size mismatch: {value}")
+                if check_asset_hashes and locked:
+                    actual = sha256_file(path)
+                    if actual != locked["sha256"]:
+                        raise ValueError(
+                            f"dataset asset SHA-256 mismatch: {value}"
+                        )
     digest = canonical_sha256({
         "descriptor": descriptor,
         "cases": cases,
         "views": views,
         "scenes": scene_configs,
+        "asset_lock": asset_lock,
     })
     return DatasetSnapshot(
         root=root,
@@ -140,6 +223,7 @@ def load_dataset_v2(path: str | Path, *, check_assets: bool = False) -> DatasetS
         cases=cases,
         views=views,
         scene_configs=scene_configs,
+        asset_lock=asset_lock,
         digest=digest,
         asset_root=asset_root,
     )

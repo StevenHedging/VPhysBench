@@ -1,7 +1,9 @@
 {
-  "asset_root": "../../data",
+  "asset_lock": "assets.lock.json",
+  "asset_root": "../..",
   "cases": "cases.jsonl",
   "dataset_id": "physics_video_three_scene_v2",
+  "release": "2.0.0",
   "scene_catalog": "scenes",
   "schema_version": "2.0",
   "views": {

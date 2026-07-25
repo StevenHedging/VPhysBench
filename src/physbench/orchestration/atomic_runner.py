@@ -155,6 +155,8 @@ def run_atomic(
     write_json(run_dir / "frozen" / "task.json", task.value)
     write_json(run_dir / "frozen" / "baseline.json", baseline.value)
     write_json(run_dir / "frozen" / "views.json", dataset.views)
+    if dataset.asset_lock is not None:
+        write_json(run_dir / "frozen" / "assets.lock.json", dataset.asset_lock)
     write_json(run_dir / "plan.json", plan.value)
     instance_value = instance.value
     write_json(

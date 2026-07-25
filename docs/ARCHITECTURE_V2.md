@@ -44,7 +44,8 @@ seed；随后各 Baseline 才把该计划编译为自己的可执行实例。
 
 ## 2. Dataset
 
-v2 Dataset 位于 `datasets/physics_v1/`。每条 case 只保留：
+v2 Dataset release 位于 `datasets/physics_video/releases/2.0.0/`，共享的不可变媒体
+位于 `datasets/physics_video/assets/`。每条 case 只保留：
 
 - 视频、首帧、参考视频等资产引用；
 - `physics` 结构化物理标注；
@@ -200,7 +201,10 @@ generic/physics 两个 Task 使用相同 Dataset 和媒体适配策略时复用�
 
 ```text
 physics_video_benchmark/
-├── datasets/physics_v1/                 # Dataset bundle
+├── datasets/physics_video/
+│   ├── assets/                           # 共享的不可变权威资产
+│   ├── provenance/                       # 导入、来源和人工审核记录
+│   └── releases/2.0.0/                   # DatasetSnapshot 元数据与资产锁
 ├── tasks/official/                      # TaskSpec
 ├── baselines/wan22_lora/
 │   ├── baseline.json                    # Baseline bundle
@@ -251,7 +255,7 @@ physics_video_benchmark/
 
 ```bash
 PYTHONPATH=src python3 -m physbench validate-dataset \
-  --dataset datasets/physics_v1/dataset.json \
+  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
   --check-assets
 ```
 
@@ -259,7 +263,7 @@ PYTHONPATH=src python3 -m physbench validate-dataset \
 
 ```bash
 PYTHONPATH=src python3 -m physbench task-build \
-  --dataset datasets/physics_v1/dataset.json \
+  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
   --task tasks/official/finetune_eval_physics.json \
   --baseline baselines/wan22_lora/baseline.json \
   --output /tmp/wan22_task_instance.json
@@ -269,7 +273,7 @@ PYTHONPATH=src python3 -m physbench task-build \
 
 ```bash
 PYTHONPATH=src python3 -m physbench atomic-run \
-  --dataset datasets/physics_v1/dataset.json \
+  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
   --task tasks/official/finetune_eval_generic.json \
   --baseline baselines/wan22_lora/baseline.json \
   --output-root runs_v2
@@ -281,7 +285,7 @@ PYTHONPATH=src python3 -m physbench atomic-run \
 
 ```bash
 PYTHONPATH=src python3 -m physbench matrix-run \
-  --dataset datasets/physics_v1/dataset.json \
+  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
   --task tasks/official/finetune_eval_generic.json \
   --task tasks/official/finetune_eval_physics.json \
   --baseline baselines/wan22_lora/baseline.json \
@@ -293,7 +297,7 @@ PYTHONPATH=src python3 -m physbench matrix-run \
 
 ```bash
 PYTHONPATH=src python3 -m physbench atomic-run \
-  --dataset datasets/physics_v1/dataset.json \
+  --dataset datasets/physics_video/releases/2.0.0/dataset.json \
   --task tasks/official/direct_eval_physics.json \
   --baseline baselines/wan22_lora/baseline.json \
   --case-id <case_id> \
@@ -305,8 +309,11 @@ Task snapshot 和新 digest，再进入相同 TaskBuilder 编译链。
 
 ## 9. 兼容策略
 
-- `data/`、`configs/`、原 `src/physbench/runner.py` 和 `runs/` 属于 v1；
-- `datasets/`、`tasks/`、`baselines/` 和 `runs_v2/` 属于 v2；
+- `datasets/physics_video/releases/1.0.0/`、`configs/`、原
+  `src/physbench/runner.py` 和 `runs/` 提供 v1 兼容；
+- `datasets/physics_video/releases/2.0.0/`、`tasks/`、`baselines/` 和
+  `runs_v2/` 属于 v2；
+- `datasets/` 是唯一权威数据根，不再维护平行的 `data/`；
 - v1 历史 runs 保持只读；
 - v2 的 WAN 插件内部仍可生成 `frozen_cases.jsonl` 和 `resolved_prompts.jsonl`，
   作为已验证旧训练/推理入口的私有兼容投影；

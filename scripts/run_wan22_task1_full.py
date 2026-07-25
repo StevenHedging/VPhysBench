@@ -13,6 +13,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from physbench.data_layout import V1_CASES, V1_VIEW_A  # noqa: E402
 
 
 def now() -> str:
@@ -35,8 +38,8 @@ def main() -> int:
         "--baseline", type=Path,
         default=ROOT / "configs" / "baselines" / "wan22_ti2v_5b_lora_three_scene_8gpu_buckets.json",
     )
-    parser.add_argument("--manifest", type=Path, default=ROOT / "data" / "manifests" / "cases.jsonl")
-    parser.add_argument("--split", type=Path, default=ROOT / "data" / "splits" / "view_a.json")
+    parser.add_argument("--manifest", type=Path, default=V1_CASES)
+    parser.add_argument("--split", type=Path, default=V1_VIEW_A)
     parser.add_argument("--output-root", type=Path, default=ROOT / "runs")
     parser.add_argument("--train-preview-per-scene", type=int, default=2)
     parser.add_argument("--train-preview-seed", type=int, default=42)
