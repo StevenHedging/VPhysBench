@@ -123,6 +123,28 @@ Bundle entrypoint 必须位于自身目录，工作目录固定为 Bundle root�
 当前 `{python}` 使用 Benchmark 的 `phybench` Python 启动协议 endpoint。模型需要不同
 环境时，由 Bundle 的执行器使用 `runtime.python` 启动外部训练或推理进程。
 
+### Run 写入边界
+
+模型代码、模型权重和可重建 cache 可以位于 Bench 外部；其余任务产物必须由
+AtomicRun 持有：
+
+```text
+runs_v2/<run_id>/
+├── frozen/                  # Dataset、Task、Baseline 快照
+├── task_instance/           # sealed 输入和执行图
+├── jobs/                    # 模型原生 job/payload
+├── predictions/             # 生成视频
+├── logs/                    # command、trainer、predictor、evaluator 日志
+├── artifacts/               # checkpoint 身份、prediction digest 等
+└── evaluation/              # case 分数、曲线和 Task 汇总
+```
+
+核心在插件返回后验证每个非空 `video_path` 都位于当前 `run_dir`，并把文件大小和
+SHA-256 写入 `artifacts/prediction_artifacts.json`。`status=complete` 但没有视频、
+视频不存在或指向模型仓库时，AtomicRun 直接失败。已有外部预测只能通过
+`prediction-import` 复制进入 run，并在 provenance 中记录来源；软链接不构成内部
+归档。
+
 ## 6. TaskBuilder 与封印验证
 
 核心 Planner 只回答“评哪些 case”；Baseline-owned TaskBuilder 回答“模型如何执行”。
@@ -263,3 +285,4 @@ G15 的审计结果是 176/214 个源 case 重叠；精确 case ID 只能发现�
 11. 相同参考输入的 case score 必须精确为 1。
 12. 外部数据或模型变换必须留下可重放 provenance。
 13. 训练源重叠必须按 source identity 审计，不能只比较 case ID。
+14. 除模型代码、权重和可重建 cache 外，AtomicRun 不得依赖 Bench 外部产物。

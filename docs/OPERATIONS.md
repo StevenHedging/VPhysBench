@@ -175,6 +175,27 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 评估会覆盖 run 内当前 evaluation 输出，但不会修改 prediction 或 Dataset。
 
+### 导入已有预测
+
+模型目录中已有的视频必须先复制到 Bench 内，不能直接把外部路径写入
+`predictions.jsonl`：
+
+```bash
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  prediction-import \
+  --source /path/to/existing_prediction.mp4 \
+  --run-dir runs_v2/<run_id> \
+  --baseline-id <baseline_id> \
+  --case-id <case_id> \
+  --job-id <job_id> \
+  --seed 42
+```
+
+命令执行原子复制，验证源与目标 SHA-256，并写入
+`provenance/prediction_imports.json`。重复导入相同内容是幂等的；目标存在但内容不同
+时会失败。外部源文件不会被删除。评测记录应改为导入后返回的
+`destination_path`。
+
 ## 9. 结果检查
 
 ```text
@@ -278,3 +299,4 @@ reference mask 作为 prediction mask。
 10. `git diff --check` 通过。
 11. 提交后工作树干净。
 12. 预训练数据重叠 audit 已复核，诊断结果没有混入正式可比结果。
+13. `artifacts/prediction_artifacts.json` 中所有预测都位于当前 run，digest 可复核。

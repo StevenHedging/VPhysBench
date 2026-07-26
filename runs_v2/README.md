@@ -11,10 +11,14 @@ DatasetSnapshot × AtomicTask × BaselineSnapshot × Seeds
 ```text
 <run_id>/
 ├── run.json
-├── task_instance.json
 ├── plan.json
 ├── predictions.jsonl
+├── frozen/
+├── task_instance/
+├── jobs/
+├── predictions/
 ├── artifacts/
+│   └── prediction_artifacts.json
 ├── logs/
 └── evaluation/
     ├── manifest.json
@@ -25,6 +29,10 @@ DatasetSnapshot × AtomicTask × BaselineSnapshot × Seeds
 
 `predictions.jsonl` 是 Baseline 输出边界。`evaluation/` 可用
 `physbench evaluate --run-dir <run>` 从相同 predictions 重新生成。
+
+模型代码、权重和可重建 cache 可以位于 run 外；所有 prediction、日志、job payload、
+训练派生物和 evaluation 必须位于当前 run。核心会拒绝外部 `video_path`，并记录每个
+预测文件的 SHA-256。已有外部视频使用 `physbench prediction-import` 复制归档。
 
 正式 Task score 只在 coverage 为 1 时存在。部分运行的 `observed_mean_score` 不能作为
 正式结果发布。

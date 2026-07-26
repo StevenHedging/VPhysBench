@@ -129,6 +129,16 @@ class TaskBuilderContractTests(unittest.TestCase):
             self.assertEqual("planned", run["status"])
             self.assertTrue((run_dir / "task_builder.json").is_file())
             self.assertTrue((run_dir / "frozen" / "assets.lock.json").is_file())
+            artifact_policy = load_json(run_dir / "artifact_policy.json")
+            self.assertFalse(
+                artifact_policy["external_prediction_references_allowed"]
+            )
+            prediction_artifacts = load_json(
+                run_dir / "artifacts" / "prediction_artifacts.json"
+            )
+            self.assertEqual(
+                [], prediction_artifacts["prediction_videos"]
+            )
             self.assertTrue(
                 (
                     run_dir / "logs" / "baseline_command"

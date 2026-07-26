@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import __version__
+from ..artifacts import ARTIFACT_POLICY, prediction_artifact_manifest
 from ..baseline_api import load_baseline_bundle, load_baseline_plugin
 from ..datasets import load_dataset_v2
 from ..domain import BaselineTaskInstance, TaskSpec
@@ -219,6 +220,10 @@ def run_atomic(
         ),
         "evaluation_protocol": evaluation_protocol["fingerprint"],
     })
+    write_json(run_dir / "artifact_policy.json", {
+        "schema_version": "1.0",
+        **ARTIFACT_POLICY,
+    })
     write_json(run_dir / "task_builder.json", plugin.task_builder.describe())
     write_json(
         run_dir / "data_adapter.json",
@@ -233,10 +238,17 @@ def run_atomic(
             execute=execute,
             stop_after_training=stop_after_training,
         )
+        prediction_artifacts = prediction_artifact_manifest(
+            predictions, run_dir
+        )
     except BaseException as exc:
         _state(run_dir, "failed", error=repr(exc))
         raise
     _state(run_dir, "training_complete_or_staged", status=training.get("status"))
+    write_json(
+        run_dir / "artifacts" / "prediction_artifacts.json",
+        prediction_artifacts,
+    )
     write_jsonl(run_dir / "predictions.jsonl", predictions)
 
     case_metrics, summary = evaluate_task(

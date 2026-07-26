@@ -6,6 +6,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .artifacts import import_prediction_video
 from .baseline_api import (
     discover_baseline_bundles,
     load_baseline_bundle,
@@ -120,6 +121,19 @@ def _evaluate(args: argparse.Namespace) -> int:
         else reevaluate_run(directory, args.scene_config_dir)
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _prediction_import(args: argparse.Namespace) -> int:
+    record = import_prediction_video(
+        source=args.source,
+        run_dir=args.run_dir,
+        baseline_id=args.baseline_id,
+        case_id=args.case_id,
+        job_id=args.job_id,
+        seed=args.seed,
+    )
+    print(json.dumps(record, ensure_ascii=False, indent=2, sort_keys=True))
     return 0
 
 
@@ -337,6 +351,18 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--run-dir", required=True)
     evaluate.add_argument("--scene-config-dir", default=str(DEFAULT_SCENES))
     evaluate.set_defaults(func=_evaluate)
+
+    prediction_import = sub.add_parser(
+        "prediction-import",
+        help="copy an existing prediction into a run-owned artifact tree",
+    )
+    prediction_import.add_argument("--source", required=True)
+    prediction_import.add_argument("--run-dir", required=True)
+    prediction_import.add_argument("--baseline-id", required=True)
+    prediction_import.add_argument("--case-id", required=True)
+    prediction_import.add_argument("--job-id", required=True)
+    prediction_import.add_argument("--seed", required=True, type=int)
+    prediction_import.set_defaults(func=_prediction_import)
 
     smoke = sub.add_parser("smoke", help="run fixture end-to-end without models")
     smoke.add_argument("--output-root", default="runs/smoke")

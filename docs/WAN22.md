@@ -176,6 +176,12 @@ Predictor 配置：
 execute=true 时，每个 GPU worker 常驻一个模型并处理自己的 job 分片。每个 canonical
 job 必须返回一条 complete、failed 或 staged prediction record。
 
+Worker 只把模型代码、base checkpoint 和 LoRA 当作外部只读依赖；生成视频写入当前
+`run_dir/predictions/`，worker 日志写入
+`run_dir/artifacts/wan22/inference_workers/`。从旧实验目录复用的视频必须先通过
+`physbench prediction-import` 复制进 run，不能把 Brady 工程路径作为正式
+`video_path`。
+
 ## 8. 验证与 dry-run
 
 ```bash

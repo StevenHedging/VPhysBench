@@ -40,6 +40,8 @@ sealed BaselineTaskInstance
 - Jensen 风格物理主体 IoU 曲线，以及场景专属几何或实例诊断。
 - Task 级严格 coverage：缺失 case 不会被静默计零，也不会被部分均值掩盖。
 - 可审计的 Dataset、TaskInstance、prediction、evaluator 和 run 指纹。
+- AtomicRun 自包含：除模型代码、权重和可重建 cache 外，预测、日志、输入快照与
+  评测产物必须保存在 `runs_v2/<run_id>/` 内。
 
 当前自动发现的 Baseline：
 

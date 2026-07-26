@@ -116,3 +116,8 @@ deployment identity。
 Cosmos 只输出 prediction，不拥有 case score。所有视频统一进入 Benchmark 的
 scene-local evaluator。无同 case GT 的 OOD case 只允许使用 Dataset 登记且 physics
 逐项相同的 parent reference；无可信 parent 时显式 unavailable。
+
+正式执行时 Cosmos 的 `-o` 固定为当前
+`runs_v2/<run_id>/predictions/<conditioning>/`，推理 stdout/stderr 写入
+`runs_v2/<run_id>/logs/cosmos3/`。模型代码、checkpoint 与 Hugging Face cache 可以
+外置，但生成视频和日志不得留在 Cosmos 工程目录。

@@ -224,6 +224,8 @@ task_instance
 8. 不在 Baseline 内定义正式 evaluator；只输出 `predictions`。
 9. 若模型已有训练语料，按 source identity 审计 Dataset 重叠；有污染的预训练模型
    必须声明 diagnostic/non-comparable。
+10. executor 必须接收 `run_dir` 并把预测、stdout/stderr、训练曲线和中间审计写入
+    该目录；除模型代码、权重和可重建 cache 外，不得让 AtomicRun 依赖外部文件。
 
 已有模型族应复用一个经过测试的共享实现。例如两个 WAN Bundle 的入口都调用
 `src/physbench/baseline_plugins/wan22.py`，不会复制 DataAdapter、media adapter 或
@@ -238,9 +240,14 @@ Prediction 的最低执行边界：
   "baseline_id": "...",
   "evaluation_partition": "test_id",
   "status": "complete",
-  "video_path": "/absolute/path/to/video.mp4"
+  "video_path": "/absolute/path/to/runs_v2/<run_id>/predictions/video.mp4"
 }
 ```
+
+核心不会信任 `video_path` 声明本身：完成态 prediction 写入
+`predictions.jsonl` 前，必须通过 run-local 路径、文件存在性和 SHA-256 检查。历史或
+人工生成的视频使用 `physbench prediction-import` 复制进入 run；不能直接引用模型
+仓库，也不能用软链接规避边界。
 
 ## 8. 管理与运行命令
 
