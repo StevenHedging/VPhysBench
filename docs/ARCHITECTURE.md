@@ -1,288 +1,280 @@
 # 系统架构
 
-## 1. 领域对象与所有权
+## 1. 领域边界
 
-| 对象 | 所有者 | 负责内容 | 不负责内容 |
+| 对象 | 所有者 | 负责 | 禁止 |
 | --- | --- | --- | --- |
-| DatasetSnapshot | Dataset | case、资产、物理标注、View、哈希 | prompt、tensor、模型 cache |
-| TaskSpec | Benchmark | case 选择、任务族、conditioning、seed、评估协议 | 模型执行参数 |
+| DatasetSnapshot | Dataset | case、资产、物理/环境标注、View、哈希 | prompt、模型尺寸、生成结果 |
+| TaskSpec | Benchmark | family、conditioning、选择、seed、评估协议 | 模型路径和执行参数 |
 | CanonicalTaskPlan | Benchmark | train/eval case 与 job 主表 | 模型输入 |
-| Baseline Bundle | Baseline | 实现、能力、TaskBuilder、DataAdapter、trainer、predictor | 修改 Dataset |
-| BaselineTaskInstance | Baseline TaskBuilder | 原生输入、operation DAG、artifact 绑定、seal | 改写 canonical plan |
-| AtomicRun | Orchestrator | 执行、prediction、evaluation、状态 | 混合不同任务条件 |
+| Baseline Bundle | Baseline | 能力、模型身份、adapter recipe、runner/driver | 修改 Dataset 或选例 |
+| BaselineTaskInstance | TaskBuilder | native inputs、DAG、cache/artifact 绑定、seal | 改写 canonical plan |
+| AtomicRun | Orchestrator | 快照、执行、prediction、evaluation、状态 | 混合不同任务条件 |
 
 依赖方向：
 
 ```text
 DatasetSnapshot ─┐
-                  ├─> Benchmark CanonicalTaskPlan ─┐
-TaskSpec ─────────┘                                │
-                                                   ├─> BaselineTaskInstance
-Baseline Bundle ──> command host ─> TaskBuilder ───┘
-                                                        │
-                                                        ▼
-                                                    AtomicRun
-                                                        │
-                                           predictions.jsonl
-                                                        │
-                                                        ▼
-                                            Benchmark TaskEvaluator
+                  ├─> CanonicalTaskPlan ────────────────┐
+TaskSpec ─────────┘                                      │
+                                                         ├─> sealed
+Baseline Bundle ─> Registry ─> TaskBuilder/DataAdapter ──┘   TaskInstance
+                                                               │
+                                                               ▼
+                                                           AtomicRun
+                                                               │
+                                                     predictions.jsonl
+                                                               │
+                                                               ▼
+                                                     TaskEvaluator
 ```
 
-Dataset 不认识 Baseline；Task 不携带模型输入；Baseline 不定义正式 evaluator。
+Dataset 不认识模型；Task 不携带模型输入；Baseline 不定义正式 evaluator。
 
-## 2. Dataset 边界
+## 2. Dataset 和 Task
 
-正式 Dataset：
+当前正式 Dataset 是：
 
 ```text
 datasets/physics_video/releases/3.0.0/dataset.json
 ```
 
-Dataset loader 冻结 descriptor、cases、scene catalog、View A/B、asset lock 和所有引用
-资产。Case 只包含模型无关事实：scene、物理量、环境、OOD、时间语义、资产和来源。
-Prompt、模型尺寸、embedding、训练 metadata 和派生媒体都不能写入 Dataset。
+loader 冻结 descriptor、cases、scene catalog、View A/B、asset lock 和引用资产。Case
+只保存模型无关事实：scene、物理量、环境、OOD、时间语义、资产和来源。
 
-## 3. Task 与 canonical plan
+TaskSpec schema 为 `2.0`。四个正式原子任务是：
 
-TaskSpec 使用 schema `2.0`。Planner 根据 Dataset View 产生不可由 Baseline 修改的
-`CanonicalTaskPlan`。四类正式任务：
+| family | conditioning | View |
+| --- | --- | --- |
+| `finetune_eval` | `generic` | A |
+| `finetune_eval` | `physics` | A |
+| `direct_eval` | `generic` | B |
+| `direct_eval` | `physics` | B |
 
-| family | conditioning | View | 训练 |
-| --- | --- | --- | --- |
-| `finetune_eval` | `generic` | A | 是 |
-| `finetune_eval` | `physics` | A | 是 |
-| `direct_eval` | `generic` | B | 否 |
-| `direct_eval` | `physics` | B | 否 |
+同一 family 的 generic/physics 共享 case、partition、seed 和媒体资产，只能在
+DataAdapter 的条件阶段产生差异。
 
-同一 family 的 generic/physics 共享 case、partition、seed 和媒体约束，只能在
-Baseline 私有条件适配阶段产生差异。
+## 3. Baseline Registry 与三档执行接口
 
-## 4. Baseline Bundle v3
-
-Baseline 集成边界是目录，而不是核心源码分支：
+Registry 只认识通用 kind，不认识模型名称。发现阶段仅扫描：
 
 ```text
-baselines/<name>/
-├── baseline.json                    # portable contract
-├── baseline.local.json              # optional local deployment
-├── plugin/main.py                   # command endpoint
-└── implementation/config/provenance # 按模型需要
+baselines/*/baseline.json
 ```
 
-Registry 扫描 `baselines/*/baseline.json`，仅解析 manifest，不 import 插件。manifest
-声明 `implementation.kind=command` 和 `protocol=physbench-baseline-v1`。具体模型名
-永远不进入核心 Registry。
-
-两个独立身份防止复现实验时混淆：
-
-- bundle digest：manifest + 声明的实现文件和配置文件 SHA-256；
-- deployment digest：应用本地 `runtime/model` 覆盖后的配置 SHA-256。
-
-Bundle 内代码和配置进入 bundle digest；本机 checkpoint、Python 与外部模型路径进入
-deployment digest。Bundle 复用的仓库内模型族实现、公共 profile 和 runner 逐文件进入
-TaskBuilder 的 `runtime_dependency_fingerprints`。大 checkpoint 不要求每次全量扫描，但
-必须在 portable manifest 中声明稳定 revision 或 digest，并在 build 前验证轻量身份文件
-或 checkpoint digest。三层身份都进入 TaskInstance，避免共享代码成为指纹盲区。
-
-当前结构：
+当前接口：
 
 ```text
-baselines/wan22_lora/                 # View A 可微调 WAN Bundle
-baselines/wan22_g15_sparse_motion/    # 冻结 G15 诊断 Bundle
-baselines/cosmos3_nano_i2v/           # 自包含 Cosmos 插件
-src/physbench/baseline_plugins/wan22.py
-                                       # 两个 WAN Bundle 唯一共享实现
-src/physbench/baseline_plugins/resources/five_scene_i2v_v1/
-                                       # 公平复用的五场景 prompt profiles
+submission v4 ─┐
+               ├─> ManagedTaskBuilder + StandardDataAdapter ─> TaskInstance
+managed v4 ────┘                     │
+                                     └─> submission importer / managed driver
+
+command v3 ──────> isolated command host ─> Baseline-owned TaskBuilder/executor
 ```
 
-共享实现是减少同模型族复制的扩展点，不是 Registry 分支。Registry 仍只认识
-`command`。
+### Submission v4
 
-## 5. 进程隔离与 Command Host
+用于已有预测。Benchmark 编译标准 TaskInstance，校验 submission 对 canonical jobs 的
+完整覆盖和身份，再把视频复制进 run。没有 Bundle driver。
 
-通用宿主通过 request/response JSON 文件调用 Bundle command。支持：
+### Managed v4
+
+是标准 T2V/I2V 的默认接口。Bundle 声明 adapter、runner 和一个薄 driver。核心统一
+处理 capability、prompt 隔离、五阶段 adaptation、计划展开、seal、identity 和
+prediction 公共字段；driver 只处理模型专有 payload、命令和 checkpoint 身份。
+
+### Command v3
+
+保留给训练、复杂多进程控制或非标准模型原生协议。它实现 `describe`、`adapt_case`、
+`build_task_instance` 和 `run_task` 四操作，通过 JSON request/response 进程边界运行。
+核心仍复验 canonical plan、identity 和 seal。
+
+这三档都输出同一种 TaskInstance 和 prediction contract，因此 evaluator 不需要知道
+Baseline 的 kind。
+
+## 4. 身份与依赖指纹
+
+每次运行冻结三层身份：
+
+1. `bundle digest`：portable manifest 和 Bundle-local 实现/provenance 的 SHA-256；
+2. `deployment digest`：应用本机 `model/runtime` 覆盖后的 manifest；
+3. `TaskBuilder fingerprint`：adapter、runner/trainer、Bundle/deployment 以及共享
+   runtime 和外部关键执行文件的指纹。
+
+managed driver 自动纳入 bundle digest。共享 prompt、WAN engine、生成脚本和 Cosmos
+外部 inference entry 纳入 runtime dependency fingerprint。checkpoint 使用稳定
+revision、identity files 或完整 SHA-256 验证。
+
+`baseline.local.json` 只允许覆盖 `model` 与 `runtime`。portable capability、adapter、
+implementation、ID 和版本不能由本机配置改变。
+
+## 5. Managed compiler
+
+`ManagedTaskBuilder` 是无副作用、确定性的公共 compiler：
 
 ```text
-describe
-adapt_case
-build_task_instance
-run_task
+DatasetSnapshot + TaskSpec
+→ Benchmark plan_atomic_task
+→ capability/scene/conditioning validation
+→ StandardDataAdapter.adapt_case
+→ adaptations + inference jobs
+→ training/infer/evaluate operation DAG
+→ cache bindings
+→ BaselineTaskInstance.seal
 ```
 
-这一边界有三个目的：
+`StandardDataAdapter` 目前提供 `standard_i2v_v1` 和 `standard_t2v_v1` preset。五个审计
+阶段是：
 
-1. 新 Baseline 只需新增目录，不修改或 import 核心 Registry；
-2. Baseline 依赖和全局状态不会进入 Benchmark planner/evaluator 进程；
-3. 输入输出可序列化、可审计，canonical plan 与 identity 可在核心侧复验。
+1. spatial：scene profile；
+2. temporal：FPS、帧数与模型合法长度；
+3. paradigm：T2V 或 I2V、首帧来源；
+4. text：generic scene/process 描述；
+5. physics：physics 分支使用的白名单物理量。
 
-Bundle entrypoint 必须位于自身目录，工作目录固定为 Bundle root。发现 manifest 不会
-执行代码；只有显式验证、构建或运行时才启动 command。
+generic prompt resolver 只接收空物理字典，因此物理标注变化不能改变 generic
+`native_inputs`。physics 分支记录使用字段、值和单位。spatial/temporal/paradigm 的
+materialization fingerprint 与 prompt fingerprint 分离，换 conditioning 不会无意义
+重建媒体 cache。
 
-当前 `{python}` 使用 Benchmark 的 `phybench` Python 启动协议 endpoint。模型需要不同
-环境时，由 Bundle 的执行器使用 `runtime.python` 启动外部训练或推理进程。
+managed 标准 envelope 是 Benchmark 可审计的数据结构，不宣称任意模型的
+`native_inputs` 都完全 opaque；复杂 token/tensor/control-stream 模型应使用自定义
+ManagedDriver 或 command 接口。
 
-### Run 写入边界
+## 6. Driver 与执行层
 
-模型代码、模型权重和可重建 cache 可以位于 Bench 外部；其余任务产物必须由
-AtomicRun 持有：
+`DirectManagedDriver` 固定 direct-eval 生命周期：
+
+```text
+prepare_job
+→ validate output is under run/predictions
+→ write run/jobs/<job_id>.json
+→ execute_job / execute_jobs
+→ assemble immutable prediction identity
+→ verify output file and status
+```
+
+子类不能覆盖 job、case、conditioning、partition、seed、status 和 output path。需要
+常驻多 GPU worker 时可覆盖 `execute_jobs`，需要完全不同的训练生命周期时可实现
+`ManagedDriver.run_task` 或使用 command。
+
+当前复用关系：
+
+```text
+Cosmos Bundle driver
+└── Cosmos payload + torchrun + checkpoint identity
+
+G15 Bundle driver (one-line alias)
+└── Wan22ManagedDriver
+    └── Wan22ExecutionEngine
+        ├── Wan22LoraAdapter
+        └── Wan22MediaAdapter
+
+WAN finetune command plugin
+└── Wan22ExecutionEngine             # 与 G15 共用执行逻辑
+```
+
+因此 G15 与 WAN 微调 Bundle 不复制媒体和模型执行实现；Cosmos 不再复制 canonical
+compiler、prompt adapter 或 prediction 组装。
+
+## 7. BaselineTaskInstance
+
+公共 schema 为 `2.1`：
+
+```text
+identity
+├── dataset / task
+├── baseline: id, version, bundle digest, deployment digest
+├── task_builder / data_adapter
+└── canonical_plan_digest
+
+semantics
+canonical_plan
+source
+adaptations
+training
+inference.jobs
+execution_graph
+cache_bindings
+baseline_payload
+instance_digest
+```
+
+seal 是 canonical JSON SHA-256。TaskInstance 返回 fresh object，执行器不能通过内存引用
+修改冻结实例。运行时再次验证当前部署、TaskBuilder、DataAdapter 和 instance digest。
+
+## 8. AtomicRun 与写入边界
+
+除模型代码、模型权重和可重建 cache 外，产物必须由 run 持有：
 
 ```text
 runs_v2/<run_id>/
-├── frozen/                  # Dataset、Task、Baseline 快照
-├── task_instance/           # sealed 输入和执行图
-├── jobs/                    # 模型原生 job/payload
-├── predictions/             # 生成视频
-├── logs/                    # command、trainer、predictor、evaluator 日志
-├── artifacts/               # checkpoint 身份、prediction digest 等
-└── evaluation/              # case 分数、曲线和 Task 汇总
+├── frozen/                    # Dataset、Task、Baseline 快照
+├── task_instance/             # seal、jobs、adaptations、DAG
+├── jobs/                      # 模型 payload/spec
+├── predictions/               # 生成或导入的视频
+├── predictions.jsonl          # Baseline/Evaluator 边界
+├── logs/                      # 模型和评估日志
+├── artifacts/                 # checkpoint、导入和 prediction digest
+├── evaluation/               # case 曲线、分数和 Task 汇总
+├── state.json
+└── run.json
 ```
 
-核心在插件返回后验证每个非空 `video_path` 都位于当前 `run_dir`，并把文件大小和
-SHA-256 写入 `artifacts/prediction_artifacts.json`。`status=complete` 但没有视频、
-视频不存在或指向模型仓库时，AtomicRun 直接失败。已有外部预测只能通过
-`prediction-import` 复制进入 run，并在 provenance 中记录来源；软链接不构成内部
-归档。
+公共 artifact validator 对所有非空 `video_path` 执行：
 
-## 6. TaskBuilder 与封印验证
+- 路径必须位于当前 run；
+- 文件必须存在；
+- `status=complete` 必须有视频；
+- 记录相对路径、大小和 SHA-256。
 
-核心 Planner 只回答“评哪些 case”；Baseline-owned TaskBuilder 回答“模型如何执行”。
+submission 和历史预测通过原子复制进入 run，并保留 source provenance。软链接不能绕过
+run-local 约束。
 
-```text
-DatasetSnapshot + TaskSpec + CanonicalTaskPlan + Baseline Bundle
-→ Baseline DataAdapter
-→ training/inference native inputs
-→ operation DAG
-→ sealed BaselineTaskInstance
-```
+## 9. Scene evaluation
 
-通用宿主收到 instance 后验证：
-
-- Dataset、Task、Baseline 与 deployment identity；
-- TaskBuilder/DataAdapter fingerprints；
-- canonical plan 内容与 digest；
-- instance canonical SHA-256。
-
-任何一项不匹配都会在创建 run 目录之前失败。
-
-## 7. DataAdapter 与 cache
-
-DataAdapter 属于 Baseline，负责：
-
-1. 空间适配；
-2. 时间适配；
-3. 输入范式映射；
-4. 文本条件适配；
-5. 物理信息注入。
-
-每个阶段都产生结构化审计。媒体派生物写入内容寻址、不可变 cache；同一 source、
-实现和配置产生同一 key。generic 分支不能观察 `case.physics`。physics 分支可读取
-白名单字段，但必须记录值、单位、模板和原生注入位置。
-
-## 8. Operation DAG
-
-`finetune_eval`：
+TaskEvaluator 以 canonical jobs 为主表，按 `scene_id` 调度 CaseEvaluator：
 
 ```text
-materialize training inputs
-→ fine-tune
-→ bind artifact://train/model
-→ materialize inference inputs
-→ generate
-→ evaluate
-```
-
-`direct_eval`：
-
-```text
-bind baseline://frozen_model
-→ materialize inference inputs
-→ generate
-→ evaluate
-```
-
-操作引用符号 artifact，而不是运行前猜测的“最新文件”。执行器必须使用与实例身份相同
-的 deployment。
-
-## 9. AtomicRun
-
-AtomicRun 冻结：
-
-```text
-DatasetSnapshot × AtomicTask × Baseline Bundle × Deployment × Seeds
-```
-
-标准输出：
-
-```text
-runs_v2/<run_id>/
-├── run.json
-├── frozen/
-├── task_instance/
-├── component_fingerprints.json
-├── adaptations/
-├── training/
-├── jobs/
-├── predictions.jsonl
-├── artifacts/
-└── evaluation/
-```
-
-`predictions.jsonl` 是 Baseline 与 Benchmark evaluator 的硬边界。run 同时记录 portable
-bundle digest 和 deployment digest。
-
-## 10. Scene-aware evaluation
-
-TaskEvaluator 以冻结 `canonical_plan.jobs` 为主表，按 `scene_id` 调度
-CaseEvaluator：
-
-```text
-prediction video
-→ common media timeline
-→ scene observation/masks
-→ scene-local physical state
-→ reference similarity score
+prediction
+→ common timeline
+→ masks / observations
+→ scene physical state
+→ reference similarity
 → strict Task aggregation
 ```
 
-公共层负责媒体采样、SAM2、mask 质量、跟踪、几何拟合和曲线；scene 模块负责主体
-prompt、状态提取、质量阈值和评分。正式分数满足：
+正式 evaluator 满足 `S(reference, reference) = 1`。无同 case GT 的 OOD 数据只能使用
+Dataset 明确登记且物理标注对应的 parent reference；没有可信 parent 时返回
+`no_trustworthy_physics_reference`，不伪造 GT。缺失 prediction 或部分 coverage 不会
+产生正式 Task score。
 
-```text
-S(reference, reference) = 1
-```
+## 10. 数据污染与可比性
 
-无同 case GT 的 OOD case 只能使用 Dataset 明确登记、物理标注逐项相同的 parent
-reference；没有可信 parent 时返回 `no_trustworthy_physics_reference`，不伪造
-reference，也不产生正式 case score。
+模型部署可复现不等于结果可比较。历史训练语料与 Dataset 重叠时：
 
-## 11. 预训练污染与可比性
+1. Bundle 必须声明 diagnostic/non-comparable；
+2. provenance 要按 source identity 审计，而不只比较 case ID；
+3. 全量结果不能进入无泄漏排名；
+4. clean subset 必须明确列出，不能代替正式 Task score。
 
-模型部署身份与评测资格是两件事。若冻结模型的历史训练数据与 Dataset 重叠：
+G15 的 source-aware audit 发现 176/214 个源 case 重叠，其中精确 case ID 只能识别
+45 个。
 
-1. Bundle 仍可注册并复现实验；
-2. manifest 必须标为 diagnostic/non-comparable；
-3. source-aware audit 必须处理“同源素材、不同 case ID”；
-4. 全量结果不能进入无泄漏排行榜；
-5. clean subset 必须显式列出，不能把部分结果称为正式 Task score。
-
-G15 的审计结果是 176/214 个源 case 重叠；精确 case ID 只能发现其中 45 个，因此不能
-作为污染判据。
-
-## 12. 系统不变量
+## 11. 不变量
 
 1. `datasets/` 是唯一权威数据根。
-2. Dataset 不保存模型条件、模型缓存或生成结果。
-3. TaskSpec 不包含 Baseline 私有执行细节。
-4. Registry 不包含具体模型名或 import 分支。
+2. Dataset 不保存 prompt、模型 cache 或 prediction。
+3. TaskSpec 不保存 Baseline 私有执行参数。
+4. Registry 不包含具体模型分支。
 5. Baseline 不能修改 canonical plan。
 6. generic 适配不能观察结构化物理标注。
-7. TaskInstance 执行前后使用同一 bundle 和 deployment identity。
-8. 缺失 prediction 必须产生显式 case 状态。
-9. 部分 coverage 不能产生正式 Task score。
-10. GT-dependent 诊断不能在无 GT 时伪造。
-11. 相同参考输入的 case score 必须精确为 1。
-12. 外部数据或模型变换必须留下可重放 provenance。
-13. 训练源重叠必须按 source identity 审计，不能只比较 case ID。
-14. 除模型代码、权重和可重建 cache 外，AtomicRun 不得依赖 Bench 外部产物。
+7. 构建与执行使用同一 Bundle/deployment identity。
+8. checkpoint 和所有输出相关依赖必须可追踪。
+9. prediction 视频必须 run-local。
+10. 缺失 case 和部分 coverage 必须显式暴露。
+11. GT-dependent 诊断不能在无 GT 时伪造。
+12. reference 自比的正式 case score 必须精确为 1。
+13. 外部数据变换必须有可重放 provenance。
+14. 训练重叠必须按 source identity 审计。

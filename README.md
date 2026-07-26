@@ -34,7 +34,8 @@ sealed BaselineTaskInstance
 - View B：不训练，按确定性分组直接评测全部 case。
 - `finetune_eval/direct_eval × generic/physics` 四种原子任务。
 - Baseline 私有 DataAdapter，支持模型原生文本、首帧、时空规格和物理信息注入。
-- Baseline Bundle v3 自动发现；新增模型只需加入一个符合协议的目录。
+- 三档自注册 Baseline：submission、managed（默认）与高级 command。
+- 标准 I2V/T2V 由公共 compiler 接管；新模型通常只需 manifest 和薄 driver。
 - 便携实现指纹与机器部署指纹分离，代码、profile、checkpoint 均可追踪。
 - 五个 scene-local evaluator，以物理状态相似度作为正式分数。
 - Jensen 风格物理主体 IoU 曲线，以及场景专属几何或实例诊断。
@@ -131,6 +132,21 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --output-root runs_v2
 ```
 
+创建新 Baseline：
+
+```bash
+# 标准 I2V：生成 schema v4 managed Bundle
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline init my_i2v --backend managed-i2v
+
+# 已有视频：生成 output-only submission Bundle
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline init my_outputs --backend submission
+```
+
+managed 与 submission 复用 Benchmark 的 canonical plan、五阶段 DataAdapter、TaskInstance
+seal、prediction 组装和 run-local 归档；复杂训练仍可使用 v3 command 接口。
+
 对已有 AtomicRun 重新评估：
 
 ```bash
@@ -155,11 +171,12 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 physics_video_benchmark/
 ├── datasets/                 # 唯一权威数据根
 ├── tasks/official/           # 四类五场景原子任务
-├── baselines/                # 三个自注册 Bundle、插件、配置与本机部署模板
+├── baselines/                # 三个自注册 Bundle、driver/endpoint 与本机模板
 ├── configs/evaluation/       # Scene evaluator 协议
 ├── schemas/v2/               # Dataset、Task、TaskInstance JSON Schema
-├── schemas/v3/               # Baseline Bundle JSON Schema
-├── src/physbench/            # 数据、任务、编排、评估、共享模型族支持和 CLI
+├── schemas/v3/               # 高级 command Bundle Schema
+├── schemas/v4/               # managed/submission Bundle Schema
+├── src/physbench/            # 数据、任务、managed runtime、评估和 CLI
 ├── tests/                    # 核心与 scene evaluator 回归测试
 ├── docs/                     # 当前架构与操作文档
 └── runs_v2/                  # AtomicRun 输出

@@ -4,6 +4,11 @@ This Bundle registers the base `nvidia/Cosmos3-Nano` checkpoint as
 `cosmos3_nano_i2v`. It supports `direct_eval × {generic, physics}` for all five
 benchmark scenes and requires each Case's immutable first-frame asset.
 
+This is a schema-v4 managed Bundle. The Benchmark-owned compiler and standard
+I2V DataAdapter build the canonical task, prompts, audit records and prediction
+envelope. `driver.py` contains only Cosmos checkpoint validation, payload
+rendering and `torchrun` execution.
+
 The integration uses Cosmos-native resolution/aspect-ratio tokens and valid
 `4n+1` frame counts. The default generation is 480p, 24 FPS and 121 frames.
 The benchmark evaluator remains responsible for resampling and physical-time
@@ -34,5 +39,5 @@ at a time. A protocol dry run does not allocate model GPUs:
   --baseline cosmos3_nano_i2v \
   --scene-id collision_1d \
   --case-id collision_r2_medium_steel_medium_steel_medium_steel_v02818 \
-  --output-root /tmp/physbench-cosmos-dry-run
+  --output-root runs_v2
 ```

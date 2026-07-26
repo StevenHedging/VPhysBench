@@ -1,200 +1,268 @@
 # Task、TaskBuilder 与 Baseline 接入
 
-## 1. 原子 Task
+## 1. Task 与 canonical plan
 
-正式任务位于 `tasks/official/five_scene_*.json`。TaskSpec 使用 schema `2.0`，
-只表达 Benchmark 意图：任务族、conditioning、数据视图、case 选择、seed 和评估协议。
-模型路径、分辨率、prompt 模板、训练器参数都不属于 TaskSpec。
+正式任务位于 `tasks/official/five_scene_*.json`。TaskSpec schema 是 `2.0`，
+只描述 Benchmark 意图：
 
-四个正式组合是：
-
-| family | conditioning | Dataset View | 训练 |
+| family | conditioning | Dataset View | 是否训练 |
 | --- | --- | --- | --- |
 | `finetune_eval` | `generic` | View A | 是 |
 | `finetune_eval` | `physics` | View A | 是 |
 | `direct_eval` | `generic` | View B | 否 |
 | `direct_eval` | `physics` | View B | 否 |
 
-一个 Task 只能包含一个 family 和一个 conditioning。generic/physics 的对照实验必须
-产生两个独立 AtomicRun。
-
-## 2. Benchmark-owned CanonicalTaskPlan
-
-Planner 校验 Dataset ID、View、scene、partition、OOD2 和 seed 后产生
-`CanonicalTaskPlan`：
+模型路径、prompt 模板、分辨率、帧数和训练器参数不进入 TaskSpec。Planner 根据冻结的
+Dataset View 产生唯一的 `CanonicalTaskPlan`：
 
 ```text
 canonical_plan
 ├── dataset_id / dataset_digest
 ├── task_id / family / conditioning
 ├── scene_ids
-├── train_case_ids
-├── training_seed
+├── train_case_ids / training_seed
 └── jobs[]
-    ├── job_id
-    ├── case_id
-    ├── scene_id
+    ├── job_id / case_id / scene_id
     ├── evaluation_partition
     ├── conditioning
     └── seed
 ```
 
-`jobs` 是 prediction 和 evaluation 的唯一主表。Baseline 只能把这份计划编译成模型
-原生输入，不能重新抽样、丢弃难例或替换 partition。通用宿主会在 TaskBuilder 返回后
-逐字比较 canonical plan 并验证其 SHA-256。
+`jobs` 是生成和评估的唯一主表。任何 Baseline 都不能重新抽样、跳过难例、改变 seed
+或替换 partition。TaskBuilder 只能把计划编译成模型输入。
 
-## 3. 自注册 Baseline Bundle v3
+## 2. 三档 Baseline 接口
 
-每个 Baseline 是 `baselines/` 下的一个独立目录。核心通过
-`baselines/*/baseline.json` 自动发现，不 import 目录中的代码：
+Registry 自动扫描 `baselines/*/baseline.json`。具体模型名不进入 Registry；加入和
+移除 Baseline 都只改变一个目录。接口按复杂度分为三档：
+
+| kind | schema | 适用情况 | 维护者需要实现 |
+| --- | --- | --- | --- |
+| `submission` | `4.0` | 已经生成好视频，只做统一评估 | manifest + submission JSONL |
+| `managed` | `4.0` | 标准 T2V/I2V 推理；默认选择 | manifest + 薄 driver |
+| `command` | `3.0` | 训练、多进程控制、特殊输入协议 | 完整四操作 endpoint |
+
+`schema_version=3.0` command 是稳定的高级接口，没有废弃。`schema_version=4.0`
+是低成本接口；managed 和 submission 复用 Benchmark 的 canonical compiler、
+DataAdapter envelope、identity 校验和 prediction 组装。
+
+### 2.1 Managed：标准接入
+
+典型目录：
 
 ```text
-baselines/<name>/
+baselines/my_i2v/
 ├── baseline.json
-├── README.md
+├── driver.py                       # 模型专有 prepare/execute
 ├── baseline.local.example.json
-├── baseline.local.json              # 可选，本机配置，必须忽略提交
-├── plugin/
-│   └── main.py
-└── ...                              # 模型私有代码、profile 和配置
+├── baseline.local.json             # 本机路径，Git ignored
+├── README.md
+└── provenance/                     # 可选，训练来源或污染审计
 ```
 
-schema `3.0` 的最小 manifest：
+manifest 的关键部分：
 
 ```json
 {
-  "schema_version": "3.0",
-  "baseline_id": "my_video_baseline",
+  "schema_version": "4.0",
+  "baseline_id": "my_i2v",
   "baseline_version": "1.0.0",
   "implementation": {
-    "kind": "command",
-    "protocol": "physbench-baseline-v1",
-    "entrypoint": ["{python}", "plugin/main.py"],
-    "fingerprint_paths": [
-      "plugin/**/*.py",
-      "profiles/*.json"
-    ]
+    "kind": "managed",
+    "driver": "driver.py",
+    "fingerprint_paths": ["provenance/*.json"]
   },
+  "supported_scenes": [
+    "pendulum",
+    "free_fall",
+    "collision_1d",
+    "inclined_plane_slide",
+    "uniform_circular_motion"
+  ],
   "capabilities": {
-    "task_families": ["finetune_eval", "direct_eval"],
+    "task_families": ["direct_eval"],
     "conditioning": ["generic", "physics"]
+  },
+  "model": {"model_id": "vendor/model", "checkpoint": null},
+  "runtime": {},
+  "adapter": {
+    "preset": "standard_i2v_v1",
+    "profile_set": "five_scene_i2v_v1",
+    "first_frame_policy": "require_asset",
+    "spatial": {
+      "scene_profiles": {
+        "pendulum": {"width": 480, "height": 832}
+      }
+    },
+    "temporal": {
+      "fps": 24,
+      "num_frames": 121,
+      "valid_frame_rule": "4n+1"
+    }
+  },
+  "runner": {
+    "type": "my_model_v1",
+    "config": {"num_inference_steps": 50}
   }
 }
 ```
 
-核心 Registry 只认识通用实现类型 `command`，不认识 WAN、CogVideoX 或任何具体模型名。
-因此加入新 Baseline 不需要修改 `src/physbench/baseline_api/registry.py`。
+`StandardDataAdapter` 统一完成：
 
-### 发现与引用
+- scene capability 与任务类型检查；
+- generic/physics prompt 解析和物理字段使用审计；
+- generic 分支不读取 `case.physics`；
+- I2V 首帧来源、空间 profile 与时间规格；
+- adaptation fingerprint、媒体 materialization fingerprint；
+- canonical jobs、operation DAG、cache binding 和 TaskInstance seal。
 
-`--baseline` 支持三种等价引用：
+因此 driver 不再重复 Dataset、Task、prompt 和 identity 逻辑。普通 driver 只需继承
+`DirectManagedDriver`，实现：
 
-```text
-my_video_baseline
-baselines/my_video_baseline
-baselines/my_video_baseline/baseline.json
+```python
+class Driver(DirectManagedDriver):
+    def prepare_job(
+        self, *, job, case, adaptation, source_root, run_dir
+    ):
+        ...
+
+    def execute_job(self, spec, *, log_path):
+        ...
 ```
 
-按 ID 引用时，重复 `baseline_id` 会立即报错。不存在的路径不会被误当作 ID。
+`prepare_job` 返回的 `output_video` 必须在
+`<run_dir>/predictions/` 内。公共 runtime 负责写 job spec、prediction 公共字段、
+GT/reference 绑定、planned/staged/complete 状态和 run-local 路径检查。driver 返回值
+不能覆盖 job ID、case ID、conditioning、seed、status 或 video path。
 
-### 两类指纹
+对于常见的命令行 I2V 模型，可直接复用
+`StandardI2VCLIDriver`。其外部程序契约是：
 
-Bundle v3 明确区分可移植实现和本机部署：
+```text
+<command> --prompt TEXT --image PATH --output PATH --seed INT [extra_args...]
+```
+
+Bundle 的 `driver.py` 只需一行：
+
+```python
+from physbench.baseline_runtime.drivers.subprocess_i2v import StandardI2VCLIDriver as Driver
+```
+
+Cosmos 使用自有薄 driver，因为它需要多 GPU `torchrun`、Cosmos payload 和 checkpoint
+identity；G15 的 Bundle driver 也只有一行，复用共享的 WAN managed driver。
+
+### 2.2 Submission：只提交输出
+
+submission Bundle 不包含 driver：
+
+```text
+baselines/my_submission/
+├── baseline.json
+├── baseline.local.example.json
+├── baseline.local.json
+└── README.md
+```
+
+portable manifest 声明 `implementation.kind=submission`、capabilities 和标准 adapter。
+本机 `baseline.local.json` 指向 JSONL：
+
+```json
+{
+  "runtime": {
+    "submission_manifest": "/absolute/path/to/submission.jsonl"
+  }
+}
+```
+
+每条 submission 记录必须精确对应一个 canonical job：
+
+```json
+{
+  "job_id": "...",
+  "case_id": "...",
+  "conditioning": "physics",
+  "seed": 42,
+  "video_path": "/external/model/output.mp4"
+}
+```
+
+执行时要求覆盖完整且无额外 job，并逐项校验 case、conditioning 和 seed。视频通过
+`import_prediction_video` 复制到当前 run；评估不会直接引用外部模型目录。缺失、额外、
+重复或身份不匹配的记录会使 run 失败。
+
+### 2.3 Command：高级接入
+
+涉及 View A 微调、复杂常驻 worker、模型原生非标准输入或独立进程隔离时，可以继续
+使用 v3 command：
+
+```text
+baselines/my_advanced_model/
+├── baseline.json
+├── plugin/main.py
+└── ...
+```
+
+```json
+{
+  "schema_version": "3.0",
+  "implementation": {
+    "kind": "command",
+    "protocol": "physbench-baseline-v1",
+    "entrypoint": ["{python}", "plugin/main.py"],
+    "fingerprint_paths": ["plugin/**/*.py"]
+  }
+}
+```
+
+endpoint 通过 request/response JSON 实现四个操作：
+
+| operation | 作用 |
+| --- | --- |
+| `describe` | 描述 TaskBuilder/DataAdapter 和依赖指纹 |
+| `adapt_case` | 构建可审计模型输入 |
+| `build_task_instance` | 编译并封印 canonical plan |
+| `run_task` | 执行训练和推理 |
+
+WAN `wan22_ti2v_5b_lora_r32_v3` 保留此路径，因为它同时支持
+`finetune_eval`。command host 会复验 canonical plan、identity 和 seal，不能因为接口
+高级而绕过 Benchmark 不变量。
+
+## 3. Bundle 与部署身份
+
+两种 digest 分工不同：
 
 ```text
 bundle digest
-= canonical(manifest + fingerprint_paths 中每个文件的相对路径和 SHA-256)
+= canonical(portable manifest + Bundle-local fingerprinted files)
 
 deployment digest
 = canonical(应用 baseline.local.json 后的 manifest)
 ```
 
-插件代码或 profile 改变会使 bundle digest 改变。本机 checkpoint、模型根目录、Python
-或 GPU 设置改变会使 deployment digest 改变。两者都进入 TaskBuilder 和
-BaselineTaskInstance 身份，避免“代码相同但实际模型不同”或“配置相同但代码已变”。
+managed driver 总是自动进入 bundle digest，即使没有写进 `fingerprint_paths`。外部共享
+runtime、prompt profile 和执行脚本进入 TaskBuilder 的
+`runtime_dependency_fingerprints`。本机 checkpoint、Python、模型根目录与 GPU 配置
+进入 deployment digest。
 
-`baseline.local.json` 只允许覆盖 `runtime` 和 `model`；覆盖 capabilities、
-implementation、ID 或版本会被拒绝。
+`baseline.local.json` 只能覆盖 `model` 和 `runtime`，不能改变 ID、版本、capability、
+adapter 或 implementation。checkpoint 还应通过 revision、identity file 或完整
+SHA-256 验证；仅记录路径不构成模型身份。
 
-仓库内被多个 Bundle 复用的实现不复制进每个目录，而由 TaskBuilder 对共享文件逐个
-计算 SHA-256，写入 `runtime_dependency_fingerprints`。因此 bundle digest 负责
-Bundle-local 边界，TaskBuilder fingerprint 负责完整可执行依赖；两者不能互相替代。
+## 4. BaselineTaskInstance
 
-## 4. Command Protocol
-
-通用宿主使用临时 request/response JSON 文件调用 Bundle：
-
-```bash
-python plugin/main.py --request request.json --response response.json
-```
-
-协议固定为 `physbench-baseline-v1`，包含四个操作：
-
-| operation | 输入 | 输出 |
-| --- | --- | --- |
-| `describe` | Bundle snapshot | TaskBuilder/DataAdapter 描述和指纹 |
-| `adapt_case` | case、conditioning、role | 可审计 adaptation record |
-| `build_task_instance` | Dataset、Task、canonical plan | sealed instance document |
-| `run_task` | sealed instance、run_dir、执行开关 | training stage、predictions |
-
-`{python}` 由宿主替换为当前 Benchmark Python。工作目录固定为 Bundle root，Bundle 内
-相对路径不会依赖调用者所在目录。入口脚本和 fingerprint glob 禁止绝对路径、`..` 与
-符号链接逃逸。
-
-发现阶段只读取 JSON。只有显式 `inspect`、`validate`、`task-build` 或运行任务时才会
-执行 Bundle command。
-
-## 5. TaskBuilder 与 DataAdapter
-
-Benchmark 核心保留抽象接口，命令型 Baseline 通过 proxy 实现：
-
-```python
-TaskBuilder.build(dataset, task)
-  -> Benchmark planner creates CanonicalTaskPlan
-  -> command build_task_instance(...)
-  -> host verifies identity and seal
-  -> BaselineTaskInstance
-```
-
-Baseline 自己负责：
-
-1. 检查 family、conditioning、scene 和模型部署能力；
-2. 绑定 Dataset 资产但不修改它们；
-3. 通过 DataAdapter 构建训练与评测输入；
-4. 生成训练节点、推理 jobs、operation DAG 和 artifact 引用；
-5. 把模型专有数据限制在 `native_inputs` 与 `baseline_payload`；
-6. 返回确定性、已封印的 TaskInstance；
-7. 执行 TaskInstance 并为每个 job 返回 prediction record。
-
-通用宿主负责验证：
-
-- Dataset ID/digest 与 Task ID/digest 未变；
-- baseline ID、bundle digest、deployment digest 未变；
-- TaskBuilder/DataAdapter fingerprint 与 `describe` 一致；
-- canonical plan 内容和 digest 未变；
-- `instance_digest` 正确；
-- 执行时使用的是同一 Baseline 部署。
-
-## 6. BaselineTaskInstance
-
-公共 envelope 使用 schema `2.1`：
+所有三档接口最终产生同一种 schema `2.1` envelope：
 
 ```text
 task_instance
 ├── instance_id / instance_digest
 ├── identity
-│   ├── dataset
-│   ├── task
-│   ├── baseline
-│   │   ├── baseline_id / baseline_version
-│   │   ├── digest
-│   │   └── deployment_digest
-│   ├── task_builder
-│   ├── data_adapter
+│   ├── dataset / task
+│   ├── baseline: id, version, bundle digest, deployment digest
+│   ├── task_builder / data_adapter fingerprints
 │   └── canonical_plan_digest
 ├── semantics
 ├── canonical_plan
-├── source
+├── source.cases / asset_root
 ├── adaptations
 ├── training
 ├── inference.jobs
@@ -203,83 +271,64 @@ task_instance
 └── baseline_payload
 ```
 
-修改 jobs、conditioning、媒体绑定、checkpoint、DAG 或 identity 后，实例 seal 都会
-失效。
+实例是 canonical JSON seal。修改 job、prompt、checkpoint、DAG、identity 或媒体绑定都会
+使 `instance_digest` 失效。执行前还会验证实例对应当前部署。
 
-## 7. 接入新 Baseline
+## 5. 新增和移除
 
-接入流程不需要修改核心源码：
-
-1. 新建 `baselines/<name>/`。
-2. 编写 Bundle v3 `baseline.json`，给出全局唯一的 `baseline_id`。
-3. 实现 `physbench-baseline-v1` 四个操作；可使用
-   `physbench.baseline_api.endpoint.main` 作为无模型逻辑的协议分发器。
-4. 把所有 Bundle 自有、会影响输出的代码和配置加入 `fingerprint_paths`；不可避免的
-   外部代码依赖必须逐文件进入 TaskBuilder fingerprint 和 `describe` 审计。
-5. 提供 `baseline.local.example.json`，把机器路径放入被忽略的
-   `baseline.local.json`。
-6. 让 generic adapter 不观察 `case.physics`；physics adapter记录使用字段。
-7. 为 canonical plan 不变性、TaskBuilder 确定性、部署指纹、数据不可变性和失败状态
-   增加测试。
-8. 不在 Baseline 内定义正式 evaluator；只输出 `predictions`。
-9. 若模型已有训练语料，按 source identity 审计 Dataset 重叠；有污染的预训练模型
-   必须声明 diagnostic/non-comparable。
-10. executor 必须接收 `run_dir` 并把预测、stdout/stderr、训练曲线和中间审计写入
-    该目录；除模型代码、权重和可重建 cache 外，不得让 AtomicRun 依赖外部文件。
-
-已有模型族应复用一个经过测试的共享实现。例如两个 WAN Bundle 的入口都调用
-`src/physbench/baseline_plugins/wan22.py`，不会复制 DataAdapter、media adapter 或
-executor。全新模型族可以把实现放在自己的 Bundle 中；核心 Registry 无需改动。
-
-Prediction 的最低执行边界：
-
-```json
-{
-  "job_id": "...",
-  "case_id": "...",
-  "baseline_id": "...",
-  "evaluation_partition": "test_id",
-  "status": "complete",
-  "video_path": "/absolute/path/to/runs_v2/<run_id>/predictions/video.mp4"
-}
-```
-
-核心不会信任 `video_path` 声明本身：完成态 prediction 写入
-`predictions.jsonl` 前，必须通过 run-local 路径、文件存在性和 SHA-256 检查。历史或
-人工生成的视频使用 `physbench prediction-import` 复制进入 run；不能直接引用模型
-仓库，也不能用软链接规避边界。
-
-## 8. 管理与运行命令
+创建 managed I2V 模板：
 
 ```bash
-# 只扫描 manifests，不执行插件
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline init my_i2v --backend managed-i2v
+```
+
+创建 output-only 模板：
+
+```bash
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline init my_outputs --backend submission
+```
+
+生成的目录会立即走正式 Registry 校验。接入时：
+
+1. 修改 portable model identity、capabilities、adapter 和 runner；
+2. 把本机路径写入 `baseline.local.json`；
+3. managed 模型实现或选择 driver；submission 准备完整 JSONL；
+4. 执行 `baseline validate`；
+5. 用一个 explicit case 做 dry-run；
+6. 验证 prediction、job、payload 和日志均在 AtomicRun；
+7. 审计预训练数据与 Dataset 的 source overlap；
+8. 增加模型专有 payload、checkpoint 和失败状态测试。
+
+移除时删除 `baselines/<name>/` 即可；无需修改 Registry、CLI 或任务配置。历史 AtomicRun
+已冻结 Bundle、deployment 和 TaskInstance，不依赖目录继续存在即可重新查看和评估。
+
+## 6. 管理命令
+
+```bash
+# 仅扫描 manifest，不 import driver 或执行 endpoint
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   baseline list
 
-# 解析本地覆盖并查看组件描述
+# 解析本机覆盖，检查实现、能力和组件身份
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline inspect wan22_ti2v_5b_lora_r32_v3
+  baseline inspect cosmos3_nano_i2v
 
-# 验证 manifest、代码指纹和 command endpoint
+# 验证部署和 TaskBuilder/DataAdapter 指纹
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline validate wan22_ti2v_5b_lora_r32_v3
-
-# 编译 sealed TaskInstance
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  task-build \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
-  --task tasks/official/five_scene_finetune_eval_generic.json \
-  --baseline wan22_ti2v_5b_lora_r32_v3 \
-  --output /tmp/task_instance.json
+  baseline validate wan22_g15_sparse_motion_r32_e20
 ```
 
-## 9. 当前 Bundle 与能力
+`--baseline` 接受 baseline ID、Bundle 目录或 `baseline.json` 路径。重复 ID 会立即报错。
 
-| baseline ID | family | conditioning | 备注 |
+## 7. 当前 Bundle
+
+| baseline ID | kind | family | 说明 |
 | --- | --- | --- | --- |
-| `wan22_ti2v_5b_lora_r32_v3` | `finetune_eval`, `direct_eval` | generic, physics | View A LoRA 基线 |
-| `cosmos3_nano_i2v` | `direct_eval` | generic, physics | base Cosmos3-Nano |
-| `wan22_g15_sparse_motion_r32_e20` | `direct_eval` | generic, physics | 冻结 G15，诊断型 |
+| `wan22_ti2v_5b_lora_r32_v3` | command v3 | `finetune_eval`, `direct_eval` | View A LoRA |
+| `cosmos3_nano_i2v` | managed v4 | `direct_eval` | Cosmos base |
+| `wan22_g15_sparse_motion_r32_e20` | managed v4 | `direct_eval` | 冻结 G15；诊断型 |
 
-TaskBuilder 会在创建 run 前拒绝 manifest 未声明的 family。特别地，Cosmos 和 G15
-收到 `finetune_eval` 时必须失败；它们不会伪造空训练阶段来绕过 View A 语义。
+Cosmos 与 G15 收到 `finetune_eval` 会在 run 创建前失败。G15 的源数据重叠审计是其
+可比性约束，不因集成方式改变。

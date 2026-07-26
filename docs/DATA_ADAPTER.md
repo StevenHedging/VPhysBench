@@ -2,13 +2,13 @@
 
 ## 1. 定位
 
-DataAdapter 属于 Baseline，不属于 Dataset 或 Benchmark 核心。它将冻结 case 转换为
-模型原生输入，同时保证媒体派生可重现、generic/physics 条件隔离可验证。
+DataAdapter recipe 属于 Baseline，不属于 Dataset。它将冻结 case 转换为模型原生
+输入，同时保证媒体派生可重现、generic/physics 条件隔离可验证。
 
-在 Bundle v3 中，核心持有 `CommandDataAdapterProxy`；实际实现位于 Bundle，或位于
-同模型族共用且被显式指纹化的支持模块。它通过
-`physbench-baseline-v1/adapt_case` 返回 adaptation record。核心只验证接口、
-fingerprint 和隔离不变量，不解释模型原生 payload。
+schema v4 managed/submission Bundle 使用公共 `StandardDataAdapter` 执行声明式 recipe；
+schema v3 command Bundle 通过 `CommandDataAdapterProxy` 调用模型族实现。两条路径都
+返回同一种 adaptation record，并把 adapter、profile 和共享实现纳入 fingerprint。
+Benchmark 不把模型专有 runner payload 写入 Dataset。
 
 ```text
 frozen case + frozen job + adapter config
@@ -93,7 +93,7 @@ TaskBuilder/TaskInstance 身份变化，但不会无意义地重建媒体 cache�
 
 ## 5. WAN2.2 当前配置
 
-`baselines/wan22_lora/baseline.json` 使用：
+`baselines/wan22_lora/baseline.json` 和 managed G15 recipe 使用：
 
 | scene | bucket |
 | --- | --- |
@@ -139,7 +139,6 @@ stage 不同。
 ```text
 adaptation_id
 case_id
-job_id
 conditioning
 implementation type/version
 source asset binding
@@ -147,8 +146,8 @@ spatial transform
 temporal transform
 text profile
 physics fields used
-native output digest
-cache keys
+prompt digest / used parameters
+adapter and materialization fingerprints
 ```
 
 TaskInstance 保存审计摘要和完整 artifact 路径，AtomicRun 再冻结实例指纹。这样可以

@@ -15,7 +15,7 @@ DEFAULT_BASELINES_ROOT = PROJECT_ROOT / "baselines"
 DESCRIPTOR_NAME = "baseline.json"
 LOCAL_OVERRIDE_NAME = "baseline.local.json"
 ALLOWED_LOCAL_OVERRIDE_KEYS = {"model", "runtime"}
-ALLOWED_MANIFEST_KEYS = {
+COMMON_MANIFEST_KEYS = {
     "schema_version",
     "baseline_id",
     "baseline_version",
@@ -25,12 +25,26 @@ ALLOWED_MANIFEST_KEYS = {
     "capabilities",
     "model",
     "runtime",
+}
+V3_MANIFEST_KEYS = {
+    *COMMON_MANIFEST_KEYS,
     "components",
 }
-ALLOWED_IMPLEMENTATION_KEYS = {
+V4_MANIFEST_KEYS = {
+    *COMMON_MANIFEST_KEYS,
+    "adapter",
+    "runner",
+    "trainer",
+}
+V3_IMPLEMENTATION_KEYS = {
     "kind",
     "protocol",
     "entrypoint",
+    "fingerprint_paths",
+}
+V4_IMPLEMENTATION_KEYS = {
+    "kind",
+    "driver",
     "fingerprint_paths",
 }
 ALLOWED_CAPABILITY_KEYS = {
@@ -70,27 +84,42 @@ def _validate_relative_path(root: Path, value: str, *, label: str) -> Path:
     return resolved
 
 
-def _validate_manifest(value: dict[str, Any], descriptor_path: Path) -> None:
-    if value.get("schema_version") != "3.0":
-        raise ValueError("baseline bundle must use schema_version=3.0")
-    unknown = sorted(set(value) - ALLOWED_MANIFEST_KEYS)
-    if unknown:
-        raise ValueError(f"baseline bundle contains unknown fields: {unknown}")
-    _validate_baseline_id(value)
-    _require_string(value, "baseline_version")
+def _validate_fingerprint_patterns(
+    implementation: dict[str, Any],
+    *,
+    required: bool,
+) -> None:
+    patterns = implementation.get("fingerprint_paths")
+    if patterns is None and not required:
+        return
+    if (
+        not isinstance(patterns, list)
+        or (required and not patterns)
+        or any(
+            not isinstance(item, str) or not item or "\x00" in item
+            for item in patterns
+        )
+    ):
+        qualifier = "a non-empty" if required else "a"
+        raise ValueError(
+            f"implementation.fingerprint_paths must be {qualifier} string list"
+        )
+    for pattern in patterns:
+        if Path(pattern).is_absolute() or ".." in Path(pattern).parts:
+            raise ValueError(
+                "implementation fingerprint glob must be bundle-relative: "
+                f"{pattern}"
+            )
 
-    implementation = value.get("implementation")
-    if not isinstance(implementation, dict):
-        raise ValueError("baseline bundle requires an implementation object")
-    unknown = sorted(set(implementation) - ALLOWED_IMPLEMENTATION_KEYS)
+
+def _validate_command_implementation(
+    implementation: dict[str, Any],
+    descriptor_path: Path,
+) -> None:
+    unknown = sorted(set(implementation) - V3_IMPLEMENTATION_KEYS)
     if unknown:
         raise ValueError(
             f"baseline implementation contains unknown fields: {unknown}"
-        )
-    if implementation.get("kind") != "command":
-        raise ValueError(
-            "unsupported baseline implementation kind "
-            f"{implementation.get('kind')!r}; supported kinds: command"
         )
     if implementation.get("protocol") != "physbench-baseline-v1":
         raise ValueError(
@@ -105,17 +134,23 @@ def _validate_manifest(value: dict[str, Any], descriptor_path: Path) -> None:
             for item in entrypoint
         )
     ):
-        raise ValueError("implementation.entrypoint must be a non-empty string list")
+        raise ValueError(
+            "implementation.entrypoint must be a non-empty string list"
+        )
     if entrypoint[0] == "{python}":
         if len(entrypoint) < 2:
-            raise ValueError("{python} entrypoint requires a bundle-local script")
+            raise ValueError(
+                "{python} entrypoint requires a bundle-local script"
+            )
         script = _validate_relative_path(
             descriptor_path.parent,
             entrypoint[1],
             label="implementation.entrypoint script",
         )
         if not script.is_file():
-            raise FileNotFoundError(f"baseline entrypoint not found: {script}")
+            raise FileNotFoundError(
+                f"baseline entrypoint not found: {script}"
+            )
     else:
         executable = _validate_relative_path(
             descriptor_path.parent,
@@ -123,26 +158,75 @@ def _validate_manifest(value: dict[str, Any], descriptor_path: Path) -> None:
             label="implementation.entrypoint executable",
         )
         if not executable.is_file():
-            raise FileNotFoundError(f"baseline entrypoint not found: {executable}")
-
-    patterns = implementation.get("fingerprint_paths")
-    if (
-        not isinstance(patterns, list)
-        or not patterns
-        or any(
-            not isinstance(item, str) or not item or "\x00" in item
-            for item in patterns
-        )
-    ):
-        raise ValueError(
-            "implementation.fingerprint_paths must be a non-empty string list"
-        )
-    for pattern in patterns:
-        if Path(pattern).is_absolute() or ".." in Path(pattern).parts:
-            raise ValueError(
-                "implementation fingerprint glob must be bundle-relative: "
-                f"{pattern}"
+            raise FileNotFoundError(
+                f"baseline entrypoint not found: {executable}"
             )
+    _validate_fingerprint_patterns(implementation, required=True)
+
+
+def _validate_v4_implementation(
+    implementation: dict[str, Any],
+    descriptor_path: Path,
+) -> None:
+    unknown = sorted(set(implementation) - V4_IMPLEMENTATION_KEYS)
+    if unknown:
+        raise ValueError(
+            f"baseline implementation contains unknown fields: {unknown}"
+        )
+    kind = implementation.get("kind")
+    if kind not in {"managed", "submission"}:
+        raise ValueError(
+            "schema v4 baseline implementation kind must be managed or "
+            f"submission, got {kind!r}"
+        )
+    _validate_fingerprint_patterns(implementation, required=False)
+    if kind == "managed":
+        driver = implementation.get("driver")
+        if not isinstance(driver, str) or not driver:
+            raise ValueError(
+                "managed baseline requires implementation.driver"
+            )
+        path = _validate_relative_path(
+            descriptor_path.parent,
+            driver,
+            label="implementation.driver",
+        )
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"managed baseline driver not found: {path}"
+            )
+    elif "driver" in implementation:
+        raise ValueError(
+            "submission baseline must not declare implementation.driver"
+        )
+
+
+def _validate_manifest(value: dict[str, Any], descriptor_path: Path) -> None:
+    schema_version = value.get("schema_version")
+    if schema_version not in {"3.0", "4.0"}:
+        raise ValueError(
+            "baseline bundle must use schema_version=3.0 or 4.0"
+        )
+    allowed = V3_MANIFEST_KEYS if schema_version == "3.0" else V4_MANIFEST_KEYS
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        raise ValueError(f"baseline bundle contains unknown fields: {unknown}")
+    _validate_baseline_id(value)
+    _require_string(value, "baseline_version")
+
+    implementation = value.get("implementation")
+    if not isinstance(implementation, dict):
+        raise ValueError("baseline bundle requires an implementation object")
+    kind = implementation.get("kind")
+    if schema_version == "3.0" and kind != "command":
+        raise ValueError(
+            "schema v3 baseline implementation kind must be command, "
+            f"got {kind!r}"
+        )
+    if schema_version == "3.0":
+        _validate_command_implementation(implementation, descriptor_path)
+    else:
+        _validate_v4_implementation(implementation, descriptor_path)
 
     capabilities = value.get("capabilities")
     if not isinstance(capabilities, dict):
@@ -183,14 +267,32 @@ def _validate_manifest(value: dict[str, Any], descriptor_path: Path) -> None:
     ):
         raise ValueError("supported_scenes contains duplicates")
 
-    components = value.get("components")
-    if components is not None and not isinstance(components, dict):
-        raise ValueError("baseline components must be an object when present")
-    if isinstance(components, dict) and "condition_adapter" in components:
-        raise ValueError(
-            "condition_adapter is not a public Baseline component; keep all "
-            "model-input adaptation inside the Baseline-owned data adapter"
-        )
+    if schema_version == "3.0":
+        components = value.get("components")
+        if components is not None and not isinstance(components, dict):
+            raise ValueError(
+                "baseline components must be an object when present"
+            )
+        if isinstance(components, dict) and "condition_adapter" in components:
+            raise ValueError(
+                "condition_adapter is not a public Baseline component; keep "
+                "all model-input adaptation inside the Baseline-owned data "
+                "adapter"
+            )
+    else:
+        adapter = value.get("adapter")
+        if not isinstance(adapter, dict):
+            raise ValueError(
+                "schema v4 baseline requires an adapter object"
+            )
+        if kind == "managed" and not isinstance(value.get("runner"), dict):
+            raise ValueError(
+                "managed baseline requires a runner object"
+            )
+        if "trainer" in value and not isinstance(value["trainer"], dict):
+            raise ValueError(
+                "baseline trainer must be an object when present"
+            )
 
 
 def discover_baseline_bundles(
@@ -303,9 +405,12 @@ def load_baseline_bundle(
     portable_value = load_json(descriptor_path)
     _validate_manifest(portable_value, descriptor_path)
     root = descriptor_path.parent.resolve()
-    files = _fingerprinted_files(
-        root, portable_value["implementation"]["fingerprint_paths"]
-    )
+    implementation = portable_value["implementation"]
+    patterns = list(implementation.get("fingerprint_paths", []))
+    driver = implementation.get("driver")
+    if driver and driver not in patterns:
+        patterns.append(driver)
+    files = _fingerprinted_files(root, patterns)
     bundle_digest = canonical_sha256({
         "manifest": portable_value,
         "files": files,
@@ -327,4 +432,12 @@ def load_baseline_plugin(bundle: BaselineBundle) -> BaselinePlugin:
         from .command import CommandBaselinePlugin
 
         return CommandBaselinePlugin(bundle)
+    if kind == "managed":
+        from ..baseline_runtime import ManagedBaselinePlugin
+
+        return ManagedBaselinePlugin(bundle)
+    if kind == "submission":
+        from ..baseline_runtime import SubmissionBaselinePlugin
+
+        return SubmissionBaselinePlugin(bundle)
     raise ValueError(f"unsupported baseline implementation kind {kind!r}")

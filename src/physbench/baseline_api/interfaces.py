@@ -18,8 +18,10 @@ class DataAdapter(ABC):
 
     A concrete adapter owns the complete adaptation pipeline: spatial, temporal,
     input-paradigm, generic text, and optional physics injection.  The benchmark
-    treats ``native_inputs`` as opaque, so a baseline may inject physics through
-    text, tokens, tensors, control streams, or another model-native mechanism.
+    passes ``native_inputs`` through to the Baseline. Managed standard adapters
+    use an auditable text/vision/shape envelope; advanced adapters may instead
+    expose opaque tokens, tensors, control streams, or another model-native
+    mechanism.
     """
 
     @property

@@ -5,6 +5,12 @@ This Bundle registers the frozen epoch-20 G15 LoRA as
 model-family implementation; this directory contains only deployment identity,
 configuration and provenance.
 
+This is a schema-v4 managed Bundle. Its one-line `driver.py` selects the shared
+`Wan22ManagedDriver`; canonical plan compilation, prompt isolation, TaskInstance
+sealing and prediction identity are provided by the common managed runtime.
+The WAN media/model lifecycle remains shared with the command-based fine-tuning
+Bundle through `Wan22ExecutionEngine`.
+
 The Bundle supports `direct_eval × {generic, physics}` only. It does not
 retrain on View A and cannot be used for `finetune_eval`.
 

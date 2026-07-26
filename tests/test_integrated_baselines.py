@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -11,6 +13,7 @@ from physbench.baseline_api import (
 )
 from physbench.data_layout import V3_DATASET
 from physbench.datasets import load_dataset_v2
+from physbench.domain import TaskSpec
 from physbench.io import canonical_sha256, load_json
 from physbench.tasks import load_task_v2
 
@@ -49,20 +52,40 @@ class IntegratedBaselineTests(unittest.TestCase):
             set(discovered),
         )
 
-    def test_wan_bundles_share_one_model_family_implementation(self) -> None:
-        for root in (ROOT / "baselines" / "wan22_lora", G15_ROOT):
-            entrypoint = (root / "plugin" / "main.py").read_text(
-                encoding="utf-8"
-            )
-            self.assertIn(
-                "physbench.baseline_plugins.wan22", entrypoint
-            )
-            self.assertFalse((root / "plugin" / "implementation.py").exists())
+    def test_lightweight_direct_bundles_share_core_runtime(self) -> None:
+        wan_command = (
+            ROOT / "baselines" / "wan22_lora" / "plugin" / "main.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("physbench.baseline_plugins.wan22", wan_command)
+        g15_driver = (G15_ROOT / "driver.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Wan22ManagedDriver", g15_driver)
+        self.assertFalse((G15_ROOT / "plugin" / "main.py").exists())
+        self.assertFalse((COSMOS_ROOT / "plugin" / "main.py").exists())
         self.assertTrue(
             (
                 ROOT / "src" / "physbench" / "baseline_plugins" / "wan22.py"
             ).is_file()
         )
+        self.assertTrue(
+            (
+                ROOT / "src" / "physbench" / "baseline_runtime"
+                / "drivers" / "wan22.py"
+            ).is_file()
+        )
+        self.assertEqual(
+            "command",
+            load_json(
+                ROOT / "baselines" / "wan22_lora" / "baseline.json"
+            )["implementation"]["kind"],
+        )
+        for root in (COSMOS_ROOT, G15_ROOT):
+            manifest = load_json(root / "baseline.json")
+            self.assertEqual("4.0", manifest["schema_version"])
+            self.assertEqual(
+                "managed", manifest["implementation"]["kind"]
+            )
 
     def test_g15_is_direct_only_and_overlap_is_source_aware(self) -> None:
         manifest = load_json(G15_ROOT / "baseline.json")
@@ -176,6 +199,85 @@ class IntegratedBaselineTests(unittest.TestCase):
             {"config.json", "model.safetensors.index.json"},
             set(manifest["model"]["identity_files"]),
         )
+
+    @unittest.skipUnless(
+        (COSMOS_ROOT / "baseline.local.json").is_file()
+        and (G15_ROOT / "baseline.local.json").is_file(),
+        "local model deployments are not configured",
+    )
+    def test_managed_bundles_materialize_equivalent_one_case_dry_runs(
+        self,
+    ) -> None:
+        case = next(
+            item
+            for item in self.dataset.cases
+            if item["scene_id"] == "collision_1d"
+        )
+        task_value = copy.deepcopy(self.direct_generic.value)
+        task_value["selection"]["scene_ids"] = ["collision_1d"]
+        task_value["selection"]["case_ids"] = [case["case_id"]]
+        task = TaskSpec(
+            self.direct_generic.path,
+            task_value,
+            canonical_sha256(task_value),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            instances = []
+            for root in (COSMOS_ROOT, G15_ROOT):
+                plugin = load_baseline_plugin(load_baseline_bundle(root))
+                instance = plugin.task_builder.build(self.dataset, task)
+                instances.append(instance)
+                run_dir = parent / root.name
+                for child in (
+                    "adaptations",
+                    "artifacts",
+                    "jobs",
+                    "logs",
+                    "predictions",
+                    "task_instance",
+                    "training",
+                ):
+                    (run_dir / child).mkdir(parents=True)
+                _, predictions = plugin.run_task(
+                    instance=instance,
+                    run_dir=run_dir,
+                    execute=False,
+                    stop_after_training=False,
+                )
+                self.assertEqual(1, len(predictions))
+                self.assertEqual("planned", predictions[0]["status"])
+                self.assertIsNone(predictions[0]["video_path"])
+                jobs = sorted((run_dir / "jobs").glob("*.json"))
+                self.assertTrue(jobs)
+                if root == COSMOS_ROOT:
+                    payload = load_json(next(
+                        (run_dir / "jobs").glob("*.payload.json")
+                    ))
+                    self.assertEqual("image2video", payload["model_mode"])
+                    self.assertEqual(24, payload["fps"])
+                    self.assertEqual(121, payload["num_frames"])
+                    self.assertEqual("16,9", payload["aspect_ratio"])
+                    self.assertEqual(42, payload["seed"])
+                else:
+                    job = load_json(jobs[0])
+                    reference_frames = job["media_adaptation"][
+                        "physics_reference"
+                    ]["target_frames"]
+                    generation_frames = job["wan22"]["generation"][
+                        "num_frames"
+                    ]
+                    self.assertGreaterEqual(
+                        generation_frames, reference_frames
+                    )
+                    self.assertEqual(0, (generation_frames - 1) % 4)
+                    self.assertTrue(
+                        Path(job["output_video"]).is_relative_to(run_dir)
+                    )
+            self.assertEqual(
+                instances[0].value["canonical_plan"],
+                instances[1].value["canonical_plan"],
+            )
 
 
 if __name__ == "__main__":

@@ -567,16 +567,31 @@ class Wan22TaskBuilder(TaskBuilder):
         })
 
 
-class Wan22BaselinePlugin(BaselinePlugin):
-    def __init__(self, bundle: BaselineBundle):
+class Wan22ExecutionEngine:
+    """Shared WAN execution layer for command and managed integrations."""
+
+    def __init__(
+        self,
+        bundle: BaselineBundle,
+        task_builder: TaskBuilder,
+    ):
         self.bundle = bundle
-        self.task_builder = Wan22TaskBuilder(bundle)
+        self.task_builder = task_builder
+
+    def _components(self) -> dict[str, Any]:
+        value = self.bundle.value
+        if "components" in value:
+            return value["components"]
+        components = {"predictor": value["runner"]}
+        if "trainer" in value:
+            components["trainer"] = value["trainer"]
+        return components
 
     def _legacy_config(
         self, instance_value: dict[str, Any]
     ) -> dict[str, Any]:
         value = self.bundle.value
-        components = value["components"]
+        components = self._components()
         frozen_checkpoint = value.get("model", {}).get("frozen_lora_checkpoint")
         is_training = instance_value["semantics"]["family"] == "finetune_eval"
         trainer_config = copy.deepcopy(
@@ -845,3 +860,29 @@ class Wan22BaselinePlugin(BaselinePlugin):
             for prediction in predictions:
                 prediction["conditioning"] = conditioning
         return training, predictions
+
+
+class Wan22BaselinePlugin(BaselinePlugin):
+    """Advanced command Bundle wrapper retained for finetune_eval."""
+
+    def __init__(self, bundle: BaselineBundle):
+        self.bundle = bundle
+        self.task_builder = Wan22TaskBuilder(bundle)
+        self.execution = Wan22ExecutionEngine(
+            bundle, self.task_builder
+        )
+
+    def run_task(
+        self,
+        *,
+        instance: BaselineTaskInstance,
+        run_dir: Path,
+        execute: bool,
+        stop_after_training: bool,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        return self.execution.run_task(
+            instance=instance,
+            run_dir=run_dir,
+            execute=execute,
+            stop_after_training=stop_after_training,
+        )

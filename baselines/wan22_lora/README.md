@@ -12,11 +12,12 @@ baseline.local.json                   local deployment, ignored by Git
 plugin/main.py                         physbench-baseline-v1 command endpoint
 ```
 
-The WAN TaskBuilder, DataAdapter and executor live once in
-`src/physbench/baseline_plugins/wan22.py`, shared with the G15 Bundle. The
-five-scene profiles are shared resources in the same package. This directory's
-portable digest covers its manifest and thin endpoint. The shared
-implementation, profiles, legacy WAN helpers and execution scripts are hashed
+The command TaskBuilder and DataAdapter live in
+`src/physbench/baseline_plugins/wan22.py`. Its `Wan22ExecutionEngine` is also
+used by the schema-v4 managed G15 Bundle, so media/model execution is not
+duplicated. The five-scene profiles are shared resources in the same package.
+This directory's portable digest covers its manifest and thin endpoint. Shared
+implementations, profiles, legacy WAN helpers and execution scripts are hashed
 separately into the TaskBuilder fingerprint and reported by
 `describe.runtime_dependency_fingerprints`.
 

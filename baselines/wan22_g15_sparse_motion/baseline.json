@@ -1,12 +1,11 @@
 {
-  "schema_version": "3.0",
+  "schema_version": "4.0",
   "baseline_id": "wan22_g15_sparse_motion_r32_e20",
   "baseline_version": "1.0.0",
   "implementation": {
-    "kind": "command",
-    "protocol": "physbench-baseline-v1",
-    "entrypoint": ["{python}", "plugin/main.py"],
-    "fingerprint_paths": ["plugin/*.py", "provenance/*.json"]
+    "kind": "managed",
+    "driver": "driver.py",
+    "fingerprint_paths": ["provenance/*.json"]
   },
   "description": "Frozen G15 WAN2.2-TI2V-5B sparse-motion LoRA; diagnostic direct-eval baseline with explicit benchmark-overlap audit.",
   "supported_scenes": [
@@ -44,80 +43,61 @@
     "accelerate_config": null,
     "diffsynth_commit": "fb337fbb90945ff829de69dbd44ded618f73e889"
   },
-  "components": {
-    "task_builder": {
-      "type": "wan22_task_builder_v1",
-      "config": {
-        "data_adapter": {
-          "spatial": {
-            "type": "wan22_spatial_v1",
-            "width": 480,
-            "height": 832,
-            "policy": "scene_aspect_ratio_bucket_then_fit_and_pad",
-            "pad_color": "black",
-            "aspect_ratio_buckets": {
-              "enabled": true,
-              "buckets": {
-                "portrait": {
-                  "width": 480,
-                  "height": 832,
-                  "scene_ids": [
-                    "pendulum",
-                    "free_fall",
-                    "uniform_circular_motion"
-                  ]
-                },
-                "landscape": {
-                  "width": 832,
-                  "height": 480,
-                  "scene_ids": [
-                    "collision_1d",
-                    "inclined_plane_slide"
-                  ]
-                }
-              }
-            }
-          },
-          "temporal": {
-            "type": "wan22_temporal_v1",
-            "fps": 24,
-            "max_frames": 121,
-            "min_frames": 5,
-            "policy": "physical-time prefix; preserve valid 4n+1 frame counts"
-          },
-          "paradigm": {
-            "type": "wan22_i2v_input_v1",
-            "mode": "i2v",
-            "first_frame_policy": "use_asset_or_extract_reference_frame0"
-          },
-          "text": {
-            "type": "wan22_scene_process_text_v1",
-            "profile_set": "five_scene_i2v_v1",
-            "generic_profile": "generic",
-            "detailed_physics_forbidden": true
-          },
-          "physics": {
-            "type": "wan22_structured_physics_injection_v1",
-            "strategy": "append_structured_values_to_text",
-            "native_target": "native_inputs.text.prompt",
-            "physics_profile": "physics"
-          },
-          "cache": {
-            "policy": "content_addressed_shared_immutable"
-          }
+  "adapter": {
+    "preset": "standard_i2v_v1",
+    "profile_set": "five_scene_i2v_v1",
+    "first_frame_policy": "asset_or_reference_frame0",
+    "cache_policy": "content_addressed_shared_immutable",
+    "spatial": {
+      "type": "wan22_spatial_v1",
+      "policy": "scene_aspect_ratio_bucket_then_fit_and_pad",
+      "pad_color": "black",
+      "scene_profiles": {
+        "pendulum": {
+          "name": "portrait",
+          "width": 480,
+          "height": 832
+        },
+        "free_fall": {
+          "name": "portrait",
+          "width": 480,
+          "height": 832
+        },
+        "uniform_circular_motion": {
+          "name": "portrait",
+          "width": 480,
+          "height": 832
+        },
+        "collision_1d": {
+          "name": "landscape",
+          "width": 832,
+          "height": 480
+        },
+        "inclined_plane_slide": {
+          "name": "landscape",
+          "width": 832,
+          "height": 480
         }
       }
     },
-    "predictor": {
-      "type": "wan22_ti2v_v1",
-      "config": {
+    "temporal": {
+      "type": "wan22_temporal_v1",
+      "fps": 24,
+      "max_frames": 121,
+      "min_frames": 5,
+      "valid_frame_rule": "4n+1",
+      "policy": "physical-time prefix; preserve valid 4n+1 frame counts"
+    }
+  },
+  "runner": {
+    "type": "wan22_ti2v_v1",
+    "config": {
         "num_inference_steps": 50,
         "cfg_scale": 5.0,
         "lora_alpha": 1.0,
         "tiled": true,
         "quality": 5,
         "negative_prompt": "camera shake, changing apparatus identity, discontinuous motion, flicker, blur, text, watermark, low quality"
-      }
     }
   }
 }

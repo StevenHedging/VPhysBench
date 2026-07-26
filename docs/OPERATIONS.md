@@ -20,8 +20,8 @@ Cosmos3 执行：
 /root/Nico/cosmos/packages/cosmos3/.venv
 ```
 
-不要混用：Benchmark 环境负责 Dataset、通用 command host、TaskBuilder 协议、
-OpenCV、SAM2 和 evaluator；WAN/Cosmos 模型环境只由各自 Bundle executor 调用。
+不要混用：Benchmark 环境负责 Dataset、Registry、managed runtime、command host、
+OpenCV、SAM2 和 evaluator；WAN/Cosmos 模型环境只由各自 Bundle driver/executor 调用。
 
 ## 2. 安装
 
@@ -63,10 +63,7 @@ PYTHONPATH=src:tests /root/miniconda3/envs/phybench/bin/python \
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
-  -m compileall -q src tests \
-  baselines/wan22_lora/plugin \
-  baselines/wan22_g15_sparse_motion/plugin \
-  baselines/cosmos3_nano_i2v/plugin
+  -m compileall -q src tests baselines
 git diff --check
 ```
 
@@ -107,7 +104,8 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   baseline inspect wan22_ti2v_5b_lora_r32_v3
 ```
 
-调用 command endpoint 并验证组件指纹：
+按各 Bundle 的 kind 验证 command endpoint 或 managed/submission runtime，并检查组件
+指纹：
 
 ```bash
 for baseline_id in \
@@ -123,6 +121,22 @@ done
 新机器必须先从目标 Bundle 的 `baseline.local.example.json` 创建
 `baseline.local.json`。不要把机器绝对路径写回 portable manifest。Cosmos build 会
 验证轻量 snapshot identity；G15 task build 会验证完整 154 MiB LoRA SHA-256。
+
+创建新接入目录：
+
+```bash
+# 标准 I2V managed Bundle
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline init my_i2v --backend managed-i2v
+
+# output-only submission Bundle
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline init my_outputs --backend submission
+```
+
+脚手架生成后会立即经过正式 Registry 校验。managed 的通用 CLI driver 接受
+`--prompt/--image/--output/--seed`；不满足该契约时只需替换 Bundle 内的
+`driver.py`，无需修改 Registry。
 
 ## 6. 编译任务
 
@@ -229,13 +243,25 @@ evaluation/cases/<job_id>/physical_subject_iou_curve.png
 
 ### `Baseline command produced no response`
 
+只适用于 `implementation.kind=command`。
 先运行 `baseline validate`。检查 entrypoint 位于 Bundle 内、使用 Benchmark
 `phybench` Python 可 import `physbench`，并确认 endpoint 无语法错误。模型 runtime
 Python 不是协议 endpoint Python。
 
+### `managed baseline driver not found` / `managed driver must export Driver`
+
+`implementation.driver` 必须是 Bundle 内相对路径，且模块必须导出
+`ManagedDriver` 子类 `Driver`。普通 direct-eval I2V 可直接 re-export
+`StandardI2VCLIDriver`。
+
+### `submission coverage mismatch`
+
+submission JSONL 与 canonical jobs 不完全相同。检查是否缺 job、混入另一 Task 的 job，
+以及 case/conditioning/seed 是否一致。不要把 coverage 检查改成“有多少评多少”。
+
 ### `task instance targets a different Baseline deployment`
 
-构建实例后 `baseline.local.json`、portable manifest、插件代码或 profile 已改变。
+构建实例后 `baseline.local.json`、portable manifest、driver/endpoint 代码或 profile 已改变。
 重新构建 TaskInstance；不要复用旧实例绕过 digest 检查。
 
 ### `baseline does not support task family finetune_eval`
@@ -289,7 +315,7 @@ reference mask 作为 prediction mask。
 
 1. 工作树只包含本次有意修改。
 2. Dataset hash 验收通过。
-3. Baseline discovery、command endpoint 和两类 digest 验收通过。
+3. Baseline discovery、三档实现加载和两类 digest 验收通过。
 4. 三个 Bundle 的能力拒绝、TaskBuilder 配对计划与 canonical-plan 防篡改测试通过。
 5. 五 scene scorer 恒等性与扰动测试通过。
 6. 五 scene 真实自比为 1。

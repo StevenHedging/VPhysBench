@@ -248,6 +248,9 @@ def _baseline_inspect(args: argparse.Namespace) -> int:
         "model": bundle.value.get("model", {}),
         "runtime": bundle.value.get("runtime", {}),
         "components": bundle.value.get("components", {}),
+        "adapter_recipe": bundle.value.get("adapter"),
+        "runner": bundle.value.get("runner"),
+        "trainer": bundle.value.get("trainer"),
         "task_builder": plugin.task_builder.describe(),
         "data_adapter": plugin.task_builder.data_adapter.describe(),
     }
@@ -268,6 +271,21 @@ def _baseline_validate(args: argparse.Namespace) -> int:
         "data_adapter_fingerprint": plugin.task_builder.data_adapter.fingerprint,
     }
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
+
+
+def _baseline_init(args: argparse.Namespace) -> int:
+    from .baseline_runtime import create_baseline_scaffold
+
+    directory = create_baseline_scaffold(
+        name=args.name,
+        backend=args.backend,
+        root=args.root or (PROJECT_ROOT / "baselines"),
+    )
+    # A generated directory must satisfy the same Registry path as a real
+    # integration before it is reported to the caller.
+    load_baseline_plugin(load_baseline_bundle(directory))
+    print(directory)
     return 0
 
 
@@ -437,11 +455,23 @@ def build_parser() -> argparse.ArgumentParser:
     baseline_inspect.add_argument("--root")
     baseline_inspect.set_defaults(func=_baseline_inspect)
     baseline_validate = baseline_sub.add_parser(
-        "validate", help="validate a manifest, fingerprints and command endpoint"
+        "validate",
+        help="validate a manifest, deployment, fingerprints and runtime",
     )
     baseline_validate.add_argument("baseline")
     baseline_validate.add_argument("--root")
     baseline_validate.set_defaults(func=_baseline_validate)
+    baseline_init = baseline_sub.add_parser(
+        "init", help="create a lightweight managed or submission Baseline"
+    )
+    baseline_init.add_argument("name")
+    baseline_init.add_argument(
+        "--backend",
+        choices=["managed-i2v", "submission"],
+        default="managed-i2v",
+    )
+    baseline_init.add_argument("--root")
+    baseline_init.set_defaults(func=_baseline_init)
     return parser
 
 

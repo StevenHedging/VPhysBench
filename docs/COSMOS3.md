@@ -10,9 +10,7 @@ baselines/cosmos3_nano_i2v/
 ├── baseline.local.example.json
 ├── baseline.local.json              # 本机部署，Git ignored
 ├── README.md
-└── plugin/
-    ├── main.py                      # 通用 command endpoint
-    └── implementation.py            # Cosmos TaskBuilder/DataAdapter/executor
+└── driver.py                        # Cosmos payload/checkpoint/torchrun 边界
 ```
 
 正式 ID 是 `cosmos3_nano_i2v`，模型身份固定为 base
@@ -42,7 +40,7 @@ manifest 记录 HF revision，并验证 checkpoint 的 `config.json` 与
 `model.safetensors.index.json` SHA-256。这样无需每次重扫 35 GB shard，也不会把错误
 snapshot 当成同一部署。
 
-TaskBuilder 还记录实际
+managed runtime 还记录实际
 `cosmos_framework/scripts/inference.py` 的 SHA-256 和 Cosmos Git commit。外部框架
 入口变化会改变 TaskBuilder fingerprint。
 
@@ -67,6 +65,10 @@ generic adaptation 接收一个移除 `case.physics` 的视图，`used_parameter
 physics adaptation 通过 `five_scene_i2v_v1` 白名单把值和单位写入 Cosmos 原生 prompt。
 两者共享 first-frame、shape 与 materialization fingerprint。
 
+这些通用逻辑由 schema v4 的 `StandardDataAdapter` 和 `ManagedTaskBuilder` 提供。
+Cosmos driver 不再自行实现 prompt resolver、canonical plan、TaskInstance seal 或
+prediction 公共字段。
+
 ## 4. 执行
 
 每个 job 生成两份 run-private 文件：
@@ -86,6 +88,8 @@ predictions/<conditioning>/<job_id>/vision.mp4
 ```
 
 不加 `--execute` 时只写 payload、job spec 和 `planned` prediction，不加载模型。
+`DirectManagedDriver` 验证 output 必须位于当前 run，并防止 driver 覆盖 canonical
+job/case/conditioning/seed。
 
 ## 5. 验证
 
@@ -119,5 +123,5 @@ scene-local evaluator。无同 case GT 的 OOD case 只允许使用 Dataset 登�
 
 正式执行时 Cosmos 的 `-o` 固定为当前
 `runs_v2/<run_id>/predictions/<conditioning>/`，推理 stdout/stderr 写入
-`runs_v2/<run_id>/logs/cosmos3/`。模型代码、checkpoint 与 Hugging Face cache 可以
+`runs_v2/<run_id>/logs/cosmos3_nano_i2v/`。模型代码、checkpoint 与 Hugging Face cache 可以
 外置，但生成视频和日志不得留在 Cosmos 工程目录。

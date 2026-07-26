@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Lightweight Baseline Bundle",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "baseline_id",
+    "baseline_version",
+    "implementation",
+    "capabilities",
+    "adapter"
+  ],
+  "properties": {
+    "schema_version": {"const": "4.0"},
+    "baseline_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "baseline_version": {"type": "string", "minLength": 1},
+    "description": {"type": "string"},
+    "implementation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "driver"],
+          "properties": {
+            "kind": {"const": "managed"},
+            "driver": {"type": "string", "minLength": 1},
+            "fingerprint_paths": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind"],
+          "properties": {
+            "kind": {"const": "submission"},
+            "fingerprint_paths": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "supported_scenes": {
+      "oneOf": [
+        {"const": "all"},
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      ]
+    },
+    "capabilities": {
+      "type": "object",
+      "required": ["task_families", "conditioning"],
+      "properties": {
+        "task_families": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "conditioning": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "train": {"type": "boolean"},
+        "finetune": {"type": "boolean"},
+        "generate": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "model": {"type": "object"},
+    "runtime": {"type": "object"},
+    "adapter": {
+      "description": "Benchmark-managed standard Case-to-model-input recipe.",
+      "type": "object"
+    },
+    "runner": {
+      "description": "Opaque model generation settings consumed by the driver.",
+      "type": "object"
+    },
+    "trainer": {
+      "description": "Optional training recipe for an advanced managed driver.",
+      "type": "object"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "implementation": {
+            "properties": {"kind": {"const": "managed"}},
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": {"required": ["runner"]}
+    }
+  ],
+  "additionalProperties": false
+}
