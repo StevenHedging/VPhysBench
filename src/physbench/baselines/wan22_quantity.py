@@ -8,6 +8,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from .wan22_lora import Wan22LoraAdapter
 from .wan22_quantity_model import (
     QUANTITY_ENCODER_STATE_KEYS,
@@ -16,6 +18,7 @@ from .wan22_quantity_model import (
     WAN22_TI2V_5B_LORA_RANK,
     WAN22_TI2V_5B_LORA_TENSOR_COUNT,
     expected_wan22_ti2v_5b_lora_targets,
+    quantity_pipeline_shared_fingerprint,
     verify_quantity_checkpoint_manifest,
 )
 from ..io import load_json, sha256_file, write_json, write_jsonl
@@ -25,6 +28,23 @@ _INVENTORY_LORA_KEY = re.compile(
     r"^(?P<target>.+)\.lora_(?P<side>A|B)"
     r"(?P<adapter>\.default)?\.weight$"
 )
+_FLOAT_DTYPE_LAYOUT = {
+    "BF16": (2, np.dtype("<u2"), 0x7F80),
+    "F16": (2, np.dtype("<u2"), 0x7C00),
+    "F32": (4, np.dtype("<u4"), 0x7F800000),
+    "F64": (8, np.dtype("<u8"), 0x7FF0000000000000),
+}
+
+
+def _strict_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(
+                f"duplicate key in safetensors checkpoint header: {key}"
+            )
+        value[key] = item
+    return value
 
 
 class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
@@ -369,35 +389,94 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
 
     @staticmethod
     def _checkpoint_inventory(path: Path) -> dict[str, Any]:
+        file_size = path.stat().st_size
         tensor_count = 0
         parameter_count = 0
         quantity_keys: set[str] = set()
         quantity_prefixes: set[str] = set()
         lora_pairs: dict[tuple[str, str], dict[str, list[int]]] = {}
         dtypes: dict[str, int] = {}
+        payload_records: list[tuple[int, int, str, str]] = []
         with path.open("rb") as handle:
             header_size_raw = handle.read(8)
             if len(header_size_raw) != 8:
                 raise ValueError("invalid safetensors checkpoint header")
             header_size = struct.unpack("<Q", header_size_raw)[0]
+            if header_size < 2 or header_size > file_size - 8:
+                raise ValueError(
+                    "invalid safetensors checkpoint header size: "
+                    f"header={header_size}, file={file_size}"
+                )
+            header_bytes = handle.read(header_size)
+            if len(header_bytes) != header_size:
+                raise ValueError("truncated safetensors checkpoint header")
             header = json.loads(
-                handle.read(header_size).decode("utf-8")
+                header_bytes.decode("utf-8"),
+                object_pairs_hook=_strict_json_object,
             )
+            if not isinstance(header, dict):
+                raise ValueError("safetensors checkpoint header must be an object")
+            payload_start = 8 + header_size
+            payload_size = file_size - payload_start
             for key, tensor in header.items():
                 if key == "__metadata__":
                     continue
-                shape = tensor["shape"]
+                if not isinstance(key, str) or not isinstance(tensor, dict):
+                    raise ValueError("invalid safetensors tensor header entry")
+                shape = tensor.get("shape")
+                if (
+                    not isinstance(shape, list)
+                    or any(
+                        not isinstance(size, int)
+                        or isinstance(size, bool)
+                        or size < 0
+                        for size in shape
+                    )
+                ):
+                    raise ValueError(
+                        f"combined checkpoint tensor has invalid shape: {key}"
+                    )
                 count = 1
                 for size in shape:
-                    count *= int(size)
+                    count *= size
                 tensor_count += 1
                 parameter_count += count
-                dtype = str(tensor["dtype"])
-                if dtype not in {"BF16", "F16", "F32", "F64"}:
+                dtype = str(tensor.get("dtype"))
+                if dtype not in _FLOAT_DTYPE_LAYOUT:
                     raise ValueError(
                         "combined checkpoint tensor must be floating point: "
                         f"{key} has dtype {dtype}"
                     )
+                offsets = tensor.get("data_offsets")
+                if (
+                    not isinstance(offsets, list)
+                    or len(offsets) != 2
+                    or any(
+                        not isinstance(offset, int)
+                        or isinstance(offset, bool)
+                        or offset < 0
+                        for offset in offsets
+                    )
+                    or offsets[1] < offsets[0]
+                ):
+                    raise ValueError(
+                        "combined checkpoint tensor has invalid data offsets: "
+                        f"{key}"
+                    )
+                item_size = _FLOAT_DTYPE_LAYOUT[dtype][0]
+                if offsets[1] - offsets[0] != count * item_size:
+                    raise ValueError(
+                        "combined checkpoint tensor byte size does not match "
+                        f"shape and dtype: {key}"
+                    )
+                if offsets[1] > payload_size:
+                    raise ValueError(
+                        "combined checkpoint tensor exceeds the payload: "
+                        f"{key}"
+                    )
+                payload_records.append(
+                    (offsets[0], offsets[1], key, dtype)
+                )
                 dtypes[dtype] = dtypes.get(dtype, 0) + 1
                 if key.startswith("pipe.quantity_encoder."):
                     quantity_prefixes.add("pipe.quantity_encoder.")
@@ -429,6 +508,38 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
                         f"{side} tensors for {pair_id[0]}"
                     )
                 pair[side] = [int(size) for size in shape]
+        cursor = 0
+        for start, end, key, _dtype in sorted(payload_records):
+            if start != cursor:
+                raise ValueError(
+                    "combined checkpoint payload has a gap or overlap before "
+                    f"{key}: expected_offset={cursor}, actual_offset={start}"
+                )
+            cursor = end
+        if cursor != payload_size:
+            raise ValueError(
+                "combined checkpoint payload length differs from tensor "
+                f"offsets: indexed={cursor}, actual={payload_size}"
+            )
+
+        mapped = np.memmap(path, mode="r", dtype=np.uint8)
+        try:
+            for start, end, key, dtype in payload_records:
+                if start == end:
+                    continue
+                _, unsigned_dtype, exponent_mask = _FLOAT_DTYPE_LAYOUT[
+                    dtype
+                ]
+                values = mapped[
+                    payload_start + start:payload_start + end
+                ].view(unsigned_dtype)
+                if bool(np.any((values & exponent_mask) == exponent_mask)):
+                    raise ValueError(
+                        "combined checkpoint tensor contains non-finite "
+                        f"values: {key}"
+                    )
+        finally:
+            del mapped
         lora_tensors = sum(len(pair) for pair in lora_pairs.values())
         if tensor_count != (
             WAN22_TI2V_5B_LORA_TENSOR_COUNT
@@ -505,6 +616,8 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
             "lora_target_topology": "wan22_ti2v_5b_30x10_v1",
             "quantity_encoder_tensor_count": len(quantity_keys),
             "dtype_tensor_counts": dict(sorted(dtypes.items())),
+            "safetensors_layout_verified": True,
+            "finite_payload_verified": True,
         }
 
     def train(
@@ -522,7 +635,7 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
             and result.get("status") in {"complete", "not_requested"}
             and checkpoint_value
         ):
-            checkpoint = Path(checkpoint_value)
+            checkpoint = Path(checkpoint_value).resolve()
             inventory = self._checkpoint_inventory(checkpoint)
             state_root = checkpoint.parent / "training_state_latest"
             state_path = state_root / "optimizer_scheduler.pt"
@@ -609,7 +722,49 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
                     "manifest"
                 )
             verify_quantity_checkpoint_manifest(checkpoint, manifest)
-        return super().generate(prepared_job, job_path)
+        result = super().generate(prepared_job, job_path)
+        if self.execute and result.get("status") == "complete":
+            audit_path = Path(prepared_job["quantity_token_audit"])
+            audit = load_json(audit_path)
+            verification = audit.get("checkpoint_verification")
+            if not isinstance(verification, dict) or (
+                verification.get("verified") is not True
+            ):
+                raise ValueError(
+                    "single-job quantity audit lacks checkpoint verification"
+                )
+            expected_fingerprint = quantity_pipeline_shared_fingerprint(
+                prepared_job
+            )
+            if (
+                audit.get("pipeline_shared_config_fingerprint")
+                != expected_fingerprint
+            ):
+                raise ValueError(
+                    "single-job quantity audit changed its pipeline-shared "
+                    "configuration fingerprint"
+                )
+            if audit.get("load_boundary_verified") is not True:
+                raise ValueError(
+                    "single-job quantity audit did not verify the actual "
+                    "checkpoint load boundary"
+                )
+            result.update({
+                "quantity_token_audit": str(audit_path),
+                "quantity_count": len(
+                    prepared_job["model_input"]["quantity_payload"][
+                        "quantities"
+                    ]
+                ),
+                "checkpoint_sha256": verification["checkpoint_sha256"],
+                "checkpoint_size": verification["checkpoint_size"],
+                "checkpoint_manifest": verification["manifest"],
+                "load_boundary_verified": True,
+                "pipeline_shared_config_fingerprint": (
+                    expected_fingerprint
+                ),
+            })
+        return result
 
 
 __all__ = ["Wan22QuantityLoraAdapter"]

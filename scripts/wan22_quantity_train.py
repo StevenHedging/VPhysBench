@@ -34,6 +34,7 @@ from examples.wanvideo.model_training.train import (
 from physbench.baselines.wan22_quantity_model import (
     NUMERIC_FEATURE_NAMES,
     QuantityEncoder,
+    distributed_sampling_contract,
     install_quantity_prompt_unit,
     load_quantity_encoder_checkpoint,
     locate_sentinel_tokens,
@@ -100,44 +101,124 @@ class QuantityWanTrainingModule(WanTrainingModule):
 
 
 class RecoverableQuantityModelLogger(ModelLogger):
-    """Weight checkpoints plus one rolling optimizer/scheduler/RNG state."""
+    """Weights plus a diagnostic optimizer/scheduler/RNG snapshot."""
 
     def __init__(self, *args, save_optimizer_state: bool, **kwargs):
         super().__init__(*args, **kwargs)
         self.save_optimizer_state = save_optimizer_state
         self.optimizer = None
         self.scheduler = None
+        self.sampler_generator = None
+        self.sampling_contract = None
         self.args = None
         self.epoch_id = -1
         self.gradient_samples: list[dict] = []
 
-    def bind_state(self, optimizer, scheduler, args) -> None:
+    def bind_state(
+        self,
+        optimizer,
+        scheduler,
+        args,
+        *,
+        sampler_generator: torch.Generator,
+        sampling_contract: dict,
+    ) -> None:
         self.optimizer = optimizer
         self.scheduler = scheduler
+        self.sampler_generator = sampler_generator
+        self.sampling_contract = dict(sampling_contract)
         self.args = args
+
+    @staticmethod
+    def assert_loss_finite(
+        accelerator: accelerate.Accelerator,
+        loss: torch.Tensor,
+    ) -> None:
+        local_finite = bool(torch.isfinite(loss.detach()).all().item())
+        flag = torch.tensor(
+            1 if local_finite else 0,
+            dtype=torch.int64,
+            device=accelerator.device,
+        )
+        finite_processes = accelerator.reduce(flag, reduction="sum")
+        if int(finite_processes.item()) != accelerator.num_processes:
+            raise FloatingPointError(
+                "non-finite training loss detected before backward: "
+                f"finite_processes={int(finite_processes.item())}/"
+                f"{accelerator.num_processes}"
+            )
+
+    def assert_quantity_gradients_finite(
+        self,
+        accelerator: accelerate.Accelerator,
+        model: torch.nn.Module,
+    ) -> tuple[float, int]:
+        unwrapped = accelerator.unwrap_model(model)
+        quantity_squared_tensor = torch.zeros(
+            (),
+            dtype=torch.float32,
+            device=accelerator.device,
+        )
+        local_finite_tensor = torch.ones(
+            (),
+            dtype=torch.bool,
+            device=accelerator.device,
+        )
+        quantity_tensors = 0
+        for parameter in unwrapped.pipe.quantity_encoder.parameters():
+            if parameter.grad is not None:
+                gradient = parameter.grad.detach()
+                local_finite_tensor.logical_and_(
+                    torch.isfinite(gradient).all().to(accelerator.device)
+                )
+                quantity_squared_tensor.add_(
+                    gradient.float().pow(2).sum().to(accelerator.device)
+                )
+                quantity_tensors += 1
+        quantity_squared = float(quantity_squared_tensor.item())
+        local_finite = (
+            bool(local_finite_tensor.item())
+            and quantity_tensors > 0
+            and math.isfinite(quantity_squared)
+        )
+        flag = torch.tensor(
+            1 if local_finite else 0,
+            dtype=torch.int64,
+            device=accelerator.device,
+        )
+        finite_processes = accelerator.reduce(flag, reduction="sum")
+        if int(finite_processes.item()) != accelerator.num_processes:
+            raise FloatingPointError(
+                "non-finite or missing QuantityEncoder gradients detected "
+                "before optimizer.step: "
+                f"finite_processes={int(finite_processes.item())}/"
+                f"{accelerator.num_processes}"
+            )
+        return math.sqrt(quantity_squared), quantity_tensors
 
     def record_gradients(
         self,
         accelerator: accelerate.Accelerator,
         model: torch.nn.Module,
+        *,
+        quantity_gradient_l2: float,
+        quantity_gradient_tensor_count: int,
     ) -> None:
+        if not math.isfinite(quantity_gradient_l2):
+            raise FloatingPointError(
+                "QuantityEncoder gradient norm is non-finite"
+            )
         unwrapped = accelerator.unwrap_model(model)
-        quantity_squared = 0.0
-        quantity_tensors = 0
-        for parameter in unwrapped.pipe.quantity_encoder.parameters():
-            if parameter.grad is not None:
-                quantity_squared += float(
-                    parameter.grad.detach().float().pow(2).sum().item()
-                )
-                quantity_tensors += 1
         text_gradients = sum(
             parameter.grad is not None
             for parameter in unwrapped.pipe.text_encoder.parameters()
         )
         self.gradient_samples.append({
             "step": self.num_steps + 1,
-            "quantity_gradient_l2": math.sqrt(quantity_squared),
-            "quantity_gradient_tensor_count": quantity_tensors,
+            "quantity_gradient_l2": quantity_gradient_l2,
+            "quantity_gradient_tensor_count": (
+                quantity_gradient_tensor_count
+            ),
             "text_encoder_gradient_tensor_count": text_gradients,
         })
 
@@ -154,7 +235,12 @@ class RecoverableQuantityModelLogger(ModelLogger):
     ) -> None:
         if not self.save_optimizer_state:
             return
-        if self.optimizer is None or self.scheduler is None:
+        if (
+            self.optimizer is None
+            or self.scheduler is None
+            or self.sampler_generator is None
+            or self.sampling_contract is None
+        ):
             raise RuntimeError("training state logger is not bound")
         state_root = Path(self.output_path) / "training_state_latest"
         state_root.mkdir(parents=True, exist_ok=True)
@@ -169,6 +255,10 @@ class RecoverableQuantityModelLogger(ModelLogger):
                 torch.cuda.get_rng_state()
                 if torch.cuda.is_available()
                 else None
+            ),
+            "sampler_generator": self.sampler_generator.get_state(),
+            "sampler_generator_initial_seed": (
+                self.sampler_generator.initial_seed()
             ),
             "process_index": accelerator.process_index,
             "global_step": self.num_steps,
@@ -197,9 +287,15 @@ class RecoverableQuantityModelLogger(ModelLogger):
                 "optimizer_scheduler": str(state_path),
                 "rng_state_pattern": "rng_rank_XX.pt",
                 "world_size": accelerator.num_processes,
+                "sampling_contract": self.sampling_contract,
+                "sampler_generator_state_captured": True,
+                "dataloader_iterator_state_captured": False,
+                "recovery_capability": "diagnostic_snapshot_only",
                 "resume_semantics": (
-                    "state-complete sidecar; automatic CLI resume is not "
-                    "enabled in this Baseline version"
+                    "optimizer, scheduler, process RNG, and sampler generator "
+                    "states are captured; the current DataLoader iterator "
+                    "position/permutation and automatic CLI resume are not "
+                    "implemented, so this is not an exact-resume checkpoint"
                 ),
             })
         accelerator.wait_for_everyone()
@@ -288,6 +384,10 @@ def launch_quantity_training(
     model_logger: RecoverableQuantityModelLogger,
     args,
 ) -> None:
+    sampling_contract = distributed_sampling_contract(
+        len(dataset),
+        accelerator.num_processes,
+    )
     if accelerator.is_main_process:
         save_training_args(args)
     optimizer_class = get_optimizer_class(args.customized_optimizer)
@@ -313,6 +413,7 @@ def launch_quantity_training(
         dataloader,
         scheduler,
     )
+    prepared_batch_sampler = type(dataloader.batch_sampler).__name__
     if accelerator.is_main_process:
         write_json(
             Path(args.output_path) / "training_sampling_runtime.json",
@@ -326,26 +427,52 @@ def launch_quantity_training(
                 ),
                 "generator_binding": "DataLoader(generator=...)",
                 "sampler_before_accelerator_prepare": unprepared_sampler,
+                "batch_sampler_after_accelerator_prepare": (
+                    prepared_batch_sampler
+                ),
                 "dataloader_after_accelerator_prepare": (
                     type(dataloader).__name__
                 ),
-                "distributed_world_size": accelerator.num_processes,
+                **sampling_contract,
+                "sampler_generator_state_checkpointed": bool(
+                    args.save_optimizer_state
+                ),
                 "process_seed_policy": (
                     "TRAIN_SEED + distributed rank; sampler generator uses "
                     "the common TRAIN_SEED"
                 ),
             },
         )
-    model_logger.bind_state(optimizer, scheduler, args)
+    model_logger.bind_state(
+        optimizer,
+        scheduler,
+        args,
+        sampler_generator=sampler_generator,
+        sampling_contract=sampling_contract,
+    )
     initialize_deepspeed_gradient_checkpointing(accelerator)
     for epoch_id in range(args.num_epochs):
         model_logger.epoch_id = epoch_id
         for data in dataloader:
             with accelerator.accumulate(model):
                 loss = model(data)
+                model_logger.assert_loss_finite(accelerator, loss)
                 accelerator.backward(loss)
+                quantity_gradient_l2, quantity_gradient_tensors = (
+                    model_logger.assert_quantity_gradients_finite(
+                        accelerator,
+                        model,
+                    )
+                )
                 if accelerator.sync_gradients:
-                    model_logger.record_gradients(accelerator, model)
+                    model_logger.record_gradients(
+                        accelerator,
+                        model,
+                        quantity_gradient_l2=quantity_gradient_l2,
+                        quantity_gradient_tensor_count=(
+                            quantity_gradient_tensors
+                        ),
+                    )
                 optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad()

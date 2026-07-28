@@ -75,12 +75,21 @@ The combined safetensors checkpoints contain both DiT LoRA tensors and
 WAN2.2-TI2V-5B topology: exactly 300 rank-32 A/B pairs (600 LoRA tensors,
 all 30 blocks × 10 targets) and exactly 19 QuantityEncoder tensors. Before
 inference, the checkpoint path, byte size, and SHA-256 must match the
-run-local schema-2 checkpoint manifest.
+run-local schema-2 checkpoint manifest. The resolved checkpoint is verified
+again immediately before and after the actual safetensors load. This hash is
+an internal consistency check for a frozen AtomicRun, not an external
+authenticity signature: a publisher who can rewrite both the checkpoint and
+its run-local manifest can create a new self-consistent pair.
 
 The shuffled training DataLoader owns an explicit `torch.Generator` seeded
 from the trainer seed. The same sampler seed is recorded in
 `training_sampling_plan.json`, `checkpoints/training_args.json`,
 `checkpoints/run.env`, and `checkpoints/training_sampling_runtime.json`.
+Training fails before its first step unless the repeated Dataset length is
+divisible by the distributed world size, so Accelerate cannot pad an epoch
+with duplicate samples. RNG sidecars include the sampler generator state, but
+remain diagnostic snapshots rather than exact-resume checkpoints because the
+live DataLoader iterator/permutation position is not captured.
 Important run-local records include:
 
 ```text

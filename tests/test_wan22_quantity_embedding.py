@@ -15,6 +15,7 @@ from unittest.mock import patch
 import torch
 from torch import nn
 
+import physbench.baselines.wan22_quantity_model as quantity_model
 from _paths import ROOT
 from physbench.baseline_api import (
     load_baseline_bundle,
@@ -35,13 +36,17 @@ from physbench.baselines.wan22_quantity_model import (
     WAN22_TI2V_5B_LORA_PAIR_COUNT,
     WAN22_TI2V_5B_LORA_RANK,
     WAN22_TI2V_5B_LORA_TENSOR_COUNT,
+    distributed_sampling_contract,
     expected_wan22_ti2v_5b_lora_targets,
     install_quantity_prompt_unit,
     load_combined_quantity_checkpoint,
     load_quantity_encoder_checkpoint,
+    load_verified_combined_quantity_checkpoint,
     locate_sentinel_tokens,
     numeric_features,
     quantity_inference_conditioning,
+    quantity_pipeline_shared_config,
+    quantity_pipeline_shared_fingerprint,
     quantity_state_dict,
     verify_quantity_checkpoint_manifest,
 )
@@ -169,7 +174,11 @@ def _write_safetensors_header(
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
-    path.write_bytes(struct.pack("<Q", len(payload)) + payload)
+    path.write_bytes(
+        struct.pack("<Q", len(payload))
+        + payload
+        + (b"\0" * offset)
+    )
 
 
 class _FakeTokenizerBackend:
@@ -710,6 +719,15 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
         invalid_type[0]["quantity_type_id"] = True
         with self.assertRaisesRegex(ValueError, "must be an integer"):
             encoder.encode_records(invalid_type)
+        overflowing = QuantityEncoder(_small_encoder_config()).eval()
+        with torch.no_grad():
+            for parameter in overflowing.parameters():
+                parameter.fill_(torch.finfo(parameter.dtype).max)
+        with self.assertRaisesRegex(
+            FloatingPointError,
+            "non-finite physical embeddings",
+        ):
+            overflowing.encode_records(records[:1])
 
     def test_combined_checkpoint_splits_encoder_and_rejects_missing_weights(
         self,
@@ -763,6 +781,8 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
             inventory = Wan22QuantityLoraAdapter._checkpoint_inventory(
                 combined_path
             )
+            self.assertTrue(inventory["safetensors_layout_verified"])
+            self.assertTrue(inventory["finite_payload_verified"])
             self.assertEqual(
                 WAN22_TI2V_5B_LORA_TENSOR_COUNT,
                 inventory["lora_tensor_count"],
@@ -779,6 +799,32 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
                 QUANTITY_ENCODER_TENSOR_COUNT,
                 inventory["quantity_encoder_tensor_count"],
             )
+
+            non_finite_path = root / "non_finite.safetensors"
+            _write_safetensors_header(non_finite_path, header)
+            with non_finite_path.open("r+b") as handle:
+                header_size = struct.unpack("<Q", handle.read(8))[0]
+                header_value = json.loads(handle.read(header_size))
+                quantity_key = next(
+                    key
+                    for key, value in header_value.items()
+                    if key.startswith(QUANTITY_CHECKPOINT_PREFIX)
+                    and value["dtype"] == "F32"
+                    and math.prod(value["shape"]) > 0
+                )
+                handle.seek(
+                    8
+                    + header_size
+                    + header_value[quantity_key]["data_offsets"][0]
+                )
+                handle.write(struct.pack("<f", float("inf")))
+            with self.assertRaisesRegex(
+                ValueError,
+                "contains non-finite values",
+            ):
+                Wan22QuantityLoraAdapter._checkpoint_inventory(
+                    non_finite_path
+                )
 
             lora_path = root / "lora_only.safetensors"
             _write_safetensors_header(lora_path, {
@@ -1115,6 +1161,140 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
                     root / "missing.json",
                 )
 
+    def test_verified_checkpoint_loader_rechecks_actual_load_boundary(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            checkpoint = root / "checkpoint.safetensors"
+            checkpoint.write_bytes(b"original checkpoint bytes")
+            manifest = root / "checkpoint.json"
+            write_json(manifest, {
+                "schema_version": "2.0",
+                "status": "complete",
+                "checkpoint": str(checkpoint),
+                "checkpoint_size": checkpoint.stat().st_size,
+                "checkpoint_sha256": sha256_file(checkpoint),
+            })
+            observed = {}
+
+            def stable_load(_pipe, _encoder, path, *, lora_alpha):
+                observed["stable_path"] = str(path)
+                observed["alpha"] = lora_alpha
+                return {
+                    "quantity_encoder_tensor_count": 19,
+                    "dit_lora_tensor_count": 600,
+                }
+
+            with patch.object(
+                quantity_model,
+                "load_combined_quantity_checkpoint",
+                side_effect=stable_load,
+            ):
+                loaded = load_verified_combined_quantity_checkpoint(
+                    object(),
+                    QuantityEncoder(_small_encoder_config()),
+                    checkpoint,
+                    manifest,
+                    lora_alpha=1.0,
+                )
+            self.assertTrue(loaded["load_boundary_verified"])
+            self.assertTrue(
+                loaded["checkpoint_verification"]["verified"]
+            )
+            self.assertEqual(
+                str(checkpoint.resolve()),
+                observed["stable_path"],
+            )
+
+            def mutate_at_load(_pipe, _encoder, path, *, lora_alpha):
+                del lora_alpha
+                observed["path"] = str(path)
+                checkpoint.write_bytes(b"replacement checkpoint bytes")
+                return {
+                    "quantity_encoder_tensor_count": 19,
+                    "dit_lora_tensor_count": 600,
+                }
+
+            with patch.object(
+                quantity_model,
+                "load_combined_quantity_checkpoint",
+                side_effect=mutate_at_load,
+            ):
+                with self.assertRaises(
+                    (RuntimeError, ValueError),
+                ):
+                    load_verified_combined_quantity_checkpoint(
+                        object(),
+                        QuantityEncoder(_small_encoder_config()),
+                        checkpoint,
+                        manifest,
+                        lora_alpha=1.0,
+                    )
+            self.assertEqual(
+                str(checkpoint.resolve()),
+                observed["path"],
+            )
+
+    def test_pipeline_shared_config_catches_load_time_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            checkpoint = root / "checkpoint.safetensors"
+            manifest = root / "checkpoint.json"
+            job = {
+                "checkpoint": str(checkpoint),
+                "checkpoint_manifest": str(manifest),
+                "wan22": {
+                    "runtime": {
+                        "project_root": "/runtime",
+                        "model_base": "/models",
+                    },
+                    "quantity_encoder": _small_encoder_config(),
+                    "generation": {
+                        "lora_alpha": 1.0,
+                        "height": 480,
+                        "width": 832,
+                        "num_frames": 121,
+                    },
+                },
+            }
+            original = quantity_pipeline_shared_config(job)
+            per_call_change = copy.deepcopy(job)
+            per_call_change["wan22"]["generation"]["height"] = 832
+            self.assertEqual(
+                original,
+                quantity_pipeline_shared_config(per_call_change),
+            )
+            alpha_change = copy.deepcopy(job)
+            alpha_change["wan22"]["generation"]["lora_alpha"] = 0.5
+            self.assertNotEqual(
+                original,
+                quantity_pipeline_shared_config(alpha_change),
+            )
+            runtime_change = copy.deepcopy(job)
+            runtime_change["wan22"]["runtime"]["model_base"] = "/other"
+            self.assertNotEqual(
+                original,
+                quantity_pipeline_shared_config(runtime_change),
+            )
+            self.assertEqual(
+                canonical_sha256(original),
+                quantity_pipeline_shared_fingerprint(job),
+            )
+            bad_alpha = copy.deepcopy(job)
+            bad_alpha["wan22"]["generation"]["lora_alpha"] = float("nan")
+            with self.assertRaisesRegex(ValueError, "alpha must be finite"):
+                quantity_pipeline_shared_config(bad_alpha)
+
+    def test_distributed_sampling_contract_forbids_even_batch_padding(
+        self,
+    ) -> None:
+        contract = distributed_sampling_contract(1160, 8)
+        self.assertEqual(145, contract["samples_per_rank_per_epoch"])
+        self.assertFalse(contract["even_batch_padding_required"])
+        with self.assertRaisesRegex(ValueError, "must be divisible"):
+            distributed_sampling_contract(28, 8)
+
     def test_finetune_dry_run_preserves_only_the_sealed_quantity_channel(
         self,
     ) -> None:
@@ -1289,6 +1469,26 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
             training_source,
         )
         self.assertIn(
+            "distributed_sampling_contract(",
+            training_source,
+        )
+        self.assertIn(
+            '"sampler_generator": self.sampler_generator.get_state()',
+            training_source,
+        )
+        self.assertIn(
+            '"sampler_generator_state_checkpointed": bool(',
+            training_source,
+        )
+        self.assertIn(
+            "assert_loss_finite(accelerator, loss)",
+            training_source,
+        )
+        self.assertIn(
+            "assert_quantity_gradients_finite(",
+            training_source,
+        )
+        self.assertIn(
             'echo "sampler_seed=$TRAIN_SEED"',
             launcher_source,
         )
@@ -1296,6 +1496,48 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
             '--sampler_seed "$TRAIN_SEED"',
             launcher_source,
         )
+
+    def test_single_and_batch_generation_share_checkpoint_audits(
+        self,
+    ) -> None:
+        single_source = (
+            ROOT / "scripts" / "wan22_quantity_generate.py"
+        ).read_text(encoding="utf-8")
+        batch_source = (
+            ROOT / "scripts" / "wan22_quantity_generate_batch.py"
+        ).read_text(encoding="utf-8")
+        adapter_source = (
+            ROOT
+            / "src"
+            / "physbench"
+            / "baselines"
+            / "wan22_quantity.py"
+        ).read_text(encoding="utf-8")
+        for source in (single_source, batch_source):
+            self.assertIn(
+                "load_verified_combined_quantity_checkpoint(",
+                source,
+            )
+            self.assertIn(
+                '"pipeline_shared_config_fingerprint"',
+                source,
+            )
+            self.assertIn('"load_boundary_verified"', source)
+        self.assertIn(
+            "quantity_pipeline_shared_config(job)",
+            batch_source,
+        )
+        for field in (
+            '"quantity_token_audit"',
+            '"quantity_count"',
+            '"checkpoint_sha256"',
+            '"checkpoint_size"',
+            '"checkpoint_manifest"',
+            '"load_boundary_verified"',
+            '"pipeline_shared_config_fingerprint"',
+        ):
+            self.assertIn(field, batch_source)
+            self.assertIn(field, adapter_source)
 
 
 if __name__ == "__main__":

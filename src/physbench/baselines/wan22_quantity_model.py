@@ -19,7 +19,7 @@ from typing import Any, Iterable
 import torch
 from torch import nn
 
-from ..io import load_json, sha256_file
+from ..io import canonical_sha256, load_json, sha256_file
 
 
 QUANTITY_CHECKPOINT_PREFIX = "pipe.quantity_encoder."
@@ -40,6 +40,17 @@ WAN22_TI2V_5B_LORA_TARGET_SUFFIXES = (
     "self_attn.q",
     "self_attn.v",
 )
+_PER_CALL_GENERATION_FIELDS = frozenset({
+    "cfg_scale",
+    "fps",
+    "height",
+    "negative_prompt",
+    "num_frames",
+    "num_inference_steps",
+    "quality",
+    "tiled",
+    "width",
+})
 QUANTITY_ENCODER_STATE_KEYS = frozenset({
     "dimension_mlp.0.bias",
     "dimension_mlp.0.weight",
@@ -85,6 +96,91 @@ def expected_wan22_ti2v_5b_lora_targets() -> frozenset[str]:
         for block in range(WAN22_TI2V_5B_BLOCK_COUNT)
         for suffix in WAN22_TI2V_5B_LORA_TARGET_SUFFIXES
     )
+
+
+def distributed_sampling_contract(
+    dataset_length: int,
+    world_size: int,
+) -> dict[str, Any]:
+    """Return a no-padding DDP sampling contract or fail before training."""
+
+    if (
+        isinstance(dataset_length, bool)
+        or not isinstance(dataset_length, int)
+        or dataset_length < 1
+    ):
+        raise ValueError("training dataset length must be a positive integer")
+    if (
+        isinstance(world_size, bool)
+        or not isinstance(world_size, int)
+        or world_size < 1
+    ):
+        raise ValueError("distributed world size must be a positive integer")
+    remainder = dataset_length % world_size
+    if remainder:
+        raise ValueError(
+            "training dataset length must be divisible by distributed world "
+            "size to prevent Accelerate even-batch padding and cross-rank "
+            f"duplicates: dataset_length={dataset_length}, "
+            f"world_size={world_size}, remainder={remainder}"
+        )
+    return {
+        "dataset_length": dataset_length,
+        "distributed_world_size": world_size,
+        "samples_per_rank_per_epoch": dataset_length // world_size,
+        "shard_strategy": (
+            "common_seed_random_permutation_then_accelerate_"
+            "batch_sampler_shard"
+        ),
+        "even_batch_padding_required": False,
+        "cross_rank_duplicate_policy": "forbidden",
+    }
+
+
+def quantity_pipeline_shared_config(job: dict[str, Any]) -> dict[str, Any]:
+    """Canonicalize state that a persistent worker loads exactly once."""
+
+    checkpoint = job.get("checkpoint")
+    manifest = job.get("checkpoint_manifest")
+    if not isinstance(checkpoint, str) or not checkpoint:
+        raise ValueError("quantity job requires a checkpoint path")
+    if not isinstance(manifest, str) or not manifest:
+        raise ValueError("quantity job requires a checkpoint manifest path")
+    wan22 = job.get("wan22")
+    if not isinstance(wan22, dict):
+        raise ValueError("quantity job requires wan22 configuration")
+    runtime = wan22.get("runtime")
+    encoder = wan22.get("quantity_encoder")
+    generation = wan22.get("generation")
+    if not isinstance(runtime, dict):
+        raise ValueError("quantity job requires wan22.runtime")
+    if not isinstance(encoder, dict):
+        raise ValueError("quantity job requires wan22.quantity_encoder")
+    if not isinstance(generation, dict):
+        raise ValueError("quantity job requires wan22.generation")
+    try:
+        alpha = float(generation.get("lora_alpha", 1.0))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("quantity job LoRA alpha must be numeric") from exc
+    if not math.isfinite(alpha):
+        raise ValueError(f"LoRA alpha must be finite, got {alpha!r}")
+    shared_generation = {
+        key: value
+        for key, value in generation.items()
+        if key not in _PER_CALL_GENERATION_FIELDS
+    }
+    shared_generation["lora_alpha"] = alpha
+    return {
+        "checkpoint": str(Path(checkpoint).resolve()),
+        "checkpoint_manifest": str(Path(manifest).resolve()),
+        "runtime": runtime,
+        "quantity_encoder": encoder,
+        "pipeline_generation": shared_generation,
+    }
+
+
+def quantity_pipeline_shared_fingerprint(job: dict[str, Any]) -> str:
+    return canonical_sha256(quantity_pipeline_shared_config(job))
 
 
 def numeric_features(value_si: float) -> tuple[float, ...]:
@@ -233,7 +329,15 @@ class QuantityEncoder(nn.Module):
             type_ids >= self.quantity_type_embedding.num_embeddings
         ):
             raise ValueError("quantity_type_id is outside the encoder registry")
-        return self(numeric, dimension, type_ids)
+        encoded = self(numeric, dimension, type_ids)
+        if (
+            not self.training
+            and not bool(torch.isfinite(encoded.detach()).all())
+        ):
+            raise FloatingPointError(
+                "QuantityEncoder produced non-finite physical embeddings"
+            )
+        return encoded
 
 
 def quantity_state_dict(path: str | Path) -> dict[str, torch.Tensor]:
@@ -546,7 +650,61 @@ def verify_quantity_checkpoint_manifest(
         "manifest": str(manifest),
         "checkpoint_size": after.st_size,
         "checkpoint_sha256": actual_sha256,
+        "checkpoint_identity": {
+            "device": after.st_dev,
+            "inode": after.st_ino,
+            "size": after.st_size,
+            "mtime_ns": after.st_mtime_ns,
+        },
         "verified": True,
+    }
+
+
+def load_verified_combined_quantity_checkpoint(
+    pipe,
+    encoder: QuantityEncoder,
+    checkpoint_path: str | Path,
+    manifest_path: str | Path,
+    *,
+    lora_alpha: float,
+) -> dict[str, Any]:
+    """Verify, load the resolved path, then verify the load boundary again."""
+
+    before = verify_quantity_checkpoint_manifest(
+        checkpoint_path,
+        manifest_path,
+    )
+    loaded = load_combined_quantity_checkpoint(
+        pipe,
+        encoder,
+        before["checkpoint"],
+        lora_alpha=lora_alpha,
+    )
+    after = verify_quantity_checkpoint_manifest(
+        before["checkpoint"],
+        before["manifest"],
+    )
+    stable_fields = (
+        "checkpoint",
+        "manifest",
+        "checkpoint_size",
+        "checkpoint_sha256",
+        "checkpoint_identity",
+    )
+    changed = {
+        field: {"before": before.get(field), "after": after.get(field)}
+        for field in stable_fields
+        if before.get(field) != after.get(field)
+    }
+    if changed:
+        raise RuntimeError(
+            "quantity checkpoint changed across the actual load boundary: "
+            f"{changed}"
+        )
+    return {
+        **loaded,
+        "checkpoint_verification": after,
+        "load_boundary_verified": True,
     }
 
 
@@ -945,14 +1103,18 @@ __all__ = [
     "WAN22_TI2V_5B_LORA_RANK",
     "WAN22_TI2V_5B_LORA_TARGET_SUFFIXES",
     "WAN22_TI2V_5B_LORA_TENSOR_COUNT",
+    "distributed_sampling_contract",
     "encode_quantity_prompt",
     "expected_wan22_ti2v_5b_lora_targets",
     "install_quantity_prompt_unit",
     "load_combined_quantity_checkpoint",
     "load_quantity_encoder_checkpoint",
+    "load_verified_combined_quantity_checkpoint",
     "locate_sentinel_tokens",
     "numeric_features",
     "quantity_inference_conditioning",
+    "quantity_pipeline_shared_config",
+    "quantity_pipeline_shared_fingerprint",
     "quantity_state_dict",
     "verify_quantity_checkpoint_manifest",
 ]

@@ -49,7 +49,10 @@ class QuantityRegistry:
             if (
                 not isinstance(dimension, list)
                 or len(dimension) != 7
-                or any(not isinstance(value, int) for value in dimension)
+                or any(
+                    not isinstance(value, int) or isinstance(value, bool)
+                    for value in dimension
+                )
             ):
                 raise ValueError(f"unit {unit!r} has an invalid SI dimension")
             scale = spec.get("si_scale")
@@ -89,7 +92,11 @@ class QuantityRegistry:
                         f"parameter {scene_id}/{name} requires {{quantity}}"
                     )
                 precision = parameter.get("precision")
-                if not isinstance(precision, int) or precision < 0:
+                if (
+                    not isinstance(precision, int)
+                    or isinstance(precision, bool)
+                    or precision < 0
+                ):
                     raise ValueError(
                         f"parameter {scene_id}/{name} has invalid precision"
                     )

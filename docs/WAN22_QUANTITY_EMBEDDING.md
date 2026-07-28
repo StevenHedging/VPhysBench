@@ -115,11 +115,31 @@ LoRA tensor，30 blocks × 每 block 10 个 target），以及 19 个
 `torch.Generator`。sampler seed 同时写入 `training_sampling_plan.json`、
 `checkpoints/training_args.json`、`checkpoints/run.env` 与
 `checkpoints/training_sampling_runtime.json`，从而区分公共 sampler seed 和
-`TRAIN_SEED + rank` 的进程随机数策略。
+`TRAIN_SEED + rank` 的进程随机数策略。训练开始前还会强制
+`len(repeated_dataset) % world_size == 0`，否则直接失败，避免 Accelerate
+`even_batches=True` 用 epoch 开头的样本补齐各 rank。runtime audit 会记录 Dataset
+长度、每 rank 每 epoch 样本数和 `BatchSamplerShard` 策略。每个 rank 的 RNG sidecar
+包含显式 sampler generator state；但因为没有保存当前 DataLoader iterator/
+permutation 的位置，也没有自动 resume 入口，这些文件仅是 diagnostic snapshot，
+不能宣称为精确可恢复的 “state-complete checkpoint”。
 
 每个推理 worker 在加载模型前必须读取 schema-2 `checkpoint.json`，核对 job 中的
 checkpoint 路径、文件 size 与 SHA-256；manifest 缺失、字段缺失或字节不一致均
-fail closed。
+fail closed。为了消除模型加载期间的长 TOCTOU 窗口，真正读取 safetensors 时使用
+第一次校验得到的 resolved path，并在实际 load 的前后再次核对 path、inode、size、
+mtime 与 SHA-256。persistent batch worker 还会逐 job 比较所有只加载一次的配置：
+checkpoint、manifest、runtime/model-base、QuantityEncoder 配置、LoRA alpha 及未知的
+load-time generation 选项；任一不一致都会在加载模型前拒绝整个 batch，不会静默复用
+首个 job 的配置。
+
+这里的 SHA-256 是 AtomicRun 内部一致性检查，不是外部真实性锚或数字签名。若某个
+主体能同时重写 checkpoint 与同目录的 `checkpoint.json`，它可以生成新的自洽文件
+对；需要对抗这种发布者级篡改时，必须由 run 目录之外的可信系统签名或固定 manifest
+digest。
+
+训练在 backward 前跨 rank 检查 loss finite，在 optimizer step 前检查
+QuantityEncoder gradient finite；最终 safetensors 会验证完整 payload 布局并用浮点
+指数位扫描拒绝 NaN/Inf，之后才写 schema-2 checkpoint manifest。
 
 先配置本机部署：
 
@@ -281,6 +301,8 @@ artifacts/wan22/checkpoint.json:
   上述 inventory、LoRA topology/shape 与 tensor finite 状态必须从实际
   safetensors bytes 严格重算并与 manifest 一致
   checkpoint size / SHA-256 / baseline identity 必须一致
+  inventory.safetensors_layout_verified == true
+  inventory.finite_payload_verified == true
   若 save_optimizer_state=true，optimizer/scheduler 与所有 rank RNG sidecar 必须齐全
   state manifest 必须与最终 step、world size、checkpoint 文件名一致，RNG 文件名/数量按 rank 核对
   optimizer/scheduler 的 SHA-256 由 checkpoint manifest 锚定；RNG SHA-256 仅记录当前文件摘要，
