@@ -20,6 +20,9 @@ from physbench.artifacts import (
     validate_prediction_records,
 )
 from physbench.baselines.wan22_quantity import Wan22QuantityLoraAdapter
+from physbench.baselines.wan22_quantity_model import (
+    verified_quantity_checkpoint_bytes,
+)
 from physbench.domain import BaselineTaskInstance
 from physbench.evaluation.contracts import (
     CASE_STATUSES,
@@ -686,6 +689,7 @@ def _checkpoint_provenance(
             "path": None,
             "available": False,
             "digest_verified": None,
+            "byte_binding": None,
             "acceptance": {
                 "passed": False,
                 "expected_inventory": expected_inventory,
@@ -732,20 +736,10 @@ def _checkpoint_provenance(
             ),
             declared_sha256=declared,
         )
-    actual = _file_sha256(checkpoint_path) if available else None
-    digest = declared if declared_valid else actual
-    verified = (
-        actual == declared
-        if actual is not None and declared_valid
-        else None
-    )
-    if verified is False:
-        _issue(
-            integrity_issues,
-            "checkpoint_digest_mismatch",
-            declared_sha256=declared,
-            actual_sha256=actual,
-        )
+    actual: str | None = None
+    actual_size: int | None = None
+    actual_inventory: dict[str, Any] | None = None
+    checkpoint_byte_binding: dict[str, Any] | None = None
     if checkpoint_path is not None and not available:
         _issue(
             integrity_issues,
@@ -786,14 +780,6 @@ def _checkpoint_provenance(
         )
 
     declared_size = manifest.get("checkpoint_size")
-    actual_size = checkpoint_path.stat().st_size if available else None
-    if declared_size != actual_size:
-        _issue(
-            integrity_issues,
-            "checkpoint_size_mismatch",
-            declared=declared_size,
-            actual=actual_size,
-        )
 
     declared_inventory = manifest.get("inventory")
     if not isinstance(declared_inventory, dict):
@@ -804,31 +790,26 @@ def _checkpoint_provenance(
         )
         declared_inventory = None
 
-    actual_inventory: dict[str, Any] | None = None
     if available:
         try:
-            with checkpoint_path.open("rb") as handle:
-                header_size_raw = handle.read(8)
-            if len(header_size_raw) != 8:
-                raise ValueError("invalid safetensors checkpoint header")
-            header_size = int.from_bytes(header_size_raw, "little")
-            if (
-                header_size > checkpoint_path.stat().st_size - 8
-                or header_size > 64 * 1024 * 1024
-            ):
-                raise ValueError(
-                    "safetensors header length is invalid or unreasonably large"
+            with verified_quantity_checkpoint_bytes(
+                checkpoint_path,
+                manifest_path,
+            ) as (checkpoint_bytes, byte_binding):
+                actual_inventory = (
+                    Wan22QuantityLoraAdapter._checkpoint_inventory_bytes(
+                        checkpoint_bytes
+                    )
                 )
-            actual_inventory = (
-                Wan22QuantityLoraAdapter._checkpoint_inventory(
-                    checkpoint_path
-                )
-            )
+            checkpoint_byte_binding = byte_binding
+            actual = byte_binding["checkpoint_sha256"]
+            actual_size = byte_binding["checkpoint_size"]
         except (
             KeyError,
             MemoryError,
             OSError,
             OverflowError,
+            RuntimeError,
             TypeError,
             ValueError,
         ) as exc:
@@ -837,6 +818,26 @@ def _checkpoint_provenance(
                 "checkpoint_inventory_read_failed",
                 error=f"{type(exc).__name__}: {exc}",
             )
+    digest = declared if declared_valid else actual
+    verified = (
+        actual == declared
+        if actual is not None and declared_valid
+        else None
+    )
+    if verified is False:
+        _issue(
+            integrity_issues,
+            "checkpoint_digest_mismatch",
+            declared_sha256=declared,
+            actual_sha256=actual,
+        )
+    if actual_size is not None and declared_size != actual_size:
+        _issue(
+            integrity_issues,
+            "checkpoint_size_mismatch",
+            declared=declared_size,
+            actual=actual_size,
+        )
     if actual_inventory is not None:
         for field, expected in expected_inventory.items():
             observed = actual_inventory.get(field)
@@ -1079,6 +1080,7 @@ def _checkpoint_provenance(
         "size": actual_size,
         "status": status,
         "source": manifest.get("source"),
+        "byte_binding": checkpoint_byte_binding,
         "inventory": actual_inventory,
         "declared_inventory": declared_inventory,
         "inventory_profile": inventory_profile,

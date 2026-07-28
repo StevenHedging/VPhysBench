@@ -348,6 +348,11 @@ pair/rank/topology/layout/finite 字段会记录为 `derived_not_declared`。
 manifest 已声明的每个字段都必须与实际 bytes 的严格重算值一致；未知版本、三处身份
 不一致、字段缺失或值不一致都会 fail closed。
 
+汇总器不会先按路径 hash、再按路径重开 checkpoint。它通过 `O_NOFOLLOW` descriptor
+一次读取 immutable buffer，SHA-256、size、header、layout、finite scan 与 inventory
+全部绑定这同一份 bytes，并在解析结束后复核 descriptor 和路径身份；因此
+swap-and-restore 不能把 A 文件的摘要与 B 文件的 inventory 拼接成可发布证据。
+
 每条训练/推理量值还应能在 token audit 中追溯到 registry fingerprint、SI value、
 量纲、type ID、sentinel token ID 和唯一 token span；每个训练 Case 和每个完成推理的
 job 都必须恰好有一份与 sealed TaskInstance 输入一致的审计记录。

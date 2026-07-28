@@ -388,8 +388,14 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
         })
 
     @staticmethod
-    def _checkpoint_inventory(path: Path) -> dict[str, Any]:
-        file_size = path.stat().st_size
+    def _checkpoint_inventory_bytes(
+        checkpoint_bytes: bytes,
+    ) -> dict[str, Any]:
+        if not isinstance(checkpoint_bytes, bytes):
+            raise TypeError(
+                "checkpoint inventory requires one immutable byte buffer"
+            )
+        file_size = len(checkpoint_bytes)
         tensor_count = 0
         parameter_count = 0
         quantity_keys: set[str] = set()
@@ -397,17 +403,23 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
         lora_pairs: dict[tuple[str, str], dict[str, list[int]]] = {}
         dtypes: dict[str, int] = {}
         payload_records: list[tuple[int, int, str, str]] = []
-        with path.open("rb") as handle:
-            header_size_raw = handle.read(8)
+
+        def index_header() -> tuple[int, int]:
+            nonlocal tensor_count, parameter_count
+            header_size_raw = checkpoint_bytes[:8]
             if len(header_size_raw) != 8:
                 raise ValueError("invalid safetensors checkpoint header")
             header_size = struct.unpack("<Q", header_size_raw)[0]
-            if header_size < 2 or header_size > file_size - 8:
+            if (
+                header_size < 2
+                or header_size > file_size - 8
+                or header_size > 64 * 1024 * 1024
+            ):
                 raise ValueError(
                     "invalid safetensors checkpoint header size: "
                     f"header={header_size}, file={file_size}"
                 )
-            header_bytes = handle.read(header_size)
+            header_bytes = checkpoint_bytes[8:8 + header_size]
             if len(header_bytes) != header_size:
                 raise ValueError("truncated safetensors checkpoint header")
             header = json.loads(
@@ -508,6 +520,9 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
                         f"{side} tensors for {pair_id[0]}"
                     )
                 pair[side] = [int(size) for size in shape]
+            return payload_start, payload_size
+
+        payload_start, payload_size = index_header()
         cursor = 0
         for start, end, key, _dtype in sorted(payload_records):
             if start != cursor:
@@ -522,7 +537,7 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
                 f"offsets: indexed={cursor}, actual={payload_size}"
             )
 
-        mapped = np.memmap(path, mode="r", dtype=np.uint8)
+        mapped = np.frombuffer(checkpoint_bytes, dtype=np.uint8)
         try:
             for start, end, key, dtype in payload_records:
                 if start == end:
@@ -619,6 +634,14 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
             "safetensors_layout_verified": True,
             "finite_payload_verified": True,
         }
+
+    @staticmethod
+    def _checkpoint_inventory(path: Path) -> dict[str, Any]:
+        with path.open("rb") as handle:
+            checkpoint_bytes = handle.read()
+        return Wan22QuantityLoraAdapter._checkpoint_inventory_bytes(
+            checkpoint_bytes
+        )
 
     def train(
         self,

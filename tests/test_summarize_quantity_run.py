@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import statistics
 import struct
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from physbench.artifacts import prediction_artifact_manifest
 from physbench.baselines.wan22_quantity import Wan22QuantityLoraAdapter
@@ -902,6 +904,21 @@ class QuantityRunSummaryTests(unittest.TestCase):
             self.assertTrue(
                 checkpoint["inventory_profile"]["verified"]
             )
+            self.assertEqual(
+                "single_fd_single_bytes",
+                checkpoint["byte_binding"]["checkpoint_read_mode"],
+            )
+            self.assertTrue(checkpoint["byte_binding"]["verified"])
+            self.assertTrue(
+                checkpoint["byte_binding"][
+                    "descriptor_identity_verified_after_consume"
+                ]
+            )
+            self.assertTrue(
+                checkpoint["byte_binding"][
+                    "path_identity_verified_after_consume"
+                ]
+            )
             self.assertTrue(
                 checkpoint["inventory_declaration"]["verified"]
             )
@@ -1193,6 +1210,99 @@ class QuantityRunSummaryTests(unittest.TestCase):
             )
             self.assertFalse(
                 summary["training_acceptance"]["checkpoint_passed"]
+            )
+
+    def test_summary_binds_checkpoint_hash_and_inventory_to_same_bytes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._fixture_run(Path(temporary))
+            manifest = self._read_json(
+                run_dir / "artifacts" / "wan22" / "checkpoint.json"
+            )
+            checkpoint = Path(manifest["checkpoint"])
+            backup = checkpoint.with_name("checkpoint.original")
+            replacement = checkpoint.with_name("checkpoint.replacement")
+            original_bytes = checkpoint.read_bytes()
+            replacement.write_bytes(
+                original_bytes[:-1]
+                + bytes([original_bytes[-1] ^ 1])
+            )
+            real_sha256 = hashlib.sha256
+            swapped = False
+
+            def swap_checkpoint() -> None:
+                nonlocal swapped
+                if swapped:
+                    return
+                os.rename(checkpoint, backup)
+                os.rename(replacement, checkpoint)
+                swapped = True
+
+            def legacy_path_hash(path: Path) -> str:
+                data = Path(path).read_bytes()
+                digest = real_sha256(data).hexdigest()
+                if Path(path) == checkpoint:
+                    swap_checkpoint()
+                return digest
+
+            def descriptor_hash(data: bytes = b""):
+                digest = real_sha256(data)
+                if data != original_bytes:
+                    return digest
+
+                class SwapOnHexdigest:
+                    def hexdigest(self) -> str:
+                        swap_checkpoint()
+                        return digest.hexdigest()
+
+                    def __getattr__(self, name: str):
+                        return getattr(digest, name)
+
+                return SwapOnHexdigest()
+
+            try:
+                with patch(
+                    "scripts.summarize_quantity_run._file_sha256",
+                    side_effect=legacy_path_hash,
+                ), patch(
+                    (
+                        "physbench.baselines.wan22_quantity_model"
+                        ".hashlib.sha256"
+                    ),
+                    side_effect=descriptor_hash,
+                ):
+                    summary = summarize_run(run_dir)
+            finally:
+                if backup.is_file():
+                    if checkpoint.is_file():
+                        os.rename(checkpoint, replacement)
+                    os.rename(backup, checkpoint)
+
+            self.assertTrue(swapped)
+            self.assertIn(
+                "checkpoint_inventory_read_failed",
+                {
+                    issue["code"]
+                    for issue in summary["integrity_issues"]
+                },
+            )
+            self.assertIn(
+                "identity changed",
+                next(
+                    issue["error"]
+                    for issue in summary["integrity_issues"]
+                    if issue["code"]
+                    == "checkpoint_inventory_read_failed"
+                ),
+            )
+            self.assertFalse(
+                summary["training_acceptance"]["checkpoint_passed"]
+            )
+            self.assertFalse(
+                summary["reporting_status"][
+                    "benchmark_score_publishable"
+                ]
             )
 
     def test_hardened_checkpoint_inventory_profile_is_publishable(

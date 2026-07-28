@@ -156,8 +156,10 @@ reported as a separately identified alternate-protocol result. Missing or
 rejected checkpoint, recovery-state, loss, gradient, training-token, or
 inference-token evidence is recorded as an integrity issue.
 
-The report always recomputes the full hardened inventory from the checkpoint
-bytes. Frozen Baseline `1.0.0` runs may carry the original five-field manifest;
+The report reads the checkpoint once through an `O_NOFOLLOW` descriptor, hashes
+that immutable buffer, and computes its header/layout/finite/inventory evidence
+from the same bytes before rechecking descriptor and path identity. Frozen
+Baseline `1.0.0` runs may carry the original five-field manifest;
 the recomputed pair/rank/topology/layout/finite fields are then reported as
 `derived_not_declared`. Baseline `1.0.1` requires all ten hardened fields in the
 manifest. A profile is selected only when `run.json`, `frozen/baseline.json`,

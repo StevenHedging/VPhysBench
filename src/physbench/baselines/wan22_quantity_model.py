@@ -567,11 +567,24 @@ def _validate_dit_lora_state_dict(
     return tuple(validated_targets)
 
 
-def _read_verified_quantity_checkpoint(
+def _checkpoint_stat_identity(
+    value: os.stat_result,
+) -> tuple[int, int, int, int, int]:
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
+@contextmanager
+def verified_quantity_checkpoint_bytes(
     checkpoint_path: str | Path,
     manifest_path: str | Path,
-) -> tuple[bytes, dict[str, Any]]:
-    """Read and verify the exact bytes later consumed by safetensors."""
+) -> Iterable[tuple[bytes, dict[str, Any]]]:
+    """Yield one authenticated buffer while its descriptor stays stable."""
 
     checkpoint_argument = Path(checkpoint_path)
     checkpoint_open_path = Path(
@@ -666,52 +679,91 @@ def _read_verified_quantity_checkpoint(
                 f"expected={expected_size}, actual={before.st_size}"
             )
         checkpoint_bytes = handle.read(expected_size + 1)
-        after = os.fstat(handle.fileno())
-    stable_identity = (
-        before.st_dev,
-        before.st_ino,
-        before.st_size,
-        before.st_mtime_ns,
-        before.st_ctime_ns,
-    )
-    if stable_identity != (
-        after.st_dev,
-        after.st_ino,
-        after.st_size,
-        after.st_mtime_ns,
-        after.st_ctime_ns,
-    ):
-        raise RuntimeError(
-            "quantity checkpoint changed while its bytes were read"
-        )
-    if len(checkpoint_bytes) != expected_size:
-        raise ValueError(
-            "quantity checkpoint byte length differs from its manifest: "
-            f"expected={expected_size}, actual={len(checkpoint_bytes)}"
-        )
-    actual_sha256 = hashlib.sha256(checkpoint_bytes).hexdigest()
-    if actual_sha256 != expected_sha256:
-        raise ValueError(
-            "quantity checkpoint SHA-256 differs from its manifest: "
-            f"expected={expected_sha256}, actual={actual_sha256}"
-        )
-    audit = {
-        "checkpoint": str(checkpoint),
-        "manifest": str(manifest),
-        "checkpoint_size": after.st_size,
-        "checkpoint_sha256": actual_sha256,
-        "checkpoint_identity": {
-            "device": after.st_dev,
-            "inode": after.st_ino,
-            "size": after.st_size,
-            "mtime_ns": after.st_mtime_ns,
-            "ctime_ns": after.st_ctime_ns,
-        },
-        "checkpoint_read_mode": "single_fd_single_bytes",
-        "nofollow_requested": bool(getattr(os, "O_NOFOLLOW", 0)),
-        "verified": True,
-    }
-    return checkpoint_bytes, audit
+        after_read = os.fstat(handle.fileno())
+        if (
+            _checkpoint_stat_identity(before)
+            != _checkpoint_stat_identity(after_read)
+        ):
+            raise RuntimeError(
+                "quantity checkpoint changed while its bytes were read"
+            )
+        if len(checkpoint_bytes) != expected_size:
+            raise ValueError(
+                "quantity checkpoint byte length differs from its manifest: "
+                f"expected={expected_size}, actual={len(checkpoint_bytes)}"
+            )
+        actual_sha256 = hashlib.sha256(checkpoint_bytes).hexdigest()
+        if actual_sha256 != expected_sha256:
+            raise ValueError(
+                "quantity checkpoint SHA-256 differs from its manifest: "
+                f"expected={expected_sha256}, actual={actual_sha256}"
+            )
+        audit = {
+            "checkpoint": str(checkpoint),
+            "manifest": str(manifest),
+            "checkpoint_size": after_read.st_size,
+            "checkpoint_sha256": actual_sha256,
+            "checkpoint_identity": {
+                "device": after_read.st_dev,
+                "inode": after_read.st_ino,
+                "size": after_read.st_size,
+                "mtime_ns": after_read.st_mtime_ns,
+                "ctime_ns": after_read.st_ctime_ns,
+            },
+            "checkpoint_read_mode": "single_fd_single_bytes",
+            "nofollow_requested": bool(getattr(os, "O_NOFOLLOW", 0)),
+            "descriptor_identity_verified_after_consume": False,
+            "path_identity_verified_after_consume": False,
+            "verified": False,
+        }
+        try:
+            yield checkpoint_bytes, audit
+        finally:
+            after_consume = os.fstat(handle.fileno())
+            if (
+                _checkpoint_stat_identity(after_read)
+                != _checkpoint_stat_identity(after_consume)
+            ):
+                raise RuntimeError(
+                    "quantity checkpoint descriptor identity changed while "
+                    "its authenticated bytes were consumed"
+                )
+            try:
+                path_after_consume = checkpoint_open_path.lstat()
+            except FileNotFoundError as exc:
+                raise RuntimeError(
+                    "quantity checkpoint path disappeared while its "
+                    "authenticated bytes were consumed"
+                ) from exc
+            if stat.S_ISLNK(path_after_consume.st_mode):
+                raise RuntimeError(
+                    "quantity checkpoint path became a symbolic link while "
+                    "its authenticated bytes were consumed"
+                )
+            if (
+                _checkpoint_stat_identity(path_after_consume)
+                != _checkpoint_stat_identity(after_consume)
+            ):
+                raise RuntimeError(
+                    "quantity checkpoint path identity changed while its "
+                    "authenticated bytes were consumed"
+                )
+            audit["descriptor_identity_verified_after_consume"] = True
+            audit["path_identity_verified_after_consume"] = True
+            audit["verified"] = True
+
+
+def _read_verified_quantity_checkpoint(
+    checkpoint_path: str | Path,
+    manifest_path: str | Path,
+) -> tuple[bytes, dict[str, Any]]:
+    """Read and verify one descriptor-bound checkpoint byte buffer."""
+
+    with verified_quantity_checkpoint_bytes(
+        checkpoint_path,
+        manifest_path,
+    ) as verified:
+        return verified
 
 
 def verify_quantity_checkpoint_manifest(
@@ -1189,5 +1241,6 @@ __all__ = [
     "quantity_pipeline_shared_config",
     "quantity_pipeline_shared_fingerprint",
     "quantity_state_dict",
+    "verified_quantity_checkpoint_bytes",
     "verify_quantity_checkpoint_manifest",
 ]
