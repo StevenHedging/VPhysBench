@@ -234,6 +234,7 @@ def _validate_record_identity(
     job: dict[str, Any],
     *,
     label: str,
+    allow_missing_scene_id: bool = False,
 ) -> None:
     for field in (
         "case_id",
@@ -241,6 +242,12 @@ def _validate_record_identity(
         "evaluation_partition",
         "seed",
     ):
+        if (
+            field == "scene_id"
+            and allow_missing_scene_id
+            and field not in record
+        ):
+            continue
         if record.get(field) != job[field]:
             raise ValueError(
                 f"{label} identity mismatch for {job['job_id']}: "
@@ -2660,6 +2667,7 @@ def summarize_run(run_dir: str | Path) -> dict[str, Any]:
                 prediction,
                 by_job[job_id],
                 label="prediction",
+                allow_missing_scene_id=True,
             )
         except ValueError as exc:
             _issue(

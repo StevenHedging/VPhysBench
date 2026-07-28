@@ -984,6 +984,49 @@ class QuantityRunSummaryTests(unittest.TestCase):
                 ]
             )
 
+    def test_prediction_may_omit_optional_scene_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._fixture_run(Path(temporary))
+            predictions_path = run_dir / "predictions.jsonl"
+            predictions = self._read_jsonl(predictions_path)
+            for prediction in predictions:
+                prediction.pop("scene_id")
+            self._write_jsonl(predictions_path, predictions)
+
+            summary = summarize_run(run_dir)
+
+            self.assertEqual([], summary["integrity_issues"])
+            self.assertTrue(
+                summary["reporting_status"][
+                    "benchmark_score_publishable"
+                ]
+            )
+
+    def test_explicit_prediction_scene_id_mismatch_fails_closed(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._fixture_run(Path(temporary))
+            predictions_path = run_dir / "predictions.jsonl"
+            predictions = self._read_jsonl(predictions_path)
+            predictions[0]["scene_id"] = "wrong_scene"
+            self._write_jsonl(predictions_path, predictions)
+
+            summary = summarize_run(run_dir)
+            mismatches = [
+                issue
+                for issue in summary["integrity_issues"]
+                if issue["code"] == "prediction_identity_mismatch"
+            ]
+
+            self.assertEqual(1, len(mismatches))
+            self.assertIn("scene_id='wrong_scene'", mismatches[0]["error"])
+            self.assertFalse(
+                summary["reporting_status"][
+                    "benchmark_score_publishable"
+                ]
+            )
+
     def test_evaluated_case_with_failed_prediction_cannot_publish(
         self,
     ) -> None:
