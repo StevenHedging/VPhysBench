@@ -1486,7 +1486,15 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
                 and prediction["video_path"] is None
                 for prediction in predictions
             ))
+            predictions_by_id = {
+                prediction["job_id"]: prediction
+                for prediction in predictions
+            }
             for job_id, frozen in frozen_jobs.items():
+                self.assertEqual(
+                    frozen["scene_id"],
+                    predictions_by_id[job_id]["scene_id"],
+                )
                 prepared = load_json(run_dir / "jobs" / f"{job_id}.json")
                 model_input = prepared["model_input"]
                 self.assertEqual(
@@ -1577,6 +1585,7 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
                 "load_verified_combined_quantity_checkpoint(",
                 source,
             )
+            self.assertIn('"scene_id": job["scene_id"]', source)
             self.assertIn(
                 '"pipeline_shared_config_fingerprint"',
                 source,
@@ -1587,6 +1596,7 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
             batch_source,
         )
         for field in (
+            '"scene_id"',
             '"quantity_token_audit"',
             '"quantity_count"',
             '"checkpoint_sha256"',

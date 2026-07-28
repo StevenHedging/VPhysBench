@@ -150,6 +150,7 @@ def main() -> int:
     write_json(Path(job["quantity_token_audit"]), {
         "schema_version": "1.0",
         "case_id": job["case_id"],
+        "scene_id": job["scene_id"],
         "job_id": job["job_id"],
         "registry_id": quantity_payload["registry_id"],
         "registry_fingerprint": quantity_payload[

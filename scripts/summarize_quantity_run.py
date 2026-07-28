@@ -266,17 +266,25 @@ def _validate_record_identity(
     job: dict[str, Any],
     *,
     label: str,
-) -> None:
-    for field in (
+    required_fields: Sequence[str] = (
         "case_id",
         "scene_id",
         "evaluation_partition",
         "seed",
-    ):
+    ),
+    optional_fields: Sequence[str] = (),
+) -> None:
+    for field in required_fields:
         if record.get(field) != job[field]:
             raise ValueError(
                 f"{label} identity mismatch for {job['job_id']}: "
                 f"{field}={record.get(field)!r}, expected {job[field]!r}"
+            )
+    for field in optional_fields:
+        if field in record and record[field] != job[field]:
+            raise ValueError(
+                f"{label} identity mismatch for {job['job_id']}: "
+                f"{field}={record[field]!r}, expected {job[field]!r}"
             )
 
 
@@ -662,12 +670,15 @@ def _checkpoint_inventory_declaration(
 def _checkpoint_provenance(
     run_dir: Path,
     integrity_issues: list[dict[str, Any]],
+    *,
+    inventory_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     issue_count_before = len(integrity_issues)
-    inventory_profile = _checkpoint_inventory_profile(
-        run_dir,
-        integrity_issues,
-    )
+    if inventory_profile is None:
+        inventory_profile = _checkpoint_inventory_profile(
+            run_dir,
+            integrity_issues,
+        )
     relative_manifest = "artifacts/wan22/checkpoint.json"
     manifest_path = run_dir / relative_manifest
     reference = _artifact_reference(run_dir, relative_manifest)
@@ -1087,7 +1098,11 @@ def _checkpoint_provenance(
         "inventory_declaration": inventory_declaration,
         "training_state": recovery_summary,
         "acceptance": {
-            "passed": len(integrity_issues) == issue_count_before,
+            "passed": (
+                inventory_profile.get("verified") is True
+                and inventory_declaration.get("verified") is True
+                and len(integrity_issues) == issue_count_before
+            ),
             "expected_inventory": expected_inventory,
             "observed_inventory": actual_inventory,
         },
@@ -2834,6 +2849,14 @@ def summarize_run(run_dir: str | Path) -> dict[str, Any]:
             run_status=run.get("status"),
             state_stage=state_document.get("stage"),
         )
+    baseline_contract_profile = _checkpoint_inventory_profile(
+        directory,
+        integrity_issues,
+    )
+    legacy_prediction_scene_projection = (
+        baseline_contract_profile.get("verified") is True
+        and baseline_contract_profile.get("baseline_version") == "1.0.0"
+    )
     prediction_values = _load_optional_jsonl(
         directory / "predictions.jsonl"
     )
@@ -2908,6 +2931,25 @@ def summarize_run(run_dir: str | Path) -> dict[str, Any]:
                 prediction,
                 by_job[job_id],
                 label="prediction",
+                required_fields=(
+                    (
+                        "case_id",
+                        "evaluation_partition",
+                        "seed",
+                    )
+                    if legacy_prediction_scene_projection
+                    else (
+                        "case_id",
+                        "scene_id",
+                        "evaluation_partition",
+                        "seed",
+                    )
+                ),
+                optional_fields=(
+                    ("scene_id",)
+                    if legacy_prediction_scene_projection
+                    else ()
+                ),
             )
         except ValueError as exc:
             _issue(
@@ -3005,7 +3047,11 @@ def summarize_run(run_dir: str | Path) -> dict[str, Any]:
                 "component_fingerprint": frozen,
             })
 
-    checkpoint = _checkpoint_provenance(directory, integrity_issues)
+    checkpoint = _checkpoint_provenance(
+        directory,
+        integrity_issues,
+        inventory_profile=baseline_contract_profile,
+    )
     scene_ids = plan.get("scene_ids")
     if not isinstance(scene_ids, list) or any(
         not isinstance(scene_id, str) or not scene_id

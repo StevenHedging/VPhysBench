@@ -956,6 +956,94 @@ class QuantityRunSummaryTests(unittest.TestCase):
             self.assertIn(self.PROTOCOL_FINGERPRINT, markdown)
             self.assertIn("Benchmark score publishable: `yes`", markdown)
 
+    def test_prediction_scene_projection_is_optional_but_consistent(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._fixture_run(Path(temporary))
+            predictions_path = run_dir / "predictions.jsonl"
+            predictions = self._read_jsonl(predictions_path)
+            for prediction in predictions:
+                prediction.pop("scene_id")
+            self._write_jsonl(predictions_path, predictions)
+
+            summary = summarize_run(run_dir)
+
+            self.assertEqual([], summary["integrity_issues"])
+            self.assertTrue(
+                summary["reporting_status"][
+                    "benchmark_score_publishable"
+                ]
+            )
+
+            predictions[0]["scene_id"] = "wrong_scene"
+            self._write_jsonl(predictions_path, predictions)
+            mismatched = summarize_run(run_dir)
+            self.assertIn(
+                "prediction_identity_mismatch",
+                {
+                    issue["code"]
+                    for issue in mismatched["integrity_issues"]
+                },
+            )
+
+    def test_hardened_prediction_scene_identity_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._fixture_run(
+                Path(temporary),
+                baseline_version="1.0.1",
+            )
+            predictions_path = run_dir / "predictions.jsonl"
+            predictions = self._read_jsonl(predictions_path)
+            for prediction in predictions:
+                prediction.pop("scene_id")
+            self._write_jsonl(predictions_path, predictions)
+
+            summary = summarize_run(run_dir)
+
+            self.assertIn(
+                "prediction_identity_mismatch",
+                {
+                    issue["code"]
+                    for issue in summary["integrity_issues"]
+                },
+            )
+            self.assertFalse(
+                summary["reporting_status"][
+                    "benchmark_score_publishable"
+                ]
+            )
+
+    def test_unknown_version_does_not_enable_legacy_scene_projection(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._fixture_run(
+                Path(temporary),
+                baseline_version="9.9.9",
+            )
+            predictions_path = run_dir / "predictions.jsonl"
+            predictions = self._read_jsonl(predictions_path)
+            for prediction in predictions:
+                prediction.pop("scene_id")
+            self._write_jsonl(predictions_path, predictions)
+
+            summary = summarize_run(run_dir)
+            codes = {
+                issue["code"] for issue in summary["integrity_issues"]
+            }
+
+            self.assertIn(
+                "checkpoint_inventory_profile_unsupported",
+                codes,
+            )
+            self.assertIn("prediction_identity_mismatch", codes)
+            self.assertFalse(
+                summary["reporting_status"][
+                    "benchmark_score_publishable"
+                ]
+            )
+
     def test_cli_writes_json_and_markdown_without_mutating_run(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

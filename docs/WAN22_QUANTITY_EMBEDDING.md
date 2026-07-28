@@ -387,6 +387,11 @@ job ID 和 reason code，但其严格官方分数不可发布。若 reevaluate �
 冻结 fingerprint 不同的修订协议，则必须作为单独标识的 alternate-protocol 结果报告，
 不能通过该发布开关。checkpoint、恢复状态、loss、gradient 或训练/推理 token audit
 缺失或未通过验收时，汇总器会写入 `integrity_issues`，不会以“无问题”掩盖缺失证据。
+prediction 的身份规则按冻结 Baseline bundle version 解释：历史 `1.0.0` 未要求
+重复输出 `scene_id`，汇总时可由 sealed plan/job/case 唯一确定；若历史记录带有
+`scene_id`，其值仍须一致。自 `1.0.1` 起，所有 prediction 都必须显式携带并匹配
+`scene_id`；未知版本或三份冻结身份不一致时不会退回宽松规则。Case evaluation
+同样始终严格要求 `scene_id`，避免跨 scene 误聚合。
 当前 TensorBoard loss 是每个 optimizer step 的 rank-0 本地 batch loss，不是八卡
 loss 的 all-reduce 均值；它适合检查训练轨迹和有限性，不应解释为全局 batch loss。
 

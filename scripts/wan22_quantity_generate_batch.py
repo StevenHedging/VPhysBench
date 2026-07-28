@@ -206,6 +206,7 @@ def main() -> int:
                 write_json(audit_path, {
                     "schema_version": "1.0",
                     "case_id": job["case_id"],
+                    "scene_id": job["scene_id"],
                     "job_id": job["job_id"],
                     "registry_id": payload["registry_id"],
                     "registry_fingerprint": payload[
@@ -230,6 +231,7 @@ def main() -> int:
                 emit(handle, {
                     "job_id": job["job_id"],
                     "case_id": job["case_id"],
+                    "scene_id": job["scene_id"],
                     "baseline_id": job["baseline_id"],
                     "evaluation_partition": job[
                         "evaluation_partition"
@@ -271,6 +273,7 @@ def main() -> int:
                 emit(handle, {
                     "job_id": job["job_id"],
                     "case_id": job["case_id"],
+                    "scene_id": job["scene_id"],
                     "baseline_id": job["baseline_id"],
                     "evaluation_partition": job[
                         "evaluation_partition"

@@ -746,6 +746,7 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
                 )
             verify_quantity_checkpoint_manifest(checkpoint, manifest)
         result = super().generate(prepared_job, job_path)
+        result["scene_id"] = prepared_job["scene_id"]
         if self.execute and result.get("status") == "complete":
             audit_path = Path(prepared_job["quantity_token_audit"])
             audit = load_json(audit_path)

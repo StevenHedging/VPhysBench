@@ -167,6 +167,12 @@ and the sealed TaskInstance agree on Baseline ID and version. Unknown versions,
 identity drift, missing required fields, or any declared/recomputed mismatch
 fail closed.
 
+The same version gate applies to prediction identity: historical `1.0.0`
+records may omit a redundant `scene_id` only when the sealed job resolves it
+unambiguously, while `1.0.1` emitters always write it and the summary requires
+an exact match. Unknown or inconsistent versions never inherit the legacy
+exception.
+
 ## Paired comparison
 
 For a controlled three-way comparison, run the generic, structured-text, and
