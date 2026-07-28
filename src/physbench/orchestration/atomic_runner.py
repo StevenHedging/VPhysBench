@@ -16,7 +16,6 @@ from ..identifiers import require_safe_id
 from ..io import (
     canonical_sha256,
     load_json,
-    load_jsonl,
     write_json,
     write_jsonl,
 )
@@ -308,58 +307,18 @@ def run_atomic(
 
 
 def reevaluate_atomic(run_dir: str | Path) -> dict[str, Any]:
-    """Re-run Benchmark-owned evaluation for a frozen AtomicRun."""
-    directory = Path(run_dir).resolve()
-    plan = load_json(directory / "plan.json")
-    task = load_json(directory / "frozen" / "task.json")
-    cases = load_jsonl(directory / "frozen" / "cases.jsonl")
-    predictions = load_jsonl(directory / "predictions.jsonl")
-    instance = load_json(directory / "task_instance" / "manifest.json")
-    prediction_artifacts = load_json(
-        directory / "artifacts" / "prediction_artifacts.json"
+    """Fail closed instead of overwriting a schema-v2 AtomicRun.
+
+    The symbol remains exported so older Python callers receive an actionable
+    error.  Use ``reevaluate_atomic_variant`` for AtomicRun v2.  Historical
+    schema-v1 directories use ``physbench.runner.reevaluate_run``.
+    """
+    raise RuntimeError(
+        "in-place AtomicRun reevaluation is forbidden; use "
+        "reevaluate_atomic_variant(run_dir, protocol_id=..., "
+        "evaluation_id=...) or `physbench evaluate --protocol-id ... "
+        "--evaluation-id ...`"
     )
-    validate_prediction_records(
-        predictions,
-        jobs=instance["inference"]["jobs"],
-        baseline_id=instance["identity"]["baseline"]["baseline_id"],
-        run_dir=directory,
-        expected_artifact_manifest=prediction_artifacts,
-    )
-    sealed_instance = BaselineTaskInstance.from_document(instance)
-    instance = sealed_instance.value
-    if plan != instance["canonical_plan"]:
-        raise ValueError(
-            "AtomicRun plan differs from the sealed BaselineTaskInstance"
-        )
-    if canonical_sha256(task) != instance["identity"]["task"]["digest"]:
-        raise ValueError(
-            "AtomicRun task differs from the sealed BaselineTaskInstance"
-        )
-    protocol_id = task.get("evaluation", {}).get(
-        "protocol", "scene_default_v1"
-    )
-    protocol = load_evaluation_protocol(protocol_id)
-    case_results, summary = evaluate_task(
-        plan=plan,
-        cases=cases,
-        predictions=predictions,
-        asset_root=instance["source"]["asset_root"],
-        protocol=protocol,
-        output_dir=directory / "evaluation",
-    )
-    write_jsonl(directory / "evaluation" / "case_metrics.jsonl", case_results)
-    write_json(directory / "evaluation" / "summary.json", summary)
-    run_path = directory / "run.json"
-    if run_path.is_file():
-        run = load_json(run_path)
-        run["evaluation_status"] = summary["status"]
-        run["evaluation_coverage"] = summary["coverage"]
-        run["evaluation_score"] = summary["score"]
-        write_json(run_path, run)
-        (directory / "report.md").write_text(
-            _render_atomic_report(run, plan, summary), encoding="utf-8"
-        )
-    return summary
 
 
 def _paired_plan_signature(plan: dict[str, Any]) -> dict[str, Any]:

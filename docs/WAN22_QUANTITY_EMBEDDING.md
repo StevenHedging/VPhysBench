@@ -6,7 +6,8 @@
 Baseline ID: wan22_ti2v_5b_lora_r32_quantity_embedding_v1
 Bundle:      1.0.1
 Base model:  WAN2.2-TI2V-5B
-Task:        five_scene_finetune_eval_v4
+Source run:  five_scene_finetune_eval_v4 / scene_default_v1
+Current Task: five_scene_finetune_eval_v5 / scene_default_v2
 Dataset:     physics_video_five_scene_v4 / View A
 ```
 
@@ -15,6 +16,12 @@ Dataset:     physics_video_five_scene_v4 / View A
 `case.text.prompt`，并从 `case.physics[annotated=true]` 中消费由 registry 明确筛选的
 物理量子集；它不会把全部结构化标注都送入模型。registry 会记录每个字段是 primary
 还是 derived，并不假设所选字段彼此统计独立。当前仅支持 `finetune_eval` Task family。
+
+2026-07-28 启动的正式 source run 固定在提交 `918e9f7`，因此保留当时的 v4 Task 和
+`scene_default_v1` native evaluation identity。修正后的官方 Task 使用 v5/v2；source
+run 的最终官方分数会另存为不可变的 v2 reevaluation variant，不会回写或伪装成其
+canonical v1 evaluation。下文命令引用当前 `tasks/official` 文件，因此新运行会生成
+v5 Task，而不是复用历史 v4 job identity。
 
 ## 2. 从设想到可训练实现
 

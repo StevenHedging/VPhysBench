@@ -36,7 +36,7 @@ def _failure_result(
     )
 
 
-def _aggregate(
+def aggregate_task_results(
     *,
     plan: dict[str, Any],
     case_results: list[dict[str, Any]],
@@ -272,7 +272,7 @@ def evaluate_task(
         results.append(record)
         write_json(artifact_dir / "result.json", record)
 
-    aggregation = _aggregate(plan=plan, case_results=results)
+    aggregation = aggregate_task_results(plan=plan, case_results=results)
     task_result = {
         "schema_version": "1.0",
         "task_id": plan["task_id"],

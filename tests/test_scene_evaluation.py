@@ -565,21 +565,25 @@ class SceneEvaluationTests(unittest.TestCase):
             self.assertAlmostEqual(0.8, summary["observed_mean_score"])
 
     def test_default_protocol_resolves_all_five_scene_evaluators(self) -> None:
-        protocol = load_evaluation_protocol("scene_default_v1")
+        protocol = load_evaluation_protocol("scene_default_v2")
         registry = SceneEvaluatorRegistry(protocol)
         expected = {
-            "pendulum": "pendulum_state_similarity",
-            "free_fall": "free_fall_state_similarity",
-            "inclined_plane_slide": "inclined_plane_state_similarity",
-            "uniform_circular_motion": (
-                "uniform_circular_motion_state_similarity"
+            "pendulum": ("pendulum_state_similarity", "1.2"),
+            "free_fall": ("free_fall_state_similarity", "1.2"),
+            "inclined_plane_slide": (
+                "inclined_plane_state_similarity",
+                "1.2",
             ),
-            "collision_1d": "collision_1d_state_similarity",
+            "uniform_circular_motion": (
+                "uniform_circular_motion_state_similarity",
+                "1.2",
+            ),
+            "collision_1d": ("collision_1d_state_similarity", "1.2"),
         }
-        for scene_id, primary_score in expected.items():
+        for scene_id, (primary_score, version) in expected.items():
             description = registry.resolve(scene_id).describe()
             self.assertTrue(description["implemented"])
-            self.assertEqual("1.1", description["version"])
+            self.assertEqual(version, description["version"])
             self.assertEqual(primary_score, description["primary_score"])
 
 

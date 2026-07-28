@@ -5,6 +5,7 @@ from ...common.media import (
     VideoInfo,
     VideoProtocolError,
     probe_video,
+    reference_timeline,
     sample_video,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "VideoInfo",
     "VideoProtocolError",
     "probe_video",
+    "reference_timeline",
     "sample_video",
 ]

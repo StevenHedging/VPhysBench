@@ -362,7 +362,7 @@ TaskInstance。`baseline.local.json` 指向外部 JSONL：
 
 ```json
 {
-  "job_id": "five_scene_direct_eval_v4__case_id__seed000042",
+  "job_id": "five_scene_direct_eval_v5__case_id__seed000042",
   "case_id": "case_id",
   "seed": 42,
   "video_path": "/external/output/case_id.mp4"

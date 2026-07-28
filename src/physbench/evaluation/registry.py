@@ -20,7 +20,7 @@ class SceneEvaluatorRegistry:
             scene_id, {"type": "unsupported"}
         )
         evaluator_type = config.get("type", "unsupported")
-        if evaluator_type == "pendulum_state_v1":
+        if evaluator_type in {"pendulum_state_v1", "pendulum_state_v2"}:
             from .scenes.pendulum.evaluator import PendulumCaseEvaluator
 
             evaluator: SceneCaseEvaluator = PendulumCaseEvaluator(config)

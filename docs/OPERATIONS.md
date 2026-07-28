@@ -258,13 +258,15 @@ runs_v2/<run_id>/
 ├── logs/
 ├── artifacts/
 │   └── prediction_artifacts.json
-└── evaluation/
-    ├── manifest.json
-    ├── case_results.jsonl
-    ├── task_result.json
-    ├── case_metrics.jsonl        # legacy consumer projection
-    ├── summary.json              # legacy consumer projection
-    └── cases/<job_id>/
+├── evaluation/                    # canonical/native evaluation，只读
+│   ├── manifest.json
+│   ├── case_results.jsonl
+│   ├── task_result.json
+│   ├── case_metrics.jsonl        # legacy consumer projection
+│   ├── summary.json              # legacy consumer projection
+│   └── cases/<job_id>/
+└── reevaluations/                 # 可选、并存、按协议指纹隔离
+    └── <protocol_id>/<protocol_sha256>/<evaluation_id>/
 ```
 
 预测路径不再按 Task 输入分支分层；Baseline ID 已唯一表达输入策略。具体模型可在
@@ -295,27 +297,69 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 ## 11. 重新评估
 
-当前 AtomicRun：
+当前 AtomicRun 必须显式指定协议和本次 evaluation ID：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  evaluate --run-dir runs_v2/RUN_ID
+  evaluate \
+  --run-dir runs_v2/RUN_ID \
+  --protocol-id scene_default_v2 \
+  --evaluation-id protocol-v2-audit-001
 ```
 
-命令读取冻结 TaskInstance、Case 与 `predictions.jsonl`，重建 evaluation；不重新规划
-Task，也不调用 Baseline。
+命令读取冻结 TaskInstance、Case 与 `predictions.jsonl`，创建：
+
+```text
+runs_v2/RUN_ID/reevaluations/
+└── scene_default_v2/<protocol_sha256>/protocol-v2-audit-001/
+```
+
+它不重新规划 Task、不调用 Baseline，也不覆盖 canonical `evaluation/`、`run.json`、
+`report.md`、`state.json` 或 `component_fingerprints.json`。相同 evaluation ID 在相同
+协议 fingerprint 下不能重用；重跑需使用新 ID。
+
+写目录前会从 `source.asset_root/releases/<release>/dataset.json` 重算 sealed Dataset
+digest，并要求 frozen descriptor/cases/views/asset lock 与该 release 完全一致；还会
+验证 sealed TaskInstance、canonical plan、frozen Task、prediction identity 与 artifact
+manifest，以及 native CaseResult contract、per-case projection 和重新聚合后的
+TaskResult。只有目标协议实际消费的 complete prediction 才会预检
+same-case/OOD-parent reference 的 size/SHA-256。任一校验失败都不会创建变体目录；
+原始 release 已移走时也会明确拒绝，不能用未锚定的 frozen 副本冒充 sealed source。
+
+每个成功变体保存 protocol snapshot、source/reference integrity、evaluator Git/source
+identity、Python/package 版本、本地 SAM2 snapshot/weight identity 和完整 artifact
+manifest。工作流中途失败时目录保留并标记 `workflow_status=failed`，已产生的部分产物
+也保留；失败 ID 仍不可覆盖。
+
+`source_integrity.json` 会区分真实性边界：Dataset 由 sealed digest 认证；历史
+prediction/native evaluation 属于没有外部签名的运行时输出，只能证明当前
+canonical manifest、逐 case 结果和聚合内部一致，不能宣称外部已签名。
 
 对于没有 `task_instance/manifest.json` 的历史 v1 run，CLI 保留 legacy evaluator
-路径。它对冻结模型输入与任务语义只读，只允许从已有 prediction 重建 evaluation
-产物；不会重新规划或调用 Baseline。旧的主动 prompt/task registry 与 planner 已移除，
-不能用于创建新实验或重新产生旧 prompt arms。
+路径，此时不要传 `--protocol-id` 或 `--evaluation-id`。Legacy 路径只允许从已有
+prediction 重建历史 evaluation 产物；不会重新规划或调用 Baseline。旧的主动
+prompt/task registry 与 planner 已移除，不能用于创建新实验或重新产生旧 prompt arms。
+该分支还要求 `run.json.schema_version=1.0` 且目录中不存在 AtomicRun v2 markers；
+删除或损坏 v2 的 `task_instance/manifest.json` 不会使它降级进入 legacy 写路径。
+旧 Python 符号 `reevaluate_atomic` 现在是 fail-closed 兼容守卫，schema-v2 重评必须
+调用 `reevaluate_atomic_variant`。
 
 ## 12. 评估结果检查
 
-先看：
+Canonical/native 结果先看：
 
 ```text
 evaluation/task_result.json
+```
+
+并存式重评看：
+
+```text
+reevaluations/<protocol_id>/<protocol_sha256>/<evaluation_id>/
+├── reevaluation.json
+├── source_integrity.json
+├── artifact_manifest.json
+└── evaluation/task_result.json
 ```
 
 重点字段：
@@ -407,6 +451,17 @@ Prediction 标记 complete 但文件缺失或路径错误。修复模型输出�
 ### Task score 为 `null`
 
 严格 coverage 未满足。查看 `status_counts` 与缺失 job，不要用 observed mean 替代。
+
+### `reevaluation destination already exists`
+
+相同协议 fingerprint 下的 evaluation ID 已使用。旧目录是不可覆盖的审计产物；检查
+旧记录后换一个新 ID。
+
+### `AtomicRun ... mismatch` / `reference asset ... differs`
+
+Frozen plan、Task、prediction、native evaluation 或 reference 已偏离创建 run 时的
+identity。不要修改 digest 或 asset lock 绕过校验；恢复原始 run/artifact，或从可信
+Dataset、TaskInstance 和 prediction 新建 AtomicRun。
 
 ## 14. 运行保留与清理
 
