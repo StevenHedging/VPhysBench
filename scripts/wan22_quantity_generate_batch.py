@@ -70,6 +70,7 @@ def main() -> int:
         install_quantity_prompt_unit,
         load_combined_quantity_checkpoint,
         quantity_inference_conditioning,
+        verify_quantity_checkpoint_manifest,
     )
     from physbench.io import write_json
 
@@ -85,6 +86,15 @@ def main() -> int:
         raise FileNotFoundError(
             "quantity-embedding generation requires a combined checkpoint"
         )
+    checkpoint_manifest = first.get("checkpoint_manifest")
+    if not checkpoint_manifest:
+        raise FileNotFoundError(
+            "quantity-embedding generation requires a checkpoint manifest"
+        )
+    checkpoint_verification = verify_quantity_checkpoint_manifest(
+        checkpoint,
+        checkpoint_manifest,
+    )
     started = time.monotonic()
     pipe = WanVideoPipeline.from_pretrained(
         torch_dtype=torch.bfloat16,
@@ -128,6 +138,11 @@ def main() -> int:
                 if job.get("checkpoint") != checkpoint:
                     raise ValueError(
                         "persistent worker jobs must share one checkpoint"
+                    )
+                if job.get("checkpoint_manifest") != checkpoint_manifest:
+                    raise ValueError(
+                        "persistent worker jobs must share one sealed "
+                        "checkpoint manifest"
                     )
                 if (
                     job["wan22"]["quantity_encoder"]
@@ -189,6 +204,7 @@ def main() -> int:
                         "audited_prompt"
                     ],
                     "quantities": pipe._last_quantity_token_audit,
+                    "checkpoint_verification": checkpoint_verification,
                 })
                 emit(handle, {
                     "job_id": job["job_id"],
@@ -208,6 +224,9 @@ def main() -> int:
                     ),
                     "quantity_token_audit": str(audit_path),
                     "quantity_count": len(payload["quantities"]),
+                    "checkpoint_sha256": checkpoint_verification[
+                        "checkpoint_sha256"
+                    ],
                 })
                 del video
                 torch.cuda.empty_cache()

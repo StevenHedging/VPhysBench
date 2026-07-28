@@ -19,8 +19,48 @@ from typing import Any, Iterable
 import torch
 from torch import nn
 
+from ..io import load_json, sha256_file
+
 
 QUANTITY_CHECKPOINT_PREFIX = "pipe.quantity_encoder."
+WAN22_TI2V_5B_BLOCK_COUNT = 30
+WAN22_TI2V_5B_LORA_RANK = 32
+WAN22_TI2V_5B_LORA_PAIR_COUNT = 300
+WAN22_TI2V_5B_LORA_TENSOR_COUNT = 600
+QUANTITY_ENCODER_TENSOR_COUNT = 19
+WAN22_TI2V_5B_LORA_TARGET_SUFFIXES = (
+    "cross_attn.k",
+    "cross_attn.o",
+    "cross_attn.q",
+    "cross_attn.v",
+    "ffn.0",
+    "ffn.2",
+    "self_attn.k",
+    "self_attn.o",
+    "self_attn.q",
+    "self_attn.v",
+)
+QUANTITY_ENCODER_STATE_KEYS = frozenset({
+    "dimension_mlp.0.bias",
+    "dimension_mlp.0.weight",
+    "dimension_mlp.2.bias",
+    "dimension_mlp.2.weight",
+    "dimension_mlp.3.bias",
+    "dimension_mlp.3.weight",
+    "fusion_mlp.0.bias",
+    "fusion_mlp.0.weight",
+    "fusion_mlp.2.bias",
+    "fusion_mlp.2.weight",
+    "fusion_mlp.3.bias",
+    "fusion_mlp.3.weight",
+    "numeric_mlp.0.bias",
+    "numeric_mlp.0.weight",
+    "numeric_mlp.2.bias",
+    "numeric_mlp.2.weight",
+    "numeric_mlp.3.bias",
+    "numeric_mlp.3.weight",
+    "quantity_type_embedding.weight",
+})
 _DIT_LORA_KEY = re.compile(
     r"^(?P<target>.+)\.lora_(?P<side>A|B)"
     r"(?P<adapter>\.default)?\.weight$"
@@ -35,6 +75,16 @@ NUMERIC_FEATURE_NAMES = (
     "clipped_base10_exponent",
     "inverse_one_plus_abs_si",
 )
+
+
+def expected_wan22_ti2v_5b_lora_targets() -> frozenset[str]:
+    """Return the frozen LoRA target topology for WAN2.2-TI2V-5B."""
+
+    return frozenset(
+        f"blocks.{block}.{suffix}"
+        for block in range(WAN22_TI2V_5B_BLOCK_COUNT)
+        for suffix in WAN22_TI2V_5B_LORA_TARGET_SUFFIXES
+    )
 
 
 def numeric_features(value_si: float) -> tuple[float, ...]:
@@ -140,6 +190,26 @@ class QuantityEncoder(nn.Module):
         parameter = next(self.parameters())
         device = parameter.device
         dtype = parameter.dtype
+        for index, item in enumerate(items):
+            dimension_value = item.get("dimension")
+            if (
+                not isinstance(dimension_value, list)
+                or len(dimension_value) != 7
+                or any(
+                    not isinstance(value, int) or isinstance(value, bool)
+                    for value in dimension_value
+                )
+            ):
+                raise ValueError(
+                    "quantity dimension must contain seven finite integer "
+                    f"exponents: record={index}"
+                )
+            type_value = item.get("quantity_type_id")
+            if not isinstance(type_value, int) or isinstance(type_value, bool):
+                raise ValueError(
+                    "quantity_type_id must be an integer: "
+                    f"record={index}"
+                )
         numeric = torch.tensor(
             [numeric_features(item["si_value"]) for item in items],
             dtype=dtype,
@@ -192,6 +262,45 @@ def _quantity_state_dict(
     return extracted
 
 
+def _validate_quantity_encoder_state_dict(
+    encoder: QuantityEncoder,
+    state: dict[str, torch.Tensor],
+) -> None:
+    if len(state) != QUANTITY_ENCODER_TENSOR_COUNT:
+        raise ValueError(
+            "quantity encoder checkpoint must contain exactly "
+            f"{QUANTITY_ENCODER_TENSOR_COUNT} tensors, got {len(state)}"
+        )
+    if set(state) != QUANTITY_ENCODER_STATE_KEYS:
+        missing = sorted(QUANTITY_ENCODER_STATE_KEYS - set(state))
+        unexpected = sorted(set(state) - QUANTITY_ENCODER_STATE_KEYS)
+        raise ValueError(
+            "quantity encoder checkpoint topology mismatch: "
+            f"missing={missing}, unexpected={unexpected}"
+        )
+    expected = encoder.state_dict()
+    if set(expected) != QUANTITY_ENCODER_STATE_KEYS:
+        raise RuntimeError(
+            "QuantityEncoder implementation no longer matches the frozen "
+            "19-tensor checkpoint topology"
+        )
+    for key, tensor in state.items():
+        if tuple(tensor.shape) != tuple(expected[key].shape):
+            raise ValueError(
+                "quantity encoder checkpoint shape mismatch: "
+                f"{key}={tuple(tensor.shape)}, "
+                f"expected={tuple(expected[key].shape)}"
+            )
+        if not tensor.is_floating_point():
+            raise ValueError(
+                f"quantity encoder tensor must be floating point: {key}"
+            )
+        if not bool(torch.isfinite(tensor).all()):
+            raise ValueError(
+                f"quantity encoder tensor contains non-finite values: {key}"
+            )
+
+
 def _validate_dit_lora_state_dict(
     dit: nn.Module,
     state: dict[str, torch.Tensor],
@@ -225,8 +334,18 @@ def _validate_dit_lora_state_dict(
             "combined checkpoint contains unsupported non-LoRA tensors: "
             f"{sorted(invalid_keys)[:10]}"
         )
-    if not pairs:
-        raise ValueError("checkpoint has no DiT LoRA tensor pairs")
+    if len(state) != WAN22_TI2V_5B_LORA_TENSOR_COUNT:
+        raise ValueError(
+            "WAN2.2-TI2V-5B checkpoint must contain exactly "
+            f"{WAN22_TI2V_5B_LORA_TENSOR_COUNT} LoRA tensors, "
+            f"got {len(state)}"
+        )
+    if len(pairs) != WAN22_TI2V_5B_LORA_PAIR_COUNT:
+        raise ValueError(
+            "WAN2.2-TI2V-5B checkpoint must contain exactly "
+            f"{WAN22_TI2V_5B_LORA_PAIR_COUNT} LoRA A/B pairs, "
+            f"got {len(pairs)}"
+        )
 
     incomplete = []
     for (target, adapter), pair in sorted(pairs.items()):
@@ -245,7 +364,11 @@ def _validate_dit_lora_state_dict(
     modules = dict(dit.named_modules())
     validated_targets = []
     normalized_targets: dict[str, tuple[str, str]] = {}
-    for pair_id, pair in sorted(pairs.items()):
+    normalized_pairs: dict[
+        str,
+        dict[str, tuple[str, torch.Tensor]],
+    ] = {}
+    for pair_id, pair in pairs.items():
         raw_target, _adapter = pair_id
         target = (
             raw_target[len("diffusion_model."):]
@@ -259,6 +382,21 @@ def _validate_dit_lora_state_dict(
                 f"target {target!r}: {previous!r} and {pair_id!r}"
             )
         normalized_targets[target] = pair_id
+        normalized_pairs[target] = pair
+
+    expected_targets = expected_wan22_ti2v_5b_lora_targets()
+    actual_targets = set(normalized_targets)
+    if actual_targets != expected_targets:
+        missing = sorted(expected_targets - actual_targets)
+        unexpected = sorted(actual_targets - expected_targets)
+        raise ValueError(
+            "WAN2.2-TI2V-5B LoRA target topology is incomplete or "
+            f"unexpected: missing={missing[:10]}, "
+            f"unexpected={unexpected[:10]}"
+        )
+
+    for target in sorted(expected_targets):
+        pair = normalized_pairs[target]
         module = modules.get(target)
         if module is None:
             raise ValueError(
@@ -285,9 +423,13 @@ def _validate_dit_lora_state_dict(
             )
         rank_a = int(tensor_a.shape[0])
         rank_b = int(tensor_b.shape[1])
-        if rank_a < 1 or rank_a != rank_b:
+        if (
+            rank_a != WAN22_TI2V_5B_LORA_RANK
+            or rank_b != WAN22_TI2V_5B_LORA_RANK
+        ):
             raise ValueError(
-                "DiT LoRA rank mismatch: "
+                "DiT LoRA rank must be exactly "
+                f"{WAN22_TI2V_5B_LORA_RANK}: "
                 f"target={target!r}, A={tuple(tensor_a.shape)}, "
                 f"B={tuple(tensor_b.shape)}"
             )
@@ -302,8 +444,110 @@ def _validate_dit_lora_state_dict(
                 f"A={tuple(tensor_a.shape)} (expected {expected_a}), "
                 f"B={tuple(tensor_b.shape)} (expected {expected_b})"
             )
+        for side, tensor in (("A", tensor_a), ("B", tensor_b)):
+            if not tensor.is_floating_point():
+                raise ValueError(
+                    "DiT LoRA tensor must be floating point: "
+                    f"target={target!r}, side={side}"
+                )
+            if not bool(torch.isfinite(tensor).all()):
+                raise ValueError(
+                    "DiT LoRA tensor contains non-finite values: "
+                    f"target={target!r}, side={side}"
+                )
         validated_targets.append(target)
     return tuple(validated_targets)
+
+
+def verify_quantity_checkpoint_manifest(
+    checkpoint_path: str | Path,
+    manifest_path: str | Path,
+) -> dict[str, Any]:
+    """Fail closed unless checkpoint bytes match their sealed run manifest."""
+
+    checkpoint = Path(checkpoint_path).resolve()
+    manifest = Path(manifest_path).resolve()
+    if not checkpoint.is_file():
+        raise FileNotFoundError(f"quantity checkpoint not found: {checkpoint}")
+    if not manifest.is_file():
+        raise FileNotFoundError(
+            f"quantity checkpoint manifest not found: {manifest}"
+        )
+    value = load_json(manifest)
+    if value.get("schema_version") != "2.0":
+        raise ValueError(
+            "quantity checkpoint manifest must use schema_version=2.0"
+        )
+    if value.get("status") not in {"complete", "not_requested"}:
+        raise ValueError(
+            "quantity checkpoint manifest does not authorize inference: "
+            f"status={value.get('status')!r}"
+        )
+    recorded_checkpoint = value.get("checkpoint")
+    if not isinstance(recorded_checkpoint, str) or not recorded_checkpoint:
+        raise ValueError(
+            "quantity checkpoint manifest has no checkpoint path"
+        )
+    recorded_path = Path(recorded_checkpoint)
+    if not recorded_path.is_absolute():
+        recorded_path = manifest.parent / recorded_path
+    if recorded_path.resolve() != checkpoint:
+        raise ValueError(
+            "quantity checkpoint path differs from its manifest: "
+            f"job={checkpoint}, manifest={recorded_path.resolve()}"
+        )
+    expected_size = value.get("checkpoint_size")
+    if (
+        not isinstance(expected_size, int)
+        or isinstance(expected_size, bool)
+        or expected_size < 1
+    ):
+        raise ValueError(
+            "quantity checkpoint manifest has no valid checkpoint_size"
+        )
+    expected_sha256 = value.get("checkpoint_sha256")
+    if (
+        not isinstance(expected_sha256, str)
+        or re.fullmatch(r"[0-9a-f]{64}", expected_sha256) is None
+    ):
+        raise ValueError(
+            "quantity checkpoint manifest has no valid checkpoint_sha256"
+        )
+    before = checkpoint.stat()
+    if before.st_size != expected_size:
+        raise ValueError(
+            "quantity checkpoint size differs from its manifest: "
+            f"expected={expected_size}, actual={before.st_size}"
+        )
+    actual_sha256 = sha256_file(checkpoint)
+    after = checkpoint.stat()
+    stable_identity = (
+        before.st_dev,
+        before.st_ino,
+        before.st_size,
+        before.st_mtime_ns,
+    )
+    if stable_identity != (
+        after.st_dev,
+        after.st_ino,
+        after.st_size,
+        after.st_mtime_ns,
+    ):
+        raise RuntimeError(
+            "quantity checkpoint changed while its digest was verified"
+        )
+    if actual_sha256 != expected_sha256:
+        raise ValueError(
+            "quantity checkpoint SHA-256 differs from its manifest: "
+            f"expected={expected_sha256}, actual={actual_sha256}"
+        )
+    return {
+        "checkpoint": str(checkpoint),
+        "manifest": str(manifest),
+        "checkpoint_size": after.st_size,
+        "checkpoint_sha256": actual_sha256,
+        "verified": True,
+    }
 
 
 def load_combined_quantity_checkpoint(
@@ -317,18 +561,40 @@ def load_combined_quantity_checkpoint(
 
     from safetensors.torch import load_file
 
+    alpha = float(lora_alpha)
+    if not math.isfinite(alpha):
+        raise ValueError(f"LoRA alpha must be finite, got {lora_alpha!r}")
     state = load_file(str(path), device="cpu")
-    quantity = _quantity_state_dict(state)
-    if not quantity:
-        raise ValueError(
-            f"checkpoint has no quantity encoder tensors: {path}"
-        )
     quantity_keys = {
         key
         for key in state
         if key.startswith(QUANTITY_CHECKPOINT_PREFIX)
         or key.startswith("quantity_encoder.")
     }
+    if not quantity_keys:
+        raise ValueError(
+            f"checkpoint has no quantity encoder tensors: {path}"
+        )
+    if len(quantity_keys) != QUANTITY_ENCODER_TENSOR_COUNT:
+        raise ValueError(
+            "combined checkpoint must contain exactly "
+            f"{QUANTITY_ENCODER_TENSOR_COUNT} quantity encoder tensors, "
+            f"got {len(quantity_keys)}"
+        )
+    quantity_prefixes = {
+        (
+            QUANTITY_CHECKPOINT_PREFIX
+            if key.startswith(QUANTITY_CHECKPOINT_PREFIX)
+            else "quantity_encoder."
+        )
+        for key in quantity_keys
+    }
+    if len(quantity_prefixes) != 1:
+        raise ValueError(
+            "combined checkpoint mixes quantity encoder key prefixes"
+        )
+    quantity = _quantity_state_dict(state)
+    _validate_quantity_encoder_state_dict(encoder, quantity)
     lora = {
         key: value
         for key, value in state.items()
@@ -340,6 +606,7 @@ def load_combined_quantity_checkpoint(
         pipe.dit,
         lora,
     )
+    # Both sub-states are fully validated before either model is mutated.
     missing, unexpected = encoder.load_state_dict(quantity, strict=True)
     if missing or unexpected:
         raise ValueError(
@@ -349,7 +616,7 @@ def load_combined_quantity_checkpoint(
     pipe.load_lora(
         pipe.dit,
         state_dict=lora,
-        alpha=float(lora_alpha),
+        alpha=alpha,
     )
     return {
         "quantity_encoder_tensor_count": len(quantity),
@@ -365,13 +632,41 @@ def load_quantity_encoder_checkpoint(
     *,
     required: bool,
 ) -> dict[str, Any]:
-    state = quantity_state_dict(path)
-    if not state:
+    from safetensors.torch import load_file
+
+    combined = load_file(str(path), device="cpu")
+    raw_quantity_keys = {
+        key
+        for key in combined
+        if key.startswith(QUANTITY_CHECKPOINT_PREFIX)
+        or key.startswith("quantity_encoder.")
+    }
+    if not raw_quantity_keys:
         if required:
             raise ValueError(
                 f"checkpoint has no quantity encoder tensors: {path}"
             )
         return {"loaded": False, "tensor_count": 0}
+    if len(raw_quantity_keys) != QUANTITY_ENCODER_TENSOR_COUNT:
+        raise ValueError(
+            "checkpoint must contain exactly "
+            f"{QUANTITY_ENCODER_TENSOR_COUNT} quantity encoder tensors, "
+            f"got {len(raw_quantity_keys)}"
+        )
+    quantity_prefixes = {
+        (
+            QUANTITY_CHECKPOINT_PREFIX
+            if key.startswith(QUANTITY_CHECKPOINT_PREFIX)
+            else "quantity_encoder."
+        )
+        for key in raw_quantity_keys
+    }
+    if len(quantity_prefixes) != 1:
+        raise ValueError(
+            "checkpoint mixes quantity encoder key prefixes"
+        )
+    state = _quantity_state_dict(combined)
+    _validate_quantity_encoder_state_dict(encoder, state)
     missing, unexpected = encoder.load_state_dict(state, strict=True)
     if missing or unexpected:
         raise ValueError(
@@ -641,9 +936,17 @@ def install_quantity_prompt_unit(
 
 __all__ = [
     "NUMERIC_FEATURE_NAMES",
+    "QUANTITY_ENCODER_STATE_KEYS",
+    "QUANTITY_ENCODER_TENSOR_COUNT",
     "QUANTITY_CHECKPOINT_PREFIX",
     "QuantityEncoder",
+    "WAN22_TI2V_5B_BLOCK_COUNT",
+    "WAN22_TI2V_5B_LORA_PAIR_COUNT",
+    "WAN22_TI2V_5B_LORA_RANK",
+    "WAN22_TI2V_5B_LORA_TARGET_SUFFIXES",
+    "WAN22_TI2V_5B_LORA_TENSOR_COUNT",
     "encode_quantity_prompt",
+    "expected_wan22_ti2v_5b_lora_targets",
     "install_quantity_prompt_unit",
     "load_combined_quantity_checkpoint",
     "load_quantity_encoder_checkpoint",
@@ -651,4 +954,5 @@ __all__ = [
     "numeric_features",
     "quantity_inference_conditioning",
     "quantity_state_dict",
+    "verify_quantity_checkpoint_manifest",
 ]

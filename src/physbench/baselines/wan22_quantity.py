@@ -9,7 +9,22 @@ from pathlib import Path
 from typing import Any
 
 from .wan22_lora import Wan22LoraAdapter
+from .wan22_quantity_model import (
+    QUANTITY_ENCODER_STATE_KEYS,
+    QUANTITY_ENCODER_TENSOR_COUNT,
+    WAN22_TI2V_5B_LORA_PAIR_COUNT,
+    WAN22_TI2V_5B_LORA_RANK,
+    WAN22_TI2V_5B_LORA_TENSOR_COUNT,
+    expected_wan22_ti2v_5b_lora_targets,
+    verify_quantity_checkpoint_manifest,
+)
 from ..io import load_json, sha256_file, write_json, write_jsonl
+
+
+_INVENTORY_LORA_KEY = re.compile(
+    r"^(?P<target>.+)\.lora_(?P<side>A|B)"
+    r"(?P<adapter>\.default)?\.weight$"
+)
 
 
 class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
@@ -62,6 +77,28 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
         rows: list[dict[str, Any]],
     ) -> None:
         write_jsonl(path, rows)
+
+    def _balance_training_rows(
+        self,
+        rows: list[dict[str, Any]],
+        artifact_root: Path,
+    ) -> list[dict[str, Any]]:
+        balanced = super()._balance_training_rows(rows, artifact_root)
+        plan_path = artifact_root / "training_sampling_plan.json"
+        plan = load_json(plan_path)
+        sampler_seed = int(self.config.get("lora", {}).get("seed", 42))
+        plan.update({
+            "shuffle": True,
+            "sampler_seed": sampler_seed,
+            "sampler_seed_source": (
+                "trainer.config.seed -> TRAIN_SEED -> --sampler_seed"
+            ),
+            "sampler_generator": "torch.Generator",
+            "sampler_binding": "DataLoader(generator=...)",
+            "process_seed_policy": "sampler_seed + distributed_rank",
+        })
+        write_json(plan_path, plan)
+        return balanced
 
     def _training_command(self, runtime_root: Path) -> list[str]:
         return [
@@ -334,8 +371,9 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
     def _checkpoint_inventory(path: Path) -> dict[str, Any]:
         tensor_count = 0
         parameter_count = 0
-        quantity_tensors = 0
-        lora_tensors = 0
+        quantity_keys: set[str] = set()
+        quantity_prefixes: set[str] = set()
+        lora_pairs: dict[tuple[str, str], dict[str, list[int]]] = {}
         dtypes: dict[str, int] = {}
         with path.open("rb") as handle:
             header_size_raw = handle.read(8)
@@ -355,22 +393,117 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
                 tensor_count += 1
                 parameter_count += count
                 dtype = str(tensor["dtype"])
+                if dtype not in {"BF16", "F16", "F32", "F64"}:
+                    raise ValueError(
+                        "combined checkpoint tensor must be floating point: "
+                        f"{key} has dtype {dtype}"
+                    )
                 dtypes[dtype] = dtypes.get(dtype, 0) + 1
                 if key.startswith("pipe.quantity_encoder."):
-                    quantity_tensors += 1
-                if "lora_A" in key or "lora_B" in key:
-                    lora_tensors += 1
-        if not quantity_tensors or not lora_tensors:
+                    quantity_prefixes.add("pipe.quantity_encoder.")
+                    quantity_keys.add(
+                        key.removeprefix("pipe.quantity_encoder.")
+                    )
+                    continue
+                if key.startswith("quantity_encoder."):
+                    quantity_prefixes.add("quantity_encoder.")
+                    quantity_keys.add(
+                        key.removeprefix("quantity_encoder.")
+                    )
+                    continue
+                match = _INVENTORY_LORA_KEY.fullmatch(key)
+                if match is None:
+                    raise ValueError(
+                        "combined checkpoint contains an unsupported tensor: "
+                        f"{key}"
+                    )
+                pair_id = (
+                    match.group("target"),
+                    match.group("adapter") or "",
+                )
+                side = match.group("side")
+                pair = lora_pairs.setdefault(pair_id, {})
+                if side in pair:
+                    raise ValueError(
+                        "combined checkpoint contains duplicate LoRA "
+                        f"{side} tensors for {pair_id[0]}"
+                    )
+                pair[side] = [int(size) for size in shape]
+        lora_tensors = sum(len(pair) for pair in lora_pairs.values())
+        if tensor_count != (
+            WAN22_TI2V_5B_LORA_TENSOR_COUNT
+            + QUANTITY_ENCODER_TENSOR_COUNT
+        ):
             raise ValueError(
-                "combined checkpoint must contain both LoRA and quantity "
-                f"encoder tensors: lora={lora_tensors}, "
-                f"quantity={quantity_tensors}"
+                "combined checkpoint must contain exactly 619 tensors: "
+                f"got {tensor_count}"
+            )
+        if (
+            len(quantity_keys) != QUANTITY_ENCODER_TENSOR_COUNT
+            or quantity_keys != QUANTITY_ENCODER_STATE_KEYS
+            or len(quantity_prefixes) != 1
+        ):
+            raise ValueError(
+                "combined checkpoint must contain the exact 19-tensor "
+                "QuantityEncoder topology"
+            )
+        if lora_tensors != WAN22_TI2V_5B_LORA_TENSOR_COUNT:
+            raise ValueError(
+                "combined checkpoint must contain exactly "
+                f"{WAN22_TI2V_5B_LORA_TENSOR_COUNT} LoRA tensors, "
+                f"got {lora_tensors}"
+            )
+        if len(lora_pairs) != WAN22_TI2V_5B_LORA_PAIR_COUNT:
+            raise ValueError(
+                "combined checkpoint must contain exactly "
+                f"{WAN22_TI2V_5B_LORA_PAIR_COUNT} LoRA A/B pairs, "
+                f"got {len(lora_pairs)}"
+            )
+        normalized_targets: set[str] = set()
+        for (raw_target, _adapter), pair in lora_pairs.items():
+            if set(pair) != {"A", "B"}:
+                raise ValueError(
+                    "combined checkpoint contains an incomplete LoRA pair: "
+                    f"{raw_target}"
+                )
+            target = (
+                raw_target.removeprefix("diffusion_model.")
+                if raw_target.startswith("diffusion_model.")
+                else raw_target
+            )
+            if target in normalized_targets:
+                raise ValueError(
+                    "combined checkpoint maps duplicate LoRA pairs to "
+                    f"{target}"
+                )
+            normalized_targets.add(target)
+            shape_a = pair["A"]
+            shape_b = pair["B"]
+            if (
+                len(shape_a) != 2
+                or len(shape_b) != 2
+                or shape_a[0] != WAN22_TI2V_5B_LORA_RANK
+                or shape_b[1] != WAN22_TI2V_5B_LORA_RANK
+            ):
+                raise ValueError(
+                    "combined checkpoint LoRA rank must be exactly "
+                    f"{WAN22_TI2V_5B_LORA_RANK}: {raw_target}"
+                )
+        if normalized_targets != expected_wan22_ti2v_5b_lora_targets():
+            expected = expected_wan22_ti2v_5b_lora_targets()
+            raise ValueError(
+                "combined checkpoint LoRA target topology mismatch: "
+                f"missing={sorted(expected - normalized_targets)[:10]}, "
+                f"unexpected={sorted(normalized_targets - expected)[:10]}"
             )
         return {
             "tensor_count": tensor_count,
             "parameter_count": parameter_count,
             "lora_tensor_count": lora_tensors,
-            "quantity_encoder_tensor_count": quantity_tensors,
+            "lora_pair_count": len(lora_pairs),
+            "lora_rank": WAN22_TI2V_5B_LORA_RANK,
+            "lora_target_topology": "wan22_ti2v_5b_30x10_v1",
+            "quantity_encoder_tensor_count": len(quantity_keys),
             "dtype_tensor_counts": dict(sorted(dtypes.items())),
         }
 
@@ -457,6 +590,26 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
             "quantity_encoder"
         ]
         return prepared
+
+    def generate(
+        self,
+        prepared_job: dict[str, Any],
+        job_path: Path,
+    ) -> dict[str, Any]:
+        if self.execute:
+            checkpoint = prepared_job.get("checkpoint")
+            manifest = prepared_job.get("checkpoint_manifest")
+            if not checkpoint:
+                raise FileNotFoundError(
+                    "quantity-embedding generation requires a checkpoint"
+                )
+            if not manifest:
+                raise FileNotFoundError(
+                    "quantity-embedding generation requires a checkpoint "
+                    "manifest"
+                )
+            verify_quantity_checkpoint_manifest(checkpoint, manifest)
+        return super().generate(prepared_job, job_path)
 
 
 __all__ = ["Wan22QuantityLoraAdapter"]

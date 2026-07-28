@@ -43,6 +43,8 @@ from physbench.io import write_json, write_jsonl
 
 def seed_process() -> int:
     seed = int(os.environ.get("TRAIN_SEED", "42"))
+    if seed < 0:
+        raise ValueError("TRAIN_SEED must be non-negative")
     rank = int(os.environ.get("RANK", "0"))
     worker_seed = seed + rank
     random.seed(worker_seed)
@@ -50,6 +52,16 @@ def seed_process() -> int:
     torch.manual_seed(worker_seed)
     torch.cuda.manual_seed_all(worker_seed)
     return worker_seed
+
+
+def seeded_training_generator(seed: int) -> torch.Generator:
+    """Build the generator explicitly owned by the shuffled DataLoader."""
+
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("sampler seed must be a non-negative integer")
+    generator = torch.Generator()
+    generator.manual_seed(seed)
+    return generator
 
 
 class QuantityWanTrainingModule(WanTrainingModule):
@@ -285,12 +297,15 @@ def launch_quantity_training(
         weight_decay=args.weight_decay,
     )
     scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer)
+    sampler_generator = seeded_training_generator(args.sampler_seed)
     dataloader = DataLoader(
         dataset,
         shuffle=True,
+        generator=sampler_generator,
         collate_fn=lambda rows: rows[0],
         num_workers=args.dataset_num_workers,
     )
+    unprepared_sampler = type(dataloader.sampler).__name__
     model.to(device=accelerator.device)
     model, optimizer, dataloader, scheduler = accelerator.prepare(
         model,
@@ -298,6 +313,29 @@ def launch_quantity_training(
         dataloader,
         scheduler,
     )
+    if accelerator.is_main_process:
+        write_json(
+            Path(args.output_path) / "training_sampling_runtime.json",
+            {
+                "schema_version": "1.0",
+                "shuffle": True,
+                "sampler_seed": int(args.sampler_seed),
+                "sampler_generator": "torch.Generator",
+                "generator_initial_seed": int(
+                    sampler_generator.initial_seed()
+                ),
+                "generator_binding": "DataLoader(generator=...)",
+                "sampler_before_accelerator_prepare": unprepared_sampler,
+                "dataloader_after_accelerator_prepare": (
+                    type(dataloader).__name__
+                ),
+                "distributed_world_size": accelerator.num_processes,
+                "process_seed_policy": (
+                    "TRAIN_SEED + distributed rank; sampler generator uses "
+                    "the common TRAIN_SEED"
+                ),
+            },
+        )
     model_logger.bind_state(optimizer, scheduler, args)
     initialize_deepspeed_gradient_checkpointing(accelerator)
     for epoch_id in range(args.num_epochs):
@@ -346,9 +384,30 @@ def main() -> int:
         "--save_optimizer_state",
         action="store_true",
     )
+    parser.add_argument(
+        "--sampler_seed",
+        type=int,
+        required=True,
+        help="Seed bound to the shuffled DataLoader torch.Generator.",
+    )
     args = parser.parse_args()
     if args.task != "sft":
         raise ValueError("quantity Baseline currently supports task=sft only")
+    train_seed = int(os.environ.get("TRAIN_SEED", "42"))
+    if args.sampler_seed != train_seed:
+        raise ValueError(
+            "--sampler_seed must equal the sealed TRAIN_SEED: "
+            f"{args.sampler_seed} != {train_seed}"
+        )
+    if args.lora_rank != 32:
+        raise ValueError(
+            "WAN2.2-TI2V-5B quantity Baseline requires lora_rank=32"
+        )
+    if args.lora_target_modules != "q,k,v,o,ffn.0,ffn.2":
+        raise ValueError(
+            "WAN2.2-TI2V-5B quantity Baseline requires the frozen LoRA "
+            "target selector q,k,v,o,ffn.0,ffn.2"
+        )
     accelerator = accelerate.Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         kwargs_handlers=[
@@ -453,6 +512,7 @@ def main() -> int:
             {
                 "schema_version": "1.0",
                 "worker_seed_rank_0": worker_seed,
+                "sampler_seed": args.sampler_seed,
                 "numeric_features": list(NUMERIC_FEATURE_NAMES),
                 "config": encoder_config,
                 "injection_stage": (

@@ -71,12 +71,23 @@ Omit `--execute` for a dry-run. `--stop-after-training` is a checkpoint
 diagnostic and intentionally produces no benchmark result.
 
 The combined safetensors checkpoints contain both DiT LoRA tensors and
-`pipe.quantity_encoder.*` tensors. Important run-local records include:
+`pipe.quantity_encoder.*` tensors. Loading is fail-closed against the frozen
+WAN2.2-TI2V-5B topology: exactly 300 rank-32 A/B pairs (600 LoRA tensors,
+all 30 blocks × 10 targets) and exactly 19 QuantityEncoder tensors. Before
+inference, the checkpoint path, byte size, and SHA-256 must match the
+run-local schema-2 checkpoint manifest.
+
+The shuffled training DataLoader owns an explicit `torch.Generator` seeded
+from the trainer seed. The same sampler seed is recorded in
+`training_sampling_plan.json`, `checkpoints/training_args.json`,
+`checkpoints/run.env`, and `checkpoints/training_sampling_runtime.json`.
+Important run-local records include:
 
 ```text
 runs_v2/<run_id>/
 ├── artifacts/wan22/checkpoints/
 ├── artifacts/wan22/checkpoint.json
+├── artifacts/wan22/checkpoints/training_sampling_runtime.json
 ├── artifacts/wan22/training_quantity_token_audit.jsonl
 ├── artifacts/wan22/inference_quantity_token_audits/
 ├── artifacts/wan22/training_sampling_plan.json

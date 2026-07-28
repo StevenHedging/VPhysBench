@@ -106,8 +106,20 @@ dtype。负面 prompt 不注入物理量。
 FlowMatch SFT 使用 AdamW、ConstantLR、学习率 `1e-4`、weight decay `0.01`、
 10 epochs、dataset repeat 4、bf16、gradient checkpointing、seed 42。五个 scene
 共同训练，并把每个 scene 过采样到最大 scene 的 metadata 行数。最终 checkpoint
-必须同时包含 LoRA 和 `pipe.quantity_encoder.*` tensors；推理拒绝只有 LoRA 的旧
-checkpoint。
+必须恰好包含当前 WAN2.2-TI2V-5B 拓扑的 300 个 rank-32 LoRA A/B pair（600 个
+LoRA tensor，30 blocks × 每 block 10 个 target），以及 19 个
+`pipe.quantity_encoder.*` tensor。缺 pair、额外 target、错误 rank、错误 shape 或
+非有限权重都会在融合前失败。推理拒绝只有 LoRA 的旧 checkpoint。
+
+训练 DataLoader 的 shuffle 显式绑定由 trainer seed 初始化的
+`torch.Generator`。sampler seed 同时写入 `training_sampling_plan.json`、
+`checkpoints/training_args.json`、`checkpoints/run.env` 与
+`checkpoints/training_sampling_runtime.json`，从而区分公共 sampler seed 和
+`TRAIN_SEED + rank` 的进程随机数策略。
+
+每个推理 worker 在加载模型前必须读取 schema-2 `checkpoint.json`，核对 job 中的
+checkpoint 路径、文件 size 与 SHA-256；manifest 缺失、字段缺失或字节不一致均
+fail closed。
 
 先配置本机部署：
 
@@ -230,6 +242,9 @@ runs_v2/<run_id>/
 │   ├── checkpoints/
 │   │   ├── *.safetensors
 │   │   ├── quantity_encoder_spec.json
+│   │   ├── training_args.json
+│   │   ├── run.env
+│   │   ├── training_sampling_runtime.json
 │   │   ├── gradient_audit.json
 │   │   └── training_state_latest/
 │   └── inference_quantity_token_audits/<job_id>.json
@@ -259,9 +274,12 @@ evaluation/task_result.json:
 
 artifacts/wan22/checkpoint.json:
   inventory.tensor_count == 619
+  inventory.lora_pair_count == 300
   inventory.lora_tensor_count == 600
+  inventory.lora_rank == 32
   inventory.quantity_encoder_tensor_count == 19
-  上述 inventory 必须从实际 safetensors header 重算并与 manifest 一致
+  上述 inventory、LoRA topology/shape 与 tensor finite 状态必须从实际
+  safetensors bytes 严格重算并与 manifest 一致
   checkpoint size / SHA-256 / baseline identity 必须一致
   若 save_optimizer_state=true，optimizer/scheduler 与所有 rank RNG sidecar 必须齐全
   state manifest 必须与最终 step、world size、checkpoint 文件名一致，RNG 文件名/数量按 rank 核对

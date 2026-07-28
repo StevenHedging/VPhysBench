@@ -53,6 +53,7 @@ def main() -> int:
         install_quantity_prompt_unit,
         load_combined_quantity_checkpoint,
         quantity_inference_conditioning,
+        verify_quantity_checkpoint_manifest,
     )
     from physbench.io import write_json
 
@@ -68,6 +69,15 @@ def main() -> int:
         raise FileNotFoundError(
             "quantity-embedding generation requires a combined checkpoint"
         )
+    checkpoint_manifest = job.get("checkpoint_manifest")
+    if not checkpoint_manifest:
+        raise FileNotFoundError(
+            "quantity-embedding generation requires a checkpoint manifest"
+        )
+    checkpoint_verification = verify_quantity_checkpoint_manifest(
+        checkpoint,
+        checkpoint_manifest,
+    )
     pipe = WanVideoPipeline.from_pretrained(
         torch_dtype=torch.bfloat16,
         device="cuda",
@@ -140,6 +150,7 @@ def main() -> int:
         "prompt": prompt,
         "audited_prompt": job["model_input"]["audited_prompt"],
         "quantities": pipe._last_quantity_token_audit,
+        "checkpoint_verification": checkpoint_verification,
     })
     return 0
 
