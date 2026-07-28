@@ -21,6 +21,16 @@ ARTIFACT_POLICY = {
     ],
 }
 
+PREDICTION_STATUSES = {"planned", "staged", "complete", "failed"}
+FORBIDDEN_PREDICTION_FIELDS = {
+    "conditioning",
+    "prompt_profile_id",
+    "evaluation_reference_video",
+    "visual_reference_video",
+    "reference_video",
+    "physics_reference_video",
+}
+
 
 def _safe_component(value: str, field: str) -> str:
     if not value or re.fullmatch(r"[A-Za-z0-9_.-]+", value) is None:
@@ -81,6 +91,131 @@ def prediction_artifact_manifest(
         "policy": ARTIFACT_POLICY,
         "prediction_videos": records,
     }
+
+
+def validate_prediction_records(
+    predictions: list[dict[str, Any]],
+    *,
+    jobs: list[dict[str, Any]],
+    baseline_id: str,
+    run_dir: str | Path,
+    expected_artifact_manifest: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Validate prediction identity, coverage, and run-local artifacts.
+
+    This is the common trust boundary used both immediately after a Baseline
+    returns and when an existing AtomicRun is re-evaluated.  Re-evaluation may
+    never bypass the identity and artifact checks that applied to the original
+    execution.
+    """
+
+    if not isinstance(predictions, list) or any(
+        not isinstance(record, dict) for record in predictions
+    ):
+        raise TypeError("predictions must be a list of objects")
+    if not isinstance(jobs, list) or any(
+        not isinstance(job, dict) for job in jobs
+    ):
+        raise TypeError("jobs must be a list of objects")
+    expected = {
+        job["job_id"]: job
+        for job in jobs
+    }
+    if len(expected) != len(jobs):
+        raise ValueError("frozen inference jobs contain duplicate job_id values")
+    actual: dict[str, dict[str, Any]] = {}
+    for index, prediction in enumerate(predictions):
+        job_id = prediction.get("job_id")
+        if not isinstance(job_id, str) or not job_id:
+            raise ValueError(
+                f"prediction[{index}] requires a non-empty job_id"
+            )
+        if job_id in actual:
+            raise ValueError(f"duplicate prediction record: {job_id}")
+        actual[job_id] = prediction
+    missing = sorted(set(expected) - set(actual))
+    extra = sorted(set(actual) - set(expected))
+    if missing or extra:
+        raise ValueError(
+            "prediction coverage mismatch: "
+            f"missing={missing}, extra={extra}"
+        )
+
+    for job_id, job in expected.items():
+        prediction = actual[job_id]
+        leaked = sorted(FORBIDDEN_PREDICTION_FIELDS & set(prediction))
+        if leaked:
+            raise ValueError(
+                f"prediction {job_id} exposes legacy/evaluator fields: "
+                f"{leaked}"
+            )
+        expected_identity = {
+            "case_id": job["case_id"],
+            "baseline_id": baseline_id,
+            "evaluation_partition": job["evaluation_partition"],
+            "seed": job["seed"],
+        }
+        actual_identity = {
+            key: prediction.get(key)
+            for key in expected_identity
+        }
+        if actual_identity != expected_identity:
+            raise ValueError(
+                f"prediction identity mismatch for {job_id}: "
+                f"expected={expected_identity}, actual={actual_identity}"
+            )
+        if prediction.get("status") not in PREDICTION_STATUSES:
+            raise ValueError(
+                f"prediction {job_id} has invalid status "
+                f"{prediction.get('status')!r}"
+            )
+        video_path = prediction.get("video_path")
+        if video_path is not None and (
+            not isinstance(video_path, str) or not video_path
+        ):
+            raise ValueError(
+                f"prediction {job_id} video_path must be null or a "
+                "non-empty string"
+            )
+
+    manifest = prediction_artifact_manifest(predictions, run_dir)
+    artifacts_by_job = {
+        record["job_id"]: record
+        for record in manifest["prediction_videos"]
+    }
+    for job_id, prediction in actual.items():
+        advertised_digest = prediction.get("video_sha256")
+        if advertised_digest is None:
+            continue
+        artifact = artifacts_by_job.get(job_id)
+        if artifact is None or advertised_digest != artifact["sha256"]:
+            raise ValueError(
+                f"prediction {job_id} video_sha256 does not match the "
+                "run-local artifact"
+            )
+
+    if expected_artifact_manifest is not None:
+        if (
+            expected_artifact_manifest.get("schema_version") != "1.0"
+            or expected_artifact_manifest.get("policy") != ARTIFACT_POLICY
+            or not isinstance(
+                expected_artifact_manifest.get("prediction_videos"),
+                list,
+            )
+        ):
+            raise ValueError("stored prediction artifact manifest is invalid")
+        key = lambda item: (item.get("job_id"), item.get("path"))
+        recorded = sorted(
+            expected_artifact_manifest["prediction_videos"],
+            key=key,
+        )
+        observed = sorted(manifest["prediction_videos"], key=key)
+        if observed != recorded:
+            raise ValueError(
+                "prediction artifacts differ from the frozen AtomicRun "
+                "manifest"
+            )
+    return manifest
 
 
 def import_prediction_video(

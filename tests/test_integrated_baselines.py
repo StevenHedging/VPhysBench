@@ -11,58 +11,83 @@ from physbench.baseline_api import (
     load_baseline_bundle,
     load_baseline_plugin,
 )
-from physbench.data_layout import V3_DATASET
-from physbench.datasets import load_dataset_v2
+from physbench.data_layout import V4_DATASET
+from physbench.datasets import load_dataset
 from physbench.domain import TaskSpec
 from physbench.io import canonical_sha256, load_json
-from physbench.tasks import load_task_v2
+from physbench.tasks import load_task
 
 
 COSMOS_ROOT = ROOT / "baselines" / "cosmos3_nano_i2v"
 G15_ROOT = ROOT / "baselines" / "wan22_g15_sparse_motion"
+WAN_LORA_ROOT = ROOT / "baselines" / "wan22_lora"
+GENERIC_MANIFESTS = (
+    COSMOS_ROOT / "baseline.json",
+    G15_ROOT / "baseline.json",
+    WAN_LORA_ROOT / "baseline.json",
+)
+PHYSICS_MANIFESTS = (
+    COSMOS_ROOT / "physics.baseline.json",
+    G15_ROOT / "physics.baseline.json",
+    WAN_LORA_ROOT / "physics.baseline.json",
+)
+ALL_MANIFESTS = (*GENERIC_MANIFESTS, *PHYSICS_MANIFESTS)
+
+
+def _contains_key(value: object, target: str) -> bool:
+    if isinstance(value, dict):
+        return target in value or any(
+            _contains_key(child, target) for child in value.values()
+        )
+    if isinstance(value, list):
+        return any(_contains_key(child, target) for child in value)
+    return False
 
 
 class IntegratedBaselineTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.dataset = load_dataset_v2(V3_DATASET, check_assets=False)
-        cls.direct_generic = load_task_v2(
-            ROOT / "tasks" / "official"
-            / "five_scene_direct_eval_generic.json"
+        cls.dataset = load_dataset(V4_DATASET, check_assets=False)
+        cls.direct = load_task(
+            ROOT
+            / "tasks"
+            / "official"
+            / "five_scene_direct_eval.json"
         )
-        cls.direct_physics = load_task_v2(
-            ROOT / "tasks" / "official"
-            / "five_scene_direct_eval_physics.json"
-        )
-        cls.finetune = load_task_v2(
-            ROOT / "tasks" / "official"
-            / "five_scene_finetune_eval_generic.json"
+        cls.finetune = load_task(
+            ROOT
+            / "tasks"
+            / "official"
+            / "five_scene_finetune_eval.json"
         )
 
-    def test_all_three_bundles_are_discovered_without_registry_entries(
+    def test_all_six_baseline_identities_are_discovered(
         self,
     ) -> None:
         discovered = discover_baseline_bundles()
         self.assertEqual(
             {
-                "cosmos3_nano_i2v",
-                "wan22_g15_sparse_motion_r32_e20",
-                "wan22_ti2v_5b_lora_r32_v3",
+                "cosmos3_nano_i2v_generic",
+                "cosmos3_nano_i2v_physics",
+                "wan22_g15_sparse_motion_r32_e20_generic",
+                "wan22_g15_sparse_motion_r32_e20_physics",
+                "wan22_ti2v_5b_lora_r32_v3_generic",
+                "wan22_ti2v_5b_lora_r32_v3_physics",
             },
             set(discovered),
         )
 
-    def test_lightweight_direct_bundles_share_core_runtime(self) -> None:
-        wan_command = (
-            ROOT / "baselines" / "wan22_lora" / "plugin" / "main.py"
-        ).read_text(encoding="utf-8")
-        self.assertIn("physbench.baseline_plugins.wan22", wan_command)
+    def test_all_integrated_bundles_use_managed_runtime(self) -> None:
+        wan_driver = (WAN_LORA_ROOT / "driver.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Wan22ManagedDriver", wan_driver)
         g15_driver = (G15_ROOT / "driver.py").read_text(
             encoding="utf-8"
         )
         self.assertIn("Wan22ManagedDriver", g15_driver)
-        self.assertFalse((G15_ROOT / "plugin" / "main.py").exists())
-        self.assertFalse((COSMOS_ROOT / "plugin" / "main.py").exists())
+        for root in (COSMOS_ROOT, G15_ROOT, WAN_LORA_ROOT):
+            self.assertFalse((root / "plugin" / "main.py").exists())
         self.assertTrue(
             (
                 ROOT / "src" / "physbench" / "baseline_plugins" / "wan22.py"
@@ -74,17 +99,35 @@ class IntegratedBaselineTests(unittest.TestCase):
                 / "drivers" / "wan22.py"
             ).is_file()
         )
-        self.assertEqual(
-            "command",
-            load_json(
-                ROOT / "baselines" / "wan22_lora" / "baseline.json"
-            )["implementation"]["kind"],
-        )
-        for root in (COSMOS_ROOT, G15_ROOT):
-            manifest = load_json(root / "baseline.json")
-            self.assertEqual("4.0", manifest["schema_version"])
+        for path in ALL_MANIFESTS:
+            manifest = load_json(path)
+            self.assertEqual("5.0", manifest["schema_version"])
             self.assertEqual(
                 "managed", manifest["implementation"]["kind"]
+            )
+            self.assertNotIn(
+                "conditioning", manifest["capabilities"]
+            )
+        for generic_path, physics_path in zip(
+            GENERIC_MANIFESTS, PHYSICS_MANIFESTS
+        ):
+            generic = load_json(generic_path)
+            physics = load_json(physics_path)
+            self.assertEqual(
+                "ignored",
+                generic["input_policy"]["physics"]["usage"],
+            )
+            self.assertEqual(
+                {"type": "none"},
+                generic["adapter"]["physics_transform"],
+            )
+            self.assertEqual(
+                "required",
+                physics["input_policy"]["physics"]["usage"],
+            )
+            self.assertEqual(
+                "append_structured_text_v1",
+                physics["adapter"]["physics_transform"]["type"],
             )
 
     def test_g15_is_direct_only_and_overlap_is_source_aware(self) -> None:
@@ -114,9 +157,28 @@ class IntegratedBaselineTests(unittest.TestCase):
             audit["matching_policy"]["inclined_plane_slide"],
         )
 
+    def test_wan_lora_checkpoint_identity_is_frozen(self) -> None:
+        expected = (
+            "7f8f28a36faa309431e7ea58e7de3c61cd58266b"
+            "62653ee69c3b9f666745acfe"
+        )
+        for path in (
+            WAN_LORA_ROOT / "baseline.json",
+            WAN_LORA_ROOT / "physics.baseline.json",
+        ):
+            self.assertEqual(
+                expected,
+                load_json(path)["model"]["checkpoint_sha256"],
+            )
+
     def test_direct_only_bundles_reject_finetune_eval(self) -> None:
-        for root in (COSMOS_ROOT, G15_ROOT):
-            bundle = load_baseline_bundle(root)
+        for path in (
+            COSMOS_ROOT / "baseline.json",
+            COSMOS_ROOT / "physics.baseline.json",
+            G15_ROOT / "baseline.json",
+            G15_ROOT / "physics.baseline.json",
+        ):
+            bundle = load_baseline_bundle(path)
             plugin = load_baseline_plugin(bundle)
             with self.assertRaisesRegex(
                 ValueError, "does not support task family"
@@ -126,25 +188,33 @@ class IntegratedBaselineTests(unittest.TestCase):
     def test_cosmos_native_payload_has_valid_shape_and_no_generic_leak(
         self,
     ) -> None:
-        bundle = load_baseline_bundle(COSMOS_ROOT)
-        plugin = load_baseline_plugin(bundle)
+        generic_plugin = load_baseline_plugin(
+            load_baseline_bundle(COSMOS_ROOT / "baseline.json")
+        )
+        physics_plugin = load_baseline_plugin(
+            load_baseline_bundle(
+                COSMOS_ROOT / "physics.baseline.json"
+            )
+        )
         case = next(
             item
             for item in self.dataset.cases
             if item["scene_id"] == "collision_1d"
         )
-        generic = plugin.task_builder.data_adapter.adapt_case(
-            case, "generic", role="eval"
+        generic = generic_plugin.task_builder.data_adapter.adapt_case(
+            case, role="eval"
         )
-        physics = plugin.task_builder.data_adapter.adapt_case(
-            case, "physics", role="eval"
+        physics = physics_plugin.task_builder.data_adapter.adapt_case(
+            case, role="eval"
         )
         shape = generic["native_inputs"]["generation_shape"]
         self.assertEqual("16,9", shape["aspect_ratio"])
         self.assertEqual("480", shape["resolution"])
         self.assertEqual(24, shape["fps"])
         self.assertEqual(0, (shape["num_frames"] - 1) % 4)
+        self.assertEqual(case["text"]["prompt"], generic["prompt"])
         self.assertEqual({}, generic["used_parameters"])
+        self.assertTrue(physics["used_parameters"])
         self.assertNotEqual(generic["prompt"], physics["prompt"])
         self.assertEqual(
             generic["materialization_fingerprint"],
@@ -153,10 +223,11 @@ class IntegratedBaselineTests(unittest.TestCase):
 
     @unittest.skipUnless(
         (COSMOS_ROOT / "baseline.local.json").is_file()
-        and (G15_ROOT / "baseline.local.json").is_file(),
+        and (G15_ROOT / "baseline.local.json").is_file()
+        and (WAN_LORA_ROOT / "baseline.local.json").is_file(),
         "local model deployments are not configured",
     )
-    def test_builds_preserve_dataset_and_share_canonical_direct_plan(
+    def test_all_variants_preserve_dataset_and_share_direct_plan(
         self,
     ) -> None:
         before = canonical_sha256({
@@ -165,10 +236,10 @@ class IntegratedBaselineTests(unittest.TestCase):
             "views": self.dataset.views,
         })
         instances = []
-        for root in (COSMOS_ROOT, G15_ROOT):
-            plugin = load_baseline_plugin(load_baseline_bundle(root))
+        for path in ALL_MANIFESTS:
+            plugin = load_baseline_plugin(load_baseline_bundle(path))
             instance = plugin.task_builder.build(
-                self.dataset, self.direct_physics
+                self.dataset, self.direct
             )
             instance.verify()
             instances.append(instance.value)
@@ -178,10 +249,27 @@ class IntegratedBaselineTests(unittest.TestCase):
             "views": self.dataset.views,
         })
         self.assertEqual(before, after)
-        self.assertEqual(
-            instances[0]["canonical_plan"],
-            instances[1]["canonical_plan"],
-        )
+        canonical_plan = instances[0]["canonical_plan"]
+        self.assertTrue(all(
+            value["canonical_plan"] == canonical_plan
+            for value in instances
+        ))
+        self.assertFalse(_contains_key(canonical_plan, "conditioning"))
+        self.assertTrue(all(
+            not _contains_key(value, "conditioning")
+            for value in instances
+        ))
+        for generic, physics in zip(instances[:3], instances[3:]):
+            generic_adapter = generic["identity"]["data_adapter"]
+            physics_adapter = physics["identity"]["data_adapter"]
+            self.assertNotEqual(
+                generic_adapter["fingerprint"],
+                physics_adapter["fingerprint"],
+            )
+            self.assertEqual(
+                generic_adapter["materialization_fingerprint"],
+                physics_adapter["materialization_fingerprint"],
+            )
         self.assertTrue(all(
             job["model_ref"] == "baseline://frozen_model"
             for value in instances
@@ -202,10 +290,11 @@ class IntegratedBaselineTests(unittest.TestCase):
 
     @unittest.skipUnless(
         (COSMOS_ROOT / "baseline.local.json").is_file()
-        and (G15_ROOT / "baseline.local.json").is_file(),
+        and (G15_ROOT / "baseline.local.json").is_file()
+        and (WAN_LORA_ROOT / "baseline.local.json").is_file(),
         "local model deployments are not configured",
     )
-    def test_managed_bundles_materialize_equivalent_one_case_dry_runs(
+    def test_managed_variants_plan_equivalent_one_case_dry_runs(
         self,
     ) -> None:
         case = next(
@@ -213,22 +302,23 @@ class IntegratedBaselineTests(unittest.TestCase):
             for item in self.dataset.cases
             if item["scene_id"] == "collision_1d"
         )
-        task_value = copy.deepcopy(self.direct_generic.value)
+        task_value = copy.deepcopy(self.direct.value)
         task_value["selection"]["scene_ids"] = ["collision_1d"]
         task_value["selection"]["case_ids"] = [case["case_id"]]
         task = TaskSpec(
-            self.direct_generic.path,
+            self.direct.path,
             task_value,
             canonical_sha256(task_value),
         )
         with tempfile.TemporaryDirectory() as temporary:
             parent = Path(temporary)
             instances = []
-            for root in (COSMOS_ROOT, G15_ROOT):
-                plugin = load_baseline_plugin(load_baseline_bundle(root))
+            for path in ALL_MANIFESTS:
+                bundle = load_baseline_bundle(path)
+                plugin = load_baseline_plugin(bundle)
                 instance = plugin.task_builder.build(self.dataset, task)
                 instances.append(instance)
-                run_dir = parent / root.name
+                run_dir = parent / bundle.baseline_id
                 for child in (
                     "adaptations",
                     "artifacts",
@@ -250,7 +340,7 @@ class IntegratedBaselineTests(unittest.TestCase):
                 self.assertIsNone(predictions[0]["video_path"])
                 jobs = sorted((run_dir / "jobs").glob("*.json"))
                 self.assertTrue(jobs)
-                if root == COSMOS_ROOT:
+                if path.parent == COSMOS_ROOT:
                     payload = load_json(next(
                         (run_dir / "jobs").glob("*.payload.json")
                     ))
@@ -276,10 +366,11 @@ class IntegratedBaselineTests(unittest.TestCase):
                     self.assertTrue(
                         Path(job["output_video"]).is_relative_to(run_dir)
                     )
-            self.assertEqual(
-                instances[0].value["canonical_plan"],
-                instances[1].value["canonical_plan"],
-            )
+            canonical_plan = instances[0].value["canonical_plan"]
+            self.assertTrue(all(
+                instance.value["canonical_plan"] == canonical_plan
+                for instance in instances
+            ))
 
 
 if __name__ == "__main__":

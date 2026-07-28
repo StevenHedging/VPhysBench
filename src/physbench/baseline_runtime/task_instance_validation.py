@@ -5,6 +5,8 @@ import json
 import re
 from typing import Any
 
+from ..identifiers import SAFE_ID_PATTERN
+
 
 _TOP_LEVEL_FIELDS = frozenset({
     "schema_version",
@@ -27,7 +29,6 @@ _CANONICAL_JOB_FIELDS = frozenset({
     "case_id",
     "scene_id",
     "evaluation_partition",
-    "conditioning",
     "seed",
 })
 
@@ -74,9 +75,25 @@ def _require_non_empty_string(value: Any, path: str) -> str:
     return value
 
 
+def _require_safe_identifier(value: Any, path: str) -> str:
+    result = _require_non_empty_string(value, path)
+    if SAFE_ID_PATTERN.fullmatch(result) is None:
+        raise _invalid(
+            path,
+            "must contain only path-safe identifier characters",
+        )
+    return result
+
+
 def _require_sha256(value: Any, path: str) -> str:
     if not isinstance(value, str) or _SHA256_RE.fullmatch(value) is None:
         raise _invalid(path, "must be a lowercase 64-character SHA-256 hex digest")
+    return value
+
+
+def _require_seed(value: Any, path: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise _invalid(path, "must be a non-boolean integer")
     return value
 
 
@@ -96,14 +113,14 @@ def _validate_identity(identity_value: Any) -> None:
     )
     dataset = _require_object(identity["dataset"], "identity.dataset")
     _require_fields(dataset, {"dataset_id", "digest"}, "identity.dataset")
-    _require_non_empty_string(
+    _require_safe_identifier(
         dataset["dataset_id"], "identity.dataset.dataset_id"
     )
     _require_sha256(dataset["digest"], "identity.dataset.digest")
 
     task = _require_object(identity["task"], "identity.task")
     _require_fields(task, {"task_id", "digest"}, "identity.task")
-    _require_non_empty_string(task["task_id"], "identity.task.task_id")
+    _require_safe_identifier(task["task_id"], "identity.task.task_id")
     _require_sha256(task["digest"], "identity.task.digest")
 
     task_builder = _require_object(
@@ -149,7 +166,7 @@ def _validate_identity(identity_value: Any) -> None:
         },
         "identity.baseline",
     )
-    _require_non_empty_string(
+    _require_safe_identifier(
         baseline["baseline_id"], "identity.baseline.baseline_id"
     )
     _require_non_empty_string(
@@ -170,16 +187,13 @@ def _validate_semantics(semantics_value: Any) -> None:
     semantics = _require_object(semantics_value, "semantics")
     _require_fields(
         semantics,
-        {"family", "conditioning", "scene_ids"},
+        {"family", "scene_ids"},
         "semantics",
     )
     _require_non_empty_string(semantics["family"], "semantics.family")
-    _require_non_empty_string(
-        semantics["conditioning"], "semantics.conditioning"
-    )
     scene_ids = _require_list(semantics["scene_ids"], "semantics.scene_ids")
     for index, scene_id in enumerate(scene_ids):
-        _require_non_empty_string(
+        _require_safe_identifier(
             scene_id, f"semantics.scene_ids[{index}]"
         )
     if len(scene_ids) != len(set(scene_ids)):
@@ -194,9 +208,14 @@ def _validate_source(source_value: Any) -> set[str]:
     case_ids: set[str] = set()
     for index, case in enumerate(cases):
         case = _require_object(case, f"source.cases[{index}]")
-        case_id = _require_non_empty_string(
+        case_id = _require_safe_identifier(
             case.get("case_id"), f"source.cases[{index}].case_id"
         )
+        if "scene_id" in case:
+            _require_safe_identifier(
+                case["scene_id"],
+                f"source.cases[{index}].scene_id",
+            )
         if case_id in case_ids:
             raise _invalid(
                 f"source.cases[{index}].case_id",
@@ -216,10 +235,10 @@ def _validate_adaptations(
         adaptation = _require_object(adaptation_value, path)
         _require_fields(
             adaptation,
-            {"adaptation_id", "case_id", "native_inputs"},
+            {"adaptation_id", "case_id", "role", "native_inputs"},
             path,
         )
-        adaptation_id = _require_non_empty_string(
+        adaptation_id = _require_safe_identifier(
             adaptation["adaptation_id"], f"{path}.adaptation_id"
         )
         if adaptation_id in by_id:
@@ -227,9 +246,14 @@ def _validate_adaptations(
                 f"{path}.adaptation_id",
                 f"duplicate adaptation_id {adaptation_id!r}",
             )
-        _require_non_empty_string(
+        _require_safe_identifier(
             adaptation["case_id"], f"{path}.case_id"
         )
+        if adaptation["role"] not in {"train", "eval"}:
+            raise _invalid(
+                f"{path}.role",
+                "must be train or eval",
+            )
         _require_object(
             adaptation["native_inputs"], f"{path}.native_inputs"
         )
@@ -253,10 +277,16 @@ def _validate_inference(
         job = _require_object(job_value, path)
         _require_fields(
             job,
-            {"job_id", "case_id", "adaptation_id", "native_inputs"},
+            {
+                *_CANONICAL_JOB_FIELDS,
+                "adaptation_id",
+                "native_inputs",
+            },
             path,
         )
-        job_id = _require_non_empty_string(job["job_id"], f"{path}.job_id")
+        job_id = _require_safe_identifier(
+            job["job_id"], f"{path}.job_id"
+        )
         if job_id in by_id:
             raise _invalid(
                 f"{path}.job_id",
@@ -264,16 +294,24 @@ def _validate_inference(
             )
         by_id[job_id] = job
 
-        case_id = _require_non_empty_string(
+        case_id = _require_safe_identifier(
             job["case_id"], f"{path}.case_id"
         )
+        _require_safe_identifier(
+            job["scene_id"], f"{path}.scene_id"
+        )
+        _require_non_empty_string(
+            job["evaluation_partition"],
+            f"{path}.evaluation_partition",
+        )
+        _require_seed(job["seed"], f"{path}.seed")
         if case_id not in case_ids:
             raise _invalid(
                 f"{path}.case_id",
                 f"references unknown source case_id {case_id!r}",
             )
 
-        adaptation_id = _require_non_empty_string(
+        adaptation_id = _require_safe_identifier(
             job["adaptation_id"], f"{path}.adaptation_id"
         )
         if adaptation_id not in adaptations:
@@ -286,6 +324,11 @@ def _validate_inference(
             raise _invalid(
                 f"{path}.adaptation_id",
                 "adaptation case_id does not match inference job case_id",
+            )
+        if adaptation["role"] != "eval":
+            raise _invalid(
+                f"{path}.adaptation_id",
+                "inference job must reference an eval adaptation",
             )
         native_inputs = _require_object(
             job["native_inputs"], f"{path}.native_inputs"
@@ -308,7 +351,6 @@ def _validate_plan_identity(
         {
             "task_id",
             "family",
-            "conditioning",
             "dataset_id",
             "dataset_digest",
             "scene_ids",
@@ -318,12 +360,29 @@ def _validate_plan_identity(
         },
         "canonical_plan",
     )
+    _require_safe_identifier(
+        canonical_plan["task_id"],
+        "canonical_plan.task_id",
+    )
+    _require_safe_identifier(
+        canonical_plan["dataset_id"],
+        "canonical_plan.dataset_id",
+    )
+    for index, scene_id in enumerate(
+        _require_list(
+            canonical_plan["scene_ids"],
+            "canonical_plan.scene_ids",
+        )
+    ):
+        _require_safe_identifier(
+            scene_id,
+            f"canonical_plan.scene_ids[{index}]",
+        )
     comparisons = {
         "task_id": identity["task"]["task_id"],
         "dataset_id": identity["dataset"]["dataset_id"],
         "dataset_digest": identity["dataset"]["digest"],
         "family": semantics["family"],
-        "conditioning": semantics["conditioning"],
         "scene_ids": semantics["scene_ids"],
     }
     mismatched = sorted(
@@ -351,9 +410,20 @@ def _validate_plan_jobs(
         path = f"canonical_plan.jobs[{index}]"
         job = _require_object(job_value, path)
         _require_fields(job, _CANONICAL_JOB_FIELDS, path)
-        job_id = _require_non_empty_string(
+        job_id = _require_safe_identifier(
             job["job_id"], f"{path}.job_id"
         )
+        _require_safe_identifier(
+            job["case_id"], f"{path}.case_id"
+        )
+        _require_safe_identifier(
+            job["scene_id"], f"{path}.scene_id"
+        )
+        _require_non_empty_string(
+            job["evaluation_partition"],
+            f"{path}.evaluation_partition",
+        )
+        _require_seed(job["seed"], f"{path}.seed")
         if job_id in by_id:
             raise _invalid(
                 f"{path}.job_id",
@@ -394,7 +464,7 @@ def _validate_training(
         "canonical_plan.train_case_ids",
     )
     train_case_ids = [
-        _require_non_empty_string(
+        _require_safe_identifier(
             case_id,
             f"canonical_plan.train_case_ids[{index}]",
         )
@@ -441,6 +511,10 @@ def _validate_training(
             "canonical_plan.family",
             "must be direct_eval or finetune_eval",
         )
+    _require_seed(
+        canonical_plan.get("training_seed"),
+        "canonical_plan.training_seed",
+    )
 
     training = _require_object(training_value, "training")
     _require_fields(
@@ -461,6 +535,7 @@ def _validate_training(
             "training.seed",
             "must match canonical_plan.training_seed",
         )
+    _require_seed(training["seed"], "training.seed")
     adaptation_ids = _require_list(
         training["adaptation_ids"], "training.adaptation_ids"
     )
@@ -475,7 +550,7 @@ def _validate_training(
     adaptation_case_ids: list[str] = []
     for index, adaptation_id_value in enumerate(adaptation_ids):
         path = f"training.adaptation_ids[{index}]"
-        adaptation_id = _require_non_empty_string(
+        adaptation_id = _require_safe_identifier(
             adaptation_id_value, path
         )
         adaptation = adaptations.get(adaptation_id)
@@ -483,6 +558,11 @@ def _validate_training(
             raise _invalid(
                 path,
                 f"references unknown adaptation_id {adaptation_id!r}",
+            )
+        if adaptation["role"] != "train":
+            raise _invalid(
+                path,
+                "training must reference a train adaptation",
             )
         adaptation_case_ids.append(adaptation["case_id"])
     if adaptation_case_ids != train_case_ids:
@@ -610,7 +690,7 @@ def _validate_execution_graph(
 
 
 def validate_task_instance_document(document: dict) -> None:
-    """Validate a schema-v2.1 BaselineTaskInstance runtime document.
+    """Validate a schema-v3 BaselineTaskInstance runtime document.
 
     The validation deliberately leaves each adaptation's baseline-owned payload
     opaque. In particular, ``input_contract`` is not required so that existing
@@ -631,9 +711,9 @@ def validate_task_instance_document(document: dict) -> None:
             )
         raise _invalid("$", "; ".join(details))
 
-    if root["schema_version"] != "2.1":
-        raise _invalid("schema_version", "must equal '2.1'")
-    _require_non_empty_string(root["instance_id"], "instance_id")
+    if root["schema_version"] != "3.0":
+        raise _invalid("schema_version", "must equal '3.0'")
+    _require_safe_identifier(root["instance_id"], "instance_id")
     _require_sha256(root["instance_digest"], "instance_digest")
     _validate_identity(root["identity"])
     _validate_semantics(root["semantics"])

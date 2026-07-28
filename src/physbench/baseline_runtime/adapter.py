@@ -4,9 +4,9 @@ import copy
 from pathlib import Path
 from typing import Any
 
+from ..baseline_api.input_policy import validate_input_policy
 from ..baseline_api.interfaces import DataAdapter
-from ..io import canonical_sha256, sha256_file
-from ..prompts import PromptRegistry
+from ..io import canonical_sha256, load_json, sha256_file
 
 
 RESOURCE_ROOT = (
@@ -16,8 +16,128 @@ RESOURCE_ROOT = (
 )
 
 
+class StructuredPhysicsTextRenderer:
+    """Append audited physical quantities to a Dataset-owned base prompt."""
+
+    def __init__(self, template_set: str):
+        self.template_set = template_set
+        self.path = RESOURCE_ROOT / f"{template_set}.json"
+        if not self.path.is_file():
+            raise FileNotFoundError(
+                f"physics template set not found: {self.path}"
+            )
+        self.value = load_json(self.path)
+        if self.value.get("schema_version") != "1.0":
+            raise ValueError(
+                "physics template set must use schema_version=1.0"
+            )
+        if self.value.get("template_set_id") != template_set:
+            raise ValueError(
+                "physics template_set_id does not match its configured name"
+            )
+        scenes = self.value.get("scenes")
+        if not isinstance(scenes, dict) or not scenes:
+            raise ValueError("physics template set requires scenes")
+        for scene_id, scene in scenes.items():
+            if not isinstance(scene, dict):
+                raise ValueError(
+                    f"physics template scene {scene_id} must be an object"
+                )
+            clauses = scene.get("parameter_clauses")
+            if not isinstance(clauses, list) or not clauses:
+                raise ValueError(
+                    f"physics template scene {scene_id} requires clauses"
+                )
+            names: set[str] = set()
+            for clause in clauses:
+                name = clause.get("name")
+                if not isinstance(name, str) or not name or name in names:
+                    raise ValueError(
+                        f"invalid or duplicate physics clause {scene_id}/{name}"
+                    )
+                names.add(name)
+                if "{value}" not in str(clause.get("template", "")):
+                    raise ValueError(
+                        f"physics clause {scene_id}/{name} requires {{value}}"
+                    )
+                precision = clause.get("precision")
+                if not isinstance(precision, int) or precision < 0:
+                    raise ValueError(
+                        f"physics clause {scene_id}/{name} has invalid precision"
+                    )
+
+    @property
+    def fingerprint(self) -> str:
+        return canonical_sha256(self.value)
+
+    def render(
+        self,
+        case: dict[str, Any],
+        base_prompt: str,
+    ) -> tuple[str, dict[str, dict[str, Any]]]:
+        try:
+            scene = self.value["scenes"][case["scene_id"]]
+        except KeyError as exc:
+            raise ValueError(
+                f"physics template set does not support {case['scene_id']}"
+            ) from exc
+        rendered_clauses: list[str] = []
+        used_parameters: dict[str, dict[str, Any]] = {}
+        quantities = case["physics"]
+        for clause in scene["parameter_clauses"]:
+            name = clause["name"]
+            quantity = quantities.get(name)
+            usable = (
+                isinstance(quantity, dict)
+                and quantity.get("annotated") is True
+                and quantity.get("value") is not None
+            )
+            if not usable:
+                if clause.get("required", False):
+                    raise ValueError(
+                        f"case {case['case_id']} lacks required annotated "
+                        f"physics parameter {name}"
+                    )
+                continue
+            unit = str(quantity.get("unit", "")).strip()
+            expected_unit = clause.get("expected_unit")
+            if expected_unit is not None and unit != expected_unit:
+                raise ValueError(
+                    f"case {case['case_id']} physics.{name} unit {unit!r} "
+                    f"!= expected {expected_unit!r}"
+                )
+            value = quantity["value"]
+            if (
+                not isinstance(value, (int, float))
+                or isinstance(value, bool)
+            ):
+                raise ValueError(
+                    f"case {case['case_id']} physics.{name} must be numeric"
+                )
+            rendered_value = f"{float(value):.{clause['precision']}f}"
+            rendered_clauses.append(
+                clause["template"].format(value=rendered_value)
+            )
+            used_parameters[name] = {
+                "value": value,
+                "unit": unit,
+                "rendered_value": rendered_value,
+            }
+        if not rendered_clauses:
+            return base_prompt, used_parameters
+        prompt = (
+            base_prompt.rstrip()
+            + str(scene.get("parameter_intro", " Physical parameters: "))
+            + str(scene.get("parameter_separator", "; ")).join(
+                rendered_clauses
+            )
+            + str(scene.get("parameter_outro", "."))
+        )
+        return prompt, used_parameters
+
+
 class StandardDataAdapter(DataAdapter):
-    """Declarative text-conditioned T2V/I2V/V2V managed adaptation."""
+    """Declarative, Baseline-owned T2V/I2V/V2V input adaptation."""
 
     PRESETS = {
         "standard_i2v_v1",
@@ -25,26 +145,18 @@ class StandardDataAdapter(DataAdapter):
         "standard_v2v_v1",
     }
 
-    def __init__(self, config: dict[str, Any]):
+    def __init__(
+        self,
+        config: dict[str, Any],
+        input_policy: dict[str, Any],
+    ):
         self.config = copy.deepcopy(config)
+        self.input_policy = validate_input_policy(input_policy)
         preset = self.config.get("preset")
         if preset not in self.PRESETS:
             raise ValueError(
                 f"unsupported managed adapter preset {preset!r}; "
                 f"supported: {sorted(self.PRESETS)}"
-            )
-        profile_set = self.config.get("profile_set")
-        if not isinstance(profile_set, str) or not profile_set:
-            raise ValueError("managed adapter requires profile_set")
-        self.profile_dir = RESOURCE_ROOT / profile_set
-        if not self.profile_dir.is_dir():
-            raise FileNotFoundError(
-                f"managed adapter profile set not found: {self.profile_dir}"
-            )
-        self.registry = PromptRegistry(self.profile_dir)
-        if set(self.registry.profiles) != {"generic", "physics"}:
-            raise ValueError(
-                "managed adapter profile set must define generic and physics"
             )
         spatial = self.config.get("spatial")
         temporal = self.config.get("temporal")
@@ -90,10 +202,9 @@ class StandardDataAdapter(DataAdapter):
                 )
         if preset == "standard_i2v_v1":
             policy = self.config.get("first_frame_policy")
-            if policy not in {"require_asset", "asset_or_reference_frame0"}:
+            if policy != "require_asset":
                 raise ValueError(
-                    "managed I2V first_frame_policy must be require_asset or "
-                    "asset_or_reference_frame0"
+                    "managed I2V first_frame_policy must be require_asset"
                 )
         if preset == "standard_v2v_v1":
             asset_key = self.config.get("video_asset_key")
@@ -110,17 +221,44 @@ class StandardDataAdapter(DataAdapter):
                     "managed V2V video_asset_key must name an explicit "
                     "conditioning asset, not GT/reference/source video"
                 )
+        transform = self.config.get(
+            "physics_transform",
+            {"type": "none"},
+        )
+        self.physics_transform = copy.deepcopy(transform)
+        transform_type = transform.get("type")
+        usage = self.input_policy["physics"]["usage"]
+        if usage == "ignored":
+            if transform != {"type": "none"}:
+                raise ValueError(
+                    "physics-ignored adapter requires transform type none"
+                )
+            self.renderer = None
+        else:
+            if transform_type != "append_structured_text_v1":
+                raise ValueError(
+                    "standard physics adapter requires "
+                    "append_structured_text_v1"
+                )
+            if self.input_policy["physics"]["representations"] != [
+                "structured_text"
+            ]:
+                raise ValueError(
+                    "standard physics adapter requires exactly the "
+                    "structured_text representation"
+                )
+            self.renderer = StructuredPhysicsTextRenderer(
+                transform["template_set"]
+            )
 
     def dependency_paths(self) -> dict[str, Path]:
+        if self.renderer is None:
+            return {}
         return {
             (
                 "src/physbench/baseline_plugins/resources/"
-                f"{self.config['profile_set']}/generic.json"
-            ): self.profile_dir / "generic.json",
-            (
-                "src/physbench/baseline_plugins/resources/"
-                f"{self.config['profile_set']}/physics.json"
-            ): self.profile_dir / "physics.json",
+                f"{self.renderer.path.name}"
+            ): self.renderer.path,
         }
 
     @property
@@ -137,39 +275,49 @@ class StandardDataAdapter(DataAdapter):
 
     @property
     def stage_fingerprints(self) -> dict[str, str]:
-        profiles = self.registry.snapshot(["generic", "physics"])["profiles"]
-        implementation = canonical_sha256(self.dependency_fingerprints)
+        core_implementation = self.dependency_fingerprints[
+            "src/physbench/baseline_runtime/adapter.py"
+        ]
+        physics_implementation = canonical_sha256(
+            self.dependency_fingerprints
+        )
         return {
             "spatial": canonical_sha256({
                 "config": self.config["spatial"],
-                "implementation": implementation,
+                "implementation": core_implementation,
             }),
             "temporal": canonical_sha256({
                 "config": self.config["temporal"],
-                "implementation": implementation,
+                "implementation": core_implementation,
             }),
             "paradigm": canonical_sha256({
                 "preset": self.config["preset"],
                 "first_frame_policy": self.config.get("first_frame_policy"),
                 "video_asset_key": self.config.get("video_asset_key"),
-                "implementation": implementation,
+                "implementation": core_implementation,
             }),
             "text": canonical_sha256({
-                "profile_set": self.config["profile_set"],
-                "generic_profile": profiles["generic"],
-                "implementation": implementation,
+                "source": "case.text.prompt",
+                "usage": "required",
+                "implementation": core_implementation,
             }),
             "physics": canonical_sha256({
-                "profile_set": self.config["profile_set"],
-                "physics_profile": profiles["physics"],
-                "implementation": implementation,
+                "policy": self.input_policy["physics"],
+                "transform": self.physics_transform,
+                "renderer": (
+                    self.renderer.fingerprint
+                    if self.renderer is not None
+                    else None
+                ),
+                "implementation": physics_implementation,
             }),
         }
 
     @property
     def fingerprint(self) -> str:
         return canonical_sha256({
-            "type": "managed_standard_data_adapter_v1",
+            "type": "managed_standard_data_adapter_v2",
+            "input_policy": self.input_policy,
             "stages": self.stage_fingerprints,
         })
 
@@ -199,10 +347,13 @@ class StandardDataAdapter(DataAdapter):
             "standard_v2v_v1": "v2v",
         }[self.config["preset"]]
         return {
-            "type": "managed_standard_data_adapter_v1",
+            "type": "managed_standard_data_adapter_v2",
             "preset": self.config["preset"],
             "generation_mode": generation_mode,
-            "physics_representations": ["structured_text"],
+            "input_policy": self.input_policy,
+            "physics_representations": self.input_policy["physics"][
+                "representations"
+            ],
             "text_conditioning_required": True,
             "fingerprint": self.fingerprint,
             "materialization_fingerprint": (
@@ -223,38 +374,27 @@ class StandardDataAdapter(DataAdapter):
         }
 
     def adapt_case(
-        self, case: dict[str, Any], conditioning: str, *, role: str
+        self,
+        case: dict[str, Any],
+        *,
+        role: str,
     ) -> dict[str, Any]:
-        if conditioning not in {"generic", "physics"}:
+        base_prompt = case["text"]["prompt"].strip()
+        if not base_prompt:
             raise ValueError(
-                f"unsupported managed conditioning {conditioning}"
+                f"case {case['case_id']} has an empty canonical prompt"
             )
-        generic = self.registry.resolve(
-            {
-                "case_id": case["case_id"],
-                "scene_id": case["scene_id"],
-                "physical_parameters": {},
-            },
-            "generic",
-            role=role,
-        )
-        if generic["used_parameters"]:
-            raise AssertionError(
-                "managed generic adaptation leaked physical parameters"
+        if self.renderer is None:
+            prompt = base_prompt
+            used_parameters: dict[str, dict[str, Any]] = {}
+            transform_id = "none"
+        else:
+            prompt, used_parameters = self.renderer.render(
+                case,
+                base_prompt,
             )
-        record = (
-            self.registry.resolve(
-                {
-                    "case_id": case["case_id"],
-                    "scene_id": case["scene_id"],
-                    "physical_parameters": case["physics"],
-                },
-                "physics",
-                role=role,
-            )
-            if conditioning == "physics"
-            else generic
-        )
+            transform_id = self.physics_transform["type"]
+
         profile = self._spatial_profile(case["scene_id"])
         temporal = copy.deepcopy(self.config["temporal"])
         preset = self.config["preset"]
@@ -284,8 +424,6 @@ class StandardDataAdapter(DataAdapter):
             vision.update({
                 "first_frame_asset": first_frame,
                 "first_frame_source": paradigm_source,
-                # The legacy name remains accepted in manifests, but managed
-                # evaluation never derives an input frame from GT/reference.
                 "first_frame_policy": "require_asset",
             })
             media_channels.append({
@@ -339,7 +477,7 @@ class StandardDataAdapter(DataAdapter):
             )
         native_inputs = {
             "vision": vision,
-            "text": {"prompt": record["prompt"]},
+            "text": {"prompt": prompt},
             "generation_shape": generation_shape,
         }
         physics_channels = (
@@ -348,25 +486,21 @@ class StandardDataAdapter(DataAdapter):
                 "representation": "structured_text",
                 "binding": "native_inputs.text.prompt",
                 "transport": "inline_text",
-                "used_parameters": sorted(record["used_parameters"]),
+                "used_parameters": sorted(used_parameters),
             }]
-            if conditioning == "physics"
+            if used_parameters
             else []
         )
-        input_contract = {
-            "schema_version": "1.0",
-            "generation_mode": generation_mode,
-            "text": {
-                "required": True,
-                "binding": "native_inputs.text.prompt",
-            },
-            "media_channels": media_channels,
-            "physics_channels": physics_channels,
-            "asset_access": asset_access,
-        }
-        record.update({
-            "schema_version": "2.0",
-            "conditioning": conditioning,
+        record = {
+            "schema_version": "3.0",
+            "case_id": case["case_id"],
+            "scene_id": case["scene_id"],
+            "role": role,
+            "source_prompt_sha256": canonical_sha256(base_prompt),
+            "prompt_sha256": canonical_sha256(prompt),
+            "text_transform_id": transform_id,
+            "prompt": prompt,
+            "used_parameters": used_parameters,
             "data_adapter_fingerprint": self.fingerprint,
             "materialization_fingerprint": (
                 self.materialization_fingerprint
@@ -388,28 +522,27 @@ class StandardDataAdapter(DataAdapter):
                     "source": paradigm_source,
                 },
                 "text": {
-                    "type": "managed_prompt_profile_v1",
-                    "generic_description": generic["prompt"],
-                    "contains_detailed_physics": (
-                        conditioning == "physics"
-                    ),
+                    "type": "dataset_case_prompt_v1",
+                    "source": "case.text.prompt",
+                    "source_prompt_sha256": canonical_sha256(base_prompt),
                 },
                 "physics": {
-                    "type": "managed_physics_profile_v1",
-                    "enabled": conditioning == "physics",
-                    "strategy": (
-                        "append_structured_values_to_text"
-                        if conditioning == "physics"
-                        else "disabled"
-                    ),
-                    "used_parameters": record["used_parameters"],
+                    "usage": self.input_policy["physics"]["usage"],
+                    "strategy": transform_id,
+                    "used_parameters": used_parameters,
                 },
             },
-            "input_contract": input_contract,
+            "input_contract": {
+                "schema_version": "1.0",
+                "generation_mode": generation_mode,
+                "text": {
+                    "required": True,
+                    "binding": "native_inputs.text.prompt",
+                },
+                "media_channels": media_channels,
+                "physics_channels": physics_channels,
+                "asset_access": asset_access,
+            },
             "native_inputs": native_inputs,
-        })
-        if conditioning == "generic" and record["used_parameters"]:
-            raise AssertionError(
-                "managed generic adaptation leaked physical parameters"
-            )
+        }
         return record

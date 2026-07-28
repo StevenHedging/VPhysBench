@@ -1,0 +1,27 @@
+{
+  "added_case_fields": [
+    "text"
+  ],
+  "asset_lock_files_unchanged": true,
+  "assets_copied": false,
+  "case_count": 214,
+  "case_ids_sha256": "689765514f3a4f171cda63e9d0232738a3d7217f98bbf20bbd1ab61702911658",
+  "copied_metadata": [
+    "expansion_audit.json",
+    "scenes",
+    "views"
+  ],
+  "dataset_digest": "be5ea8880be3cf8e0d0d316ee025cf02905ef5aeb544f3df5f4b966e5e14782d",
+  "prompt_profile_digest": "19a729711b5caee6aa035dce55e4651291b8228229db8074fa49af24ee1671cd",
+  "prompt_profile_storage": "migration_script_snapshot",
+  "scene_prompt_count": 5,
+  "schema_version": "1.0",
+  "source_assets_mutated": false,
+  "source_case_schema_version": "2.0",
+  "source_dataset": "../3.0.0/dataset.json",
+  "source_dataset_id": "physics_video_five_scene_v3",
+  "source_prompt_profile": "../../../../src/physbench/baseline_plugins/resources/five_scene_i2v_v1/generic.json",
+  "source_release": "3.0.0",
+  "target_case_schema_version": "3.0",
+  "text_annotation_source": "five_scene_prompt_v1"
+}

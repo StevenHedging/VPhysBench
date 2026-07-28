@@ -1,17 +1,13 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-from _paths import FIXTURES, METRICS, ROOT, SCENES
 from physbench.baselines.wan22_media import Wan22MediaAdapter
-from physbench.io import load_json, load_jsonl
-from physbench.runner import run_benchmark
 
 
 def file_sha256(path: Path) -> str:
@@ -154,80 +150,6 @@ class Wan22MediaTests(unittest.TestCase):
             source_probe["duration_s"],
         )
         self.assertEqual(1, generation_frames % 4)
-
-
-class Wan22OrchestrationTests(unittest.TestCase):
-    def test_task1_dry_run_builds_private_training_cache_plan(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = run_benchmark(
-                task_path=FIXTURES / "task_view_a.json",
-                baseline_path=ROOT / "configs" / "baselines" / "wan22_ti2v_5b_lora_task1.json",
-                manifest_path=FIXTURES / "cases.jsonl",
-                split_path=FIXTURES / "view_a.json",
-                scene_config_dir=SCENES,
-                metric_config_path=METRICS,
-                output_root=temporary,
-                run_id="wan-task1-dry",
-            )
-            stage = load_json(run_dir / "training_stage.json")
-            audit = load_jsonl(run_dir / "artifacts" / "wan22" / "training_media_audit.jsonl")
-            predictions = load_jsonl(run_dir / "predictions.jsonl")
-            job = load_json(
-                run_dir / "jobs"
-                / (
-                    "fixture_view_a_finetune__pend_id_001"
-                    "__prompt-physics_natural__seed000042.json"
-                )
-            )
-            self.assertEqual("planned", stage["status"])
-            self.assertEqual(2, len(audit))
-            self.assertTrue(all(item["status"] == "planned" for item in audit))
-            self.assertTrue(all("artifacts/wan22/dataset" in item["output"] for item in audit))
-            self.assertEqual(4, len(predictions))
-            self.assertTrue(all(item["status"] == "planned" for item in predictions))
-            self.assertEqual("physics_natural", job["prompt_profile_id"])
-            self.assertIn("bob radius is 0.010 meters", job["model_input"]["prompt"])
-            self.assertIn("initial release angle is 20.0 degrees", job["model_input"]["prompt"])
-
-    def test_task2_uses_frozen_pendulum_lora_without_training(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = run_benchmark(
-                task_path=ROOT / "configs" / "tasks" / "view_b_zero_shot_pendulum.json",
-                baseline_path=ROOT / "configs" / "baselines" / "wan22_ti2v_5b_lora_task2_pendulum.json",
-                manifest_path=FIXTURES / "cases.jsonl",
-                split_path=FIXTURES / "view_b.json",
-                scene_config_dir=SCENES,
-                metric_config_path=METRICS,
-                output_root=temporary,
-                run_id="wan-task2-dry",
-            )
-            stage = load_json(run_dir / "training_stage.json")
-            checkpoint = load_json(run_dir / "artifacts" / "wan22" / "checkpoint.json")
-            predictions = load_jsonl(run_dir / "predictions.jsonl")
-            self.assertEqual("not_requested", stage["status"])
-            self.assertEqual("frozen", checkpoint["status"])
-            self.assertIn("physics_r1_r32_f121/epoch-4.safetensors", checkpoint["checkpoint"])
-            self.assertEqual(6, len(predictions))
-            self.assertEqual(
-                {"generic", "physics_natural"},
-                {item["prompt_profile_id"] for item in predictions},
-            )
-            self.assertTrue(all(item["status"] == "planned" for item in predictions))
-
-    def test_pendulum_only_lora_rejects_cross_scene_task(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            with self.assertRaisesRegex(ValueError, "not declared valid for scene free_fall"):
-                run_benchmark(
-                    task_path=FIXTURES / "task_view_b.json",
-                    baseline_path=ROOT / "configs" / "baselines" / "wan22_ti2v_5b_lora_task2_pendulum.json",
-                    manifest_path=FIXTURES / "cases.jsonl",
-                    split_path=FIXTURES / "view_b.json",
-                    scene_config_dir=SCENES,
-                    metric_config_path=METRICS,
-                    output_root=temporary,
-                    run_id="wan-invalid-cross-scene",
-                )
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -17,12 +17,16 @@ class Wan22ManagedDriver(ManagedDriver):
     def validate_deployment(self) -> None:
         model = self.bundle.value["model"]
         checkpoint = model.get("frozen_lora_checkpoint")
-        if not checkpoint or not Path(checkpoint).is_file():
+        if checkpoint and not Path(checkpoint).is_file():
             raise FileNotFoundError(
                 f"WAN frozen LoRA checkpoint not found: {checkpoint}"
             )
         expected = model.get("checkpoint_sha256")
-        if expected:
+        if checkpoint and not expected:
+            raise ValueError(
+                "WAN frozen LoRA checkpoint requires model.checkpoint_sha256"
+            )
+        if checkpoint:
             actual = sha256_file(checkpoint)
             if actual != expected:
                 raise ValueError(
@@ -161,7 +165,7 @@ class Wan22ManagedDriver(ManagedDriver):
             stop_after_training=stop_after_training,
         )
         for prediction in predictions:
-            prediction.pop("prompt_profile_id", None)
+            prediction.pop("text_transform_id", None)
             prediction.pop("evaluation_reference_video", None)
             prediction.pop("visual_reference_video", None)
         return training, predictions

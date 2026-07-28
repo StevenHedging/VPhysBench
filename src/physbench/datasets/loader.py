@@ -1,18 +1,18 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
 from ..domain import DatasetSnapshot
+from ..identifiers import require_safe_id
 from ..io import canonical_sha256, load_json, load_jsonl, sha256_file
 
 
 FORBIDDEN_CASE_KEYS = {
     "input_views",
     "physical_parameters",
-    "prompt",
     "prompt_profile_id",
-    "text",
     "view_a_split",
 }
 REQUIRED_CASE_KEYS = {
@@ -20,6 +20,7 @@ REQUIRED_CASE_KEYS = {
     "case_id",
     "scene_id",
     "assets",
+    "text",
     "physics",
     "appearance",
     "temporal",
@@ -42,57 +43,174 @@ def _load_directory_json(directory: Path) -> dict[str, dict[str, Any]]:
     return values
 
 
-def _assert_no_prompt_payload(case: dict[str, Any]) -> None:
+def _assert_no_model_payload(case: dict[str, Any]) -> None:
     invalid = sorted(FORBIDDEN_CASE_KEYS & set(case))
     if invalid:
         raise ValueError(
-            f"dataset v2 case {case.get('case_id')} contains model/task fields: {invalid}"
+            f"dataset case {case.get('case_id')} contains model/task fields: {invalid}"
         )
-    stack: list[Any] = [case]
+    stack: list[tuple[tuple[str, ...], Any]] = [((), case)]
     while stack:
-        value = stack.pop()
+        path, value = stack.pop()
         if isinstance(value, dict):
-            if "prompt" in value:
-                raise ValueError(
-                    f"dataset v2 case {case.get('case_id')} contains a prompt payload"
-                )
-            stack.extend(value.values())
+            for key, child in value.items():
+                child_path = (*path, key)
+                if key == "prompt" and child_path != ("text", "prompt"):
+                    raise ValueError(
+                        f"case {case.get('case_id')} contains prompt outside "
+                        "case.text.prompt"
+                    )
+                stack.append((child_path, child))
         elif isinstance(value, list):
-            stack.extend(value)
+            stack.extend(((*path, str(index)), child) for index, child in enumerate(value))
 
 
 def _validate_case(case: dict[str, Any], known_scenes: set[str]) -> None:
     missing = sorted(REQUIRED_CASE_KEYS - set(case))
     if missing:
-        raise ValueError(f"dataset v2 case {case.get('case_id')} missing {missing}")
-    if case["schema_version"] != "2.0":
-        raise ValueError(f"case {case.get('case_id')} must use schema_version=2.0")
-    _assert_no_prompt_payload(case)
+        raise ValueError(f"dataset v3 case {case.get('case_id')} missing {missing}")
+    if case["schema_version"] != "3.0":
+        raise ValueError(f"case {case.get('case_id')} must use schema_version=3.0")
+    require_safe_id(case.get("case_id"), label="case.case_id")
+    require_safe_id(case.get("scene_id"), label="case.scene_id")
+    _assert_no_model_payload(case)
     if case["scene_id"] not in known_scenes:
         raise ValueError(f"case {case['case_id']} references unknown scene {case['scene_id']}")
+    text = case["text"]
+    if not isinstance(text, dict):
+        raise ValueError(f"case {case['case_id']} text must be an object")
+    expected_text_fields = {
+        "schema_version",
+        "prompt",
+        "language",
+        "annotation_source",
+    }
+    if set(text) != expected_text_fields:
+        raise ValueError(
+            f"case {case['case_id']} text fields must be "
+            f"{sorted(expected_text_fields)}"
+        )
+    if text["schema_version"] != "1.0":
+        raise ValueError(
+            f"case {case['case_id']} text.schema_version must be 1.0"
+        )
+    for key in ("prompt", "language", "annotation_source"):
+        if not isinstance(text[key], str) or not text[key].strip():
+            raise ValueError(
+                f"case {case['case_id']} text.{key} must be non-empty"
+            )
     physics = case["physics"]
     if not isinstance(physics, dict) or not physics:
         raise ValueError(f"case {case['case_id']} requires structured physics")
     for name, quantity in physics.items():
+        if not isinstance(name, str) or not name:
+            raise ValueError(
+                f"case {case['case_id']} physics parameter names must be non-empty"
+            )
         if not isinstance(quantity, dict):
             raise ValueError(f"case {case['case_id']} physics.{name} must be an object")
-        if not {"value", "unit", "annotated"} <= set(quantity):
-            raise ValueError(f"case {case['case_id']} physics.{name} is incomplete")
+        expected_quantity_fields = {"value", "unit", "annotated"}
+        if set(quantity) != expected_quantity_fields:
+            raise ValueError(
+                f"case {case['case_id']} physics.{name} fields must be "
+                f"{sorted(expected_quantity_fields)}"
+            )
+        value = quantity["value"]
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+        ):
+            raise ValueError(
+                f"case {case['case_id']} physics.{name}.value must be a "
+                "finite number"
+            )
+        if (
+            not isinstance(quantity["unit"], str)
+            or not quantity["unit"].strip()
+        ):
+            raise ValueError(
+                f"case {case['case_id']} physics.{name}.unit must be non-empty"
+            )
+        if not isinstance(quantity["annotated"], bool):
+            raise ValueError(
+                f"case {case['case_id']} physics.{name}.annotated must be boolean"
+            )
+    if not isinstance(case["assets"], dict):
+        raise ValueError(f"case {case['case_id']} assets must be an object")
+    for name, value in case["assets"].items():
+        if not isinstance(name, str) or not name:
+            raise ValueError(
+                f"case {case['case_id']} asset names must be non-empty"
+            )
+        if value is not None and (
+            not isinstance(value, str) or not value.strip()
+        ):
+            raise ValueError(
+                f"case {case['case_id']} assets.{name} must be null or "
+                "a non-empty relative path"
+            )
+        if isinstance(value, str):
+            path = Path(value)
+            if path.is_absolute() or ".." in path.parts:
+                raise ValueError(
+                    f"case {case['case_id']} assets.{name} must be a "
+                    f"relative path inside asset_root: {value}"
+                )
+    if not isinstance(case["has_real_reference_video"], bool):
+        raise ValueError(
+            f"case {case['case_id']} has_real_reference_video must be boolean"
+        )
 
 
 def _validate_views(
     cases: tuple[dict[str, Any], ...], views: dict[str, dict[str, Any]]
 ) -> None:
     case_ids = {case["case_id"] for case in cases}
+    case_scene = {
+        case["case_id"]: case["scene_id"]
+        for case in cases
+    }
     for view_id, view in views.items():
         if view.get("schema_version") != "2.0":
             raise ValueError(f"dataset view {view_id} must use schema_version=2.0")
-        ids = [
-            case_id
-            for groups in view.get("scenes", {}).values()
-            for members in groups.values()
-            for case_id in members
-        ]
+        if view.get("view_id") != view_id:
+            raise ValueError(
+                f"dataset view key {view_id} does not match "
+                f"view_id={view.get('view_id')!r}"
+            )
+        scenes = view.get("scenes")
+        if not isinstance(scenes, dict) or not scenes:
+            raise ValueError(f"dataset view {view_id} scenes must be non-empty")
+        ids: list[str] = []
+        for scene_id, groups in scenes.items():
+            if not isinstance(scene_id, str) or not isinstance(groups, dict):
+                raise ValueError(
+                    f"dataset view {view_id} has an invalid scene bucket"
+                )
+            for group_id, members in groups.items():
+                if (
+                    not isinstance(group_id, str)
+                    or not group_id
+                    or not isinstance(members, list)
+                    or any(
+                        not isinstance(case_id, str) or not case_id
+                        for case_id in members
+                    )
+                ):
+                    raise ValueError(
+                        f"dataset view {view_id} has an invalid group "
+                        f"{scene_id}/{group_id}"
+                    )
+                for case_id in members:
+                    actual_scene = case_scene.get(case_id)
+                    if actual_scene is not None and actual_scene != scene_id:
+                        raise ValueError(
+                            f"dataset view {view_id} places case {case_id} "
+                            f"from scene {actual_scene} in scene bucket "
+                            f"{scene_id}"
+                        )
+                ids.extend(members)
         if len(ids) != len(set(ids)):
             raise ValueError(f"dataset view {view_id} contains duplicate case IDs")
         unknown = set(ids) - case_ids
@@ -111,6 +229,11 @@ def _validate_views(
             )
         if coverage == "subset" and not ids:
             raise ValueError(f"dataset subset view {view_id} cannot be empty")
+        expected_case_set_digest = canonical_sha256(sorted(ids))
+        if view.get("case_set_sha256") != expected_case_set_digest:
+            raise ValueError(
+                f"dataset view {view_id} case_set_sha256 mismatch"
+            )
 
 
 def _load_asset_lock(
@@ -164,7 +287,7 @@ def _load_asset_lock(
     return lock
 
 
-def load_dataset_v2(
+def load_dataset(
     path: str | Path,
     *,
     check_assets: bool = False,
@@ -172,8 +295,12 @@ def load_dataset_v2(
 ) -> DatasetSnapshot:
     descriptor_path = Path(path).resolve()
     descriptor = load_json(descriptor_path)
-    if descriptor.get("schema_version") != "2.0":
-        raise ValueError("dataset descriptor must use schema_version=2.0")
+    if descriptor.get("schema_version") != "3.0":
+        raise ValueError("dataset descriptor must use schema_version=3.0")
+    require_safe_id(
+        descriptor.get("dataset_id"),
+        label="dataset.dataset_id",
+    )
     root = descriptor_path.parent
     cases = tuple(load_jsonl(root / descriptor["cases"]))
     scene_configs = _load_directory_json(root / descriptor["scene_catalog"])
@@ -231,6 +358,24 @@ def load_dataset_v2(
         "scenes": scene_configs,
         "asset_lock": asset_lock,
     })
+    release_relative = descriptor.get("release_manifest")
+    if release_relative is not None:
+        release_manifest = load_json(root / release_relative)
+        if release_manifest.get("schema_version") != "1.0":
+            raise ValueError("dataset release manifest must use schema_version=1.0")
+        if release_manifest.get("dataset_id") != descriptor.get("dataset_id"):
+            raise ValueError("dataset release manifest dataset_id mismatch")
+        if release_manifest.get("release") != descriptor.get("release"):
+            raise ValueError("dataset release manifest release mismatch")
+        if release_manifest.get("dataset_digest") != digest:
+            raise ValueError("dataset release manifest dataset_digest mismatch")
+        if asset_lock is not None and (
+            release_manifest.get("asset_files_digest")
+            != asset_lock.get("files_digest")
+        ):
+            raise ValueError(
+                "dataset release manifest asset_files_digest mismatch"
+            )
     return DatasetSnapshot(
         root=root,
         descriptor=descriptor,

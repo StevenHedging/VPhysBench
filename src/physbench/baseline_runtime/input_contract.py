@@ -14,10 +14,11 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from ..baseline_api.input_policy import validate_input_policy
+
 INPUT_CONTRACT_SCHEMA_VERSION = "1.0"
 GENERATION_MODES = frozenset({"t2v", "i2v", "v2v", "hybrid"})
 MEDIA_KINDS = frozenset({"image", "video"})
-CONDITIONING_MODES = frozenset({"generic", "physics"})
 NATIVE_INPUT_BINDING_PREFIX = "native_inputs."
 
 FORBIDDEN_ASSET_KEYS = frozenset({
@@ -39,14 +40,11 @@ ARTIFACT_REFERENCE_PREFIXES = ("artifact://", "cache://")
 ARTIFACT_REFERENCE_RE = re.compile(
     r"^(?:artifact|cache)://sha256/([0-9a-f]{64})$"
 )
-DEFAULT_PHYSICS_REPRESENTATIONS = frozenset({"structured_text"})
 MAX_INLINE_CONTROL_BYTES = 4096
 
 __all__ = [
     "ARTIFACT_REFERENCE_PREFIXES",
     "ARTIFACT_REFERENCE_RE",
-    "CONDITIONING_MODES",
-    "DEFAULT_PHYSICS_REPRESENTATIONS",
     "FORBIDDEN_ASSET_KEYS",
     "GENERATION_MODES",
     "INPUT_CONTRACT_SCHEMA_VERSION",
@@ -175,33 +173,6 @@ def _validate_channel_id(
     return channel_id
 
 
-def _validate_capability_representations(
-    capabilities: Mapping[str, Any],
-) -> frozenset[str]:
-    raw = capabilities.get(
-        "physics_representations",
-        list(DEFAULT_PHYSICS_REPRESENTATIONS),
-    )
-    if not isinstance(raw, list) or not raw:
-        raise ValueError(
-            "capabilities.physics_representations must be a non-empty list"
-        )
-    representations: list[str] = []
-    for index, value in enumerate(raw):
-        representations.append(_require_non_empty_string(
-            value,
-            label=(
-                "capabilities.physics_representations"
-                f"[{index}]"
-            ),
-        ))
-    if len(representations) != len(set(representations)):
-        raise ValueError(
-            "capabilities.physics_representations contains duplicates"
-        )
-    return frozenset(representations)
-
-
 def _artifact_digest(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
@@ -269,39 +240,28 @@ def _validate_artifact_provenance(
 def validate_adaptation_record(
     record: Mapping[str, Any],
     *,
-    conditioning: str,
-    capabilities: Mapping[str, Any],
+    input_policy: Mapping[str, Any],
 ) -> None:
     """Validate one adapter-produced record and its input contract.
 
-    ``generic`` adaptations may describe text and media but cannot declare or
-    consume physical parameters.  ``physics`` adaptations must declare at
-    least one physics channel, and every used physical parameter must be
-    attributable to a channel.  Large control representations are external
-    artifact/cache references so task instances remain lightweight.
+    The Baseline's fixed physics usage policy determines whether physical
+    channels are forbidden, optional, or required. Every used physical
+    parameter must be attributable to a channel. Large control
+    representations are external artifact/cache references so task instances
+    remain lightweight.
 
     Args:
         record: Complete adaptation record.
-        conditioning: Benchmark information-access arm (``generic`` or
-            ``physics``), independent of the model's injection mechanism.
-        capabilities: Baseline capability object.  Older manifests that omit
-            ``physics_representations`` are treated as supporting only
-            ``structured_text``.
+        input_policy: Normalized Baseline-owned Case input policy.
 
     Raises:
         ValueError: If the record or contract violates the declared protocol.
     """
 
     record = _require_object(record, label="adaptation record")
-    capabilities = _require_object(
-        capabilities,
-        label="capabilities",
-    )
-    if conditioning not in CONDITIONING_MODES:
-        raise ValueError(
-            f"conditioning must be one of {sorted(CONDITIONING_MODES)}, "
-            f"got {conditioning!r}"
-        )
+    policy = validate_input_policy(input_policy)
+    physics_policy = policy["physics"]
+    physics_usage = physics_policy["usage"]
 
     _require_object(
         record.get("native_inputs"),
@@ -509,10 +469,8 @@ def validate_adaptation_record(
         )
 
     parameter_bindings: set[str] = set()
-    supported_representations = (
-        _validate_capability_representations(capabilities)
-        if conditioning == "physics"
-        else DEFAULT_PHYSICS_REPRESENTATIONS
+    supported_representations = frozenset(
+        physics_policy["representations"]
     )
     for index, raw_channel in enumerate(physics_channels):
         label = f"input_contract.physics_channels[{index}]"
@@ -545,7 +503,7 @@ def validate_adaptation_record(
         if representation not in supported_representations:
             raise ValueError(
                 f"{label}.representation {representation!r} is not declared "
-                "in capabilities.physics_representations"
+                "in input_policy.physics.representations"
             )
         transport = _require_non_empty_string(
             channel.get("transport"),
@@ -617,24 +575,31 @@ def validate_adaptation_record(
             )
         parameter_bindings.update(channel_parameters)
 
-    if conditioning == "generic":
+    if physics_usage == "ignored":
         if used_parameters:
             raise ValueError(
-                "generic adaptation record.used_parameters must be {}"
+                "physics-ignored adaptation record.used_parameters must be {}"
             )
         if physics_channels:
             raise ValueError(
-                "generic adaptation input_contract.physics_channels "
+                "physics-ignored adaptation input_contract.physics_channels "
                 "must be empty"
             )
-    elif not physics_channels:
+    elif physics_usage == "required" and not physics_channels:
         raise ValueError(
-            "physics adaptation requires at least one physics channel"
+            "physics-required adaptation requires at least one physics channel"
         )
-    elif not used_parameters:
+    elif physics_usage == "required" and not used_parameters:
         raise ValueError(
-            "physics adaptation must consume at least one annotated "
+            "physics-required adaptation must consume at least one annotated "
             "physical parameter"
+        )
+    elif physics_usage == "optional" and bool(physics_channels) != bool(
+        used_parameters
+    ):
+        raise ValueError(
+            "physics-optional adaptation must declare channels exactly when "
+            "it consumes physical parameters"
         )
 
     used_parameter_keys = set(used_parameters)

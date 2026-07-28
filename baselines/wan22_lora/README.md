@@ -1,40 +1,47 @@
-# WAN2.2 TI2V LoRA Baseline Bundle
+# WAN2.2 TI2V LoRA baselines
 
-This directory is a self-registering Physics Video Benchmark Baseline Bundle.
-The core registry discovers `baseline.json`; it contains no WAN-specific branch.
+This Bundle directory registers the trainable WAN2.2-TI2V-5B FlowMatch LoRA
+recipe as two schema-v5 managed Baseline identities:
+
+- `wan22_ti2v_5b_lora_r32_v3_generic` uses the Case's canonical prompt and
+  explicitly ignores structured physics.
+- `wan22_ti2v_5b_lora_r32_v3_physics` appends the Case's annotated structured
+  physics with `five_scene_physics_clauses_v1`.
+
+The distinction is Baseline-owned through `input_policy` and
+`adapter.physics_transform`; both identities can run the same `direct_eval`
+or `finetune_eval` Task. Their model, trainer, runner, spatial and temporal
+recipes are otherwise identical.
 
 ## Layout
 
 ```text
-baseline.json                         portable manifest
-baseline.local.example.json           deployment override template
-baseline.local.json                   local deployment, ignored by Git
-plugin/main.py                         physbench-baseline-v1 command endpoint
+baseline.json                 generic portable manifest
+physics.baseline.json         physics-injecting portable manifest
+baseline.local.example.json   deployment override template
+baseline.local.json           shared local deployment, ignored by Git
+driver.py                     shared managed WAN driver selector
 ```
 
-The command TaskBuilder and DataAdapter live in
-`src/physbench/baseline_plugins/wan22.py`. Its `Wan22ExecutionEngine` is also
-used by the schema-v4 managed G15 Bundle, so media/model execution is not
-duplicated. The five-scene profiles are shared resources in the same package.
-This directory's portable digest covers its manifest and thin endpoint. Shared
-implementations, profiles, legacy WAN helpers and execution scripts are hashed
-separately into the TaskBuilder fingerprint and reported by
-`describe.runtime_dependency_fingerprints`.
+The former command endpoint has been replaced by the managed driver contract.
+The common `Wan22ManagedDriver` delegates media, training and inference to the
+repository's shared WAN implementation. The portable manifests now expose
+`adapter`, `trainer` and `runner` as separate, auditable components.
 
-Machine paths live in `baseline.local.json`; they change the deployment digest
-without changing the portable bundle digest.
+## Local deployment
 
-To configure another machine:
+Copy `baseline.local.example.json` to the Git-ignored
+`baseline.local.json`, then configure the checkpoint, WAN project, model root
+and Python environment. Because both manifests live in this directory, the
+one local override intentionally services both identities.
 
-```bash
-cp baseline.local.example.json baseline.local.json
-```
-
-Edit only the `runtime` and `model` objects. Other override keys are rejected.
-
-Validate from the repository root:
+The frozen step-410 checkpoint is identified by SHA-256
+`7f8f28a36faa309431e7ea58e7de3c61cd58266b62653ee69c3b9f666745acfe`.
+The driver refuses a configured checkpoint whose digest is missing or differs.
 
 ```bash
-PYTHONPATH=src python -m physbench baseline validate \
-  wan22_ti2v_5b_lora_r32_v3
+/root/miniconda3/envs/phybench/bin/physbench baseline validate \
+  wan22_ti2v_5b_lora_r32_v3_generic
+/root/miniconda3/envs/phybench/bin/physbench baseline validate \
+  wan22_ti2v_5b_lora_r32_v3_physics
 ```

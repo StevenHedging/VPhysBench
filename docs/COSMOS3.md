@@ -1,127 +1,204 @@
 # Cosmos3-Nano I2V Baseline
 
-## 1. 身份与范围
-
-Bundle：
+## 1. Bundle
 
 ```text
 baselines/cosmos3_nano_i2v/
-├── baseline.json
+├── baseline.json                 # cosmos3_nano_i2v_generic
+├── physics.baseline.json         # cosmos3_nano_i2v_physics
 ├── baseline.local.example.json
-├── baseline.local.json              # 本机部署，Git ignored
-├── README.md
-└── driver.py                        # Cosmos payload/checkpoint/torchrun 边界
+├── baseline.local.json           # 本机部署，Git ignored
+├── driver.py
+└── README.md
 ```
 
-正式 ID 是 `cosmos3_nano_i2v`，模型身份固定为 base
-`nvidia/Cosmos3-Nano` snapshot
-`411f42a8fdfb8c5b2583cb8786e0938f49796eaa`。它只支持
-`direct_eval × {generic, physics}`，没有 trainer，也不会接受 `finetune_eval`。
+两份 manifest 都是 schema 5.0 managed Baseline：
 
-`/root/Nico/cosmos` 中另有 physics SFT iter-300，但该模型没有被静默替换为本
-Baseline。base 与 SFT 是不同训练身份；如果以后评 SFT，必须用新的 baseline ID、
-manifest 和训练来源审计。
+| Baseline ID | 物理策略 | Task family |
+| --- | --- | --- |
+| `cosmos3_nano_i2v_generic` | `ignored` | `direct_eval` |
+| `cosmos3_nano_i2v_physics` | `required/structured_text` | `direct_eval` |
+
+二者共享 Cosmos3-Nano base checkpoint、driver、本机部署、首帧与 generation shape；
+Baseline ID、Bundle digest、完整 adapter fingerprint 与 TaskInstance 不同。它们运行同一
+`tasks/official/five_scene_direct_eval.json`。
+
+仓库外可能存在 Cosmos physics SFT checkpoint，但当前 Bundle 不会静默替换 base
+snapshot。不同训练身份必须建立新的 Baseline ID、版本与 checkpoint identity。
 
 ## 2. 本机部署
 
-当前部署：
+从模板创建：
 
-```text
-framework:  /root/Nico/cosmos/packages/cosmos3
-python:     /root/Nico/cosmos/packages/cosmos3/.venv/bin/python
-torchrun:   /root/Nico/cosmos/packages/cosmos3/.venv/bin/torchrun
-checkpoint: /root/Nico/cosmos/models/Cosmos3-Nano
-GPUs:       0,1,2,3
-offline:    true
+```bash
+cp baselines/cosmos3_nano_i2v/baseline.local.example.json \
+  baselines/cosmos3_nano_i2v/baseline.local.json
 ```
 
-新机器从 `baseline.local.example.json` 创建 Git-ignored local override。portable
-manifest 记录 HF revision，并验证 checkpoint 的 `config.json` 与
-`model.safetensors.index.json` SHA-256。这样无需每次重扫 35 GB shard，也不会把错误
-snapshot 当成同一部署。
+需要填写：
 
-managed runtime 还记录实际
-`cosmos_framework/scripts/inference.py` 的 SHA-256 和 Cosmos Git commit。外部框架
-入口变化会改变 TaskBuilder fingerprint。
+```text
+model.checkpoint
+runtime.framework_root
+runtime.python
+runtime.torchrun
+runtime.hf_home
+runtime.uv_cache_dir
+runtime.cuda_visible_devices
+```
 
-## 3. DataAdapter
+Driver 验证 checkpoint 中 `config.json` 与
+`model.safetensors.index.json` 的冻结 SHA-256、Cosmos inference entry、Python 和
+torchrun。只记录路径不构成模型身份。
 
-输入范式严格为 I2V。v3 的 214 个 case 都有 `assets.first_frame`；adapter 不从 GT
-视频补帧，也不修改 Dataset。
+Benchmark orchestration 使用 `phybench` 环境；Cosmos subprocess 使用
+`runtime.python/torchrun`。不要把模型环境当作 CLI 环境。
 
-| scene | Cosmos resolution | aspect token |
+## 3. Case 输入
+
+两种 Baseline 都从 Dataset 读取：
+
+```text
+case.text.prompt
+assets.first_frame
+physics[annotated=true]
+```
+
+generic：
+
+```text
+input_policy.physics.usage = ignored
+physics_transform          = none
+native prompt              = case.text.prompt
+used_parameters            = {}
+```
+
+physics：
+
+```text
+input_policy.physics.usage           = required
+input_policy.physics.representations = ["structured_text"]
+physics_transform                    = append_structured_text_v1
+native prompt                        = case.text.prompt + audited clauses
+```
+
+Renderer 使用：
+
+```text
+src/physbench/baseline_plugins/resources/five_scene_physics_clauses_v1.json
+```
+
+它按 scene 白名单验证字段与单位。Cosmos driver 只读取 TaskInstance 的最终
+`native_inputs.text.prompt`，不读取 raw physics 或另一个 prompt profile。
+
+## 4. I2V 与时间规格
+
+首帧固定来自 Dataset `assets.first_frame`。Cosmos driver 将源图像和 shape token 交给
+模型原生预处理器：
+
+| scene | resolution | aspect ratio |
 | --- | ---: | --- |
-| pendulum | 480p | `9,16` |
-| free_fall | 480p | `9,16` |
-| collision_1d | 480p | `16,9` |
-| inclined_plane_slide | 480p | `16,9` |
-| uniform_circular_motion | 480p | `4,3` |
+| pendulum | 480 | `9,16` |
+| free_fall | 480 | `9,16` |
+| collision_1d | 480 | `16,9` |
+| inclined_plane_slide | 480 | `16,9` |
+| uniform_circular_motion | 480 | `4,3` |
 
-默认 timeline 是 24 FPS、121 帧，满足 Cosmos `4n+1`。这些是生成规格，不是
-evaluator 对 GT 的要求。Evaluator 按 scene reference 决定物理时间轴，再分别采样、
-letterbox 生成视频与 reference，因此两者原始分辨率和帧数可以不同。
-
-generic adaptation 接收一个移除 `case.physics` 的视图，`used_parameters` 必须为空。
-physics adaptation 通过 `five_scene_i2v_v1` 白名单把值和单位写入 Cosmos 原生 prompt。
-两者共享 first-frame、shape 与 materialization fingerprint。
-
-这些通用逻辑由 schema v4 的 `StandardDataAdapter` 和 `ManagedTaskBuilder` 提供。
-Cosmos driver 不再自行实现 prompt resolver、canonical plan、TaskInstance seal 或
-prediction 公共字段。
-
-## 4. 执行
-
-每个 job 生成两份 run-private 文件：
+时间固定为：
 
 ```text
-jobs/<job_id>.payload.json  # cosmos_framework 原生 inference payload
-jobs/<job_id>.json          # Benchmark prediction/job 审计
+fps:        24
+num_frames: 121
+rule:       4n+1
 ```
 
-executor 使用 local `torchrun` 启动
-`cosmos_framework.scripts.inference`。一个 job 使用
-`runtime.cuda_visible_devices` 中的全部 GPU；job 之间串行，避免多个 FSDP 组争用同一
-设备。环境显式设置 HF/UV cache、CUDA library path 与 offline 模式。输出位于：
+GT 不需要与 prediction 具有相同分辨率或帧数；统一 timeline、几何归一化和
+reference-bounded sampling 属于 evaluator。
+
+generic/physics 两个 Baseline 的 materialization fingerprint 相同，只有文本/物理
+stage 与完整 adapter identity 不同。
+
+## 5. 推理
+
+默认 runner：
 
 ```text
-predictions/<conditioning>/<job_id>/vision.mp4
+num_inference_steps: 35
+guidance:            6.0
+shift:               10.0
+fps:                 24
+num_frames:          121
+sound:               disabled
 ```
 
-不加 `--execute` 时只写 payload、job spec 和 `planned` prediction，不加载模型。
-`DirectManagedDriver` 验证 output 必须位于当前 run，并防止 driver 覆盖 canonical
-job/case/conditioning/seed。
+Driver 为每个 job 写：
 
-## 5. 验证
+```text
+jobs/<job_id>.payload.json
+jobs/<job_id>.json
+logs/<baseline_id>/<job_id>.log
+predictions/<job_id>/vision.mp4
+```
+
+实际预测、payload 和日志都在当前 AtomicRun。Cosmos checkpoint、HF cache 与 uv cache
+可以位于 run 外并只读。
+
+`execute=false` 会生成 job/payload 与 planned prediction，不启动 torchrun；
+`execute=true` 才按 `cuda_visible_devices` 启动多进程推理。当前默认配置通常一次 job
+使用四张 GPU，运行前应检查空闲设备。
+
+## 6. 验证与运行
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline validate cosmos3_nano_i2v
+  baseline validate cosmos3_nano_i2v_generic
+
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline validate cosmos3_nano_i2v_physics
 ```
 
-单 case physics dry-run：
+单 case dry-run：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval_physics.json \
-  --baseline cosmos3_nano_i2v \
-  --scene-id collision_1d \
-  --case-id collision_r2_medium_steel_medium_steel_medium_steel_v02818 \
+  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
+  --baseline cosmos3_nano_i2v_physics \
+  --scene-id pendulum \
+  --case-id CASE_ID \
+  --run-id cosmos3_physics_pendulum_dryrun \
   --output-root runs_v2
 ```
 
-执行前应确认四张 GPU 同时空闲。GPU 被其他训练占用时，保持 dry-run，或复用身份明确
-的既有生成视频做非官方 evaluator smoke；不能在资源不足时降低并行度却沿用同一
-deployment identity。
+同 Task 对照矩阵：
 
-## 6. 评估边界
+```bash
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  matrix-run \
+  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
+  --baseline cosmos3_nano_i2v_generic \
+  --baseline cosmos3_nano_i2v_physics \
+  --matrix-id cosmos3_generic_vs_physics \
+  --output-root runs_v2
+```
 
-Cosmos 只输出 prediction，不拥有 case score。所有视频统一进入 Benchmark 的
-scene-local evaluator。无同 case GT 的 OOD case 只允许使用 Dataset 登记且 physics
-逐项相同的 parent reference；无可信 parent 时显式 unavailable。
+确认 payload 中 base prompt、物理 clause、首帧、shape、seed 与 checkpoint identity 后，
+使用新的 matrix ID 并加 `--execute`。
 
-正式执行时 Cosmos 的 `-o` 固定为当前
-`runs_v2/<run_id>/predictions/<conditioning>/`，推理 stdout/stderr 写入
-`runs_v2/<run_id>/logs/cosmos3_nano_i2v/`。模型代码、checkpoint 与 Hugging Face cache 可以
-外置，但生成视频和日志不得留在 Cosmos 工程目录。
+## 7. Evaluation
+
+Cosmos 只生成 prediction。Reference、parent reference、mask、timeline 与 scene-local
+物理评分由 Benchmark evaluator 解析。无可信物理 reference 的 OOD case 返回明确错误，
+不会伪造 GT。
+
+Case 产物包括：
+
+```text
+evaluation/cases/<job_id>/result.json
+evaluation/cases/<job_id>/per_frame.csv
+evaluation/cases/<job_id>/physical_subject_iou_curve.png
+```
+
+完整评测与故障排查见 [运行指南](OPERATIONS.md)。

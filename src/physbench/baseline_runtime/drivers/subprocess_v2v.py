@@ -67,7 +67,6 @@ class StandardV2VCLIDriver(DirectManagedDriver):
         output = (
             run_dir
             / "predictions"
-            / adaptation["conditioning"]
             / f"{job['job_id']}.mp4"
         ).resolve()
         job_spec = (

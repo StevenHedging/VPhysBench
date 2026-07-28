@@ -1,172 +1,289 @@
-# DataAdapter 与条件隔离
+# DataAdapter 与 Baseline 输入策略
 
 ## 1. 定位
 
-DataAdapter recipe 属于 Baseline，不属于 Dataset。它将冻结 case 转换为模型原生
-输入，同时使媒体派生与 generic/physics 条件使用可审计。
-
-schema v4 managed/submission Bundle 通过 loader 注入 `DataAdapter`：普通 Baseline
-使用内置 `StandardDataAdapter`，结构化控制 Baseline 可提供 Bundle-local Python
-adapter。schema v3 command Bundle 继续通过 `CommandDataAdapterProxy` 调用模型族
-实现。Benchmark 不把模型专有 runner payload 写入 Dataset。
+DataAdapter 属于 Baseline。它把冻结 Case 转换成模型原生输入：
 
 ```text
-frozen case + frozen job + adapter config
-→ native_inputs + adaptation audit + immutable cache artifacts
+conditionable Case + role + Baseline adapter recipe
+→ native_inputs + input_contract + adaptation audit
 ```
 
-## 2. 五阶段模型
+Dataset 保存原始 prompt、媒体与结构化事实；Task 只决定训练/评测 case 和 seed；
+adapter 决定模型是否使用物理信息以及如何表示。统一接口是：
 
-### 空间适配
+```python
+adapt_case(case, *, role)
+```
 
-- 选择 scene 对应宽高 bucket；
-- 保持宽高比；
-- resize 后 pad；
-- 保存 source/target 尺寸、scale、offset 和插值方式；
-- 不覆盖 Dataset 首帧或 reference。
+`role` 为 `train` 或 `eval`，不再传 Task 层的物理开关。
 
-### 时间适配
+## 2. Adapter 接收的 Case
 
-- 声明模型 FPS、目标帧数和 `4n+1` 等合法长度；
-- 保存生成覆盖区间与变换 recipe；
-- 只处理已授权的条件媒体，不读取 evaluator reference；
-- 不把 GT 帧注入生成结果。
-
-reference 解码、公共 timeline 和 reference-bounded sampling 属于 Evaluator，不属于
-DataAdapter。Adapter 只需保证 prediction 的最后时间戳覆盖任务要求的物理区间。
-
-### 输入范式与审计契约
-
-- T2V：文本；
-- I2V：文本与首帧；
-- V2V：文本与独立条件视频；
-- hybrid：文本，同时包含图像和视频。
-
-所有模式都必须输出 `input_contract`，声明 generation mode、非空文本 binding、媒体
-channel、physics channel 和资产访问白名单。I2V 必须使用 `assets.first_frame`；不再
-从 reference 第 0 帧补首帧。V2V 必须使用显式条件资产（推荐
-`assets.input_video`），禁止使用 `reference_video`、`physics_reference_video` 或
-`source_video`。
-
-### 文本适配
-
-文本 profile 由 Baseline 选择并进入完整依赖指纹。当前 WAN 与 Cosmos 为保证输入对照
-公平，共用 `five_scene_i2v_v1`；模型专属 profile 也可以放在自己的 Bundle 内。profile
-负责 scene 描述与物理白名单，不改变 Dataset 事实。
-
-### 物理注入
-
-`generic|physics` 是信息访问策略，不是注入方法。公共 compiler 不向 generic adapter
-提供结构化 `case.physics`；仅 physics conditioning 可读取结构化标注。注入必须：
-
-- 只使用 profile 白名单字段；
-- 保留数值与单位；
-- 记录字段路径和渲染结果；
-- 写入 Baseline 声明的 native target；
-- 实际使用至少一个 `annotated=true` 参数；
-- 不修改公共 job 或 Dataset。
-
-representation 是开放字符串，例如 `structured_text`、`numeric_tokens`、
-`trajectory`、`mask`、`optical_flow`、`force_field` 或 `proxy_video`。大型控制内容
-必须用 `artifact://sha256/<digest>` / `cache://sha256/<digest>` URI 引用，
-TaskInstance 只冻结 binding 与 provenance。核心验证声明格式和 active producer；
-custom driver 负责解析实体、复验实际字节 SHA-256，并验证其自报 `source_digest`。
-
-## 3. Generic 隔离
-
-generic 分支的公共契约不是“最后 prompt 没出现数字”，而是 compiler 不提供结构化
-physics 或 GT/reference/provenance。
-
-测试要求：
-
-1. generic adapter 输入没有 `physics` key；
-2. physics adapter 只看到 `annotated=true` 的字段；
-3. 内置共享媒体 recipe 在 generic/physics 两臂使用相同 materialization key；
-4. 每条 adaptation 的字段、数值、单位、channel 和 binding 都可审计。
-
-Python adapter/driver 是受信任 Bundle 代码。case ID 和资产路径可能带有语义，因此当前
-不承诺对恶意扩展的严格 non-interference；第三方盲测需要另加 opaque handle、无语义
-资产别名和进程隔离。
-
-## 4. 内容寻址 cache
-
-Cache key 至少包含：
+Compiler 给所有 Baseline 相同的 `conditionable_case_v1`：
 
 ```text
-source asset SHA-256
-+ materialization implementation digest
-+ spatial config
-+ temporal config
-+ input paradigm config
+case_id / scene_id
+text.prompt
+appearance / temporal / ood
+允许作为生成输入的 assets
+physics[annotated=true]
 ```
 
-文本差异不能使媒体 materialization 失效。缓存目录是 immutable；同 key 内容不一致
-必须报错，不能覆盖。
+它不会给 adapter：
 
-完整 DataAdapter fingerprint 覆盖五个阶段；materialization fingerprint 只覆盖空间、
-时间和输入范式阶段。schema v4 Bundle-local Python 文件自动进入 portable digest；
-其他 Bundle-local 文件用 `fingerprint_paths`，Bundle 外共享实现/profile 用
-`dependency_paths()`。因此文本变化仍会使
-TaskBuilder/TaskInstance 身份变化，但不会无意义地重建媒体 cache。
+- `reference_video`、`physics_reference_video`、`source_video`；
+- provenance、source locator 或 alignment evidence；
+- `annotated=false` 的派生量；
+- evaluator reference。
 
-## 5. WAN2.2 当前配置
+Adapter 本身不接收训练 target。Compiler 只在 sealed runtime source 的训练 case 中
+另加 `supervised_targets` 供 trainer 使用；eval adapter 与 predictor 看不到该 target。
 
-`baselines/wan22_lora/baseline.json` 和 managed G15 recipe 使用：
+所有 Baseline 看到同一份可条件化 Case，保证未来的 text、token、trajectory、mask、
+flow 等策略使用同一接口。某个 Baseline 是否消费 physics，由 manifest 与输出 contract
+共同约束。
 
-| scene | bucket |
+## 3. `input_policy`
+
+Baseline schema 5.0 必须声明：
+
+```json
+{
+  "input_policy": {
+    "schema_version": "1.0",
+    "case_view": "conditionable_case_v1",
+    "text": {
+      "source": "case.text.prompt",
+      "usage": "required"
+    },
+    "physics": {
+      "source": "case.physics[annotated=true]",
+      "usage": "ignored",
+      "representations": []
+    }
+  }
+}
+```
+
+文本源固定是非空 `case.text.prompt`。物理策略：
+
+### `ignored`
+
+- `representations` 必须为空；
+- `used_parameters` 必须是 `{}`；
+- `physics_channels` 必须为空；
+- 标准 adapter 的 `physics_transform` 必须为 `{"type": "none"}`。
+
+### `optional`
+
+- manifest 必须列出至少一种 representation；
+- 每条 Case 可不使用物理；
+- 一旦使用，`used_parameters` 与 physics channel 必须同时、精确出现。
+
+### `required`
+
+- manifest 必须列出至少一种 representation；
+- 每条 adaptation 至少使用一个 `annotated=true` 参数；
+- channel 中登记的参数集合必须与 `used_parameters` 完全一致。
+
+该策略是 Baseline identity 的一部分。改变 usage、representation 或 transform，需要新的
+Baseline ID 或明确的 Baseline 版本升级，不能通过 Task 或运行时 flag 临时切换。
+
+## 4. 标准 adapter
+
+`StandardDataAdapter` 支持：
+
+```text
+standard_t2v_v1
+standard_i2v_v1
+standard_v2v_v1
+```
+
+它按五个阶段生成可审计输入：
+
+1. `spatial`：scene 对应的宽高或模型 shape token；
+2. `temporal`：FPS、帧数与 `4n+1` 等模型约束；
+3. `paradigm`：T2V/I2V/V2V 媒体角色；
+4. `text`：读取 `case.text.prompt`；
+5. `physics`：按固定 policy 忽略或转换 annotated 物理量。
+
+当前内置物理转换：
+
+```json
+{
+  "type": "append_structured_text_v1",
+  "template_set": "five_scene_physics_clauses_v1"
+}
+```
+
+模板位于：
+
+```text
+src/physbench/baseline_plugins/resources/five_scene_physics_clauses_v1.json
+```
+
+Renderer 按 scene 白名单读取 quantity，验证单位，按声明精度格式化，并追加到
+`case.text.prompt` 后。它同时记录原 prompt digest、最终 prompt digest、字段、原值、
+单位和渲染值。Driver 只消费已经封印的 `native_inputs.text.prompt`，不得再次拼接。
+
+## 5. 自定义 Python adapter
+
+非文本物理注入使用 Bundle-local adapter：
+
+```json
+{
+  "adapter": {
+    "kind": "python",
+    "entrypoint": "adapter.py",
+    "config": {},
+    "cache_policy": "content_addressed_immutable"
+  }
+}
+```
+
+`adapter.py` 必须导出：
+
+```python
+def create_adapter(bundle):
+    return MyDataAdapter(bundle)
+```
+
+返回对象实现 `DataAdapter`，至少提供：
+
+- `adapt_case(case, *, role)`；
+- `describe()`；
+- `fingerprint`；
+- `materialization_fingerprint`；
+- 可选 `dependency_paths()`。
+
+可声明的 representation 是开放字符串，例如：
+
+```text
+structured_text
+numeric_tokens
+trajectory
+mask
+optical_flow
+force_field
+state_sequence
+proxy_video
+control_video
+```
+
+大型表示必须放在不可变 artifact/cache 中，`native_inputs` 只保存
+`artifact://sha256/<digest>` 或 `cache://sha256/<digest>`。Channel 同时登记
+`content_sha256`、`producer_fingerprint` 和 `source_digest`；driver 解析实体时应复验
+实际字节。
+
+## 6. `input_contract`
+
+每条 adaptation 必须输出：
+
+```text
+input_contract
+├── schema_version
+├── generation_mode
+├── text
+│   ├── required=true
+│   └── binding
+├── media_channels[]
+├── physics_channels[]
+└── asset_access[]
+```
+
+Contract 只描述模型输入如何绑定，不规定 `native_inputs` 内部形状。Compiler 会验证：
+
+- 文本 binding 指向非空字符串；
+- generation mode 与 Baseline capability 一致；
+- media channel 与 asset whitelist 一致；
+- physics representation 已声明；
+- used parameter 存在、`annotated=true`，且值与单位未被改写；
+- 大型 control 使用 artifact reference；
+- producer fingerprint 属于当前 adapter/materializer/TaskBuilder。
+
+## 7. 媒体范式
+
+| mode | 输入媒体 |
 | --- | --- |
-| pendulum | 480 × 832 |
-| free_fall | 480 × 832 |
-| uniform_circular_motion | 480 × 832 |
-| collision_1d | 832 × 480 |
-| inclined_plane_slide | 832 × 480 |
+| `t2v` | 无媒体 |
+| `i2v` | 一个或多个图像 channel |
+| `v2v` | 一个或多个视频 channel |
+| `hybrid` | 同时有图像和视频 |
 
-时间规格：
+标准 I2V 使用 Dataset 的 `assets.first_frame`。缺失首帧应回到 Dataset provenance 流程
+补齐，不能从 reference 临时提取，也不能把 GT 首帧拼到生成视频。
 
-- 24 FPS；
-- 最多 121 帧；
-- 至少 5 帧；
-- 保留合法 `4n+1` 帧数；
-- 使用物理时间前缀。
+V2V 标准 channel ID 为 `conditioning_video`。这里的 conditioning 仅表示媒体在
+V2V 模型中的输入角色，不是“是否注入结构化物理信息”的 Task 属性。视频必须来自显式
+独立资产（默认 `assets.input_video`）或经审计的 derived artifact；禁止绑定
+reference、physics reference 或 source video，也会检查内容 digest 别名。
 
-输入范式为 I2V。physics profile 把结构化值追加到
-`native_inputs.text.prompt`；generic profile 明确禁止详细物理字段。
+## 8. Fingerprint 与 cache
 
-## 6. Cosmos3-Nano 当前配置
+完整 adapter fingerprint 覆盖：
 
-Cosmos 同样使用 Dataset `assets.first_frame`，但不先生成 WAN 宽高像素副本，而是把
-源资产与 Cosmos-native shape token 交给其预处理器：
+```text
+spatial + temporal + paradigm + text + physics
+```
+
+Materialization fingerprint 只覆盖：
+
+```text
+spatial + temporal + paradigm
+```
+
+因此同模型的 generic/physics Baseline：
+
+- canonical plan 相同；
+- first-frame 与 generation shape 相同；
+- media materialization fingerprint 可相同；
+- 完整 adapter/TaskBuilder/TaskInstance fingerprint 不同。
+
+文本或物理模板变化不会无意义地重建媒体 cache，但一定会改变完整输入身份。
+
+Cache key 至少包含 source asset digest、materialization implementation、空间/时间配置
+与输入范式。Cache 是 immutable；相同 key 出现不同字节时必须报错，不能覆盖。
+
+## 9. 当前 WAN 与 Cosmos 配置
+
+WAN I2V：
+
+| scene | target |
+| --- | --- |
+| pendulum, free_fall, uniform_circular_motion | 480 × 832 |
+| collision_1d, inclined_plane_slide | 832 × 480 |
+
+WAN 时间规格为 24 FPS、5–121 帧、合法 `4n+1`，按物理时间前缀适配。
+
+Cosmos I2V：
 
 | scene | resolution | aspect ratio |
 | --- | ---: | --- |
-| pendulum | 480p | `9,16` |
-| free_fall | 480p | `9,16` |
-| collision_1d | 480p | `16,9` |
-| inclined_plane_slide | 480p | `16,9` |
-| uniform_circular_motion | 480p | `4,3` |
+| pendulum, free_fall | 480 | `9,16` |
+| collision_1d, inclined_plane_slide | 480 | `16,9` |
+| uniform_circular_motion | 480 | `4,3` |
 
-时间规格固定为 24 FPS、121 帧，满足 `4n+1`。这不要求 GT 与生成视频同分辨率或同
-帧数；统一 timeline、letterbox 和 reference-bounded sampling 属于 evaluator。
-Cosmos generic/physics 仍使用同一 first-frame 资产和 generation shape，仅 prompt
-stage 不同。
+Cosmos 固定 24 FPS、121 帧。生成与 GT 不要求相同分辨率或帧数；统一 timeline 与几何
+对齐属于 evaluator。
 
-## 7. 审计输出
+## 10. 审计输出
 
-每个 adaptation 至少记录：
+每条 adaptation 至少记录：
 
 ```text
 adaptation_id
-case_id
-conditioning
-implementation type/version
-source asset binding
-spatial transform
-temporal transform
-text profile
-physics fields used
-prompt digest / used parameters
-adapter and materialization fingerprints
+case_id / scene_id / role
+source_prompt_sha256 / prompt_sha256
+text_transform_id
+used_parameters
+spatial / temporal / paradigm / text / physics stages
+input_contract
+native_inputs
+adapter fingerprint
+materialization fingerprint
 ```
 
-TaskInstance 保存审计摘要和完整 artifact 路径，AtomicRun 再冻结实例指纹。这样可以
-区分 Dataset 差异、Task 差异、Adapter 差异和模型推理差异。
+这些记录进入 `task_instance/adaptations.jsonl`，AtomicRun 同时冻结
+`data_adapter.json`、`task_builder.json` 和 component fingerprints，使 Dataset、
+Task、adapter 与模型执行差异可以分开审计。

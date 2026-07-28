@@ -11,6 +11,92 @@ from .compiler import ManagedTaskBuilder
 from .driver import load_managed_driver
 
 
+def _validate_managed_outputs(
+    bundle: BaselineBundle,
+    instance: BaselineTaskInstance,
+    training: Any,
+    predictions: Any,
+) -> None:
+    """Bind driver outputs back to the frozen inference jobs."""
+
+    if not isinstance(training, dict):
+        raise TypeError("managed driver training result must be an object")
+    if not isinstance(predictions, list) or any(
+        not isinstance(record, dict) for record in predictions
+    ):
+        raise TypeError(
+            "managed driver predictions must be a list of objects"
+        )
+    expected = {
+        job["job_id"]: job
+        for job in instance.value["inference"]["jobs"]
+    }
+    by_job: dict[str, dict[str, Any]] = {}
+    for index, prediction in enumerate(predictions):
+        job_id = prediction.get("job_id")
+        if not isinstance(job_id, str) or not job_id:
+            raise ValueError(
+                f"managed prediction[{index}] requires a non-empty job_id"
+            )
+        if job_id in by_job:
+            raise ValueError(
+                f"managed driver returned duplicate prediction {job_id}"
+            )
+        by_job[job_id] = prediction
+    missing = sorted(set(expected) - set(by_job))
+    extra = sorted(set(by_job) - set(expected))
+    if missing or extra:
+        raise ValueError(
+            "managed prediction coverage mismatch: "
+            f"missing={missing}, extra={extra}"
+        )
+
+    forbidden = {
+        "conditioning",
+        "prompt_profile_id",
+        "evaluation_reference_video",
+        "visual_reference_video",
+        "reference_video",
+        "physics_reference_video",
+    }
+    statuses = {"planned", "staged", "complete", "failed"}
+    for job_id, job in expected.items():
+        prediction = by_job[job_id]
+        leaked = sorted(forbidden & set(prediction))
+        if leaked:
+            raise ValueError(
+                f"managed prediction {job_id} exposes legacy/evaluator "
+                f"fields: {leaked}"
+            )
+        expected_identity = {
+            "case_id": job["case_id"],
+            "baseline_id": bundle.baseline_id,
+            "evaluation_partition": job["evaluation_partition"],
+            "seed": int(job["seed"]),
+        }
+        actual_identity = {
+            key: prediction.get(key) for key in expected_identity
+        }
+        if actual_identity != expected_identity:
+            raise ValueError(
+                f"managed prediction identity mismatch for {job_id}: "
+                f"expected={expected_identity}, actual={actual_identity}"
+            )
+        if prediction.get("status") not in statuses:
+            raise ValueError(
+                f"managed prediction {job_id} has invalid status "
+                f"{prediction.get('status')!r}"
+            )
+        video_path = prediction.get("video_path")
+        if video_path is not None and (
+            not isinstance(video_path, str) or not video_path
+        ):
+            raise ValueError(
+                f"managed prediction {job_id} video_path must be null or "
+                "a non-empty string"
+            )
+
+
 def _merge_dependency_paths(
     *groups: dict[str, Path],
     label: str,
@@ -157,9 +243,16 @@ class ManagedBaselinePlugin(BaselinePlugin):
         stop_after_training: bool,
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         verify_managed_instance(self.bundle, self.task_builder, instance)
-        return self.driver.run_task(
+        training, predictions = self.driver.run_task(
             instance=instance,
             run_dir=run_dir,
             execute=execute,
             stop_after_training=stop_after_training,
         )
+        _validate_managed_outputs(
+            self.bundle,
+            instance,
+            training,
+            predictions,
+        )
+        return training, predictions

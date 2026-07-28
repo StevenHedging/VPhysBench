@@ -3,14 +3,20 @@
 `datasets/` 是仓库唯一权威数据根。当前正式入口：
 
 ```text
-physics_video/releases/3.0.0/dataset.json
+physics_video/releases/4.0.0/dataset.json
 ```
 
 目录职责：
 
 - `physics_video/assets/`：逐 scene/case 组织的 source 与 canonical 媒体；
 - `physics_video/provenance/`：导入来源、原始标注和对齐审核；
-- `physics_video/releases/3.0.0/`：Dataset descriptor、cases、scene、View 和 asset lock。
+- `physics_video/releases/4.0.0/`：当前 Dataset descriptor、Case schema 3.0、
+  scene、View 和 asset lock；
+- `physics_video/releases/<older>/`：只读的历史 release。
+
+Case 的原始文本位于 `text.prompt`，结构化物理标注位于 `physics`。二者都是数据事实；
+Task 不决定是否使用物理信息，Baseline 的 `input_policy` 与 adapter 才决定忽略、转换
+或注入哪些已标注物理量。
 
 禁止写入：
 

@@ -100,7 +100,6 @@ class SubmissionBaselinePlugin(BaselinePlugin):
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         verify_managed_instance(self.bundle, self.task_builder, instance)
         value = instance.value
-        conditioning = value["semantics"]["conditioning"]
         training = {
             "operation_id": "train",
             "status": "not_requested",
@@ -113,7 +112,6 @@ class SubmissionBaselinePlugin(BaselinePlugin):
                     "job_id": job["job_id"],
                     "case_id": job["case_id"],
                     "baseline_id": self.bundle.baseline_id,
-                    "conditioning": conditioning,
                     "evaluation_partition": job["evaluation_partition"],
                     "status": status,
                     "video_path": None,
@@ -139,12 +137,10 @@ class SubmissionBaselinePlugin(BaselinePlugin):
             record = submitted[job["job_id"]]
             expected = {
                 "case_id": job["case_id"],
-                "conditioning": conditioning,
                 "seed": int(job["seed"]),
             }
             actual = {
                 "case_id": record.get("case_id"),
-                "conditioning": record.get("conditioning"),
                 "seed": (
                     int(record["seed"])
                     if isinstance(record.get("seed"), int)
@@ -169,7 +165,6 @@ class SubmissionBaselinePlugin(BaselinePlugin):
                 "job_id": job["job_id"],
                 "case_id": job["case_id"],
                 "baseline_id": self.bundle.baseline_id,
-                "conditioning": conditioning,
                 "evaluation_partition": job["evaluation_partition"],
                 "status": "complete",
                 "video_path": imported["destination_path"],

@@ -7,11 +7,22 @@ from pathlib import Path
 from physbench.artifacts import (
     import_prediction_video,
     prediction_artifact_manifest,
+    validate_prediction_records,
 )
-from physbench.io import load_json
+from physbench.io import load_json, write_json, write_jsonl
+from physbench.orchestration import reevaluate_atomic
 
 
 class PredictionArtifactTests(unittest.TestCase):
+    @staticmethod
+    def _job() -> dict:
+        return {
+            "job_id": "job_1",
+            "case_id": "case_1",
+            "evaluation_partition": "test_id",
+            "seed": 42,
+        }
+
     def test_external_prediction_is_imported_with_provenance(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -94,6 +105,75 @@ class PredictionArtifactTests(unittest.TestCase):
                     [{"job_id": "job_1", "status": "complete"}],
                     Path(temporary),
                 )
+
+    def test_prediction_identity_is_bound_to_frozen_job(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            prediction = {
+                "job_id": "job_1",
+                "case_id": "different_case",
+                "baseline_id": "fixture",
+                "evaluation_partition": "test_id",
+                "seed": 42,
+                "status": "planned",
+                "video_path": None,
+            }
+            with self.assertRaisesRegex(
+                ValueError, "prediction identity mismatch"
+            ):
+                validate_prediction_records(
+                    [prediction],
+                    jobs=[self._job()],
+                    baseline_id="fixture",
+                    run_dir=temporary,
+                )
+
+    def test_reevaluation_detects_prediction_artifact_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary) / "run"
+            video = run_dir / "predictions" / "fixture" / "job_1.mp4"
+            video.parent.mkdir(parents=True)
+            video.write_bytes(b"original")
+            prediction = {
+                "job_id": "job_1",
+                "case_id": "case_1",
+                "baseline_id": "fixture",
+                "evaluation_partition": "test_id",
+                "seed": 42,
+                "status": "complete",
+                "video_path": str(video),
+            }
+            frozen_artifacts = validate_prediction_records(
+                [prediction],
+                jobs=[self._job()],
+                baseline_id="fixture",
+                run_dir=run_dir,
+            )
+            (run_dir / "frozen").mkdir()
+            (run_dir / "task_instance").mkdir()
+            (run_dir / "artifacts").mkdir()
+            write_json(run_dir / "plan.json", {})
+            write_json(run_dir / "frozen" / "task.json", {})
+            write_jsonl(run_dir / "frozen" / "cases.jsonl", [])
+            write_jsonl(run_dir / "predictions.jsonl", [prediction])
+            write_json(
+                run_dir / "task_instance" / "manifest.json",
+                {
+                    "identity": {
+                        "baseline": {"baseline_id": "fixture"},
+                    },
+                    "inference": {"jobs": [self._job()]},
+                    "source": {"asset_root": str(run_dir)},
+                },
+            )
+            write_json(
+                run_dir / "artifacts" / "prediction_artifacts.json",
+                frozen_artifacts,
+            )
+            video.write_bytes(b"modified")
+            with self.assertRaisesRegex(
+                ValueError, "differ from the frozen AtomicRun manifest"
+            ):
+                reevaluate_atomic(run_dir)
 
 
 if __name__ == "__main__":

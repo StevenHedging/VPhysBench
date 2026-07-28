@@ -1,8 +1,9 @@
 # Physics Video Benchmark
 
-Physics Video Benchmark 是一个面向物理视频生成模型的五场景、训推一体评测框架。
-当前唯一正式数据快照是
-`datasets/physics_video/releases/3.0.0/dataset.json`，包含：
+Physics Video Benchmark 是一个面向物理视频生成模型的五场景、训推一体评测框架。当前
+Dataset release 是
+`datasets/physics_video/releases/4.0.0/dataset.json`，包含 214 个 case 和 468 个
+锁定资产：
 
 - 单摆 `pendulum`
 - 自由落体 `free_fall`
@@ -10,187 +11,165 @@ Physics Video Benchmark 是一个面向物理视频生成模型的五场景、�
 - 斜面下滑 `inclined_plane_slide`
 - 匀速圆周运动 `uniform_circular_motion`
 
-系统把数据、任务、模型适配、生成和评估分成明确边界：
+## 设计原则
+
+数据、任务和模型输入策略各有唯一所有者：
+
+| 对象 | 负责 |
+| --- | --- |
+| Dataset / Case | 原始 `text.prompt`、首帧、结构化物理与环境标注、参考资产、View |
+| Task | `family`、数据选择、seed、OOD2 recipe、评估协议 |
+| Baseline | 模型身份、I2V/V2V 等输入范式、是否使用物理信息、物理表示与 adapter |
+| Evaluator | 参考解析、时空对齐、scene-local 物理评分与 Task 汇总 |
+
+因此 Task 不再区分“带/不带物理注入”。所有 Baseline 都接收同一种可条件化 Case，
+再由固定的 `input_policy.physics.usage` 决定 `ignored`、`optional` 或 `required`。
+例如 WAN generic 与 WAN physics 是两个 Baseline identity；前者原样使用
+`case.text.prompt`，后者在 Baseline-owned adapter 中追加经审计的结构化物理量。
 
 ```text
-DatasetSnapshot
-  + Atomic TaskSpec
-  + Baseline bundle
-        │
-        ▼
-Baseline-owned TaskBuilder
-        │
-        ▼
-sealed BaselineTaskInstance
-        │
-        ├── optional fine-tuning
-        ├── generation
-        └── benchmark-owned scene evaluation
+DatasetSnapshot + model-agnostic TaskSpec
+                    │
+                    ▼
+            CanonicalTaskPlan
+                    │
+       ┌────────────┴────────────┐
+       ▼                         ▼
+generic Baseline          physics Baseline
+       │                         │
+       └── sealed BaselineTaskInstance
+                          │
+                          ▼
+                     AtomicRun
+                          │
+                          ▼
+                 scene-local evaluation
 ```
 
-## 核心能力
+同一 Task 对多个 Baseline 的 canonical plan 必须完全相同；差异只能来自各 Baseline
+的模型、adapter、训练或推理实现。
 
-- View A：训练或微调后评测数值 ID 与环境 OOD1。
-- View B：不训练，按确定性分组直接评测全部 case。
-- `finetune_eval/direct_eval × generic/physics` 四种原子任务。
-- 可插拔 Baseline 私有 DataAdapter；所有模式有语言文本，物理可走文本、token、轨迹、
-  mask、flow 或代理视频等模型原生通道。
-- 三档自注册 Baseline：submission、managed（默认）与高级 command。
-- T2V/I2V/V2V 由公共 compiler 与 input contract 接管；新模型通常只需 manifest、
-  adapter 和薄 driver。
-- 便携实现指纹与机器部署指纹分离；代码/profile 自动或显式入指纹，checkpoint
-  通过声明的 revision/hash 审计。
-- 五个 scene-local evaluator，以物理状态相似度作为正式分数。
-- Jensen 风格物理主体 IoU 曲线，以及场景专属几何或实例诊断。
-- Task 级严格 coverage：缺失 case 不会被静默计零，也不会被部分均值掩盖。
-- 可审计的 Dataset、TaskInstance、prediction、evaluator 和 run 指纹。
-- AtomicRun 自包含：除模型代码、权重和可重建 cache 外，预测、日志、输入快照与
-  评测产物必须保存在 `runs_v2/<run_id>/` 内。
+## 当前 Baseline
 
-当前自动发现的 Baseline：
+Registry 会发现每个 Bundle 目录下的 `baseline.json` 与 `*.baseline.json`：
 
-| baseline ID | 模型身份 | 支持任务 | 可比性 |
+| Baseline ID | 物理策略 | 支持 Task family | 说明 |
 | --- | --- | --- | --- |
-| `wan22_ti2v_5b_lora_r32_v3` | WAN2.2 + View A LoRA | `finetune_eval`, `direct_eval` | 按正式任务执行 |
-| `cosmos3_nano_i2v` | Cosmos3-Nano base snapshot | `direct_eval` | base pretrained |
-| `wan22_g15_sparse_motion_r32_e20` | G15 step-2840 frozen LoRA | `direct_eval` | 仅诊断；训练源与 v3 重叠 |
+| `wan22_ti2v_5b_lora_r32_v3_generic` | `ignored` | `finetune_eval`, `direct_eval` | WAN2.2 + LoRA |
+| `wan22_ti2v_5b_lora_r32_v3_physics` | `required` / `structured_text` | `finetune_eval`, `direct_eval` | 同模型，追加结构化物理文本 |
+| `cosmos3_nano_i2v_generic` | `ignored` | `direct_eval` | Cosmos3-Nano base |
+| `cosmos3_nano_i2v_physics` | `required` / `structured_text` | `direct_eval` | 同模型，追加结构化物理文本 |
+| `wan22_g15_sparse_motion_r32_e20_generic` | `ignored` | `direct_eval` | G15 step-2840，诊断型 |
+| `wan22_g15_sparse_motion_r32_e20_physics` | `required` / `structured_text` | `direct_eval` | G15 step-2840，诊断型 |
 
-G15 的 source-aware audit 记录了 176/214 个见过的源 case，因此全量分数不能与无泄漏
-Baseline 横向排名。详见 Bundle 内的
-`baselines/wan22_g15_sparse_motion/provenance/benchmark_overlap_v3.json`。
+G15 的训练源与 Dataset 底层 trial 有重叠，不能进入无泄漏排名。审计见
+`baselines/wan22_g15_sparse_motion/provenance/benchmark_overlap_v3.json`；4.0.0 没有
+改变 3.0.0 的 case 或媒体集合，所以该 source-aware 结论仍成立。
 
-## 环境
+## 环境与验证
 
-Benchmark 的正式虚拟环境是：
+Benchmark 环境：
 
 ```text
 /root/miniconda3/envs/phybench
 ```
 
-核心规划与数据测试可用普通 Python。视频 evaluator 需要：
-
 ```bash
 cd /root/Steven/physics_video_benchmark
+
+PYTHONPATH=src:tests /root/miniconda3/envs/phybench/bin/python \
+  -m unittest discover -s tests -v
+
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  validate-dataset \
+  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --check-asset-hashes
+```
+
+Scene evaluator 需要额外安装：
+
+```bash
 /root/miniconda3/envs/phybench/bin/pip install -e ".[scene-evaluation]"
 /root/miniconda3/envs/phybench/bin/pip install -e /root/Jensen/Eval/sam2-main
 ```
 
-SAM2 当前来自 `/root/Jensen/Eval/sam2-main`。未编译 `_C` 后处理扩展时会出现警告，
-官方 fallback 仍可运行，但部署环境应优先完成官方扩展安装。
+## 快速开始
 
-## 快速验证
-
-```bash
-# 核心测试；缺少 scene-evaluation extras 时相关测试会明确 skip
-make test
-
-# 正式环境中的完整测试
-PYTHONPATH=src:tests /root/miniconda3/envs/phybench/bin/python \
-  -m unittest discover -s tests -v
-
-# 数据资产逐字节验收
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  validate-dataset \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
-  --check-asset-hashes
-```
-
-## 编译和运行任务
-
-列出并验证自动发现的 Baseline：
+发现并验证 Baseline：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   baseline list
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline validate wan22_ti2v_5b_lora_r32_v3
-
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline validate cosmos3_nano_i2v
-
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline validate wan22_g15_sparse_motion_r32_e20
+  baseline validate wan22_ti2v_5b_lora_r32_v3_generic
 ```
 
-只编译 sealed TaskInstance：
+编译一份 sealed TaskInstance：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
-  --task tasks/official/five_scene_finetune_eval_physics.json \
-  --baseline wan22_ti2v_5b_lora_r32_v3 \
-  --output /tmp/wan22_physics_task_instance.json
+  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
+  --baseline wan22_ti2v_5b_lora_r32_v3_generic \
+  --output /tmp/wan22_generic_task_instance.json
 ```
 
-创建 AtomicRun；不加 `--execute` 只冻结计划和输入：
+创建 AtomicRun；不加 `--execute` 时只冻结并展开计划：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval_generic.json \
-  --baseline wan22_ti2v_5b_lora_r32_v3 \
+  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
+  --baseline cosmos3_nano_i2v_generic \
   --output-root runs_v2
 ```
 
-创建新 Baseline：
-
-```bash
-# 标准 I2V：生成 schema v4 managed Bundle
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline init my_i2v --backend managed-i2v
-
-# 标准 V2V 协议模板：要求 Dataset 提供独立 input_video，禁止使用 GT/reference
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline init my_v2v --backend managed-v2v
-
-# 已有视频：生成 output-only submission Bundle
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline init my_outputs --backend submission
-```
-
-managed 与 submission 复用 canonical plan、DataAdapter input contract、TaskInstance
-seal、prediction 组装和 run-local 归档；复杂训练仍可使用 v3 command 接口。
-当前正式 3.0.0 release 的 214 个 case 尚无 `assets.input_video`，因此 V2V 模板需在
-增加独立条件视频资产后才能用于正式任务。
-
-对已有 AtomicRun 重新评估：
+在同一 Task 上成对比较两个 Baseline：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  evaluate --run-dir runs_v2/<run_id>
+  matrix-run \
+  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
+  --baseline cosmos3_nano_i2v_generic \
+  --baseline cosmos3_nano_i2v_physics \
+  --matrix-id cosmos3_generic_vs_physics \
+  --output-root runs_v2
 ```
+
+加 `--execute` 才会启动模型。每个矩阵元素仍是独立
+`runs_v2/<matrix_id>__<baseline_id>/` AtomicRun。
 
 ## 文档
 
 - [系统架构](docs/ARCHITECTURE.md)
-- [数据集与划分](docs/DATASET.md)
-- [自定义 Baseline 集成指南](docs/BASELINE_INTEGRATION.md)
-- [TaskBuilder 与 Baseline 接入](docs/TASKS.md)
-- [DataAdapter 与条件隔离](docs/DATA_ADAPTER.md)
+- [Dataset、Case 与划分](docs/DATASET.md)
+- [Task 与运行矩阵](docs/TASKS.md)
+- [DataAdapter 与输入策略](docs/DATA_ADAPTER.md)
+- [自定义 Baseline 集成](docs/BASELINE_INTEGRATION.md)
 - [五场景评估协议](docs/EVALUATION.md)
-- [WAN2.2、View A LoRA 与 G15 baseline](docs/WAN22.md)
-- [Cosmos3-Nano I2V baseline](docs/COSMOS3.md)
+- [WAN2.2 Baseline](docs/WAN22.md)
+- [Cosmos3-Nano Baseline](docs/COSMOS3.md)
 - [运行、验证与故障排查](docs/OPERATIONS.md)
 
 ## 仓库结构
 
 ```text
 physics_video_benchmark/
-├── datasets/                 # 唯一权威数据根
-├── tasks/official/           # 四类五场景原子任务
-├── baselines/                # 三个自注册 Bundle、driver/endpoint 与本机模板
-├── configs/evaluation/       # Scene evaluator 协议
-├── schemas/v2/               # Dataset、Task、TaskInstance JSON Schema
-├── schemas/v3/               # 高级 command Bundle Schema
-├── schemas/v4/               # managed/submission Bundle Schema
-├── src/physbench/            # 数据、任务、managed runtime、评估和 CLI
-├── tests/                    # 核心与 scene evaluator 回归测试
-├── docs/                     # 当前架构与操作文档
-└── runs_v2/                  # AtomicRun 输出
+├── datasets/                 # 唯一权威数据根；4.0.0 是当前 release
+├── tasks/official/           # direct_eval 与 finetune_eval 两份模型无关 Task
+├── baselines/                # schema v5 Bundle、adapter/driver 与本机配置模板
+├── configs/evaluation/       # scene evaluator 协议
+├── schemas/v3/               # Dataset、Case、Task、TaskInstance、prediction/evaluation
+├── schemas/v5/               # Baseline Bundle
+├── src/physbench/            # planner、runtime、评估与 CLI
+├── tests/                    # 回归测试
+├── docs/                     # 架构和操作文档
+└── runs_v2/                  # 当前 AtomicRun 输出
 ```
 
-权威数据资产只能写入 `datasets/`。Baseline 重采样、缩放、抽帧、特征和模型缓存必须
-写入内容寻址 cache 或 run 目录，不能回写 Dataset。
+权威数据资产只能写入 `datasets/`。缩放、抽帧、特征、模型缓存和预测必须进入内容寻址
+cache 或当前 run，不能回写 Dataset。

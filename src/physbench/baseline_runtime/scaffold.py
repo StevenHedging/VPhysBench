@@ -20,7 +20,7 @@ def _adapter(generation_mode: str) -> dict[str, Any]:
     adapter = {
         "kind": "standard",
         "preset": f"standard_{generation_mode}_v1",
-        "profile_set": "five_scene_i2v_v1",
+        "physics_transform": {"type": "none"},
         "spatial": {
             "scene_profiles": {
                 scene_id: {"width": 832, "height": 480}
@@ -42,19 +42,30 @@ def _adapter(generation_mode: str) -> dict[str, Any]:
 
 def _common(name: str, generation_mode: str) -> dict[str, Any]:
     return {
-        "schema_version": "4.0",
+        "schema_version": "5.0",
         "baseline_id": name,
         "baseline_version": "0.1.0",
         "description": f"Physics Video Benchmark Baseline: {name}.",
         "supported_scenes": SCENES,
         "capabilities": {
             "task_families": ["direct_eval"],
-            "conditioning": ["generic", "physics"],
             "generation_modes": [generation_mode],
-            "physics_representations": ["structured_text"],
             "train": False,
             "finetune": False,
             "generate": True,
+        },
+        "input_policy": {
+            "schema_version": "1.0",
+            "case_view": "conditionable_case_v1",
+            "text": {
+                "source": "case.text.prompt",
+                "usage": "required",
+            },
+            "physics": {
+                "source": "case.physics[annotated=true]",
+                "usage": "ignored",
+                "representations": [],
+            },
         },
         "model": {"model_id": name, "checkpoint": None},
         "runtime": {},

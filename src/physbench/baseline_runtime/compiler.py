@@ -88,10 +88,6 @@ class ManagedTaskBuilder(TaskBuilder):
             raise ValueError(
                 f"Baseline does not support task family {task.family}"
             )
-        if task.conditioning not in capabilities["conditioning"]:
-            raise ValueError(
-                f"Baseline does not support conditioning {task.conditioning}"
-            )
         supported = value.get("supported_scenes", "all")
         if supported != "all":
             requested = set(canonical_plan.value["scene_ids"]) | {
@@ -115,7 +111,6 @@ class ManagedTaskBuilder(TaskBuilder):
     @staticmethod
     def _adapter_case(
         case: dict[str, Any],
-        conditioning: str,
     ) -> dict[str, Any]:
         """Project a Case onto assets and facts available to an adapter."""
         projected = {
@@ -124,6 +119,7 @@ class ManagedTaskBuilder(TaskBuilder):
                 "schema_version",
                 "case_id",
                 "scene_id",
+                "text",
                 "appearance",
                 "temporal",
                 "ood",
@@ -135,14 +131,14 @@ class ManagedTaskBuilder(TaskBuilder):
             for key, value in case["assets"].items()
             if key not in _NON_RUNTIME_ASSET_KEYS
         }
-        if conditioning == "physics":
-            projected["physics"] = {
-                name: copy.deepcopy(quantity)
-                for name, quantity in case["physics"].items()
-                if quantity.get("annotated") is True
-            }
-        # Generic receives no physics key. Neither arm receives provenance,
-        # source locators, alignment evidence, or evaluator-only assets.
+        projected["physics"] = {
+            name: copy.deepcopy(quantity)
+            for name, quantity in case["physics"].items()
+            if quantity.get("annotated") is True
+        }
+        # Every Baseline sees the same conditionable Case. None receives
+        # provenance, source locators, alignment evidence, non-annotated
+        # derived quantities, or evaluator-only assets.
         return projected
 
     @staticmethod
@@ -152,7 +148,7 @@ class ManagedTaskBuilder(TaskBuilder):
         training_target: bool,
     ) -> dict[str, Any]:
         """Project source data embedded in the runnable TaskInstance."""
-        projected = ManagedTaskBuilder._adapter_case(case, "generic")
+        projected = ManagedTaskBuilder._adapter_case(case)
         if training_target:
             target_key = (
                 "reference_video"
@@ -250,10 +246,7 @@ class ManagedTaskBuilder(TaskBuilder):
     def _validate_physics_access(
         adaptation: dict[str, Any],
         case: dict[str, Any],
-        conditioning: str,
     ) -> None:
-        if conditioning == "generic":
-            return
         physics = case.get("physics", {})
         invalid = [
             name
@@ -328,6 +321,7 @@ class ManagedTaskBuilder(TaskBuilder):
             "model": value.get("model", {}),
             "runtime": value.get("runtime", {}),
             "adapter": value["adapter"],
+            "input_policy": value["input_policy"],
             "runner": value.get("runner"),
             "trainer": value.get("trainer"),
         })
@@ -337,8 +331,7 @@ class ManagedTaskBuilder(TaskBuilder):
         cache_root = (
             Path(__file__).resolve().parents[3]
             / "cache"
-            / "baselines"
-            / self.bundle.baseline_id
+            / "baseline_materializations"
             / self.data_adapter.materialization_fingerprint
             / dataset_digest
         )
@@ -362,7 +355,6 @@ class ManagedTaskBuilder(TaskBuilder):
         """Revalidate managed-only contracts against the active deployment."""
 
         plan = document["canonical_plan"]
-        conditioning = document["semantics"]["conditioning"]
         train_ids = list(plan["train_case_ids"])
         eval_ids = sorted({
             job["case_id"] for job in plan["jobs"]
@@ -383,6 +375,8 @@ class ManagedTaskBuilder(TaskBuilder):
             "schema_version",
             "case_id",
             "scene_id",
+            "text",
+            "physics",
             "appearance",
             "temporal",
             "ood",
@@ -400,6 +394,28 @@ class ManagedTaskBuilder(TaskBuilder):
             if not isinstance(assets, dict):
                 raise ValueError(
                     f"managed source case {case_id} requires assets"
+                )
+            text = case.get("text")
+            if (
+                not isinstance(text, dict)
+                or not isinstance(text.get("prompt"), str)
+                or not text["prompt"].strip()
+            ):
+                raise ValueError(
+                    f"managed source case {case_id} requires text.prompt"
+                )
+            physics = case.get("physics")
+            if (
+                not isinstance(physics, dict)
+                or not physics
+                or any(
+                    not isinstance(quantity, dict)
+                    or quantity.get("annotated") is not True
+                    for quantity in physics.values()
+                )
+            ):
+                raise ValueError(
+                    f"managed source case {case_id} requires annotated physics"
                 )
             leaked_assets = sorted(
                 set(assets) & _NON_RUNTIME_ASSET_KEYS
@@ -433,7 +449,7 @@ class ManagedTaskBuilder(TaskBuilder):
                 )
 
         expected_adaptations = {
-            f"{case_id}::{role}::{conditioning}": (case_id, role)
+            f"{case_id}__{role}": (case_id, role)
             for role, case_ids in (
                 ("train", train_ids),
                 ("eval", eval_ids),
@@ -457,7 +473,6 @@ class ManagedTaskBuilder(TaskBuilder):
             adaptation = adaptations[adaptation_id]
             expected_identity = {
                 "case_id": case_id,
-                "conditioning": conditioning,
                 "role": role,
             }
             actual_identity = {
@@ -471,8 +486,7 @@ class ManagedTaskBuilder(TaskBuilder):
                 )
             validate_adaptation_record(
                 adaptation,
-                conditioning=conditioning,
-                capabilities=capabilities,
+                input_policy=self.bundle.value["input_policy"],
             )
             self._validate_artifact_producers(adaptation)
             mode = adaptation["input_contract"]["generation_mode"]
@@ -488,6 +502,10 @@ class ManagedTaskBuilder(TaskBuilder):
                 asset_digests={},
                 forbidden_media_paths=set(),
                 forbidden_media_digests=set(),
+            )
+            self._validate_physics_access(
+                adaptation,
+                source_by_id[case_id],
             )
 
         if document["inference"]["predictor"] != self._predictor_payload():
@@ -560,12 +578,10 @@ class ManagedTaskBuilder(TaskBuilder):
         adaptation_by_key: dict[tuple[str, str], dict[str, Any]] = {}
         for role, case_ids in (("train", train_ids), ("eval", eval_ids)):
             for case_id in case_ids:
-                case = self._adapter_case(
-                    by_id[case_id], task.conditioning
-                )
+                case = self._adapter_case(by_id[case_id])
                 adapter_case = copy.deepcopy(case)
                 adaptation = self.data_adapter.adapt_case(
-                    adapter_case, task.conditioning, role=role
+                    adapter_case, role=role
                 )
                 if adapter_case != case:
                     raise ValueError(
@@ -574,7 +590,6 @@ class ManagedTaskBuilder(TaskBuilder):
                     )
                 expected_identity = {
                     "case_id": case_id,
-                    "conditioning": task.conditioning,
                     "role": role,
                 }
                 actual_identity = {
@@ -589,8 +604,7 @@ class ManagedTaskBuilder(TaskBuilder):
                     )
                 validate_adaptation_record(
                     adaptation,
-                    conditioning=task.conditioning,
-                    capabilities=self.bundle.value["capabilities"],
+                    input_policy=self.bundle.value["input_policy"],
                 )
                 declared_modes = self.bundle.value[
                     "capabilities"
@@ -617,12 +631,9 @@ class ManagedTaskBuilder(TaskBuilder):
                 self._validate_physics_access(
                     adaptation,
                     case,
-                    task.conditioning,
                 )
                 self._validate_artifact_producers(adaptation)
-                adaptation_id = (
-                    f"{case_id}::{role}::{task.conditioning}"
-                )
+                adaptation_id = f"{case_id}__{role}"
                 adaptation["adaptation_id"] = adaptation_id
                 adaptations.append(adaptation)
                 adaptation_by_key[(case_id, role)] = adaptation
@@ -688,7 +699,7 @@ class ManagedTaskBuilder(TaskBuilder):
         )
         value = self.bundle.value
         return BaselineTaskInstance.seal({
-            "schema_version": "2.1",
+            "schema_version": "3.0",
             "instance_id": instance_id,
             "identity": {
                 "dataset": {
@@ -721,7 +732,6 @@ class ManagedTaskBuilder(TaskBuilder):
             },
             "semantics": {
                 "family": task.family,
-                "conditioning": task.conditioning,
                 "scene_ids": canonical_plan.value["scene_ids"],
             },
             "canonical_plan": canonical_plan.value,

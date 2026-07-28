@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "scene_id": "free_fall",
+  "display_name": "自由落体",
+  "id_parameters": ["initial_height", "ball_radius"],
+  "unannotated_parameters": [],
+  "ood1_factors": ["background", "ball_material"],
+  "constraints": ["OOD1 must preserve initial_height and ball_radius"],
+  "metric_spec": {
+    "common_sense_checks": ["downward acceleration", "no upward launch", "object identity preserved"],
+    "prediction_subjects": ["falling_ball"],
+    "prediction_quantities": ["vertical trajectory", "impact time", "acceleration"],
+    "visual_attributes": ["ball material", "motion blur", "background consistency"]
+  }
+}

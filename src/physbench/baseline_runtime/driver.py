@@ -127,7 +127,6 @@ class DirectManagedDriver(ManagedDriver):
         adaptations = {
             item["adaptation_id"]: item for item in value["adaptations"]
         }
-        conditioning = value["semantics"]["conditioning"]
         training = {
             "operation_id": "train",
             "status": "not_requested",
@@ -175,7 +174,6 @@ class DirectManagedDriver(ManagedDriver):
                 "job_id": job["job_id"],
                 "case_id": job["case_id"],
                 "baseline_id": self.bundle.baseline_id,
-                "conditioning": conditioning,
                 "evaluation_partition": job["evaluation_partition"],
                 "manual_scores": {},
                 "job_spec": str(spec_path),
@@ -217,7 +215,6 @@ class DirectManagedDriver(ManagedDriver):
                 "job_id",
                 "case_id",
                 "baseline_id",
-                "conditioning",
                 "evaluation_partition",
                 "status",
                 "video_path",

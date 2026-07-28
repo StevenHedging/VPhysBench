@@ -1,14 +1,13 @@
 {
-  "schema_version": "3.0",
-  "baseline_id": "wan22_ti2v_5b_lora_r32_v3",
-  "baseline_version": "1.0.0",
+  "schema_version": "5.0",
+  "baseline_id": "wan22_ti2v_5b_lora_r32_v3_generic",
+  "baseline_version": "2.0.0",
   "implementation": {
-    "kind": "command",
-    "protocol": "physbench-baseline-v1",
-    "entrypoint": ["{python}", "plugin/main.py"],
-    "fingerprint_paths": ["plugin/*.py"]
+    "kind": "managed",
+    "driver": "driver.py",
+    "fingerprint_paths": []
   },
-  "description": "Static WAN2.2-TI2V-5B + FlowMatch LoRA baseline bundle.",
+  "description": "WAN2.2-TI2V-5B FlowMatch LoRA baseline using each Case's canonical prompt without structured physics injection.",
   "supported_scenes": [
     "pendulum",
     "free_fall",
@@ -18,14 +17,28 @@
   ],
   "capabilities": {
     "task_families": ["finetune_eval", "direct_eval"],
-    "conditioning": ["generic", "physics"],
+    "generation_modes": ["i2v"],
     "train": false,
     "finetune": true,
     "generate": true
   },
+  "input_policy": {
+    "schema_version": "1.0",
+    "case_view": "conditionable_case_v1",
+    "text": {
+      "source": "case.text.prompt",
+      "usage": "required"
+    },
+    "physics": {
+      "source": "case.physics[annotated=true]",
+      "usage": "ignored",
+      "representations": []
+    }
+  },
   "model": {
     "base_model": "WAN2.2-TI2V-5B",
-    "frozen_lora_checkpoint": null
+    "frozen_lora_checkpoint": null,
+    "checkpoint_sha256": "7f8f28a36faa309431e7ea58e7de3c61cd58266b62653ee69c3b9f666745acfe"
   },
   "runtime": {
     "project_root": ".",
@@ -35,98 +48,85 @@
     "accelerate_config": null,
     "diffsynth_commit": "fb337fbb90945ff829de69dbd44ded618f73e889"
   },
-  "components": {
-    "task_builder": {
-      "type": "wan22_task_builder_v1",
-      "config": {
-        "data_adapter": {
-          "spatial": {
-            "type": "wan22_spatial_v1",
-            "width": 480,
-            "height": 832,
-            "policy": "scene_aspect_ratio_bucket_then_fit_and_pad",
-            "pad_color": "black",
-            "aspect_ratio_buckets": {
-              "enabled": true,
-              "buckets": {
-                "portrait": {
-                  "width": 480,
-                  "height": 832,
-                  "scene_ids": [
-                    "pendulum",
-                    "free_fall",
-                    "uniform_circular_motion"
-                  ]
-                },
-                "landscape": {
-                  "width": 832,
-                  "height": 480,
-                  "scene_ids": ["collision_1d", "inclined_plane_slide"]
-                }
-              }
-            }
-          },
-          "temporal": {
-            "type": "wan22_temporal_v1",
-            "fps": 24,
-            "max_frames": 121,
-            "min_frames": 5,
-            "policy": "physical-time prefix; preserve valid 4n+1 frame counts"
-          },
-          "paradigm": {
-            "type": "wan22_i2v_input_v1",
-            "mode": "i2v",
-            "first_frame_policy": "use_asset_or_extract_reference_frame0"
-          },
-          "text": {
-            "type": "wan22_scene_process_text_v1",
-            "profile_set": "five_scene_i2v_v1",
-            "generic_profile": "generic",
-            "detailed_physics_forbidden": true
-          },
-          "physics": {
-            "type": "wan22_structured_physics_injection_v1",
-            "strategy": "append_structured_values_to_text",
-            "native_target": "native_inputs.text.prompt",
-            "physics_profile": "physics"
-          },
-          "cache": {
-            "policy": "content_addressed_shared_immutable"
-          }
+  "adapter": {
+    "kind": "standard",
+    "preset": "standard_i2v_v1",
+    "first_frame_policy": "require_asset",
+    "cache_policy": "content_addressed_shared_immutable",
+    "physics_transform": {
+      "type": "none"
+    },
+    "spatial": {
+      "type": "wan22_spatial_v1",
+      "policy": "scene_aspect_ratio_bucket_then_fit_and_pad",
+      "pad_color": "black",
+      "scene_profiles": {
+        "pendulum": {
+          "name": "portrait",
+          "width": 480,
+          "height": 832
+        },
+        "free_fall": {
+          "name": "portrait",
+          "width": 480,
+          "height": 832
+        },
+        "uniform_circular_motion": {
+          "name": "portrait",
+          "width": 480,
+          "height": 832
+        },
+        "collision_1d": {
+          "name": "landscape",
+          "width": 832,
+          "height": 480
+        },
+        "inclined_plane_slide": {
+          "name": "landscape",
+          "width": 832,
+          "height": 480
         }
       }
     },
-    "trainer": {
-      "type": "diffsynth_flowmatch_lora_v1",
-      "config": {
-        "algorithm": "FlowMatch SFT + LoRA",
-        "rank": 32,
-        "target_modules": "q,k,v,o,ffn.0,ffn.2",
-        "learning_rate": 0.0001,
-        "dataset_repeat": 4,
-        "num_epochs": 10,
-        "save_steps": 41,
-        "scene_balancing": "oversample_each_scene_to_largest",
-        "gradient_accumulation": 1,
-        "num_workers": 4,
-        "seed": 42,
-        "precision": "bf16",
-        "gradient_checkpointing": true,
-        "optimizer": "AdamW",
-        "scheduler": "ConstantLR",
-        "weight_decay": 0.01
-      }
-    },
-    "predictor": {
-      "type": "wan22_ti2v_v1",
-      "config": {
-        "num_inference_steps": 50,
-        "cfg_scale": 5.0,
-        "lora_alpha": 1.0,
-        "tiled": true,
-        "quality": 5,
-        "negative_prompt": "camera shake, changing apparatus identity, discontinuous motion, flicker, blur, text, watermark, low quality"
-      }
+    "temporal": {
+      "type": "wan22_temporal_v1",
+      "fps": 24,
+      "max_frames": 121,
+      "min_frames": 5,
+      "valid_frame_rule": "4n+1",
+      "policy": "physical-time prefix; preserve valid 4n+1 frame counts"
+    }
+  },
+  "trainer": {
+    "type": "diffsynth_flowmatch_lora_v1",
+    "config": {
+      "algorithm": "FlowMatch SFT + LoRA",
+      "rank": 32,
+      "target_modules": "q,k,v,o,ffn.0,ffn.2",
+      "learning_rate": 0.0001,
+      "dataset_repeat": 4,
+      "num_epochs": 10,
+      "save_steps": 41,
+      "scene_balancing": "oversample_each_scene_to_largest",
+      "gradient_accumulation": 1,
+      "num_workers": 4,
+      "seed": 42,
+      "precision": "bf16",
+      "gradient_checkpointing": true,
+      "optimizer": "AdamW",
+      "scheduler": "ConstantLR",
+      "weight_decay": 0.01
+    }
+  },
+  "runner": {
+    "type": "wan22_ti2v_v1",
+    "config": {
+      "num_inference_steps": 50,
+      "cfg_scale": 5.0,
+      "lora_alpha": 1.0,
+      "tiled": true,
+      "quality": 5,
+      "negative_prompt": "camera shake, changing apparatus identity, discontinuous motion, flicker, blur, text, watermark, low quality"
     }
   }
 }

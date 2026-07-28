@@ -4,42 +4,63 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _paths import FIXTURES, METRICS, ROOT, SCENES
-from physbench.io import load_json, load_jsonl
-from physbench.runner import reevaluate_run, run_benchmark
+from _paths import FIXTURES, METRICS, SCENES
+from physbench.io import (
+    load_json,
+    load_jsonl,
+    write_json,
+    write_jsonl,
+)
+from physbench.runner import reevaluate_run
 
 
-class RunnerTests(unittest.TestCase):
-    def test_dummy_run_is_self_contained(self) -> None:
+class LegacyReevaluationTests(unittest.TestCase):
+    def test_frozen_schema_v1_run_can_still_be_reevaluated(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            run_dir = run_benchmark(
-                task_path=FIXTURES / "task_view_a.json",
-                baseline_path=ROOT / "configs" / "baselines" / "dummy_i2v.json",
-                manifest_path=FIXTURES / "cases.jsonl",
-                split_path=FIXTURES / "view_a.json",
-                scene_config_dir=SCENES,
-                metric_config_path=METRICS,
-                output_root=temporary,
-                run_id="test-run",
-            )
-            expected = {
-                "run.json", "data_context.json", "frozen_task.json", "frozen_baseline.json", "frozen_split.json",
-                "frozen_metrics.json", "frozen_cases.jsonl", "plan.json", "training_job.json", "training_stage.json",
-                "frozen_prompt_profiles.json", "resolved_prompts.jsonl",
-                "predictions.jsonl", "case_metrics.jsonl", "summary.json", "report.md",
+            run_dir = Path(temporary)
+            cases = load_jsonl(FIXTURES / "cases.jsonl")
+            prediction = {
+                "job_id": "legacy-job",
+                "case_id": "pend_id_001",
+                "baseline_id": "legacy-baseline",
+                "prompt_profile_id": "generic",
+                "evaluation_partition": "test_id",
+                "status": "placeholder",
+                "video_path": None,
+                "manual_scores": {},
             }
-            self.assertTrue(expected <= {path.name for path in Path(run_dir).iterdir()})
-            self.assertEqual(4, len(load_jsonl(Path(run_dir) / "predictions.jsonl")))
-            self.assertEqual(
-                {"physics_natural"},
-                {
-                    item["prompt_profile_id"]
-                    for item in load_jsonl(Path(run_dir) / "predictions.jsonl")
+            write_jsonl(run_dir / "frozen_cases.jsonl", cases)
+            write_jsonl(run_dir / "predictions.jsonl", [prediction])
+            write_json(run_dir / "frozen_metrics.json", load_json(METRICS))
+            write_json(run_dir / "run.json", {
+                "schema_version": "1.0",
+                "run_id": "legacy-run",
+                "task_id": "legacy-task",
+                "baseline_id": "legacy-baseline",
+                "manifest_sha256": "0" * 64,
+                "status": "complete_with_placeholders",
+            })
+            write_json(run_dir / "plan.json", {
+                "schema_version": "1.0",
+                "mode": "zero_shot_eval",
+                "view": "B",
+                "train_case_ids": [],
+                "jobs": [prediction],
+                "prompt_profiles": {
+                    "train": None,
+                    "eval": ["generic"],
                 },
-            )
-            self.assertEqual("complete_with_placeholders", load_json(Path(run_dir) / "run.json")["status"])
+            })
+
             summary = reevaluate_run(run_dir, SCENES)
+
             self.assertEqual(0, summary["scored_jobs"])
+            self.assertTrue((run_dir / "case_metrics.jsonl").is_file())
+            self.assertTrue((run_dir / "summary.json").is_file())
+            self.assertIn(
+                "legacy-run",
+                (run_dir / "report.md").read_text(encoding="utf-8"),
+            )
 
 
 if __name__ == "__main__":

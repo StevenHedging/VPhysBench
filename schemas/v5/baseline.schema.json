@@ -1,0 +1,343 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Baseline Bundle v5",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "baseline_id",
+    "baseline_version",
+    "implementation",
+    "capabilities",
+    "input_policy",
+    "adapter"
+  ],
+  "properties": {
+    "schema_version": {"const": "5.0"},
+    "baseline_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "baseline_version": {"type": "string", "minLength": 1},
+    "description": {"type": "string"},
+    "implementation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "driver"],
+          "properties": {
+            "kind": {"const": "managed"},
+            "driver": {"type": "string", "minLength": 1},
+            "fingerprint_paths": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind"],
+          "properties": {
+            "kind": {"const": "submission"},
+            "fingerprint_paths": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "supported_scenes": {
+      "oneOf": [
+        {"const": "all"},
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      ]
+    },
+    "capabilities": {
+      "type": "object",
+      "required": ["task_families", "generation_modes"],
+      "properties": {
+        "task_families": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "generation_modes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": ["t2v", "i2v", "v2v", "hybrid"]
+          },
+          "uniqueItems": true
+        },
+        "train": {"type": "boolean"},
+        "finetune": {"type": "boolean"},
+        "generate": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "input_policy": {"$ref": "#/$defs/inputPolicy"},
+    "model": {"type": "object"},
+    "runtime": {"type": "object"},
+    "adapter": {
+      "description": "Baseline-owned Case-to-model-input adapter.",
+      "oneOf": [
+        {
+          "description": "Built-in standard text-conditioned adapter.",
+          "type": "object",
+          "required": ["preset", "spatial", "temporal"],
+          "properties": {
+            "kind": {"const": "standard"},
+            "preset": {
+              "enum": [
+                "standard_t2v_v1",
+                "standard_i2v_v1",
+                "standard_v2v_v1"
+              ]
+            },
+            "spatial": {"type": "object"},
+            "temporal": {"type": "object"},
+            "first_frame_policy": {"const": "require_asset"},
+            "video_asset_key": {"type": "string", "minLength": 1},
+            "cache_policy": {"type": "string", "minLength": 1},
+            "physics_transform": {
+              "oneOf": [
+                {"$ref": "#/$defs/noPhysicsTransform"},
+                {"$ref": "#/$defs/structuredTextPhysicsTransform"}
+              ]
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "preset": {"const": "standard_i2v_v1"}
+                },
+                "required": ["preset"]
+              },
+              "then": {"required": ["first_frame_policy"]},
+              "else": {
+                "not": {"required": ["first_frame_policy"]}
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "preset": {"const": "standard_v2v_v1"}
+                },
+                "required": ["preset"]
+              },
+              "then": {"required": ["video_asset_key"]},
+              "else": {
+                "not": {"required": ["video_asset_key"]}
+              }
+            }
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "Bundle-local Python adapter factory.",
+          "type": "object",
+          "required": ["kind", "entrypoint"],
+          "properties": {
+            "kind": {"const": "python"},
+            "entrypoint": {
+              "type": "string",
+              "pattern": "^(?:[A-Za-z_][A-Za-z0-9_]*/)*[A-Za-z_][A-Za-z0-9_]*\\.py$"
+            },
+            "config": {"type": "object"},
+            "cache_policy": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "runner": {
+      "description": "Opaque model generation settings consumed by the driver.",
+      "type": "object"
+    },
+    "trainer": {
+      "description": "Optional training recipe for an advanced managed driver.",
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "inputPolicy": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "case_view",
+        "text",
+        "physics"
+      ],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "case_view": {"const": "conditionable_case_v1"},
+        "text": {
+          "type": "object",
+          "required": ["source", "usage"],
+          "properties": {
+            "source": {"const": "case.text.prompt"},
+            "usage": {"const": "required"}
+          },
+          "additionalProperties": false
+        },
+        "physics": {
+          "type": "object",
+          "required": ["source", "usage", "representations"],
+          "properties": {
+            "source": {"const": "case.physics[annotated=true]"},
+            "usage": {
+              "enum": ["ignored", "optional", "required"]
+            },
+            "representations": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1},
+              "uniqueItems": true
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "usage": {"const": "ignored"}
+                },
+                "required": ["usage"]
+              },
+              "then": {
+                "properties": {
+                  "representations": {"maxItems": 0}
+                }
+              },
+              "else": {
+                "properties": {
+                  "representations": {"minItems": 1}
+                }
+              }
+            }
+          ],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "noPhysicsTransform": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {"const": "none"}
+      },
+      "additionalProperties": false
+    },
+    "structuredTextPhysicsTransform": {
+      "type": "object",
+      "required": ["type", "template_set"],
+      "properties": {
+        "type": {"const": "append_structured_text_v1"},
+        "template_set": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "implementation": {
+            "properties": {"kind": {"const": "managed"}},
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": {"required": ["runner"]}
+    },
+    {
+      "if": {
+        "properties": {
+          "adapter": {
+            "properties": {"kind": {"const": "python"}},
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "capabilities": {
+            "required": ["generation_modes"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "adapter": {
+            "properties": {"kind": {"const": "standard"}}
+          },
+          "input_policy": {
+            "properties": {
+              "physics": {
+                "properties": {"usage": {"const": "ignored"}},
+                "required": ["usage"]
+              }
+            },
+            "required": ["physics"]
+          }
+        },
+        "required": ["adapter", "input_policy"]
+      },
+      "then": {
+        "properties": {
+          "adapter": {
+            "properties": {
+              "physics_transform": {
+                "$ref": "#/$defs/noPhysicsTransform"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "adapter": {
+            "properties": {"kind": {"const": "standard"}}
+          },
+          "input_policy": {
+            "properties": {
+              "physics": {
+                "properties": {
+                  "usage": {"enum": ["optional", "required"]}
+                },
+                "required": ["usage"]
+              }
+            },
+            "required": ["physics"]
+          }
+        },
+        "required": ["adapter", "input_policy"]
+      },
+      "then": {
+        "properties": {
+          "adapter": {
+            "required": ["physics_transform"],
+            "properties": {
+              "physics_transform": {
+                "$ref": "#/$defs/structuredTextPhysicsTransform"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

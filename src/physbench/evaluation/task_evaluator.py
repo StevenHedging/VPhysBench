@@ -267,7 +267,6 @@ def evaluate_task(
         record = {
             **outcome.to_dict(),
             "evaluation_partition": job["evaluation_partition"],
-            "conditioning": job["conditioning"],
             "seed": job["seed"],
         }
         results.append(record)
@@ -278,7 +277,6 @@ def evaluate_task(
         "schema_version": "1.0",
         "task_id": plan["task_id"],
         "task_family": plan["family"],
-        "conditioning": plan["conditioning"],
         "protocol": {
             "id": protocol["protocol_id"],
             "fingerprint": protocol["fingerprint"],

@@ -1,77 +1,138 @@
-# WAN2.2 Baseline：View A LoRA 与 G15
+# WAN2.2 Baseline
 
-## 1. Bundle 与共享实现
+## 1. Bundle 与 Baseline identity
 
-当前有两个 WAN Bundle：
+WAN 有两个 Bundle 目录、四个 Baseline identity：
 
 ```text
 baselines/wan22_lora/
-├── baseline.json
+├── baseline.json                 # ..._generic
+├── physics.baseline.json         # ..._physics
 ├── baseline.local.example.json
-├── baseline.local.json                 # 本机部署，Git ignored
-└── plugin/main.py                       # thin command endpoint
+├── baseline.local.json           # 本机部署，Git ignored
+└── driver.py
 
 baselines/wan22_g15_sparse_motion/
-├── baseline.json
+├── baseline.json                 # ..._generic
+├── physics.baseline.json         # ..._physics
 ├── baseline.local.example.json
-├── baseline.local.json                 # 本机部署，Git ignored
-├── driver.py                           # one-line shared managed driver alias
+├── baseline.local.json           # 本机部署，Git ignored
+├── driver.py
 └── provenance/benchmark_overlap_v3.json
-
-src/physbench/baseline_plugins/wan22.py # TaskBuilder + 共享 execution engine
-src/physbench/baseline_runtime/drivers/wan22.py
-                                       # G15 managed deployment/media bridge
-src/physbench/baseline_plugins/resources/five_scene_i2v_v1/
 ```
 
-身份与能力：
-
-| baseline ID | model | family | 用途 |
+| Baseline ID | Task family | 物理策略 | 用途 |
 | --- | --- | --- | --- |
-| `wan22_ti2v_5b_lora_r32_v3` | WAN2.2-TI2V-5B + run-private/frozen LoRA | command v3；finetune, direct | 正式四任务 |
-| `wan22_g15_sparse_motion_r32_e20` | WAN2.2-TI2V-5B + G15 step-2840 | managed v4；direct only | 诊断 |
+| `wan22_ti2v_5b_lora_r32_v3_generic` | `finetune_eval`, `direct_eval` | `ignored` | 正式 WAN LoRA |
+| `wan22_ti2v_5b_lora_r32_v3_physics` | `finetune_eval`, `direct_eval` | `required/structured_text` | 同模型，物理文本追加 |
+| `wan22_g15_sparse_motion_r32_e20_generic` | `direct_eval` | `ignored` | 冻结 G15，诊断型 |
+| `wan22_g15_sparse_motion_r32_e20_physics` | `direct_eval` | `required/structured_text` | 冻结 G15，诊断型 |
 
-核心 Registry 不包含 WAN 分支。可微调 Bundle 继续用 command endpoint 和
-`Wan22TaskBuilder`；G15 用公共 `ManagedTaskBuilder` 与标准五阶段 adapter。二者最终
-都委托给 `Wan22ExecutionEngine`，因此 checkpoint、媒体 materialization、job
-compatibility projection、常驻 GPU worker 和 prediction 逻辑只有一份。
+四者都使用 schema 5.0 managed runtime。同目录两份 manifest 共享 driver、模型部署与
+`baseline.local.json`，但拥有不同 Baseline ID、Bundle digest、adapter fingerprint
+和 TaskInstance。它们运行相同的官方 Task，不再用 Task 文件区分物理信息注入。
 
-WAN 当前仍复用旧 runner 的 `wan22_lora.py`、`wan22_media.py` 和三个执行脚本。
-两条路径都会逐文件计算共享实现、profile、兼容层和执行脚本的 SHA-256，并写入
-TaskBuilder fingerprint 与
-`describe.runtime_dependency_fingerprints`。因此去重不会制造身份盲区。
-
-## 2. 便携配置与本机部署
-
-`baseline.json` 保存可提交、可迁移的默认值。当前机器的外部依赖写在
-`baseline.local.json`：
+共享执行实现：
 
 ```text
-pipeline root: /root/Steven/wan22_pendulum_pipeline
-model Python:  /root/miniconda3/envs/dlp/bin/python
-devices:       0,1,2,3,4,5,6,7
-DiffSynth:     fb337fbb90945ff829de69dbd44ded618f73e889
+baselines/*/driver.py
+└── Wan22ManagedDriver
+    └── Wan22ExecutionEngine
+        ├── Wan22LoraAdapter
+        └── Wan22MediaAdapter
 ```
 
-另一个机器从模板创建本地配置：
+模型专有兼容层仍复用既有 WAN 训练/推理代码，但 canonical plan、Case projection、
+input policy、adapter audit、TaskInstance seal 和 run identity 由当前公共 runtime
+负责。
+
+## 2. Portable 配置与本机部署
+
+Manifest 保存可提交的模型语义。本机依赖写入：
+
+```text
+baselines/wan22_lora/baseline.local.json
+baselines/wan22_g15_sparse_motion/baseline.local.json
+```
+
+从模板创建：
 
 ```bash
-cd baselines/wan22_lora
-cp baseline.local.example.json baseline.local.json
+cp baselines/wan22_lora/baseline.local.example.json \
+  baselines/wan22_lora/baseline.local.json
 ```
 
-只可覆盖 `runtime` 和 `model`。本地文件不进入 portable bundle digest，但其解析结果
-进入 deployment digest。`BaselineTaskInstance.identity.baseline` 同时冻结这两个
-digest。
+本机配置通常包含：
 
-Benchmark 的 command endpoint 或 managed runtime 使用 `phybench` 环境；WAN 的训练
-和生成 worker 再使用 `runtime.python` 调用模型环境。这两个 Python 角色不能互换。
+```text
+project_root
+runtime.python
+model_base
+cuda_visible_devices
+accelerate_config
+frozen_lora_checkpoint
+```
 
-G15 本机配置将 `frozen_lora_checkpoint` 指向 step-2840。Task build 会读取该文件并
-验证 SHA-256 必须为
-`cd19f851133c8370def00991fa778a3bfb581e35713842438ba068495912906f`。
+只允许覆盖 `model` 与 `runtime`。Portable bundle digest 与应用 local override 后的
+deployment digest 都会进入 TaskInstance。
 
-## 3. DataAdapter
+G15 checkpoint 固定为 step-2840，预期 SHA-256：
+
+```text
+cd19f851133c8370def00991fa778a3bfb581e35713842438ba068495912906f
+```
+
+WAN LoRA checkpoint 固定为 step-410，预期 SHA-256：
+
+```text
+7f8f28a36faa309431e7ea58e7de3c61cd58266b62653ee69c3b9f666745acfe
+```
+
+Driver 在 task build/validate 阶段复核文件内容，不运行时搜索“最新 checkpoint”。
+
+## 3. Case 输入与物理策略
+
+所有 WAN Baseline 都接收同一 Case 投影：
+
+```text
+case.text.prompt
+assets.first_frame
+appearance / temporal / ood
+physics[annotated=true]
+```
+
+generic Baseline：
+
+```text
+input_policy.physics.usage = ignored
+adapter.physics_transform  = none
+native prompt              = case.text.prompt
+used_parameters            = {}
+```
+
+physics Baseline：
+
+```text
+input_policy.physics.usage            = required
+input_policy.physics.representations  = ["structured_text"]
+adapter.physics_transform             = append_structured_text_v1
+native prompt                         = case.text.prompt + audited clauses
+```
+
+物理模板：
+
+```text
+src/physbench/baseline_plugins/resources/five_scene_physics_clauses_v1.json
+```
+
+Renderer 只读取 scene 白名单内 `annotated=true` 的量，验证单位并记录渲染值。WAN
+driver 只消费 TaskInstance 中已封印的最终 prompt，不再自行选择 prompt profile 或读取
+raw physics side channel。
+
+generic/physics 两个 Baseline 使用相同首帧、空间/时间 recipe 和
+materialization fingerprint；文本/物理阶段与完整 adapter fingerprint 不同。
+
+## 4. I2V 媒体适配
 
 空间 bucket：
 
@@ -83,46 +144,20 @@ G15 本机配置将 `frozen_lora_checkpoint` 指向 step-2840。Task build 会�
 时间规格：
 
 - 24 FPS；
-- 最多 121 帧，至少 5 帧；
-- 维持 WAN 所需 `4n+1`；
-- 按物理时间读取视频前缀；
-- 不把 GT 首帧补进生成视频。
+- 5–121 帧；
+- 帧数满足 `4n+1`；
+- 按物理时间前缀生成；
+- 不把 GT 首帧或末帧补进 prediction。
 
-Reference derivative 与 generation 使用不同且有审计的取整方向：reference 只能向下选择
-源视频可安全解码的 `4n+1` 帧数；generation 必须向上选择最后时间戳覆盖 reference
-物理区间的 `4n+1` 帧数。两者不能共用一个 frame count，否则会出现“容器 duration
-足够、最后一帧时间戳却少一帧”的系统性错误。generation 最多仍为 121 帧，不复制
-GT 帧或末帧。
+I2V 只使用显式 `assets.first_frame`。Dataset 原件只读，resize/pad/抽帧等派生物进入
+内容寻址 cache 或当前 run。
 
-输入范式是 I2V。首帧优先来自 Dataset `assets.first_frame`；缺失时从 canonical
-reference 第 0 帧确定性提取。Dataset 原件只读，派生媒体进入内容寻址 cache。
+Reference 解码、统一 timeline 与分辨率归一化属于 evaluator。生成视频不要求与 GT
+具有相同像素尺寸或帧数，但必须覆盖协议要求的物理时间区间。
 
-DataAdapter 的五个阶段 fingerprint 都包含共享实现和 profile digest。可微调 command
-Bundle 使用 `Wan22DataAdapter`；G15 managed Bundle 使用等价的声明式
-`StandardDataAdapter` recipe。空间、时间或媒体实现改变会使 materialization
-fingerprint 和 cache namespace 失效。generic/physics profile 内容只进入文本或物理
-stage，单纯修改 prompt 不会使媒体 cache 失效；TaskBuilder fingerprint 仍会变化。
+## 5. View A fine-tuning
 
-## 4. Conditioning
-
-generic profile：
-
-- 只生成 scene 通用描述；
-- 文本阶段接收的 case 视图不包含结构化 physics；
-- `used_parameters` 必须为空；
-- 物理注入 stage 显式记录为 disabled。
-
-physics profile：
-
-- 按 scene 白名单读取结构化物理量；
-- 保留值和单位；
-- 追加到 WAN 原生 `native_inputs.text.prompt`；
-- 在 adaptation audit 中记录使用字段。
-
-generic 与 physics 使用相同的空间、时间和输入范式配置，但生成不同的完整 adapter
-fingerprint 和 TaskInstance。
-
-## 5. View A Fine-tuning
+`wan22_ti2v_5b_lora_r32_v3_*` 的 trainer recipe：
 
 | 参数 | 值 |
 | --- | --- |
@@ -138,96 +173,102 @@ fingerprint 和 TaskInstance。
 | scene balancing | oversample each scene to largest |
 | seed | canonical plan training seed |
 
-每个 conditioning 产生独立 TaskInstance、部署身份和训练 artifact。训练 checkpoint
-通过 `artifact://train/model` 绑定到后续推理；predictor 不搜索“最新 checkpoint”。
-这一节只适用于 `wan22_ti2v_5b_lora_r32_v3`；G15 manifest 不含 trainer，
-收到 `finetune_eval` 会在 run 创建前失败。
+两种 WAN LoRA Baseline 都运行同一
+`tasks/official/five_scene_finetune_eval.json`。每个 Baseline 建立独立 AtomicRun、
+TaskInstance、训练 prompt、checkpoint artifact 与预测，不共享训练后模型。
 
-## 6. G15 身份、训练来源与可比性
+训练输出通过 `artifact://train/model` 绑定到同一 TaskInstance 的推理阶段；predictor
+不扫描外部目录选择 checkpoint。
 
-G15 是 rank-32 LoRA，目标模块为 q/k/v/o/ffn.0/ffn.2；训练 20 epochs，采用 sparse
-tube FlowMatch boost=1.0。集成固定选择 epoch 20 的 step-2840，而不是运行时搜索最新
-checkpoint。
+G15 manifest 不含 task-specific trainer，只支持 direct-eval。
 
-G15 的训练集使用了五场景源素材。污染审计不能只比较 case ID：斜面和圆周在 G15
-训练目录中使用另一套 ID，但底层 capture/trial 与 benchmark v3 相同。source-aware
-结果：
+## 6. G15 数据重叠与可比性
+
+G15 是 rank-32、20 epoch 的 sparse-motion LoRA，固定使用 step-2840。它的训练素材与
+Benchmark 的底层 capture/trial 有重叠；case ID 不同也不能视为独立样本。
+
+Source-aware audit：
 
 | 集合 | 总数 | G15 见过 |
 | --- | ---: | ---: |
-| benchmark v3 | 214 | 176 |
+| Dataset | 214 | 176 |
 | View A train | 121 | 121 |
 | View A test ID | 23 | 8 |
 | View A test OOD1 | 43 | 20 |
 
-因此 G15 全量结果只能标为 `diagnostic_pretrained`，不能进入无泄漏排名。38 个 source
-unseen case 位于旧三场景测试集合；只评它们时也必须明确标为 clean-subset
-diagnostic，而不是完整 Task score。逐 scene 证据与输入清单 digest 在 Bundle
-provenance 文件中。
+审计文件名保留 `v3`，因为它最初针对 3.0.0 生成；Dataset 4.0.0 没有改变 case、View
+或媒体，所以 overlap 结论仍适用。
+
+G15 全量分数必须标记为 `diagnostic_pretrained`，不能进入无泄漏排名。Source-unseen
+subset 也只能作为明确的 clean-subset diagnostic，不能冒充完整 Task score。
 
 ## 7. Generation
 
-Predictor 配置：
+当前 WAN predictor：
 
 - 50 inference steps；
 - CFG 5.0；
 - LoRA alpha 1.0；
 - tiled inference；
 - quality 5；
-- 使用 Bundle 冻结的 negative prompt。
+- 使用 manifest 冻结的 negative prompt。
 
-共享 execution engine 在 execute=false 时仍会完整 materialize job specs，但不会加载 GPU 模型。
-execute=true 时，每个 GPU worker 常驻一个模型并处理自己的 job 分片。每个 canonical
-job 必须返回一条 complete、failed 或 staged prediction record。
+`execute=false` 会物化 TaskInstance、adaptation、训练/推理 job 和 planned prediction，
+但不加载 GPU 模型。`execute=true` 时按可用 GPU 启动常驻 worker 并分片 canonical
+jobs。
 
-Worker 只把模型代码、base checkpoint 和 LoRA 当作外部只读依赖；生成视频写入当前
-`run_dir/predictions/`，worker 日志写入
-`run_dir/artifacts/wan22/inference_workers/`。从旧实验目录复用的视频必须先通过
-`physbench prediction-import` 复制进 run，不能把 Brady 工程路径作为正式
-`video_path`。
+模型代码、base checkpoint 与初始 LoRA 可以位于 run 外并只读；以下内容必须 run-local：
 
-## 8. 验证与 dry-run
+```text
+training specs / checkpoints
+job payloads
+worker logs
+generated videos
+predictions.jsonl
+evaluation
+```
+
+从历史工程复用的视频必须先用 `physbench prediction-import` 复制进 run。
+
+## 8. 验证
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline validate wan22_ti2v_5b_lora_r32_v3
+  baseline validate wan22_ti2v_5b_lora_r32_v3_generic
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline validate wan22_g15_sparse_motion_r32_e20
+  baseline validate wan22_ti2v_5b_lora_r32_v3_physics
+
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline validate wan22_g15_sparse_motion_r32_e20_generic
+
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline validate wan22_g15_sparse_motion_r32_e20_physics
 ```
+
+编译 fine-tune Task：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
-  --task tasks/official/five_scene_finetune_eval_physics.json \
-  --baseline wan22_ti2v_5b_lora_r32_v3 \
-  --output /tmp/wan22_task_instance.json
+  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --task tasks/official/five_scene_finetune_eval.json \
+  --baseline wan22_ti2v_5b_lora_r32_v3_physics \
+  --output /tmp/wan22_physics_finetune_task.json
 ```
 
-单 case AtomicRun dry-run：
+同 Task 的 direct-eval 对照矩阵：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  atomic-run \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval_generic.json \
-  --baseline wan22_g15_sparse_motion_r32_e20 \
-  --scene-id pendulum \
-  --case-id <pendulum_case_id> \
+  matrix-run \
+  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
+  --baseline wan22_ti2v_5b_lora_r32_v3_generic \
+  --baseline wan22_ti2v_5b_lora_r32_v3_physics \
+  --matrix-id wan22_generic_vs_physics \
   --output-root runs_v2
 ```
 
-加入 `--execute` 前应检查：
-
-- local override 中 pipeline、Python、model base 和 accelerate config；
-- 冻结 LoRA checkpoint；
-- bundle/deployment digest；
-- TaskInstance 的 canonical jobs、bucket 和 cache root；
-- GPU 列表和输出目录。
-
-## 9. 评估边界
-
-WAN 只训练和生成，不定义正式分数。生成完成后统一调用 Benchmark TaskEvaluator。
-Bundle 不得替换 canonical jobs、跳过失败记录、修改 Dataset reference、在无 GT case
-伪造 reference，或覆盖 scene evaluator 协议。
+首次接入或迁移机器时先做单 case dry-run，再用新 run ID 加 `--execute`。完整操作见
+[运行、验证与故障排查](OPERATIONS.md)。

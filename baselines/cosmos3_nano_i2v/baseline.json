@@ -1,13 +1,13 @@
 {
-  "schema_version": "4.0",
-  "baseline_id": "cosmos3_nano_i2v",
-  "baseline_version": "1.1.0",
+  "schema_version": "5.0",
+  "baseline_id": "cosmos3_nano_i2v_generic",
+  "baseline_version": "2.0.0",
   "implementation": {
     "kind": "managed",
     "driver": "driver.py",
     "fingerprint_paths": []
   },
-  "description": "NVIDIA Cosmos3-Nano base image-to-video direct-evaluation baseline.",
+  "description": "NVIDIA Cosmos3-Nano base I2V baseline using each Case's canonical prompt without structured physics injection.",
   "supported_scenes": [
     "pendulum",
     "free_fall",
@@ -17,12 +17,23 @@
   ],
   "capabilities": {
     "task_families": ["direct_eval"],
-    "conditioning": ["generic", "physics"],
     "generation_modes": ["i2v"],
-    "physics_representations": ["structured_text"],
     "train": false,
     "finetune": false,
     "generate": true
+  },
+  "input_policy": {
+    "schema_version": "1.0",
+    "case_view": "conditionable_case_v1",
+    "text": {
+      "source": "case.text.prompt",
+      "usage": "required"
+    },
+    "physics": {
+      "source": "case.physics[annotated=true]",
+      "usage": "ignored",
+      "representations": []
+    }
   },
   "model": {
     "model_id": "nvidia/Cosmos3-Nano",
@@ -50,8 +61,10 @@
   "adapter": {
     "kind": "standard",
     "preset": "standard_i2v_v1",
-    "profile_set": "five_scene_i2v_v1",
     "first_frame_policy": "require_asset",
+    "physics_transform": {
+      "type": "none"
+    },
     "spatial": {
       "type": "cosmos3_resolution_aspect_token_v1",
       "policy": "scene_profile_then_native_cosmos_preprocessor",

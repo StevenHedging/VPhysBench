@@ -43,20 +43,24 @@ class Wan22LoraAdapter(BaselineAdapter):
             )
 
     def _prompt(
-        self, case: dict[str, Any], resolved_prompt: dict[str, Any] | None = None
+        self,
+        case: dict[str, Any],
+        adaptation: dict[str, Any] | None = None,
     ) -> str:
-        if resolved_prompt is None:
+        if adaptation is None:
             raise ValueError(
-                f"case {case.get('case_id')} has no run-resolved PromptProfile record"
+                f"case {case.get('case_id')} has no managed adaptation record"
             )
-        if resolved_prompt.get("case_id") != case.get("case_id"):
+        if adaptation.get("case_id") != case.get("case_id"):
             raise ValueError(
-                f"resolved prompt case {resolved_prompt.get('case_id')} does not match "
+                f"adaptation case {adaptation.get('case_id')} does not match "
                 f"{case.get('case_id')}"
             )
-        prompt = resolved_prompt.get("prompt")
+        prompt = adaptation.get("prompt")
         if not isinstance(prompt, str) or not prompt.strip():
-            raise ValueError(f"case {case.get('case_id')} has an invalid resolved prompt")
+            raise ValueError(
+                f"case {case.get('case_id')} has an invalid adapted prompt"
+            )
         return prompt.strip()
 
     @staticmethod
@@ -208,15 +212,18 @@ class Wan22LoraAdapter(BaselineAdapter):
             }
 
         cases = {case["case_id"]: case for case in load_jsonl(run_dir / "frozen_cases.jsonl")}
-        prompt_records = {
+        adaptations = {
             item["case_id"]: item
-            for item in load_jsonl(run_dir / "resolved_prompts.jsonl")
+            for item in load_jsonl(
+                run_dir / "adaptations" / "case_adaptations.jsonl"
+            )
             if item.get("role") == "train"
         }
-        missing_prompt_records = sorted(set(train_ids) - set(prompt_records))
-        if missing_prompt_records:
+        missing_adaptations = sorted(set(train_ids) - set(adaptations))
+        if missing_adaptations:
             raise ValueError(
-                f"training prompt resolution missing cases: {missing_prompt_records}"
+                "training adaptations missing cases: "
+                f"{missing_adaptations}"
             )
         dataset_dir = artifact_root / "dataset"
         metadata_path = dataset_dir / "metadata.csv"
@@ -247,17 +254,25 @@ class Wan22LoraAdapter(BaselineAdapter):
                     if output.is_relative_to(dataset_dir)
                     else str(output)
                 ),
-                "prompt": self._prompt(case, prompt_records[case_id]),
+                "prompt": self._prompt(case, adaptations[case_id]),
                 "case_id": case_id,
                 "scene_id": case["scene_id"],
-                "prompt_profile_id": prompt_records[case_id]["prompt_profile_id"],
+                "text_transform_id": adaptations[case_id][
+                    "text_transform_id"
+                ],
             })
         metadata_rows = self._balance_training_rows(metadata_rows, artifact_root)
         dataset_dir.mkdir(parents=True, exist_ok=True)
         with metadata_path.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(
                 handle,
-                fieldnames=["video", "prompt", "case_id", "scene_id", "prompt_profile_id"],
+                fieldnames=[
+                    "video",
+                    "prompt",
+                    "case_id",
+                    "scene_id",
+                    "text_transform_id",
+                ],
             )
             writer.writeheader()
             writer.writerows(metadata_rows)
@@ -383,7 +398,10 @@ class Wan22LoraAdapter(BaselineAdapter):
             else self.media.max_frames
         )
         output = (
-            run_dir / "predictions" / job["prompt_profile_id"] / f"{job['job_id']}.mp4"
+            run_dir
+            / "predictions"
+            / self.baseline_id
+            / f"{job['job_id']}.mp4"
         )
         checkpoint = self._configured_checkpoint(run_dir)
         media_profile = self.media.profile(case["scene_id"])
@@ -392,7 +410,7 @@ class Wan22LoraAdapter(BaselineAdapter):
             "baseline_id": self.baseline_id,
             "input_view": "i2v" if normalized_first else "t2v",
             "model_input": {
-                "prompt": self._prompt(case, job.get("resolved_prompt")),
+                "prompt": self._prompt(case, job.get("adaptation")),
                 "first_frame": str(normalized_first) if normalized_first else None,
                 "physical_parameters": case["physical_parameters"],
             },
@@ -422,11 +440,9 @@ class Wan22LoraAdapter(BaselineAdapter):
             "case_id": prepared_job["case_id"],
             "baseline_id": self.baseline_id,
             "evaluation_partition": prepared_job["evaluation_partition"],
-            "prompt_profile_id": prepared_job["prompt_profile_id"],
-            "evaluation_reference_video": prepared_job.get("evaluation_reference_video"),
-            "visual_reference_video": prepared_job.get("visual_reference_video"),
             "manual_scores": {},
             "command": command,
+            "seed": int(prepared_job["seed"]),
         }
         if not self.execute:
             return {

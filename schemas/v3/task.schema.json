@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Model-agnostic atomic benchmark Task",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "task_id",
+    "family",
+    "dataset_id",
+    "dataset_view",
+    "selection",
+    "ood2",
+    "seeds"
+  ],
+  "properties": {
+    "schema_version": {"const": "3.0"},
+    "task_id": {"$ref": "#/$defs/safeIdentifier"},
+    "family": {"enum": ["finetune_eval", "direct_eval"]},
+    "dataset_id": {"$ref": "#/$defs/safeIdentifier"},
+    "dataset_view": {"enum": ["view_a", "view_b"]},
+    "selection": {"type": "object"},
+    "ood2": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "heldout_scenes": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/safeIdentifier"},
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {"enabled": {"const": true}},
+            "required": ["enabled"]
+          },
+          "then": {
+            "required": ["heldout_scenes"],
+            "properties": {
+              "heldout_scenes": {"minItems": 1}
+            }
+          },
+          "else": {
+            "properties": {
+              "heldout_scenes": {"maxItems": 0}
+            }
+          }
+        }
+      ]
+    },
+    "seeds": {
+      "type": "object",
+      "required": ["training", "inference"],
+      "properties": {
+        "training": {
+          "type": "array",
+          "items": {"type": "integer"},
+          "uniqueItems": true
+        },
+        "inference": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "integer"},
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "evaluation": {
+      "type": "object",
+      "properties": {
+        "protocol": {"$ref": "#/$defs/safeIdentifier"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {"family": {"const": "finetune_eval"}},
+        "required": ["family"]
+      },
+      "then": {
+        "properties": {
+          "dataset_view": {"const": "view_a"},
+          "selection": {
+            "type": "object",
+            "required": ["scene_ids", "eval_partitions"],
+            "properties": {
+              "scene_ids": {"$ref": "#/$defs/idSelector"},
+              "eval_partitions": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"enum": ["test_id", "test_ood1"]},
+                "uniqueItems": true
+              }
+            },
+            "additionalProperties": false
+          },
+          "seeds": {
+            "properties": {
+              "training": {
+                "minItems": 1,
+                "maxItems": 1
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "dataset_view": {"const": "view_b"},
+          "selection": {
+            "type": "object",
+            "required": ["scene_ids", "groups"],
+            "properties": {
+              "scene_ids": {"$ref": "#/$defs/idSelector"},
+              "groups": {"$ref": "#/$defs/idSelector"},
+              "case_ids": {
+                "type": "array",
+                "items": {"$ref": "#/$defs/safeIdentifier"},
+                "uniqueItems": true
+              }
+            },
+            "additionalProperties": false
+          },
+          "ood2": {
+            "properties": {
+              "enabled": {"const": false}
+            }
+          },
+          "seeds": {
+            "properties": {
+              "training": {"maxItems": 0}
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "safeIdentifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "idSelector": {
+      "oneOf": [
+        {"const": "all"},
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/safeIdentifier"},
+          "uniqueItems": true
+        }
+      ]
+    }
+  }
+}

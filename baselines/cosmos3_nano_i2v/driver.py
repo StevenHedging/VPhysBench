@@ -101,7 +101,6 @@ class Driver(DirectManagedDriver):
         output_root = (
             run_dir
             / "predictions"
-            / adaptation["conditioning"]
         ).resolve()
         output_video = output_root / job["job_id"] / "vision.mp4"
         payload_path = run_dir / "jobs" / f"{job['job_id']}.payload.json"

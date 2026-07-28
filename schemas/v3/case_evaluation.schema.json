@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Case-level evaluation result",
+  "type": "object",
+  "required": [
+    "job_id",
+    "case_id",
+    "scene_id",
+    "evaluation_partition",
+    "seed",
+    "status",
+    "score"
+  ],
+  "properties": {
+    "job_id": {"type": "string", "minLength": 1},
+    "case_id": {"type": "string", "minLength": 1},
+    "scene_id": {"type": "string", "minLength": 1},
+    "evaluation_partition": {"type": "string", "minLength": 1},
+    "seed": {"type": "integer"},
+    "status": {"type": "string", "minLength": 1},
+    "score": {"type": ["number", "null"]}
+  }
+}

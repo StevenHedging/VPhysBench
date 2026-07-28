@@ -83,24 +83,28 @@ class FixtureAdapter(DataAdapter):
                 self.materialization_fingerprint
             ),
             "generation_mode": "i2v",
+            "input_policy": self.bundle.value["input_policy"],
+            "physics_representations": self.bundle.value[
+                "input_policy"
+            ]["physics"]["representations"],
             "text_conditioning_required": True,
         }
 
-    def adapt_case(self, case, conditioning, *, role):
+    def adapt_case(self, case, *, role):
         has_physics = "physics" in case
         self.received_has_physics.append(has_physics)
         self.received_physics_keys.append(
             sorted(case.get("physics", {}))
         )
         self.received_case_keys.append(sorted(case))
-        if conditioning == "generic":
-            if has_physics:
-                raise AssertionError(
-                    "generic custom adapter received physics"
-                )
+        physics_usage = self.bundle.value[
+            "input_policy"
+        ]["physics"]["usage"]
+        base_prompt = case["text"]["prompt"]
+        if physics_usage == "ignored":
             used_parameters = {}
             physics_channels = []
-            prompt = "A pendulum moves."
+            prompt = base_prompt
         else:
             quantity = case["physics"]["string_length"]
             used_parameters = {"string_length": quantity}
@@ -112,14 +116,14 @@ class FixtureAdapter(DataAdapter):
                 "used_parameters": ["string_length"],
             }]
             prompt = (
-                "A pendulum moves with string_length="
+                base_prompt + " Physical parameters: string_length="
                 f"{quantity['value']} {quantity['unit']}."
             )
         first_frame = case["assets"]["first_frame"]
         return {
-            "schema_version": "2.0",
+            "schema_version": "3.0",
             "case_id": case["case_id"],
-            "conditioning": conditioning,
+            "scene_id": case["scene_id"],
             "role": role,
             "used_parameters": used_parameters,
             "input_contract": {
@@ -156,7 +160,6 @@ def create_adapter(bundle):
 def _standard_adapter_config() -> dict:
     return {
         "preset": "standard_i2v_v1",
-        "profile_set": "five_scene_i2v_v1",
         "first_frame_policy": "require_asset",
         "spatial": {
             "scene_profiles": {
@@ -171,26 +174,49 @@ def _standard_adapter_config() -> dict:
     }
 
 
+def _input_policy(
+    usage: str = "ignored",
+    representations: list[str] | None = None,
+) -> dict:
+    if representations is None:
+        representations = (
+            [] if usage == "ignored" else ["structured_text"]
+        )
+    return {
+        "schema_version": "1.0",
+        "case_view": "conditionable_case_v1",
+        "text": {
+            "source": "case.text.prompt",
+            "usage": "required",
+        },
+        "physics": {
+            "source": "case.physics[annotated=true]",
+            "usage": usage,
+            "representations": representations,
+        },
+    }
+
+
 def _manifest(
     baseline_id: str,
     *,
     adapter: dict,
-    custom_capabilities: bool,
+    input_policy: dict | None = None,
 ) -> dict:
+    generation_mode = {
+        "standard_t2v_v1": "t2v",
+        "standard_i2v_v1": "i2v",
+        "standard_v2v_v1": "v2v",
+    }.get(adapter.get("preset"), "i2v")
     capabilities = {
         "task_families": ["direct_eval"],
-        "conditioning": ["generic", "physics"],
+        "generation_modes": [generation_mode],
         "train": False,
         "finetune": False,
         "generate": True,
     }
-    if custom_capabilities:
-        capabilities.update({
-            "generation_modes": ["i2v"],
-            "physics_representations": ["structured_text"],
-        })
     return {
-        "schema_version": "4.0",
+        "schema_version": "5.0",
         "baseline_id": baseline_id,
         "baseline_version": "0.1.0",
         "implementation": {
@@ -200,6 +226,7 @@ def _manifest(
         },
         "supported_scenes": ["pendulum"],
         "capabilities": capabilities,
+        "input_policy": input_policy or _input_policy(),
         "model": {},
         "runtime": {},
         "adapter": adapter,
@@ -213,6 +240,7 @@ def _create_bundle(
     name: str = "fixture",
     adapter_source: str | None = ADAPTER_SOURCE,
     adapter: dict | None = None,
+    input_policy: dict | None = None,
 ) -> Path:
     root = parent / name
     root.mkdir(parents=True)
@@ -233,7 +261,7 @@ def _create_bundle(
         _manifest(
             name,
             adapter=adapter,
-            custom_capabilities=adapter.get("kind") == "python",
+            input_policy=input_policy,
         ),
     )
     return root
@@ -241,9 +269,15 @@ def _create_bundle(
 
 def _case() -> dict:
     return {
-        "schema_version": "2.0",
+        "schema_version": "3.0",
         "case_id": "pendulum_case",
         "scene_id": "pendulum",
+        "text": {
+            "schema_version": "1.0",
+            "language": "en",
+            "prompt": "A pendulum moves.",
+            "annotation_source": "fixture",
+        },
         "assets": {
             "first_frame": "assets/first.png",
             "input_video": "assets/input.mp4",
@@ -257,6 +291,16 @@ def _case() -> dict:
             "string_length": {
                 "value": 0.25,
                 "unit": "m",
+                "annotated": True,
+            },
+            "bob_radius": {
+                "value": 0.02,
+                "unit": "m",
+                "annotated": True,
+            },
+            "initial_angle": {
+                "value": 30.0,
+                "unit": "deg",
                 "annotated": True,
             },
         },
@@ -274,10 +318,13 @@ def _case() -> dict:
 
 def _dataset(root: Path) -> DatasetSnapshot:
     case = _case()
-    descriptor = {"dataset_id": "conditioning_contract_fixture"}
+    descriptor = {
+        "schema_version": "3.0",
+        "dataset_id": "conditioning_contract_fixture",
+    }
     views = {
         "view_a": {
-            "schema_version": "2.0",
+            "schema_version": "3.0",
             "coverage": "complete",
             "scenes": {
                 "pendulum": {
@@ -288,7 +335,7 @@ def _dataset(root: Path) -> DatasetSnapshot:
             },
         },
         "view_b": {
-            "schema_version": "2.0",
+            "schema_version": "3.0",
             "coverage": "complete",
             "scenes": {
                 "pendulum": {"group_1": ["pendulum_case"]},
@@ -307,7 +354,7 @@ def _dataset(root: Path) -> DatasetSnapshot:
         views=views,
         scene_configs={
             "pendulum": {
-                "schema_version": "2.0",
+                "schema_version": "3.0",
                 "scene_id": "pendulum",
             },
         },
@@ -317,12 +364,11 @@ def _dataset(root: Path) -> DatasetSnapshot:
     )
 
 
-def _task(root: Path, *, conditioning: str = "generic") -> TaskSpec:
+def _task(root: Path) -> TaskSpec:
     value = {
-        "schema_version": "2.0",
-        "task_id": f"fixture_direct_{conditioning}",
+        "schema_version": "3.0",
+        "task_id": "fixture_direct",
         "family": "direct_eval",
-        "conditioning": conditioning,
         "dataset_id": "conditioning_contract_fixture",
         "dataset_view": "view_b",
         "selection": {
@@ -339,7 +385,7 @@ def _task(root: Path, *, conditioning: str = "generic") -> TaskSpec:
     )
 
 
-def _generic_record(*, mode: str, kind: str, asset_key: str) -> dict:
+def _base_record(*, mode: str, kind: str, asset_key: str) -> dict:
     media_field = (
         "first_frame_asset" if kind == "image" else "input_video_asset"
     )
@@ -368,8 +414,33 @@ def _generic_record(*, mode: str, kind: str, asset_key: str) -> dict:
     }
 
 
+def _record_with_structured_physics() -> dict:
+    record = _base_record(
+        mode="i2v",
+        kind="image",
+        asset_key="first_frame",
+    )
+    record["used_parameters"] = {
+        "string_length": {
+            "value": 0.25,
+            "unit": "m",
+        },
+    }
+    record["native_inputs"]["text"]["prompt"] += (
+        " The string length is 0.25 m."
+    )
+    record["input_contract"]["physics_channels"] = [{
+        "id": "physics_text",
+        "representation": "structured_text",
+        "binding": "native_inputs.text.prompt",
+        "transport": "inline_text",
+        "used_parameters": ["string_length"],
+    }]
+    return record
+
+
 class AdapterFactoryTests(unittest.TestCase):
-    def test_legacy_v4_adapter_without_kind_still_loads(self) -> None:
+    def test_standard_v5_adapter_without_kind_loads(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = _create_bundle(
                 Path(temporary),
@@ -382,6 +453,26 @@ class AdapterFactoryTests(unittest.TestCase):
             self.assertNotIn("kind", bundle.value["adapter"])
             self.assertIsInstance(adapter, StandardDataAdapter)
             self.assertEqual("i2v", adapter.describe()["generation_mode"])
+
+    def test_schema_v4_manifest_is_explicitly_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = _create_bundle(Path(temporary))
+            manifest = _manifest(
+                "fixture",
+                adapter={
+                    "kind": "python",
+                    "entrypoint": "adapter.py",
+                    "config": {},
+                },
+            )
+            manifest["schema_version"] = "4.0"
+            write_json(root / "baseline.json", manifest)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "schema_version=5.0",
+            ):
+                load_baseline_bundle(root)
 
     def test_python_factory_loads_and_entrypoint_changes_digest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -447,7 +538,6 @@ class AdapterFactoryTests(unittest.TestCase):
                         "entrypoint": "adapter_pkg/adapter.py",
                         "config": {},
                     },
-                    custom_capabilities=True,
                 ),
             )
 
@@ -526,7 +616,6 @@ class BaseDriver(DirectManagedDriver):
                     "entrypoint": "adapter.py",
                     "config": {},
                 },
-                custom_capabilities=True,
             )
             manifest["implementation"]["driver"] = "runtime/driver.py"
             write_json(root / "baseline.json", manifest)
@@ -566,7 +655,6 @@ class BaseDriver(DirectManagedDriver):
                     "entrypoint": "../outside.py",
                     "config": {},
                 },
-                custom_capabilities=True,
             )
             write_json(root / "baseline.json", manifest)
             with self.assertRaisesRegex(ValueError, "bundle-relative"):
@@ -575,16 +663,14 @@ class BaseDriver(DirectManagedDriver):
 
 class InputContractTests(unittest.TestCase):
     def test_text_binding_must_resolve_to_non_empty_text(self) -> None:
-        capabilities = {"physics_representations": ["structured_text"]}
-        valid = _generic_record(
+        valid = _base_record(
             mode="i2v",
             kind="image",
             asset_key="first_frame",
         )
         validate_adaptation_record(
             valid,
-            conditioning="generic",
-            capabilities=capabilities,
+            input_policy=_input_policy(),
         )
 
         invalid = copy.deepcopy(valid)
@@ -592,18 +678,16 @@ class InputContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "non-empty string"):
             validate_adaptation_record(
                 invalid,
-                conditioning="generic",
-                capabilities=capabilities,
+                input_policy=_input_policy(),
             )
 
     def test_i2v_and_v2v_require_the_matching_media_kind(self) -> None:
-        capabilities = {"physics_representations": ["structured_text"]}
-        i2v = _generic_record(
+        i2v = _base_record(
             mode="i2v",
             kind="image",
             asset_key="first_frame",
         )
-        v2v = _generic_record(
+        v2v = _base_record(
             mode="v2v",
             kind="video",
             asset_key="input_video",
@@ -611,11 +695,10 @@ class InputContractTests(unittest.TestCase):
         for record in (i2v, v2v):
             validate_adaptation_record(
                 record,
-                conditioning="generic",
-                capabilities=capabilities,
+                input_policy=_input_policy(),
             )
 
-        wrong = _generic_record(
+        wrong = _base_record(
             mode="i2v",
             kind="video",
             asset_key="input_video",
@@ -623,11 +706,10 @@ class InputContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "requires one or more image"):
             validate_adaptation_record(
                 wrong,
-                conditioning="generic",
-                capabilities=capabilities,
+                input_policy=_input_policy(),
             )
 
-        leaked_gt = _generic_record(
+        leaked_gt = _base_record(
             mode="v2v",
             kind="video",
             asset_key="reference_video",
@@ -635,11 +717,10 @@ class InputContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "reserved"):
             validate_adaptation_record(
                 leaked_gt,
-                conditioning="generic",
-                capabilities=capabilities,
+                input_policy=_input_policy(),
             )
 
-        qualified_gt = _generic_record(
+        qualified_gt = _base_record(
             mode="v2v",
             kind="video",
             asset_key="assets.reference_video",
@@ -647,15 +728,13 @@ class InputContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "reserved"):
             validate_adaptation_record(
                 qualified_gt,
-                conditioning="generic",
-                capabilities=capabilities,
+                input_policy=_input_policy(),
             )
 
     def test_generation_modes_have_unambiguous_media_modalities(
         self,
     ) -> None:
-        capabilities = {"physics_representations": ["structured_text"]}
-        t2v_with_image = _generic_record(
+        t2v_with_image = _base_record(
             mode="t2v",
             kind="image",
             asset_key="first_frame",
@@ -663,11 +742,10 @@ class InputContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must not declare media"):
             validate_adaptation_record(
                 t2v_with_image,
-                conditioning="generic",
-                capabilities=capabilities,
+                input_policy=_input_policy(),
             )
 
-        hybrid = _generic_record(
+        hybrid = _base_record(
             mode="hybrid",
             kind="image",
             asset_key="first_frame",
@@ -675,8 +753,7 @@ class InputContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "both image and video"):
             validate_adaptation_record(
                 hybrid,
-                conditioning="generic",
-                capabilities=capabilities,
+                input_policy=_input_policy(),
             )
         hybrid["native_inputs"]["media"][
             "input_video_asset"
@@ -690,13 +767,11 @@ class InputContractTests(unittest.TestCase):
         hybrid["input_contract"]["asset_access"].append("input_video")
         validate_adaptation_record(
             hybrid,
-            conditioning="generic",
-            capabilities=capabilities,
+            input_policy=_input_policy(),
         )
 
     def test_derived_artifact_can_supply_v2v_conditioning(self) -> None:
-        capabilities = {"physics_representations": ["structured_text"]}
-        record = _generic_record(
+        record = _base_record(
             mode="v2v",
             kind="video",
             asset_key="input_video",
@@ -719,15 +794,15 @@ class InputContractTests(unittest.TestCase):
         record["input_contract"]["asset_access"] = []
         validate_adaptation_record(
             record,
-            conditioning="generic",
-            capabilities=capabilities,
+            input_policy=_input_policy(),
         )
 
     def test_large_physics_payload_requires_artifact_reference(self) -> None:
-        capabilities = {
-            "physics_representations": ["optical_flow"],
-        }
-        record = _generic_record(
+        policy = _input_policy(
+            "required",
+            ["optical_flow"],
+        )
+        record = _base_record(
             mode="i2v",
             kind="image",
             asset_key="first_frame",
@@ -757,8 +832,7 @@ class InputContractTests(unittest.TestCase):
         }]
         validate_adaptation_record(
             record,
-            conditioning="physics",
-            capabilities=capabilities,
+            input_policy=policy,
         )
 
         inline = copy.deepcopy(record)
@@ -769,41 +843,29 @@ class InputContractTests(unittest.TestCase):
         ):
             validate_adaptation_record(
                 inline,
-                conditioning="physics",
-                capabilities=capabilities,
+                input_policy=policy,
             )
 
-    def test_generic_arm_rejects_all_physics_consumption(self) -> None:
-        capabilities = {
-            "physics_representations": ["structured_text"],
-        }
-        record = _generic_record(
-            mode="i2v",
-            kind="image",
-            asset_key="first_frame",
-        )
-        record["used_parameters"] = {
-            "string_length": {"value": 0.25, "unit": "m"},
-        }
-        record["input_contract"]["physics_channels"] = [{
-            "id": "physics_text",
-            "representation": "structured_text",
-            "binding": "native_inputs.text.prompt",
-            "transport": "inline_text",
-            "used_parameters": ["string_length"],
-        }]
+    def test_ignored_policy_rejects_all_physics_consumption(self) -> None:
+        record = _record_with_structured_physics()
+        record["input_contract"]["physics_channels"] = []
         with self.assertRaisesRegex(
             ValueError,
-            "generic adaptation record.used_parameters",
+            "physics-ignored adaptation record.used_parameters",
         ):
             validate_adaptation_record(
                 record,
-                conditioning="generic",
-                capabilities=capabilities,
+                input_policy=_input_policy("ignored"),
             )
 
-    def test_physics_arm_must_consume_an_annotated_parameter(self) -> None:
-        record = _generic_record(
+    def test_required_policy_must_consume_a_parameter(self) -> None:
+        valid = _record_with_structured_physics()
+        validate_adaptation_record(
+            valid,
+            input_policy=_input_policy("required"),
+        )
+
+        record = _base_record(
             mode="i2v",
             kind="image",
             asset_key="first_frame",
@@ -821,10 +883,31 @@ class InputContractTests(unittest.TestCase):
         ):
             validate_adaptation_record(
                 record,
-                conditioning="physics",
-                capabilities={
-                    "physics_representations": ["structured_text"],
-                },
+                input_policy=_input_policy("required"),
+            )
+
+    def test_optional_policy_accepts_zero_or_audited_physics_use(
+        self,
+    ) -> None:
+        policy = _input_policy("optional")
+        unused = _base_record(
+            mode="i2v",
+            kind="image",
+            asset_key="first_frame",
+        )
+        used = _record_with_structured_physics()
+        validate_adaptation_record(unused, input_policy=policy)
+        validate_adaptation_record(used, input_policy=policy)
+
+        inconsistent = copy.deepcopy(used)
+        inconsistent["used_parameters"] = {}
+        with self.assertRaisesRegex(
+            ValueError,
+            "declare channels exactly when",
+        ):
+            validate_adaptation_record(
+                inconsistent,
+                input_policy=policy,
             )
 
     def test_standard_v2v_uses_only_explicit_conditioning_video(self) -> None:
@@ -832,10 +915,9 @@ class InputContractTests(unittest.TestCase):
         config["preset"] = "standard_v2v_v1"
         config.pop("first_frame_policy")
         config["video_asset_key"] = "input_video"
-        adapter = StandardDataAdapter(config)
+        adapter = StandardDataAdapter(config, _input_policy())
         record = adapter.adapt_case(
             _case(),
-            "generic",
             role="eval",
         )
         self.assertEqual(
@@ -854,10 +936,13 @@ class InputContractTests(unittest.TestCase):
             ValueError,
             "explicit conditioning asset",
         ):
-            StandardDataAdapter({
-                **config,
-                "video_asset_key": "physics_reference_video",
-            })
+            StandardDataAdapter(
+                {
+                    **config,
+                    "video_asset_key": "physics_reference_video",
+                },
+                _input_policy(),
+            )
 
 
 class CompilerAndDriverIsolationTests(unittest.TestCase):
@@ -872,13 +957,17 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
         )
         return plugin, instance
 
-    def test_compiler_uses_custom_adapter_and_hides_generic_physics(
+    def test_compiler_gives_adapter_annotated_physics_but_ignored_policy_does_not_consume_it(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             plugin, instance = self._compiled_fixture(Path(temporary))
 
-            self.assertEqual([False], plugin.data_adapter.received_has_physics)
+            self.assertEqual([True], plugin.data_adapter.received_has_physics)
+            self.assertEqual(
+                ["bob_radius", "initial_angle", "string_length"],
+                plugin.data_adapter.received_physics_keys[0],
+            )
             self.assertNotIn(
                 "provenance",
                 plugin.data_adapter.received_case_keys[0],
@@ -888,9 +977,69 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                 adaptation["native_inputs"]["custom_adapter"]
             )
             self.assertEqual({}, adaptation["used_parameters"])
-            self.assertNotIn(
-                "physics",
-                instance.value["source"]["cases"][0],
+            self.assertEqual(
+                "A pendulum moves.",
+                adaptation["native_inputs"]["text"]["prompt"],
+            )
+            value = instance.value
+            self.assertEqual("3.0", value["schema_version"])
+            self.assertNotIn("conditioning", value)
+            self.assertNotIn("conditioning", value["semantics"])
+            self.assertIn("physics", value["source"]["cases"][0])
+            self.assertIn("text", value["source"]["cases"][0])
+
+    def test_physics_ignored_baseline_is_counterfactually_invariant(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            ignored_plugin = load_baseline_plugin(
+                load_baseline_bundle(
+                    _create_bundle(root, name="ignored_fixture")
+                )
+            )
+            required_plugin = load_baseline_plugin(
+                load_baseline_bundle(
+                    _create_bundle(
+                        root,
+                        name="required_fixture",
+                        input_policy=_input_policy("required"),
+                    )
+                )
+            )
+            original = _case()
+            counterfactual = copy.deepcopy(original)
+            counterfactual["physics"]["string_length"]["value"] = 9.0
+
+            ignored_original = ignored_plugin.data_adapter.adapt_case(
+                original,
+                role="eval",
+            )
+            ignored_counterfactual = (
+                ignored_plugin.data_adapter.adapt_case(
+                    counterfactual,
+                    role="eval",
+                )
+            )
+            self.assertEqual(
+                ignored_original["native_inputs"],
+                ignored_counterfactual["native_inputs"],
+            )
+            self.assertEqual({}, ignored_original["used_parameters"])
+
+            required_original = required_plugin.data_adapter.adapt_case(
+                original,
+                role="eval",
+            )
+            required_counterfactual = (
+                required_plugin.data_adapter.adapt_case(
+                    counterfactual,
+                    role="eval",
+                )
+            )
+            self.assertNotEqual(
+                required_original["native_inputs"],
+                required_counterfactual["native_inputs"],
             )
 
     def test_driver_receives_only_contract_authorized_case_view(self) -> None:
@@ -928,12 +1077,15 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
             ):
                 self.assertNotIn(forbidden, received["assets"])
 
-    def test_physics_arm_rejects_non_annotated_fields_and_hides_raw_case(
+    def test_adapter_receives_only_annotated_physics_and_driver_hides_raw_case(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            bundle_root = _create_bundle(root)
+            bundle_root = _create_bundle(
+                root,
+                input_policy=_input_policy("required"),
+            )
             plugin = load_baseline_plugin(
                 load_baseline_bundle(bundle_root)
             )
@@ -945,10 +1097,10 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
             }
             instance = plugin.task_builder.build(
                 dataset,
-                _task(root, conditioning="physics"),
+                _task(root),
             )
             self.assertEqual(
-                ["string_length"],
+                ["bob_radius", "initial_angle", "string_length"],
                 plugin.data_adapter.received_physics_keys[-1],
             )
             plugin.run_task(
@@ -963,13 +1115,18 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             plugin = load_baseline_plugin(
-                load_baseline_bundle(_create_bundle(root))
+                load_baseline_bundle(
+                    _create_bundle(
+                        root,
+                        input_policy=_input_policy("required"),
+                    )
+                )
             )
             original = plugin.data_adapter.adapt_case
 
-            def tampered_adapter(case, conditioning, *, role):
+            def tampered_adapter(case, *, role):
                 record = copy.deepcopy(
-                    original(case, conditioning, role=role)
+                    original(case, role=role)
                 )
                 record["used_parameters"]["string_length"][
                     "value"
@@ -983,7 +1140,7 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
             ):
                 plugin.task_builder.build(
                     _dataset(root),
-                    _task(root, conditioning="physics"),
+                    _task(root),
                 )
 
     def test_v2v_rejects_cross_case_reference_digest_alias(self) -> None:
@@ -1129,7 +1286,6 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                     "entrypoint": "adapter.py",
                     "config": {},
                 },
-                custom_capabilities=True,
             )
             manifest["capabilities"]["task_families"] = ["finetune_eval"]
             manifest["capabilities"]["train"] = True
@@ -1146,7 +1302,7 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
             eval_case["case_id"] = "pendulum_eval"
             views = {
                 "view_a": {
-                    "schema_version": "2.0",
+                    "schema_version": "3.0",
                     "coverage": "complete",
                     "scenes": {
                         "pendulum": {
@@ -1157,12 +1313,13 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                     },
                 },
                 "view_b": {
-                    "schema_version": "2.0",
+                    "schema_version": "3.0",
                     "coverage": "complete",
                     "scenes": {"pendulum": {"group_1": []}},
                 },
             }
             descriptor = {
+                "schema_version": "3.0",
                 "dataset_id": "conditioning_contract_fixture"
             }
             dataset = DatasetSnapshot(
@@ -1172,7 +1329,7 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                 views=views,
                 scene_configs={
                     "pendulum": {
-                        "schema_version": "2.0",
+                        "schema_version": "3.0",
                         "scene_id": "pendulum",
                     },
                 },
@@ -1185,10 +1342,9 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                 asset_root=root,
             )
             task_value = {
-                "schema_version": "2.0",
-                "task_id": "fixture_finetune_generic",
+                "schema_version": "3.0",
+                "task_id": "fixture_finetune",
                 "family": "finetune_eval",
-                "conditioning": "generic",
                 "dataset_id": "conditioning_contract_fixture",
                 "dataset_view": "view_a",
                 "selection": {
@@ -1199,7 +1355,7 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                 "seeds": {"training": [11], "inference": [7]},
             }
             task = TaskSpec(
-                path=root / "fixture_finetune_generic.json",
+                path=root / "fixture_finetune.json",
                 value=task_value,
                 digest=canonical_sha256(task_value),
             )
@@ -1209,7 +1365,8 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                 case["case_id"]: case
                 for case in instance["source"]["cases"]
             }
-            self.assertNotIn("physics", source["pendulum_train"])
+            self.assertIn("physics", source["pendulum_train"])
+            self.assertIn("text", source["pendulum_train"])
             self.assertNotIn(
                 "reference_video",
                 source["pendulum_train"]["assets"],

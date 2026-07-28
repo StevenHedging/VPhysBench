@@ -7,11 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from .. import __version__
-from ..artifacts import ARTIFACT_POLICY, prediction_artifact_manifest
+from ..artifacts import ARTIFACT_POLICY, validate_prediction_records
 from ..baseline_api import load_baseline_bundle, load_baseline_plugin
-from ..datasets import load_dataset_v2
+from ..datasets import load_dataset
 from ..domain import BaselineTaskInstance, TaskSpec
 from ..evaluation import evaluate_task, load_evaluation_protocol
+from ..identifiers import require_safe_id
 from ..io import (
     canonical_sha256,
     load_json,
@@ -19,7 +20,7 @@ from ..io import (
     write_json,
     write_jsonl,
 )
-from ..tasks import load_task_v2
+from ..tasks import load_task
 
 
 def build_task_instance(
@@ -30,8 +31,8 @@ def build_task_instance(
     check_assets: bool = True,
 ) -> BaselineTaskInstance:
     """Public file-based facade for a Baseline-owned TaskBuilder."""
-    dataset = load_dataset_v2(dataset_path, check_assets=check_assets)
-    task = load_task_v2(task_path)
+    dataset = load_dataset(dataset_path, check_assets=check_assets)
+    task = load_task(task_path)
     baseline = load_baseline_bundle(baseline_path)
     plugin = load_baseline_plugin(baseline)
     instance = plugin.task_builder.build(dataset, task)
@@ -75,7 +76,6 @@ def _render_atomic_report(
         "```text\nTaskSpec → CanonicalTaskPlan → BaselineTaskInstance → AtomicRun\n```\n\n",
         f"- Dataset：`{run['dataset_id']}` / `{run['dataset_digest']}`\n",
         f"- Task：`{run['task_id']}` / `{run['task_family']}`\n",
-        f"- Conditioning：`{run['conditioning']}`\n",
         f"- Baseline：`{run['baseline_id']}` / bundle "
         f"`{run['baseline_digest']}` / deployment "
         f"`{run['baseline_deployment_digest']}`\n",
@@ -100,11 +100,11 @@ def _render_atomic_report(
         )
     lines.extend([
         "\n## Isolation\n\n",
-        "- Dataset snapshot 不包含 prompt 或模型 input view。\n",
-        "- 完整模型输入由 Baseline-owned DataAdapter 生成。\n",
-        "- 物理注入是 DataAdapter 内的基线私有阶段，不预设为文本。\n",
+        "- 原始文本是 Dataset Case 的冻结属性。\n",
+        "- 同一份可条件化 Case 由 Baseline-owned DataAdapter 转换。\n",
+        "- 是否使用物理信息及其表示由 Baseline input policy 固定声明。\n",
         "- Trainer/Predictor 只消费已封印的 BaselineTaskInstance。\n",
-        "- 本 AtomicRun 只包含一种 conditioning 和一份独立模型产物。\n",
+        "- 本 AtomicRun 对应一个不可变 Baseline identity 和一份模型产物。\n",
     ])
     return "".join(lines)
 
@@ -123,8 +123,8 @@ def run_atomic(
     groups: list[str] | None = None,
     case_ids: list[str] | None = None,
 ) -> Path:
-    dataset = load_dataset_v2(dataset_path, check_assets=check_assets)
-    task = load_task_v2(task_path)
+    dataset = load_dataset(dataset_path, check_assets=check_assets)
+    task = load_task(task_path)
     protocol_id = task.value.get("evaluation", {}).get(
         "protocol", "scene_default_v1"
     )
@@ -149,6 +149,7 @@ def run_atomic(
     plan = instance.canonical_plan
 
     identifier = run_id or _run_id(task.task_id, baseline.baseline_id)
+    require_safe_id(identifier, label="run_id")
     run_dir = (Path(output_root) / identifier).resolve()
     if run_dir.exists():
         raise FileExistsError(f"run directory already exists: {run_dir}")
@@ -238,8 +239,11 @@ def run_atomic(
             execute=execute,
             stop_after_training=stop_after_training,
         )
-        prediction_artifacts = prediction_artifact_manifest(
-            predictions, run_dir
+        prediction_artifacts = validate_prediction_records(
+            predictions,
+            jobs=instance.value["inference"]["jobs"],
+            baseline_id=baseline.baseline_id,
+            run_dir=run_dir,
         )
     except BaseException as exc:
         _state(run_dir, "failed", error=repr(exc))
@@ -279,7 +283,6 @@ def run_atomic(
         "dataset_digest": dataset.digest,
         "task_id": task.task_id,
         "task_family": task.family,
-        "conditioning": task.conditioning,
         "baseline_id": baseline.baseline_id,
         "baseline_version": baseline.baseline_version,
         "baseline_digest": baseline.digest,
@@ -287,6 +290,7 @@ def run_atomic(
         "task_instance_id": instance.instance_id,
         "task_instance_digest": instance.digest,
         "task_builder_fingerprint": plugin.task_builder.fingerprint,
+        "input_policy": baseline.value["input_policy"],
         "training_seed": plan.value["training_seed"],
         "execute": execute,
         "status": status,
@@ -311,6 +315,26 @@ def reevaluate_atomic(run_dir: str | Path) -> dict[str, Any]:
     cases = load_jsonl(directory / "frozen" / "cases.jsonl")
     predictions = load_jsonl(directory / "predictions.jsonl")
     instance = load_json(directory / "task_instance" / "manifest.json")
+    prediction_artifacts = load_json(
+        directory / "artifacts" / "prediction_artifacts.json"
+    )
+    validate_prediction_records(
+        predictions,
+        jobs=instance["inference"]["jobs"],
+        baseline_id=instance["identity"]["baseline"]["baseline_id"],
+        run_dir=directory,
+        expected_artifact_manifest=prediction_artifacts,
+    )
+    sealed_instance = BaselineTaskInstance.from_document(instance)
+    instance = sealed_instance.value
+    if plan != instance["canonical_plan"]:
+        raise ValueError(
+            "AtomicRun plan differs from the sealed BaselineTaskInstance"
+        )
+    if canonical_sha256(task) != instance["identity"]["task"]["digest"]:
+        raise ValueError(
+            "AtomicRun task differs from the sealed BaselineTaskInstance"
+        )
     protocol_id = task.get("evaluation", {}).get(
         "protocol", "scene_default_v1"
     )
@@ -360,29 +384,34 @@ def _paired_plan_signature(plan: dict[str, Any]) -> dict[str, Any]:
 def run_matrix(
     *,
     dataset_path: str | Path,
-    task_paths: list[str | Path],
-    baseline_path: str | Path,
+    task_path: str | Path,
+    baseline_paths: list[str | Path],
     output_root: str | Path,
     matrix_id: str,
     execute: bool = False,
     stop_after_training: bool = False,
 ) -> list[Path]:
-    if len(task_paths) < 2:
-        raise ValueError("a task matrix requires at least two atomic tasks")
-    dataset = load_dataset_v2(dataset_path, check_assets=True)
-    tasks = [load_task_v2(path) for path in task_paths]
-    baseline = load_baseline_bundle(baseline_path)
-    plugin = load_baseline_plugin(baseline)
-    instances = [plugin.task_builder.build(dataset, task) for task in tasks]
+    if len(baseline_paths) < 2:
+        raise ValueError("a task matrix requires at least two Baselines")
+    require_safe_id(matrix_id, label="matrix_id")
+    dataset = load_dataset(dataset_path, check_assets=True)
+    task = load_task(task_path)
+    baselines = [load_baseline_bundle(path) for path in baseline_paths]
+    baseline_ids = [baseline.baseline_id for baseline in baselines]
+    if len(baseline_ids) != len(set(baseline_ids)):
+        raise ValueError("task matrix contains duplicate Baseline identities")
+    plugins = [load_baseline_plugin(baseline) for baseline in baselines]
+    instances = [
+        plugin.task_builder.build(dataset, task)
+        for plugin in plugins
+    ]
     plans = [instance.canonical_plan.value for instance in instances]
     first_signature = _paired_plan_signature(plans[0])
     if any(_paired_plan_signature(plan) != first_signature for plan in plans[1:]):
         raise ValueError(
-            "paired task matrix must use identical data, splits, seeds, and evaluation cases"
+            "Baseline matrix must use identical data, splits, seeds, and "
+            "evaluation cases"
         )
-    conditioning = [task.conditioning for task in tasks]
-    if len(conditioning) != len(set(conditioning)):
-        raise ValueError("task matrix contains duplicate conditioning variants")
     output = Path(output_root).resolve()
     index_path = output / f"{matrix_id}.matrix.json"
     if index_path.exists():
@@ -390,14 +419,20 @@ def run_matrix(
     index = {
         "schema_version": "2.0",
         "matrix_id": matrix_id,
-        "elements": ["dataset", "task", "baseline"],
+        "elements": ["dataset", "task", "baselines"],
         "dataset": str(Path(dataset_path).resolve()),
-        "baseline": str(baseline.descriptor_path),
-        "baseline_id": baseline.baseline_id,
-        "baseline_digest": baseline.digest,
-        "baseline_deployment_digest": baseline.deployment_digest,
-        "task_builder_fingerprint": plugin.task_builder.fingerprint,
-        "tasks": [str(task.path) for task in tasks],
+        "task": str(task.path),
+        "baselines": [
+            {
+                "descriptor": str(baseline.descriptor_path),
+                "baseline_id": baseline.baseline_id,
+                "digest": baseline.digest,
+                "deployment_digest": baseline.deployment_digest,
+                "input_policy": baseline.value["input_policy"],
+                "task_builder_fingerprint": plugin.task_builder.fingerprint,
+            }
+            for baseline, plugin in zip(baselines, plugins, strict=True)
+        ],
         "task_instances": [
             {
                 "instance_id": instance.instance_id,
@@ -405,31 +440,59 @@ def run_matrix(
             }
             for instance in instances
         ],
-        "conditioning": conditioning,
         "atomic_runs": [],
         "paired_plan_signature": first_signature,
         "status": "running",
+        "orchestration_status": "running",
+        "atomic_run_statuses": {},
     }
     write_json(index_path, index)
     run_dirs = []
     try:
-        for task in tasks:
-            run_dirs.append(run_atomic(
+        for baseline, expected_instance in zip(
+            baselines,
+            instances,
+            strict=True,
+        ):
+            run_dir = run_atomic(
                 dataset_path=dataset_path,
                 task_path=task.path,
-                baseline_path=baseline_path,
+                baseline_path=baseline.descriptor_path,
                 output_root=output,
-                run_id=f"{matrix_id}__{task.conditioning}",
+                run_id=f"{matrix_id}__{baseline.baseline_id}",
                 execute=execute,
                 stop_after_training=stop_after_training,
-            ))
+            )
+            actual_run = load_json(run_dir / "run.json")
+            if (
+                actual_run.get("task_instance_digest")
+                != expected_instance.digest
+            ):
+                raise RuntimeError(
+                    "matrix preflight TaskInstance differs from the "
+                    f"executed AtomicRun for {baseline.baseline_id}"
+                )
+            run_dirs.append(run_dir)
             index["atomic_runs"] = [str(path) for path in run_dirs]
+            index["atomic_run_statuses"][baseline.baseline_id] = (
+                actual_run["status"]
+            )
             write_json(index_path, index)
     except BaseException as exc:
         index["status"] = "failed"
+        index["orchestration_status"] = "failed"
         index["error"] = repr(exc)
         write_json(index_path, index)
         raise
-    index["status"] = "complete"
+    statuses = set(index["atomic_run_statuses"].values())
+    index["orchestration_status"] = "complete"
+    if statuses == {"complete"}:
+        index["status"] = "complete"
+    elif statuses == {"planned"}:
+        index["status"] = "planned"
+    elif statuses == {"training_complete_inference_staged"}:
+        index["status"] = "training_complete_inference_staged"
+    else:
+        index["status"] = "incomplete"
     write_json(index_path, index)
     return run_dirs

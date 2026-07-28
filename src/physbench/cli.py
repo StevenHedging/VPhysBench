@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 from .artifacts import import_prediction_video
@@ -13,24 +12,20 @@ from .baseline_api import (
     load_baseline_plugin,
 )
 from .io import load_json, load_jsonl, write_json
-from .datasets import load_dataset_v2
+from .datasets import load_dataset
 from .orchestration import (
     build_task_instance,
     reevaluate_atomic,
     run_atomic,
     run_matrix,
 )
-from .prompts import PromptRegistry, SUPPORTED_PROMPT_PROFILES
-from .runner import reevaluate_run, run_benchmark
+from .runner import reevaluate_run
 from .splitters import build_view_a, build_view_b
-from .task_planner import plan_task
 from .validation import errors, load_scene_configs, validate_cases
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCENES = PROJECT_ROOT / "configs" / "scenes"
-DEFAULT_METRICS = PROJECT_ROOT / "configs" / "metrics" / "default.json"
-DEFAULT_PROMPTS = PROJECT_ROOT / "configs" / "prompts"
 
 
 def _validate(args: argparse.Namespace) -> int:
@@ -61,58 +56,6 @@ def _split(args: argparse.Namespace) -> int:
     return 0
 
 
-def _plan(args: argparse.Namespace) -> int:
-    cases = load_jsonl(args.manifest)
-    plan = plan_task(
-        load_json(args.task),
-        cases,
-        load_json(args.split),
-        train_preview_per_scene=args.train_preview_per_scene,
-        train_preview_seed=args.train_preview_seed,
-        train_prompt_profile=args.train_prompt_profile,
-        eval_prompt_profiles=args.eval_prompt_profile,
-    )
-    registry = PromptRegistry(args.prompt_config_dir)
-    registry.require([
-        plan["prompt_profiles"]["train"],
-        *plan["prompt_profiles"]["eval"],
-    ])
-    by_id = {case["case_id"]: case for case in cases}
-    train_profile = plan["prompt_profiles"]["train"]
-    if train_profile:
-        for case_id in plan["train_case_ids"]:
-            registry.resolve(by_id[case_id], train_profile, role="train")
-    for job in plan["jobs"]:
-        registry.resolve(
-            by_id[job["case_id"]], job["prompt_profile_id"], role="eval"
-        )
-    write_json(args.output, plan)
-    print(f"train_cases={len(plan['train_case_ids'])} eval_jobs={len(plan['jobs'])} output={args.output}")
-    return 0
-
-
-def _run(args: argparse.Namespace) -> int:
-    directory = run_benchmark(
-        task_path=args.task,
-        baseline_path=args.baseline,
-        manifest_path=args.manifest,
-        split_path=args.split,
-        scene_config_dir=args.scene_config_dir,
-        metric_config_path=args.metrics,
-        output_root=args.output_root,
-        execute=args.execute,
-        run_id=args.run_id,
-        stop_after_training=args.stop_after_training,
-        train_preview_per_scene=args.train_preview_per_scene,
-        train_preview_seed=args.train_preview_seed,
-        prompt_config_dir=args.prompt_config_dir,
-        train_prompt_profile=args.train_prompt_profile,
-        eval_prompt_profiles=args.eval_prompt_profile,
-    )
-    print(directory)
-    return 0
-
-
 def _evaluate(args: argparse.Namespace) -> int:
     directory = Path(args.run_dir)
     summary = (
@@ -137,25 +80,8 @@ def _prediction_import(args: argparse.Namespace) -> int:
     return 0
 
 
-def _smoke(args: argparse.Namespace) -> int:
-    fixture = PROJECT_ROOT / "examples" / "fixtures"
-    run_id = "smoke_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    directory = run_benchmark(
-        task_path=fixture / "task_view_a.json",
-        baseline_path=PROJECT_ROOT / "configs" / "baselines" / "dummy_i2v.json",
-        manifest_path=fixture / "cases.jsonl",
-        split_path=fixture / "view_a.json",
-        scene_config_dir=DEFAULT_SCENES,
-        metric_config_path=DEFAULT_METRICS,
-        output_root=args.output_root,
-        run_id=run_id,
-    )
-    print(directory)
-    return 0
-
-
-def _validate_dataset_v2(args: argparse.Namespace) -> int:
-    dataset = load_dataset_v2(
+def _validate_dataset(args: argparse.Namespace) -> int:
+    dataset = load_dataset(
         args.dataset,
         check_assets=args.check_assets or args.check_asset_hashes,
         check_asset_hashes=args.check_asset_hashes,
@@ -202,8 +128,8 @@ def _task_build(args: argparse.Namespace) -> int:
 def _matrix_run(args: argparse.Namespace) -> int:
     directories = run_matrix(
         dataset_path=args.dataset,
-        task_paths=args.task,
-        baseline_path=args.baseline,
+        task_path=args.task,
+        baseline_paths=args.baseline,
         output_root=args.output_root,
         matrix_id=args.matrix_id,
         execute=args.execute,
@@ -244,6 +170,7 @@ def _baseline_inspect(args: argparse.Namespace) -> int:
         ).is_file(),
         "implementation": bundle.value["implementation"],
         "capabilities": bundle.value["capabilities"],
+        "input_policy": bundle.value["input_policy"],
         "supported_scenes": bundle.value.get("supported_scenes", "all"),
         "model": bundle.value.get("model", {}),
         "runtime": bundle.value.get("runtime", {}),
@@ -308,63 +235,6 @@ def build_parser() -> argparse.ArgumentParser:
     split.add_argument("--seed", type=int, default=42)
     split.set_defaults(func=_split)
 
-    plan = sub.add_parser("plan", help="materialize train and inference jobs")
-    plan.add_argument("--task", required=True)
-    plan.add_argument("--manifest", required=True)
-    plan.add_argument("--split", required=True)
-    plan.add_argument("--output", required=True)
-    plan.add_argument("--prompt-config-dir", default=str(DEFAULT_PROMPTS))
-    plan.add_argument(
-        "--train-prompt-profile", choices=SUPPORTED_PROMPT_PROFILES,
-        help="prompt profile used to build finetuning metadata",
-    )
-    plan.add_argument(
-        "--eval-prompt-profile", action="append", choices=SUPPORTED_PROMPT_PROFILES,
-        help="repeat to evaluate the same model with multiple prompt profiles",
-    )
-    plan.add_argument(
-        "--train-preview-per-scene", type=int,
-        help="view A only: also schedule this many randomly selected seen training cases per scene",
-    )
-    plan.add_argument(
-        "--train-preview-seed", type=int,
-        help="seed used only for deterministic training-case preview sampling (default: 42)",
-    )
-    plan.set_defaults(func=_plan)
-
-    run = sub.add_parser("run", help="run orchestration and placeholder evaluation")
-    run.add_argument("--task", required=True)
-    run.add_argument("--baseline", required=True)
-    run.add_argument("--manifest", required=True)
-    run.add_argument("--split", required=True)
-    run.add_argument("--scene-config-dir", default=str(DEFAULT_SCENES))
-    run.add_argument("--metrics", default=str(DEFAULT_METRICS))
-    run.add_argument("--prompt-config-dir", default=str(DEFAULT_PROMPTS))
-    run.add_argument(
-        "--train-prompt-profile", choices=SUPPORTED_PROMPT_PROFILES,
-        help="prompt profile used to build finetuning metadata",
-    )
-    run.add_argument(
-        "--eval-prompt-profile", action="append", choices=SUPPORTED_PROMPT_PROFILES,
-        help="repeat to evaluate the same adapter with multiple prompt profiles",
-    )
-    run.add_argument("--output-root", default="runs")
-    run.add_argument("--run-id")
-    run.add_argument("--execute", action="store_true", help="allow reviewed command adapters to execute")
-    run.add_argument(
-        "--stop-after-training", action="store_true",
-        help="materialize inference jobs after training but leave generation staged",
-    )
-    run.add_argument(
-        "--train-preview-per-scene", type=int,
-        help="view A only: also infer this many randomly selected seen training cases per scene",
-    )
-    run.add_argument(
-        "--train-preview-seed", type=int,
-        help="seed used only for deterministic training-case preview sampling (default: 42)",
-    )
-    run.set_defaults(func=_run)
-
     evaluate = sub.add_parser("evaluate", help="re-evaluate a run after predictions or scores are added")
     evaluate.add_argument("--run-dir", required=True)
     evaluate.add_argument("--scene-config-dir", default=str(DEFAULT_SCENES))
@@ -382,12 +252,8 @@ def build_parser() -> argparse.ArgumentParser:
     prediction_import.add_argument("--seed", required=True, type=int)
     prediction_import.set_defaults(func=_prediction_import)
 
-    smoke = sub.add_parser("smoke", help="run fixture end-to-end without models")
-    smoke.add_argument("--output-root", default="runs/smoke")
-    smoke.set_defaults(func=_smoke)
-
     validate_v2 = sub.add_parser(
-        "validate-dataset", help="validate a prompt-free Dataset v2 bundle"
+        "validate-dataset", help="validate the current Dataset bundle"
     )
     validate_v2.add_argument("--dataset", required=True)
     validate_v2.add_argument("--check-assets", action="store_true")
@@ -396,7 +262,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="also verify every referenced asset against assets.lock.json",
     )
-    validate_v2.set_defaults(func=_validate_dataset_v2)
+    validate_v2.set_defaults(func=_validate_dataset)
 
     atomic = sub.add_parser(
         "atomic-run", help="run Dataset × one atomic Task × Baseline"
@@ -426,11 +292,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     matrix = sub.add_parser(
         "matrix-run",
-        help="run paired atomic Tasks with identical Dataset/Baseline/splits",
+        help="run one Task across multiple Baseline identities",
     )
     matrix.add_argument("--dataset", required=True)
-    matrix.add_argument("--task", action="append", required=True)
-    matrix.add_argument("--baseline", required=True)
+    matrix.add_argument("--task", required=True)
+    matrix.add_argument("--baseline", action="append", required=True)
     matrix.add_argument("--output-root", default="runs_v2")
     matrix.add_argument("--matrix-id", required=True)
     matrix.add_argument("--execute", action="store_true")

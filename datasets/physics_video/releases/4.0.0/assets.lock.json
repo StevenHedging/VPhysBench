@@ -1,0 +1,5499 @@
+{
+  "dataset_id": "physics_video_five_scene_v4",
+  "files": [
+    {
+      "case_ids": [
+        "collision_r2_glass_marble_glass_marble_glass_marble_v04374"
+      ],
+      "path": "assets/collision_1d/collision_r2_glass_marble_glass_marble_glass_marble_v04374/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "6e2125d39cb1e4647e8a1f0728aad9ebc26255a120399e0ee32733d692ed0bdf",
+      "size_bytes": 2931985
+    },
+    {
+      "case_ids": [
+        "collision_r2_glass_marble_glass_marble_glass_marble_v04374"
+      ],
+      "path": "assets/collision_1d/collision_r2_glass_marble_glass_marble_glass_marble_v04374/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "a2e0f13daf3c6db73126a956dadbc32f7fc44a764b08327af58b11b186c28eb2",
+      "size_bytes": 468379817
+    },
+    {
+      "case_ids": [
+        "collision_r2_glass_marble_glass_marble_glass_marble_v04374"
+      ],
+      "path": "assets/collision_1d/collision_r2_glass_marble_glass_marble_glass_marble_v04374/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "31e7ddaa3f2bfb2275a70c67de14cbf6637ceaba390786ce00f05ad30b46e61e",
+      "size_bytes": 30106018
+    },
+    {
+      "case_ids": [
+        "collision_r2_glass_marble_glass_marble_glass_marble_v05716"
+      ],
+      "path": "assets/collision_1d/collision_r2_glass_marble_glass_marble_glass_marble_v05716/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "2e808ce679b0663d539abd833de669bed191f2394103210dc0c61ee791339998",
+      "size_bytes": 1749027
+    },
+    {
+      "case_ids": [
+        "collision_r2_glass_marble_glass_marble_glass_marble_v05716"
+      ],
+      "path": "assets/collision_1d/collision_r2_glass_marble_glass_marble_glass_marble_v05716/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "11bd641128ee347b0bfe75474e6ec1124add13206de1a1d49a316479fead4f89",
+      "size_bytes": 274298937
+    },
+    {
+      "case_ids": [
+        "collision_r2_glass_marble_glass_marble_glass_marble_v05716"
+      ],
+      "path": "assets/collision_1d/collision_r2_glass_marble_glass_marble_glass_marble_v05716/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "81592b0cec4219994d54d73640dff51030da77cfbe5c46bc9e65ab40765ce0c9",
+      "size_bytes": 29510986
+    },
+    {
+      "case_ids": [
+        "collision_r2_glass_marble_glass_marble_glass_marble_v07545"
+      ],
+      "path": "assets/collision_1d/collision_r2_glass_marble_glass_marble_glass_marble_v07545/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "4dfd89e07cea65453d8baa37f1e953a17b194adfd2f04f8f5266717a8305b361",
+      "size_bytes": 1582316
+    },
+    {
+      "case_ids": [
+        "collision_r2_glass_marble_glass_marble_glass_marble_v07545"
+      ],
+      "path": "assets/collision_1d/collision_r2_glass_marble_glass_marble_glass_marble_v07545/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "10e555e57b970f9819d229d8044bd2939a653bd711c64b8697a008daec2978aa",
+      "size_bytes": 179431398
+    },
+    {
+      "case_ids": [
+        "collision_r2_glass_marble_glass_marble_glass_marble_v07545"
+      ],
+      "path": "assets/collision_1d/collision_r2_glass_marble_glass_marble_glass_marble_v07545/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "89c5ffcd4f31ccbf3b04c728d1d2d073cc290df28b8a7f2b8c37773b888125da",
+      "size_bytes": 16606885
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_large_steel_large_steel_v01249"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_large_steel_large_steel_v01249/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "ff0d44b246f8fc02751c65fe15706f0eefd1d169b34216c2d0b1f46bc1f39fa1",
+      "size_bytes": 1545062
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_large_steel_large_steel_v01249"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_large_steel_large_steel_v01249/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "bfc2ecaeb710b0595061464f30e2894d3f5698c1d7153c947a43c8a189bf0095",
+      "size_bytes": 689471488
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_large_steel_large_steel_v01249"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_large_steel_large_steel_v01249/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "cbfebf31851f0d3ceb5597cc964ad540441658cd5d3c730facd9b2a1577a96f1",
+      "size_bytes": 59339542
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_large_steel_large_steel_v02081"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_large_steel_large_steel_v02081/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "2fe8030e78463554f02c349e11e73a4ed409abb93419757a0c907c116405c7b1",
+      "size_bytes": 1717251
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_large_steel_large_steel_v02081"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_large_steel_large_steel_v02081/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "dbb655e73f8b115875181ac85aa4f33d61561e9c5a0f7c4512d23f561fa5f9d1",
+      "size_bytes": 379659865
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_large_steel_large_steel_v02081"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_large_steel_large_steel_v02081/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "497122524b7cdae52ce7ec7a681142e7dea7450dc00dd1261c29692cbb9e4ea7",
+      "size_bytes": 32439010
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_large_steel_large_steel_v02229"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_large_steel_large_steel_v02229/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "f4aa1e30bf02b837a78d3db9a9b49674e77277a131fa3123d4e8600cb85e5a5a",
+      "size_bytes": 1530091
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_large_steel_large_steel_v02229"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_large_steel_large_steel_v02229/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "f1a40b7dceabc6945537fd2dce81ea98fe02d67f7ebb1b63b1a3b83575b53961",
+      "size_bytes": 323726645
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_large_steel_large_steel_v02229"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_large_steel_large_steel_v02229/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "b395d671857aed962ef08959d1b7bb27ff619512c425277d9acdd9d8380eb85e",
+      "size_bytes": 26254818
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_large_steel_large_steel_v02696"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_large_steel_large_steel_v02696/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "7b031c84caf018a9707592518a617816e6bcfb2788eac5b67d08dd6d50f4f886",
+      "size_bytes": 1487396
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_large_steel_large_steel_v02696"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_large_steel_large_steel_v02696/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "c4af497b17bcb14fe8e54550c55a0698654c5f927c265e5b5e4dab514159b119",
+      "size_bytes": 274914740
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_large_steel_large_steel_v02696"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_large_steel_large_steel_v02696/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "58c4660997ff9aa76e504d1639f8b7f4792295e6b493d6d3ba40e5844fad3fe2",
+      "size_bytes": 19498539
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_large_steel_large_steel_v04462"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_large_steel_large_steel_v04462/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "0707d0ac0049b0193e216b63f01ae14eaddf65d6627d546a0f462fc507604ef2",
+      "size_bytes": 1711342
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_large_steel_large_steel_v04462"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_large_steel_large_steel_v04462/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "b7c7ab1162df71d592be421b8dfaf11d785b41590a6028940ef09862c178f89e",
+      "size_bytes": 469417819
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_large_steel_large_steel_v04462"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_large_steel_large_steel_v04462/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "21f92fe30ecc7f1fead145e1ab41856001d0234c3568d7e620f5ea63b71621cc",
+      "size_bytes": 38847333
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_medium_steel_small_steel_v01165"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_medium_steel_small_steel_v01165/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "73a3b91e043ada6fba947085539fba7ebb5061a3847790d5d0570ae7691c7a75",
+      "size_bytes": 1670644
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_medium_steel_small_steel_v01165"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_medium_steel_small_steel_v01165/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "b1e0fdbb92a8ff32faffcad10e55ae81b17e43e1a173c46e303301e1dd78a7f8",
+      "size_bytes": 647326926
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_medium_steel_small_steel_v01165"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_medium_steel_small_steel_v01165/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "9a604d2007938e23477eeff46f36063f32018d8f7fb4820e172addd890fc1e72",
+      "size_bytes": 53247452
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_medium_steel_small_steel_v01313"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_medium_steel_small_steel_v01313/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "629f846e9b5737f82cb5947890f51235ea546c7a3ade435d6c3cf2d48a39d456",
+      "size_bytes": 1576917
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_medium_steel_small_steel_v01313"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_medium_steel_small_steel_v01313/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "4b6a6e0db671aeaee74761952f6ac00af99ce11db9f5a2fe32d5be56fbc4c5c5",
+      "size_bytes": 741403280
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_medium_steel_small_steel_v01313"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_medium_steel_small_steel_v01313/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "e183a4bb7b8e58bdb66676893a029fe7baf303f54fef4f9c8abb16acb3bb9028",
+      "size_bytes": 56749548
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_medium_steel_small_steel_v02174"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_medium_steel_small_steel_v02174/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "d093bb39a3ff3c8975fd0478e745fc2ed0541ceb2b96c0661371282ddb6aa53e",
+      "size_bytes": 1570470
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_medium_steel_small_steel_v02174"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_medium_steel_small_steel_v02174/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "6c3c60340440ece0ad9e79e5bb29eaf30b208f6415205147a4c84588f6056091",
+      "size_bytes": 515008633
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_medium_steel_small_steel_v02174"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_medium_steel_small_steel_v02174/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "6e1fb96eb113bd69190611a2221ae8f14b43d23a2528067722832590e79a0bb4",
+      "size_bytes": 35284680
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_medium_steel_small_steel_v02358"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_medium_steel_small_steel_v02358/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "58bfb938691edbbbba5c820fab182c9e1d690f7d20dc787f9405ada3da9657cc",
+      "size_bytes": 1575275
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_medium_steel_small_steel_v02358"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_medium_steel_small_steel_v02358/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "d75b087fbe4183799ed4d65c1a590187962d6b2405e1a8c0d96c98008088e1fa",
+      "size_bytes": 405733435
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_medium_steel_small_steel_v02358"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_medium_steel_small_steel_v02358/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "823a39fd4ec8e42c204e273a4ff096ea2addf6c296ea11a50d1ba99306cfdb9d",
+      "size_bytes": 38072269
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_medium_steel_small_steel_v03033"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_medium_steel_small_steel_v03033/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "f74ec4360520652b4e3d3018b0691f402cbe12ed3365290b4d6f3bd56978deba",
+      "size_bytes": 1559706
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_medium_steel_small_steel_v03033"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_medium_steel_small_steel_v03033/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "3c1bb6793798e427773caec66f21cd451ac5ac4b482217df83f70da2aa07b0c8",
+      "size_bytes": 332716016
+    },
+    {
+      "case_ids": [
+        "collision_r2_large_steel_medium_steel_small_steel_v03033"
+      ],
+      "path": "assets/collision_1d/collision_r2_large_steel_medium_steel_small_steel_v03033/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "cd952d03cc29e0514e4d64da7a8f158551030091baf7c020b899da2fed0041c7",
+      "size_bytes": 32570122
+    },
+    {
+      "case_ids": [
+        "collision_r2_medium_steel_medium_steel_medium_steel_v00894"
+      ],
+      "path": "assets/collision_1d/collision_r2_medium_steel_medium_steel_medium_steel_v00894/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "72a89d9ca07ebe6418c0b97f53e3484e4b8d4726f869784930f2f5765942bbc7",
+      "size_bytes": 1700769
+    },
+    {
+      "case_ids": [
+        "collision_r2_medium_steel_medium_steel_medium_steel_v00894"
+      ],
+      "path": "assets/collision_1d/collision_r2_medium_steel_medium_steel_medium_steel_v00894/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "9e6b2007e530ebb772e6bfb291465d72ff68494dae8035319201aacdb83b3b00",
+      "size_bytes": 683239316
+    },
+    {
+      "case_ids": [
+        "collision_r2_medium_steel_medium_steel_medium_steel_v00894"
+      ],
+      "path": "assets/collision_1d/collision_r2_medium_steel_medium_steel_medium_steel_v00894/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "20e3cbab2b2741d5c0ae25a62b31a589bf91e9540fb78404cf355301b22c5eb9",
+      "size_bytes": 57740819
+    },
+    {
+      "case_ids": [
+        "collision_r2_medium_steel_medium_steel_medium_steel_v01510"
+      ],
+      "path": "assets/collision_1d/collision_r2_medium_steel_medium_steel_medium_steel_v01510/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "eb6c93b6fb31d31df79896db2266d2ec2b55a1a45d95c681d18a33d4b99e4cce",
+      "size_bytes": 1731348
+    },
+    {
+      "case_ids": [
+        "collision_r2_medium_steel_medium_steel_medium_steel_v01510"
+      ],
+      "path": "assets/collision_1d/collision_r2_medium_steel_medium_steel_medium_steel_v01510/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "3f7ecfa978a3c35897b7e11b3af036b29e066dd6a96965760baefcc360e253f2",
+      "size_bytes": 700747884
+    },
+    {
+      "case_ids": [
+        "collision_r2_medium_steel_medium_steel_medium_steel_v01510"
+      ],
+      "path": "assets/collision_1d/collision_r2_medium_steel_medium_steel_medium_steel_v01510/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "9dca68e8b58f0ec47d153b588ae90e5a36be451cbd6b6c42cc829445f5a67a6f",
+      "size_bytes": 64519835
+    },
+    {
+      "case_ids": [
+        "collision_r2_medium_steel_medium_steel_medium_steel_v02818"
+      ],
+      "path": "assets/collision_1d/collision_r2_medium_steel_medium_steel_medium_steel_v02818/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "1d9d36cd2b3aed971c315880c95e382b7337ffaac499d47e9978a5bc45543e91",
+      "size_bytes": 1713226
+    },
+    {
+      "case_ids": [
+        "collision_r2_medium_steel_medium_steel_medium_steel_v02818"
+      ],
+      "path": "assets/collision_1d/collision_r2_medium_steel_medium_steel_medium_steel_v02818/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "2743f97e3dd7dc3df7feb2ac831ec48f17c47adb4e2cd4bab27fd67ecab4a6be",
+      "size_bytes": 411444920
+    },
+    {
+      "case_ids": [
+        "collision_r2_medium_steel_medium_steel_medium_steel_v02818"
+      ],
+      "path": "assets/collision_1d/collision_r2_medium_steel_medium_steel_medium_steel_v02818/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "139681378650e4873a107e6be1a06891beb5a50ff7aed0234994ad3208f80fa3",
+      "size_bytes": 32238767
+    },
+    {
+      "case_ids": [
+        "collision_r2_medium_steel_medium_steel_medium_steel_v03205"
+      ],
+      "path": "assets/collision_1d/collision_r2_medium_steel_medium_steel_medium_steel_v03205/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "6a2562b9f6f5dd379e0062c6208252436dd7d9a48ce4c968a8a2683c6b3c3af8",
+      "size_bytes": 2902310
+    },
+    {
+      "case_ids": [
+        "collision_r2_medium_steel_medium_steel_medium_steel_v03205"
+      ],
+      "path": "assets/collision_1d/collision_r2_medium_steel_medium_steel_medium_steel_v03205/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "b72312da654de3e080ba275471b82be1ec3d3e03cc1f64db0940467812199dd6",
+      "size_bytes": 466665335
+    },
+    {
+      "case_ids": [
+        "collision_r2_medium_steel_medium_steel_medium_steel_v03205"
+      ],
+      "path": "assets/collision_1d/collision_r2_medium_steel_medium_steel_medium_steel_v03205/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "0b02c524691e73465f95fa072696af7006d3ba8ae89a349763b5d059e32b1d83",
+      "size_bytes": 32375917
+    },
+    {
+      "case_ids": [
+        "collision_r2_medium_steel_medium_steel_medium_steel_v07184"
+      ],
+      "path": "assets/collision_1d/collision_r2_medium_steel_medium_steel_medium_steel_v07184/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "f4a9059a69db4ed1b673bd87b4f7442157d1a8ffb6d37d44dd3f7038ffc98b44",
+      "size_bytes": 2940837
+    },
+    {
+      "case_ids": [
+        "collision_r2_medium_steel_medium_steel_medium_steel_v07184"
+      ],
+      "path": "assets/collision_1d/collision_r2_medium_steel_medium_steel_medium_steel_v07184/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "1683b4d32e31824853f2a7019444e15b9313cbf1bf599353c3f102cf5aac1c2d",
+      "size_bytes": 411600536
+    },
+    {
+      "case_ids": [
+        "collision_r2_medium_steel_medium_steel_medium_steel_v07184"
+      ],
+      "path": "assets/collision_1d/collision_r2_medium_steel_medium_steel_medium_steel_v07184/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "846daf4e5988ed97a0056288eee7d4105006154b34743778a0c71b127c036b12",
+      "size_bytes": 30900968
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_glass_marble_glass_marble_v01509"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_glass_marble_glass_marble_v01509/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "99850944735ebd3d3c5e68bced2ec31c2d1c4c73154e2ff324411d882ec35a8a",
+      "size_bytes": 2938670
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_glass_marble_glass_marble_v01509"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_glass_marble_glass_marble_v01509/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "b70ef606f433f4f9e3af584671fa980304dedd5e759ce08abb0b25d284fd1fc2",
+      "size_bytes": 733637483
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_glass_marble_glass_marble_v01509"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_glass_marble_glass_marble_v01509/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "11adb94c175bedc3490d3c890ebd7ce0fe210da1856f065531613d8801a79de9",
+      "size_bytes": 50625847
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_glass_marble_glass_marble_v02179"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_glass_marble_glass_marble_v02179/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "a5ec6fadef1a0380a3214fdc64475ba62c77134167b5e064f2d94aedd668c422",
+      "size_bytes": 2583560
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_glass_marble_glass_marble_v02179"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_glass_marble_glass_marble_v02179/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "40684ca8c32a0f54e4cc3245fb12d217323cdff02e5a30db8f777708212c325f",
+      "size_bytes": 601202798
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_glass_marble_glass_marble_v02179"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_glass_marble_glass_marble_v02179/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "5025625b840762d477794e1b20dcad52f074aac7f53c2315e9eb1831faa35a51",
+      "size_bytes": 44399354
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_glass_marble_glass_marble_v02935"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_glass_marble_glass_marble_v02935/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "db321e5bbae153b61568f96b541d3496b4542a09d748cf23b751c31712cf0123",
+      "size_bytes": 3023069
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_glass_marble_glass_marble_v02935"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_glass_marble_glass_marble_v02935/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "36822fb1f159d9df1af5ece7f0478b65706d48059f3933da77ec4f88ec67ad46",
+      "size_bytes": 478891686
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_glass_marble_glass_marble_v02935"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_glass_marble_glass_marble_v02935/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "8149b1c19cb5f929ef82f8a0f0c9fc071877e72060314f366411be1d5d8d38cb",
+      "size_bytes": 35012256
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_glass_marble_glass_marble_v05212"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_glass_marble_glass_marble_v05212/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "b6ed75e40f2727900683c91a77faebd517f6440084d3eb4cf5376c84fb6a334e",
+      "size_bytes": 2887022
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_glass_marble_glass_marble_v05212"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_glass_marble_glass_marble_v05212/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "80ace324fb13345453c5ac8331a3118cea283e8b0cacd67e52eccaf64d1a70de",
+      "size_bytes": 325602601
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_glass_marble_glass_marble_v05212"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_glass_marble_glass_marble_v05212/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "e0f19969ebfab92e91b0915cc0a7759fe4cd62fd834faf6a41ea273491806eca",
+      "size_bytes": 24905643
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_glass_marble_glass_marble_v05533"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_glass_marble_glass_marble_v05533/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "66e68ad3deffec9ea240e5fbd965911508d405ec9e2798e490b5ba27c113f355",
+      "size_bytes": 2915000
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_glass_marble_glass_marble_v05533"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_glass_marble_glass_marble_v05533/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "855c6eae6279cc1973ec8af20cb85c602423c1d2e182b513b6ebbd6ad832fee7",
+      "size_bytes": 325177372
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_glass_marble_glass_marble_v05533"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_glass_marble_glass_marble_v05533/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "fdb6aa4f001ee0993738c8b76ba8a7f37999c0f512fbb8135919d78040c1829a",
+      "size_bytes": 24842065
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_medium_steel_large_steel_v01985"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_medium_steel_large_steel_v01985/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "69dfeed0b4ec294f946a680edc6eaf2e717f34cdd744ea9893bcc17ee81005bc",
+      "size_bytes": 1591432
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_medium_steel_large_steel_v01985"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_medium_steel_large_steel_v01985/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "9328906278812937edbfbcc6a2c31610cc81fddebc4da2ee0315abaf6d6ce962",
+      "size_bytes": 379435763
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_medium_steel_large_steel_v01985"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_medium_steel_large_steel_v01985/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "2462135c6c968ac14b7d71b4b5cce40f05ed8249fd589d92f40b0dc5eaefe74a",
+      "size_bytes": 28555192
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_medium_steel_large_steel_v03759"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_medium_steel_large_steel_v03759/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "4e2b822bf560069782d3a73fa1587df370cd1722ffb076e3e022e65bb05c6531",
+      "size_bytes": 1607547
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_medium_steel_large_steel_v03759"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_medium_steel_large_steel_v03759/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "3d53c4ed07e1304eed4b2bb4a9ee71eca96a5bfb85a44c172c80c7b01cb72600",
+      "size_bytes": 519688749
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_medium_steel_large_steel_v03759"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_medium_steel_large_steel_v03759/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "03bf7bca931e933be10a91758ad39d8ce3180c0edb9bb81298b85b20ac19297a",
+      "size_bytes": 45079802
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_medium_steel_large_steel_v04097"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_medium_steel_large_steel_v04097/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "b8c765c286f5c3ac07b2345eb66afc3ef1e30703e05e7f1f9cb0a1ce7cb771fe",
+      "size_bytes": 1344675
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_medium_steel_large_steel_v04097"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_medium_steel_large_steel_v04097/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "dff634303330cad07002ced8675c27949072d9c2b21f374cb783c2c901137163",
+      "size_bytes": 315101578
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_medium_steel_large_steel_v04097"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_medium_steel_large_steel_v04097/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "e9e1212cfd39f10973fdfbea0641142c64f5de319c86c172338ba2b67ec89f73",
+      "size_bytes": 23736953
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_medium_steel_large_steel_v06332"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_medium_steel_large_steel_v06332/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "86e27fcfd446946a2420fac76be1ec0fe1f0ed9249ebdf0e8b985ae9d2cd3c1e",
+      "size_bytes": 1420464
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_medium_steel_large_steel_v06332"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_medium_steel_large_steel_v06332/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "346d0f6fc0dcf6da699a647c201fd38f90f35cfaed540da504e7896f47e3b9f4",
+      "size_bytes": 355707640
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_medium_steel_large_steel_v06332"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_medium_steel_large_steel_v06332/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "72309b9520e82d4e1b3f32652ea735cc5a93bb410f980fcbdf61e588c1324ddf",
+      "size_bytes": 26308303
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_medium_steel_large_steel_v07389"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_medium_steel_large_steel_v07389/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "666b75449cc022787fff93fbf01da6aef51dfa6cab9389953c55734c3e2ddb62",
+      "size_bytes": 1325283
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_medium_steel_large_steel_v07389"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_medium_steel_large_steel_v07389/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "fa5a3562ba1af49edb0b19a8aeae6f67b77c702ab0cc83f3fb054a816eb9cdf3",
+      "size_bytes": 18296427
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_medium_steel_large_steel_v07389"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_medium_steel_large_steel_v07389/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "5f556132e073d540bfb40e20586371f9f831fd0f2a10f3bc62fbfc061207ebe2",
+      "size_bytes": 18346386
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_small_steel_small_steel_v02332"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_small_steel_small_steel_v02332/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "9a6fa498083771c94a9eb8ffeb78d45fcdb2aba08afd08c7dddc138a594fda48",
+      "size_bytes": 2957472
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_small_steel_small_steel_v02332"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_small_steel_small_steel_v02332/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "2b39900183d2fba8351049d522d9483a02c6cec65697390efdb143200138fa9a",
+      "size_bytes": 622889447
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_small_steel_small_steel_v02332"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_small_steel_small_steel_v02332/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "b75ba9d6c99f74e72adcff76fb77fb5f2d8306e7adc9110e504bbf38c1dbe993",
+      "size_bytes": 43948591
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_small_steel_small_steel_v04865"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_small_steel_small_steel_v04865/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "4819def74717c6919290c3858353aba68dcdcf924b835e096279b2c8fdc8ccb3",
+      "size_bytes": 2940624
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_small_steel_small_steel_v04865"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_small_steel_small_steel_v04865/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "c1f3e396de0694aa237a5d37a2767607ab4380da660a97fe26103366870d708f",
+      "size_bytes": 343969982
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_small_steel_small_steel_v04865"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_small_steel_small_steel_v04865/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "b49be6047bed7d6535087bbad4d7463f152118073459ee22b316adc4e8045e91",
+      "size_bytes": 24677609
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_small_steel_small_steel_v07845"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_small_steel_small_steel_v07845/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "347a768cd561841182cf91103681e7c5b451ffe6618807c88e62657cc40fec85",
+      "size_bytes": 2969608
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_small_steel_small_steel_v07845"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_small_steel_small_steel_v07845/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "9ec451d4a27c18022fcb11b45ab4d4ba307bea7a2113e8b9ee3340a4b0a4dfe5",
+      "size_bytes": 431609890
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_small_steel_small_steel_v07845"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_small_steel_small_steel_v07845/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "0ad2026c910ddebd1faf4ea2f81ddb791206613e359751202cfaba17bc845366",
+      "size_bytes": 44129981
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_small_steel_small_steel_v10861"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_small_steel_small_steel_v10861/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "ab1921d932d5a9ea50d8acf333eb59f6ea7cf7d893cbe88be779ecdecd027757",
+      "size_bytes": 2893465
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_small_steel_small_steel_v10861"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_small_steel_small_steel_v10861/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "69ed1d88aec1de5b3680d0fb152f59ab1754d80175cc715d80144f3ae52f2e0b",
+      "size_bytes": 387213650
+    },
+    {
+      "case_ids": [
+        "collision_r2_small_steel_small_steel_small_steel_v10861"
+      ],
+      "path": "assets/collision_1d/collision_r2_small_steel_small_steel_small_steel_v10861/source/reference.mov",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "73d9dbad97860ec9fd09264f3370ecd79f3f7bbc94b7d1cba4837c594de9e3d8",
+      "size_bytes": 38998153
+    },
+    {
+      "case_ids": [
+        "freefall_r2_l_h060cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_l_h060cm/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "de8576b0d133d378903b1d762d78897881912c89ad8e5be347aa97cfc58f6d02",
+      "size_bytes": 440077
+    },
+    {
+      "case_ids": [
+        "freefall_r2_l_h060cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_l_h060cm/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "2c885cd5f7d114e175631ad950172c124a84923fdcd6979b27e3507fcfd2e725",
+      "size_bytes": 1987989
+    },
+    {
+      "case_ids": [
+        "freefall_r2_l_h060cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_l_h060cm/source/source_slowmo.mp4",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "f24e2e8d2d7b3ea971e20894f6c56f00e2c2407cb3d8433c878f6d780f5c1354",
+      "size_bytes": 2035579
+    },
+    {
+      "case_ids": [
+        "freefall_r2_l_h080cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_l_h080cm/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "05145617af35b4ede41caed67fc5a79aa81c0f3413d0d50753573c6182c5952f",
+      "size_bytes": 347823
+    },
+    {
+      "case_ids": [
+        "freefall_r2_l_h080cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_l_h080cm/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "1f633aaece69e0247bb40fcfd9c6e7aaa1df3c61836e7a7ec2e91fa6998fc5e6",
+      "size_bytes": 1771534
+    },
+    {
+      "case_ids": [
+        "freefall_r2_l_h080cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_l_h080cm/source/source_slowmo.mp4",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "af241aa57586b4d5617c5b60842ad636f3e44f1ae0fbfdcc423a673a103baa86",
+      "size_bytes": 1825540
+    },
+    {
+      "case_ids": [
+        "freefall_r2_l_h100cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_l_h100cm/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "316fc69cdfe5061e0ffbfd5ace77b375f4bc7d9a8baf65fd36e6692f80b14055",
+      "size_bytes": 381349
+    },
+    {
+      "case_ids": [
+        "freefall_r2_l_h100cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_l_h100cm/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "f78edf13f38cf521d61ff91d926bd95828997870de0de15737c3a251220eec73",
+      "size_bytes": 1799069
+    },
+    {
+      "case_ids": [
+        "freefall_r2_l_h100cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_l_h100cm/source/source_slowmo.mp4",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "5e8c274da0d550e8e32f250dbcade4182329b34ce2d1e27581a140176bb6407d",
+      "size_bytes": 1862592
+    },
+    {
+      "case_ids": [
+        "freefall_r2_m_h060cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_m_h060cm/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "37ddd9efe5bceb0d07a1923fa03853cdf70f817a45a5564d8cbe729a8519761d",
+      "size_bytes": 451642
+    },
+    {
+      "case_ids": [
+        "freefall_r2_m_h060cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_m_h060cm/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "16ef16e1da658a727348ca5db5fa6687c3c8cdb8d1395597507a5ecaeda3235f",
+      "size_bytes": 1914483
+    },
+    {
+      "case_ids": [
+        "freefall_r2_m_h060cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_m_h060cm/source/source_slowmo.mp4",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "e5905d8bb5132b02cb8077efd459538ebad9e619efb43f20f387470662852ca5",
+      "size_bytes": 1964455
+    },
+    {
+      "case_ids": [
+        "freefall_r2_m_h080cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_m_h080cm/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "94e2d3e188443d32b5d39792c56e7a539577b54bc62484cebbf530a21f747e90",
+      "size_bytes": 394380
+    },
+    {
+      "case_ids": [
+        "freefall_r2_m_h080cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_m_h080cm/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "6428e5e03e9ed9b8fd36f8e9023448652a2eea54634d72ef25d8613db2adf4e7",
+      "size_bytes": 2180291
+    },
+    {
+      "case_ids": [
+        "freefall_r2_m_h080cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_m_h080cm/source/source_slowmo.mp4",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "a03970c0f9c990cd1163926c64e115a31736edd436797a8ba8fc47d91c5ebcdb",
+      "size_bytes": 2238104
+    },
+    {
+      "case_ids": [
+        "freefall_r2_m_h100cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_m_h100cm/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "11a6f864fe328081f397db85c56d2e8b4249e9278989b5e853bc91af596f4061",
+      "size_bytes": 396894
+    },
+    {
+      "case_ids": [
+        "freefall_r2_m_h100cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_m_h100cm/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "d779244c83ead698d2ef9782e6af6b028dfa04945706d193386e9a4c3ab58b0f",
+      "size_bytes": 1729501
+    },
+    {
+      "case_ids": [
+        "freefall_r2_m_h100cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_m_h100cm/source/source_slowmo.mp4",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "4fea55386efbbbf6d3eea5b91a181647e0e9c89f51d019994db7310a8e9e70b4",
+      "size_bytes": 1784055
+    },
+    {
+      "case_ids": [
+        "freefall_r2_s_h080cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_s_h080cm/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "e4bede464ac39feda6fc9a46049eb80d4a973412cc9514871b02911b85c0b651",
+      "size_bytes": 411099
+    },
+    {
+      "case_ids": [
+        "freefall_r2_s_h080cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_s_h080cm/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "445ec6edcd1f8d001d7a83efdf34eeae0821b1ce2453a03dd0dfb48e7a017215",
+      "size_bytes": 1950369
+    },
+    {
+      "case_ids": [
+        "freefall_r2_s_h080cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_s_h080cm/source/source_slowmo.mp4",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "f6620a92c7bab5dcb0ae3b3e9fb6ceb851f99fe6853b92d70984eb592346012f",
+      "size_bytes": 2009552
+    },
+    {
+      "case_ids": [
+        "freefall_r2_s_h100cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_s_h100cm/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "d67315820456d0fe7066154637b57512bf842bdf1d1c72cd89f5205ca3469d2e",
+      "size_bytes": 344417
+    },
+    {
+      "case_ids": [
+        "freefall_r2_s_h100cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_s_h100cm/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "75595cc29cd971e595aa3e690c8b06208a6cfeb14a1b30dcbff5348b326194bb",
+      "size_bytes": 1151101
+    },
+    {
+      "case_ids": [
+        "freefall_r2_s_h100cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_s_h100cm/source/source_slowmo.mp4",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "f807e1a948d9a8789dc5438e89a83ed2a0bd51b8072aa81fe89789ad1d9cf3d2",
+      "size_bytes": 1210850
+    },
+    {
+      "case_ids": [
+        "freefall_r2_xl_h060cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_xl_h060cm/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "102b3fba9b2dcf5970ee01cf4f08202ba56ad81bd215dead736e1e495c63c006",
+      "size_bytes": 429198
+    },
+    {
+      "case_ids": [
+        "freefall_r2_xl_h060cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_xl_h060cm/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "df6ebebda1eacf387706e4b74e422a7d2a3bd4332236a718e982f847e201eede",
+      "size_bytes": 1948023
+    },
+    {
+      "case_ids": [
+        "freefall_r2_xl_h060cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_xl_h060cm/source/source_slowmo.mp4",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "c175b56d129452fc4ac20b18757ccff26439cc650cdbd9126596a844b068d9ff",
+      "size_bytes": 1993239
+    },
+    {
+      "case_ids": [
+        "freefall_r2_xl_h080cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_xl_h080cm/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "081f7155759fb7b94ed9ffec7f68b711a2d45732f60376e2de02d855acc86144",
+      "size_bytes": 387936
+    },
+    {
+      "case_ids": [
+        "freefall_r2_xl_h080cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_xl_h080cm/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "80d4d440f244473cdd1f4de7f8d951032aef38db87baed1ee1a7d651ff75f2ee",
+      "size_bytes": 1913676
+    },
+    {
+      "case_ids": [
+        "freefall_r2_xl_h080cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_xl_h080cm/source/source_slowmo.mp4",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "5a5ed60ec517fc27b4fb99f32fd13ec2ac2bd1089f41284f0540fde55e798cfe",
+      "size_bytes": 1966090
+    },
+    {
+      "case_ids": [
+        "freefall_r2_xl_h100cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_xl_h100cm/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "ac5054bdb10ef8d51a1d45bc7c1688466dd0a3c7d33180fe1462fe39edf82670",
+      "size_bytes": 375845
+    },
+    {
+      "case_ids": [
+        "freefall_r2_xl_h100cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_xl_h100cm/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "64851d41eb1dc384d5a84d7d7ac7517359221d866a4968bf13c97c04c14f6750",
+      "size_bytes": 2024607
+    },
+    {
+      "case_ids": [
+        "freefall_r2_xl_h100cm"
+      ],
+      "path": "assets/free_fall/freefall_r2_xl_h100cm/source/source_slowmo.mp4",
+      "roles": [
+        "source_video"
+      ],
+      "sha256": "b6bf18b8239c85aa0b7d56da31316cf354e54e6748311ad629418b2dd8bf1056",
+      "size_bytes": 2088101
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgblack_img_0341"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgblack_img_0341/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "8c0ed88cfcfb1fc55446eb4cb1da15e39dcec3d6a9a2606d5bece6107e1f5ff8",
+      "size_bytes": 1182755
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgblack_img_0341"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgblack_img_0341/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "ac0cfd0419a302679e8377d2a0cf9d8fe681d39f985e081351ed386eae52ead2",
+      "size_bytes": 4567407
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgblack_img_0342"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgblack_img_0342/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "90c8d4eb8fa9d80e535c9a176c30ff41c32610f52853c2e8f6439da3ac2c79b7",
+      "size_bytes": 1102036
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgblack_img_0342"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgblack_img_0342/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "32667eb24b00a96be5294e2321398e15fac3d812bcaa3dfbc1fd3df8f396a02f",
+      "size_bytes": 3706282
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgblack_img_0343"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgblack_img_0343/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "fbef9c3388147daca34b2f505529dbc60dee183dfde9ecc7c1e0c1b5ce273a53",
+      "size_bytes": 1190563
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgblack_img_0343"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgblack_img_0343/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "a9d869ff2300e77f1e9841f84604faec891c5ea6ac5674ba71df70ea91b5103d",
+      "size_bytes": 3757369
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgblack_img_0344"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgblack_img_0344/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "9c3a7614b7fd8ea40890b5ad690d0d1d5832b7dabaa1f7a72edc3ff84da47f9e",
+      "size_bytes": 1193499
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgblack_img_0344"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgblack_img_0344/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "40d724d8ed557cf948f3f5609d3d76dac0160e3bc34be68b7ec4b4d8c0d17fcc",
+      "size_bytes": 4158638
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgblack_img_0345"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgblack_img_0345/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "f3aa986873a4f93d6eb163b9321be821f815d1fcb8b35e4f6f8bb35434d1f9c9",
+      "size_bytes": 1209657
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgblack_img_0345"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgblack_img_0345/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "adff4849fc1f65456a38443353b42b51f42667638fd332f94aa8d57aa3030545",
+      "size_bytes": 4217061
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bggreen_img_0346"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bggreen_img_0346/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "e2634eae02fe20299a9ba379c1fc4e217fc3a517ee8f2b62506342947b8d8059",
+      "size_bytes": 787321
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bggreen_img_0346"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bggreen_img_0346/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "0ada2d97d8a4bf2890230c0316807ce0b50bf58764af557d5c792ba7a589b557",
+      "size_bytes": 1628922
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bggreen_img_0349"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bggreen_img_0349/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "42bce5eaa1291cf132b6779631e4925f647e96cfc102af59a5cf564cb7599bcb",
+      "size_bytes": 730425
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bggreen_img_0349"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bggreen_img_0349/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "4d89a467df23ecca0a0b9d871daa174f076d6d53ff74ddad47b00cad2fb6ba75",
+      "size_bytes": 966517
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bggreen_img_0350"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bggreen_img_0350/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "bdf798578a842e5363f245c5a1d7c5572bb69db391238f2c79ae1e40299a31d2",
+      "size_bytes": 795201
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bggreen_img_0350"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bggreen_img_0350/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "e3dcbcf0ce6ecdc86d4de13a83bbb054adb8078182f907b30766bef5ddaea3be",
+      "size_bytes": 1522267
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bggreen_img_0351"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bggreen_img_0351/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "78aa57c4ba5b2f3898b6f23b31ad4a064791d4ca2d42103d6438b2fda786405b",
+      "size_bytes": 794681
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bggreen_img_0351"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bggreen_img_0351/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "8b9705687468de655d9f554ff320f449d6490c9cc71f6e5becce5e6066ea4306",
+      "size_bytes": 1905775
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgoil_img_0313"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgoil_img_0313/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "4c340614d2e8795ea7fde0dfa0b829939cff3a2a0c6ee60692f4d4151e05c69e",
+      "size_bytes": 1132010
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgoil_img_0313"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgoil_img_0313/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "5deb410154223c4b11f49f441a6995d1e00cd14d1206d0709ca9042905a6c642",
+      "size_bytes": 3117158
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgoil_img_0314"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgoil_img_0314/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "df096cef86bee84aa89b0abbedca126666e9a0ab0180625a84e60288fb2fbfdf",
+      "size_bytes": 1139816
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgoil_img_0314"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgoil_img_0314/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "683e4ff0d5b2ba60fc428767b121486f5bab9672e11b233e8aa5bfb7b7b33c22",
+      "size_bytes": 3250674
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgoil_img_0317"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgoil_img_0317/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "92afb7ab288057e8b61b56a3669e8bb2570a7b6d7c8df7365a1c20add3b19c9b",
+      "size_bytes": 1151546
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgoil_img_0317"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgoil_img_0317/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "baa265c5698fb3c4d9b01ace829f4c728ec63a418b6fa274d7887e1ee882e5a0",
+      "size_bytes": 2357946
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgoil_img_0318"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgoil_img_0318/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "24b0b0e41622b495b1a78afb5c932bf9f59883315a94b88fb12225ef9e27b1dc",
+      "size_bytes": 1128501
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgoil_img_0318"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgoil_img_0318/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "0dd951ab4566e01068e67613c7abb0d5000af6854c74603142ab7af9e45a0323",
+      "size_bytes": 2056792
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgoil_img_0319"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgoil_img_0319/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "447ef34bd6020a0f7c55cce9f3741930659ba35606879a44d48a44f4cb3fd908",
+      "size_bytes": 1158910
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgoil_img_0319"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgoil_img_0319/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "b4d064a6c3ee6fbbfb7c06a61dd0195341ebabedabb77c248b1f417393f039c2",
+      "size_bytes": 2487878
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgwhite_img_0271"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgwhite_img_0271/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "959fa82faed971c8cc04582a529c004ba213a4ad654cf382330cc7f488787f5d",
+      "size_bytes": 833752
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgwhite_img_0271"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgwhite_img_0271/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "f84a5c12b3eec2de05c41da663f430deb7c797485162e42e68fee60b20593588",
+      "size_bytes": 1281438
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgwhite_img_0273"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgwhite_img_0273/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "6b6e0bf7280c38724d60b3fde9b3c12adaecca3691e8176659cc1bbfc5359f85",
+      "size_bytes": 806148
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgwhite_img_0273"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgwhite_img_0273/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "b22177fc0234269d0a99ada664ca054560f80e608970899348e76b8e90e1f8fd",
+      "size_bytes": 1443163
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgwhite_img_0274"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgwhite_img_0274/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "d322fb6f635611b80e2edec48b238dd48b59c30980d8ca609af129cb35552573",
+      "size_bytes": 782345
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgwhite_img_0274"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgwhite_img_0274/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "5f9b27e38d7385889667c35dc3ef1f455abc2df0edb7fdf5953d1b782d4458e1",
+      "size_bytes": 1567879
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgwhite_img_0275"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgwhite_img_0275/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "069b1c9e6c9b1cf563ede0f1d6d075a5fe7d68177212f77c640e009b8d7a5502",
+      "size_bytes": 826943
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgwhite_img_0275"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgwhite_img_0275/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "44cae94ffb602f47b2e0481073442b67f1aa18b1a294d7e09935cb32081a2378",
+      "size_bytes": 1759861
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgwhite_img_0276"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgwhite_img_0276/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "04a4a16b1ea2aa9c58bd7833d09226892c1f5c81d0baedf92c512b1575fdde3d",
+      "size_bytes": 804022
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgwhite_img_0276"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a32deg_bgwhite_img_0276/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "505a08d9b06de072b28e0d05137c024af6980682b73fb2d29ab89673d855de1a",
+      "size_bytes": 1636888
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgblack_img_0375"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgblack_img_0375/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "4de2e226e058e0b081a4418eb83af2da343262714cf73424bdae5d027b72cb87",
+      "size_bytes": 1181218
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgblack_img_0375"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgblack_img_0375/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "12de3e89d32d0c8cbbe26b6ff7c9d15c3bf92c9d4ea41516ea42f48c0c42fabf",
+      "size_bytes": 2989569
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgblack_img_0376"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgblack_img_0376/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "d11b8cfcf041b6f3d7b963c3ca37f574a871272cfc9b40c1d4276441048022cd",
+      "size_bytes": 1193120
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgblack_img_0376"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgblack_img_0376/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "e86e205fe5848aaf52b2d3e7b2d7ce16507ebbd6706f58f6e7133a4d0cfadca9",
+      "size_bytes": 2375974
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgblack_img_0377"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgblack_img_0377/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "e2d38e8b105b7b92a75cc2c7d448e5212fb7c9c5afa65b0251c3fc6780b8e041",
+      "size_bytes": 1155574
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgblack_img_0377"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgblack_img_0377/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "735f3c7f5551b99f97b911493351ae617f4faccc4d7a60b9c2d8de56249fe36e",
+      "size_bytes": 2490857
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgblack_img_0378"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgblack_img_0378/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "0d9bc00aaafb85d275a35c5583e18d129d1d10e19b15662ba72b946a4135b4c2",
+      "size_bytes": 1123670
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgblack_img_0378"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgblack_img_0378/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "c1f91240a50cf1ce5e5041080edfd2eb0b592cc9c56e2b54477b137c8f1da15f",
+      "size_bytes": 2259052
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgblack_img_0379"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgblack_img_0379/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "80b18425bed4f9f2db458fac24bc8f3d3340013cd39692345cef7054cbd10424",
+      "size_bytes": 1138178
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgblack_img_0379"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgblack_img_0379/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "2281acae8746d3feb8b61c26d414dea43ab0e22c14b2e483d55247b579443022",
+      "size_bytes": 2292312
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bggreen_img_0352"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bggreen_img_0352/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "d6092a19fd2424e0c7eb10937d7370048afa81d99959ea5bf52184185e54b4e7",
+      "size_bytes": 831199
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bggreen_img_0352"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bggreen_img_0352/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "9dbbafd54b7fa21b6da9267269adaa6d0d6ffaf9a1e9a554d8c780ac8f6b0438",
+      "size_bytes": 1607237
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bggreen_img_0353"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bggreen_img_0353/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "49a1ff238cffd8c8e6cc0ed843bd1b6d1a49f16946d63b316dbfc03981d0b8bd",
+      "size_bytes": 807808
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bggreen_img_0353"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bggreen_img_0353/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "eac78cb2d138705140df3791c6c11df4c235029c1305f01cbe23016b90277ce8",
+      "size_bytes": 907315
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bggreen_img_0355"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bggreen_img_0355/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "81adc970f158caddb6bb3eb425c5558c796f0455e8b15a2aa8b268c644a037d4",
+      "size_bytes": 761978
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bggreen_img_0355"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bggreen_img_0355/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "11435bb593ec126fa1c8906e34846ee058697a3c3f855c5f16d693b6bad60fd7",
+      "size_bytes": 776403
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bggreen_img_0356"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bggreen_img_0356/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "a63e1f4133f3415efb6992559a377b1df3e0a3ec6e808dd0a21e89e094700b17",
+      "size_bytes": 806009
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bggreen_img_0356"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bggreen_img_0356/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "f57438d768e3430d8054a1e552041d16c90785195370d8a5b33a411c53c26b8a",
+      "size_bytes": 1218609
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bggreen_img_0357"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bggreen_img_0357/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "ec0fead5849edf7c8fd47a5aa8735e04d02316597085c73f9bfbf4351661d6a0",
+      "size_bytes": 804859
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bggreen_img_0357"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bggreen_img_0357/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "8baad69ce74144507a91dbcc2b53b26b413513914896c19481f2aabdd74ae65b",
+      "size_bytes": 1092565
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgoil_img_0320"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgoil_img_0320/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "d18ae9e05650d92ff799417d7868c02cc502428761442f9751cd3159cd1b2057",
+      "size_bytes": 1146057
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgoil_img_0320"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgoil_img_0320/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "e7e74a8bed47b98497f0646620317ee5bebb585df2122d1842d9632378c78422",
+      "size_bytes": 1749693
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgoil_img_0321"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgoil_img_0321/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "cebed2c150cb3cad2856204737c3b3ac366a8ec5e1c95834501401e515de3671",
+      "size_bytes": 1096498
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgoil_img_0321"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgoil_img_0321/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "69cdfe26ffbc7dbbbd306818a0b18e0a61818c19c7b800c6901fd2a26b8f0c4f",
+      "size_bytes": 1518977
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgoil_img_0323"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgoil_img_0323/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "03feeac6e088ad8ec4f7ebd8d9ecdb5a8060b5399c426e3f6a07758b61bebd67",
+      "size_bytes": 1119567
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgoil_img_0323"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgoil_img_0323/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "76185b7f04bdfd6cc6cdd4cd15e40933f140e50694d29c510f0d4c5fb53e5cb5",
+      "size_bytes": 3064407
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgoil_img_0324"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgoil_img_0324/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "0a448bc59b8bc46a881d57acf051474dd2b8b8ca1c8d241d8b476b9aa76cd5e7",
+      "size_bytes": 1141345
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgoil_img_0324"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgoil_img_0324/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "00d2b2835e13e758d2a3271fd5d8fb1d042172acb64475be22fe282c01182ca8",
+      "size_bytes": 1638863
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgoil_img_0325"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgoil_img_0325/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "001578d77e0f2b4d0e457dc48e1a10db4321a123c91b0bd33a5b6ceb89f7f76c",
+      "size_bytes": 1132879
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgoil_img_0325"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgoil_img_0325/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "cc53518bf65251e51f2d60d1affe5e4c1bc48cbfbac8ddf792a9794240815700",
+      "size_bytes": 1469186
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgwhite_img_0281"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgwhite_img_0281/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "6c19ecf094a9cdc71eca69e2f3afb660f62c4b1ef2918e45d8386ac00fcd8d34",
+      "size_bytes": 801291
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgwhite_img_0281"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgwhite_img_0281/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "2e5b8c169ca576c7d11a4be2196c23105a6e44c6eb580735cc10b86951c4e9a6",
+      "size_bytes": 1056603
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgwhite_img_0283"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgwhite_img_0283/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "0c23f82779823ce13113d7e93f55df0ebfdcbe7f0c1e1e31cf58bf4e2d9fdd70",
+      "size_bytes": 825166
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgwhite_img_0283"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgwhite_img_0283/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "8264f1381e8d96f20814c37cf2976752b839c2d42df758fcdab4738311bae58b",
+      "size_bytes": 1364447
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgwhite_img_0284"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgwhite_img_0284/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "2c74e133f580605c0943041053b3f9062277fb1f8536660c73c5f022d1fd3e03",
+      "size_bytes": 803928
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgwhite_img_0284"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgwhite_img_0284/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "cafdb08af65b9457747f07b2307c58a3f28be33bb7998a8a2f6770e4f912fa52",
+      "size_bytes": 1166160
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgwhite_img_0285"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgwhite_img_0285/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "493c36622f9aaf077c488ac158c2235c2f672765f286f54bc3f8859d11a125a6",
+      "size_bytes": 821893
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgwhite_img_0285"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgwhite_img_0285/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "45c61891075299ceb88f23677ebadcb7f646a0ce994b94ec7710add4fe53fecf",
+      "size_bytes": 1024781
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgwhite_img_0286"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgwhite_img_0286/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "fd7a81230e9ca413b3e67e92144beb67e3e564e039dcdb4b46387c995c281d5e",
+      "size_bytes": 805865
+    },
+    {
+      "case_ids": [
+        "incline_r1_a35deg_bgwhite_img_0286"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a35deg_bgwhite_img_0286/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "18bd033b3db1ca05e0fe409f8881b71af1c75c7cdefed4e9b1c838afa316eb91",
+      "size_bytes": 1277444
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgblack_img_0380"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgblack_img_0380/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "9bbd144528beb65885a5564888a88fdb6c963cdc7e554e3e52807aeca78921e1",
+      "size_bytes": 1039019
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgblack_img_0380"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgblack_img_0380/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "5f5f2fc6fe7d82d106912aa2af9fe538fc0fa9104e734a1d9761879215f89e74",
+      "size_bytes": 1757593
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgblack_img_0381"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgblack_img_0381/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "0a00beb841c3ec6c15a4999b560a8ea5418c1d43e746a9803fba3647b79c8972",
+      "size_bytes": 1213451
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgblack_img_0381"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgblack_img_0381/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "4338aac6422e65f23eb326241f51346bc66e260830cd70a0418f69c7b7f8f30f",
+      "size_bytes": 2192164
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgblack_img_0384"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgblack_img_0384/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "9e16a10f466d02e99f44043f9c7c6c195ba7be34b9ad61e02eaf5b805a3ee815",
+      "size_bytes": 1122910
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgblack_img_0384"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgblack_img_0384/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "72abda05c7b9837079d547061bb5266826b005814a26079bc2d66204dd4f7576",
+      "size_bytes": 1527738
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bggreen_img_0358"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bggreen_img_0358/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "cfd99d79f6ad4315aae0dafa56a4680fa592dc760c71823354b9d2106aaa01d5",
+      "size_bytes": 817673
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bggreen_img_0358"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bggreen_img_0358/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "1e8b6c96a4277b86d76e8128831ef24dcc3efaaaf432461c34feed3201172574",
+      "size_bytes": 1026681
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bggreen_img_0359"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bggreen_img_0359/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "a363c63bfada57af94a665c5518dde32a6344798325221aa779f0bc6220a69c8",
+      "size_bytes": 801831
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bggreen_img_0359"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bggreen_img_0359/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "a433759f15f693dc77f67f4df319efc68db2e01bc7926a84af05295a9786aefe",
+      "size_bytes": 857732
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bggreen_img_0360"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bggreen_img_0360/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "daa96ce852acebff28c75155f91d531e70c4154e382a87cafc8422b33af9ea58",
+      "size_bytes": 818674
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bggreen_img_0360"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bggreen_img_0360/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "504789fdbd75ce385823dd45a4f18c62603f1255be900e2964f7ddb1f7e5ca4a",
+      "size_bytes": 944739
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bggreen_img_0361"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bggreen_img_0361/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "cdbd175b4e28cbe0b10ffa2ae463604280705a771468046e5e7d02543c3965a2",
+      "size_bytes": 839848
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bggreen_img_0361"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bggreen_img_0361/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "09082009d10d1c82ac7156b8373b79d13c6efc37bce2b0ddab21985ff165594f",
+      "size_bytes": 1010314
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bggreen_img_0362"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bggreen_img_0362/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "1c32af32d2220a26684dc4f1ef231887217b1ba854afed4b60914ed741c788fb",
+      "size_bytes": 821036
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bggreen_img_0362"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bggreen_img_0362/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "3aa3dc3d85c806b3cb936258a4930ff42e4c0b0084bcfa8233d60c2e1352d715",
+      "size_bytes": 818739
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgoil_img_0326"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgoil_img_0326/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "19eb60ed0407ca1a76c35380ac81943f87a05092659a964896ebaf1cc077b016",
+      "size_bytes": 1115644
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgoil_img_0326"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgoil_img_0326/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "a7b6899d56de6757d18cf692baffd3da825bad0e67c78d027517e74798ae881a",
+      "size_bytes": 1122312
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgoil_img_0327"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgoil_img_0327/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "87152a5d4517b737c36b7cb82cb87b0877818c6df8be29be6fad7616eacecef1",
+      "size_bytes": 1140110
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgoil_img_0327"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgoil_img_0327/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "ebc41bee78a9867b061c605604c888320857032c0b673d80e2eb1ff693408f0c",
+      "size_bytes": 1161468
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgoil_img_0328"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgoil_img_0328/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "3b74617f5ddc96362d4ee56e5f03cdbf18fb0c99b1ea1a2362cbe3cd5f835a7f",
+      "size_bytes": 1132880
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgoil_img_0328"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgoil_img_0328/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "4ba2c981325874134708a97431e7a2ac6a60a2d288d156ce563ddef6f22dc29a",
+      "size_bytes": 1162974
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgoil_img_0329"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgoil_img_0329/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "51718a94cc1a279b3947919f8d6781924a51ade2e9cd6ff50783c182e3be19ab",
+      "size_bytes": 1125929
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgoil_img_0329"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgoil_img_0329/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "a701dc4f5d3dfef60d428edadab7a4a768d9cd30d9cf0cdc6373ac454295e6ed",
+      "size_bytes": 1586902
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgoil_img_0330"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgoil_img_0330/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "a6517bc197ccb38b9f6cc05cdf2aec2a7e8d770510a45d1afcf3467def09f4c1",
+      "size_bytes": 1126753
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgoil_img_0330"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgoil_img_0330/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "4814a4d9329b67caed0b3fc0e7d3146f9e1ac8506f7f9587b6d68349ec3efc81",
+      "size_bytes": 1051671
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgwhite_img_0287"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgwhite_img_0287/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "7b4ce8da64c1616c28e0c71e7bb7f36227ba20312223e4ac9e5e6b9d898714f2",
+      "size_bytes": 827989
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgwhite_img_0287"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgwhite_img_0287/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "5662447c52ee3d7651bb84893c76dfb0e03f1da68a4cfc6c76ae3bf4832faf27",
+      "size_bytes": 1261856
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgwhite_img_0288"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgwhite_img_0288/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "d49e5090b3b3cee247000402e631aa3565ded592e309ab6eb74f16693ecb2b84",
+      "size_bytes": 813085
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgwhite_img_0288"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgwhite_img_0288/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "2837896d8786d54d97b07b779112f7d7538160bc546e802091d49d9fe76c4255",
+      "size_bytes": 918443
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgwhite_img_0290"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgwhite_img_0290/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "f96f661807037fd7ef38eec081e43c62e8c2dfb11be96597bb4cfc3890c95285",
+      "size_bytes": 829230
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgwhite_img_0290"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgwhite_img_0290/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "a7d380009bf6c118543e37f54ec233f259447bd155ee01d69129e20f735a88b0",
+      "size_bytes": 1253196
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgwhite_img_0291"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgwhite_img_0291/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "62dafd1318825846375715930b4f6c8152e2f5fdc2a3823d2879345f2e5198b2",
+      "size_bytes": 830718
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgwhite_img_0291"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgwhite_img_0291/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "cd75f5fc310032baec8d4977c7d1b11b03430eeaffcd0b4e649b5ddc75a2366b",
+      "size_bytes": 1256640
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgwhite_img_0292"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgwhite_img_0292/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "43d1722a10c3799f892f128ff6d0029935fc0c7d1344eba42e5a9400a9cea38e",
+      "size_bytes": 812867
+    },
+    {
+      "case_ids": [
+        "incline_r1_a38deg_bgwhite_img_0292"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a38deg_bgwhite_img_0292/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "d1ab26fb9fc176c994444a7861758ce84b7953162352c636b34ab85150e58cb4",
+      "size_bytes": 1132581
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgblack_img_0385"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgblack_img_0385/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "43e7286e6e55b5e0201a8d63c8519e2fecc16fd5f3abea8b22b93465e6c7be6d",
+      "size_bytes": 1101178
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgblack_img_0385"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgblack_img_0385/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "273d8fdbdd574ce983d767c511c0c9c9047ae7a6c96e08b7856431568086a93a",
+      "size_bytes": 1606673
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgblack_img_0386"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgblack_img_0386/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "30a676a398f88db1664aa55739b404f137341590e29a72c45ed5bbc2c70fba7a",
+      "size_bytes": 1175724
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgblack_img_0386"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgblack_img_0386/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "56d1737ed2a1e253ac57cd0c5a496a4a388452a372bc6152de120713ac8970d7",
+      "size_bytes": 1769548
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgblack_img_0387"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgblack_img_0387/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "916f592e48e9a9ad2dfa2e3453bdcc98a11e3aca57de184d4aaa0d65a9610c3a",
+      "size_bytes": 1185952
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgblack_img_0387"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgblack_img_0387/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "4a68837a68c4d404303430cbeae3f19c7cf7b1af397013d3af6cec353e6cb070",
+      "size_bytes": 2008761
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgblack_img_0388"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgblack_img_0388/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "0637bee3c054469514c3dce82551fa19e94c3ea52bdfbf44acf1343518737581",
+      "size_bytes": 1220827
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgblack_img_0388"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgblack_img_0388/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "4d66c4015487f8a0eef3e21875fe03ee4db9651176886e20d22e5adf0c603d86",
+      "size_bytes": 2021267
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgblack_img_0389"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgblack_img_0389/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "cfcfc1dc3bb4c2e3a3d9ade1e2671c2c41fe2ff64b101e4999ba3b094f8bf2bb",
+      "size_bytes": 1201535
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgblack_img_0389"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgblack_img_0389/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "325c0c13618e446e9b2b770e00385f37522052177d739496aa54dac34578762d",
+      "size_bytes": 1920817
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bggreen_img_0363"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bggreen_img_0363/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "9064c9107af25f50ca48ee29e0255046cf0b420fa06aeab83f88ba32599a588b",
+      "size_bytes": 834944
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bggreen_img_0363"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bggreen_img_0363/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "973f487af60c035bed4a0a8cd738844a23bf55c9bb12bb9c24fa0e272de99b7d",
+      "size_bytes": 906277
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bggreen_img_0364"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bggreen_img_0364/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "3acce21f5759ba61bc6bad4f168bb72fd2376bebe8c98a0ec23434bd67dc91c2",
+      "size_bytes": 822317
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bggreen_img_0364"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bggreen_img_0364/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "6ebd210511cdb4b82f38bba3c584164e97f2053152c1ff6b9e25de1877735390",
+      "size_bytes": 943427
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bggreen_img_0365"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bggreen_img_0365/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "b29f14916a6a50ff5ab0ff1b0df059c2f85cbce6190c4ccc6da000199029c38e",
+      "size_bytes": 831093
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bggreen_img_0365"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bggreen_img_0365/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "2ad5abdd427e02341a89ff219cbb54787adcd3bb624dc634b403471d74132e11",
+      "size_bytes": 942040
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bggreen_img_0366"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bggreen_img_0366/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "6e6d4ecc440071df1429a60791472a328eb75a0083871b9646245456dd77b05b",
+      "size_bytes": 846888
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bggreen_img_0366"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bggreen_img_0366/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "cb717cb342e72f590810e6cf85b9bbaa9c2ec6da1f58e5c6be39cf6e39426734",
+      "size_bytes": 1147772
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bggreen_img_0367"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bggreen_img_0367/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "cfd3d46844a48014169e04fe82b3d294995ab1a4833b06c21c7d79dfc653ce97",
+      "size_bytes": 879965
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bggreen_img_0367"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bggreen_img_0367/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "d3b8be08f9c438bf401044d482e702ccb2cf9c2045d48bfdfdec6ae90afe795e",
+      "size_bytes": 1170381
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgoil_img_0331"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgoil_img_0331/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "88e9ef5a7e6f176d620e1d6ec2b81b182ee09ffa9322798d5216c766fbbd60b7",
+      "size_bytes": 1106013
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgoil_img_0331"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgoil_img_0331/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "bb82ff32a129036ab20ba99b8276f5e371b984e131f3d2e257ad3f70ce5e9e70",
+      "size_bytes": 1037175
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgoil_img_0332"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgoil_img_0332/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "5c1a71682a4708d8ef14b56d18085c047c2cc3423b97cb201e85a4c38eec3ae3",
+      "size_bytes": 1150104
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgoil_img_0332"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgoil_img_0332/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "d33595ae9b020c8c83f6dc1e6eab76178b78a6e2a9fe712ef04a7b654f953611",
+      "size_bytes": 1302062
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgoil_img_0333"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgoil_img_0333/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "237603172bec76a75badfd3fe7cee5d7c43530484bae1ced7598ce94746ad5a9",
+      "size_bytes": 1143233
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgoil_img_0333"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgoil_img_0333/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "533f529973a42ecf659488512bc6e254958c93d07808cf0da301946f6abf955f",
+      "size_bytes": 1090992
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgoil_img_0334"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgoil_img_0334/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "7257ba90151d7c1610628d291c59b277f841a35d0d5ab9b4ed0b074025ee4fd2",
+      "size_bytes": 1144692
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgoil_img_0334"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgoil_img_0334/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "149e486a36be03a0c2e506f00d42701c83c86761f46c85eb12c77d3f2d4aa742",
+      "size_bytes": 1315499
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgoil_img_0335"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgoil_img_0335/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "99272f562d3aafd9ab6b75b07ddce4ae8d58575f004de3558ed4a362111dd0c1",
+      "size_bytes": 1149578
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgoil_img_0335"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgoil_img_0335/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "f267d9232dcff8cf8f6036d31d78927a19b4853aae51bca3bb3f31d15b3f4ee8",
+      "size_bytes": 1271885
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgwhite_img_0294"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgwhite_img_0294/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "1c1d3d64b831b4e7e0116d3bde467d948371f5c94a67549b6e7fff54865c1319",
+      "size_bytes": 818438
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgwhite_img_0294"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgwhite_img_0294/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "1b98cbd5c3ca5931721341bd961056d9ea811322516aaba3af234cddf09e4c06",
+      "size_bytes": 1052574
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgwhite_img_0295"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgwhite_img_0295/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "8039fdaf228dc06f510a6ac85839bd2382c8a781f0be7fdd4a918421a8a19669",
+      "size_bytes": 801344
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgwhite_img_0295"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgwhite_img_0295/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "4512d9d0cdced79a95ad3ba2f5c1829835b876091b9e439fb04c30c5d58cff57",
+      "size_bytes": 1101081
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgwhite_img_0296"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgwhite_img_0296/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "0f94dcc3cffe2da436445ac4c5357ef4ca105372f3e702929f58041436a6a489",
+      "size_bytes": 744972
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgwhite_img_0296"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgwhite_img_0296/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "2f026f477ea3d83f4adac65fdd6d499cb27b5f926218a85447c3e5a6b6ccc4e5",
+      "size_bytes": 787490
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgwhite_img_0297"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgwhite_img_0297/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "c732c42fb333a04ea32ffe5fec027eb24a516ee628bf3cd42ea562fb5041eddc",
+      "size_bytes": 777962
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgwhite_img_0297"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgwhite_img_0297/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "e72c02ebf735bdea8c78fb05e0f60388b5aa0cd1dc4cc18a861419534b0f2641",
+      "size_bytes": 1325275
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgwhite_img_0298"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgwhite_img_0298/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "6ce02b4e358c485ebf06a66c6f89e5ff5e714193ade26e6292020f26fa2811c0",
+      "size_bytes": 799401
+    },
+    {
+      "case_ids": [
+        "incline_r1_a41deg_bgwhite_img_0298"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a41deg_bgwhite_img_0298/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "d2f1b4593cec1c317baa16e1c80eb9b2ea06eb226ede5ec2c26262081861f903",
+      "size_bytes": 886679
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgblack_img_0390"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgblack_img_0390/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "f7e44854897c6effff307dc4f9079ffc4665ff0240fbd24b3da2198fbcc3a5b0",
+      "size_bytes": 1177849
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgblack_img_0390"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgblack_img_0390/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "9ae4e6b74cd39cfa760ede514f74bb540082ac0681ada42f658cda65e39251b4",
+      "size_bytes": 1762740
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgblack_img_0392"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgblack_img_0392/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "fc1e9f91188885d14fe5ecbdeb0dec0d9e385ddb697940c1eb967ef20d86bdfe",
+      "size_bytes": 1198082
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgblack_img_0392"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgblack_img_0392/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "c3cc4d4b2e0ef38f5d3a4bb9fe495e140e30f1fa8f9264432fd882db332d7eb6",
+      "size_bytes": 1764098
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgblack_img_0393"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgblack_img_0393/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "267066d136577eea22384b60b54d76db11275c3b8baa49d2e1ec2769f0d558e1",
+      "size_bytes": 1193525
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgblack_img_0393"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgblack_img_0393/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "380389da862c16fdf554e79f950bfd6233c3966fb57278d0b5d1dbf895777886",
+      "size_bytes": 1766715
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgblack_img_0394"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgblack_img_0394/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "d03c722f2d75d1f8d244c2b25cfce142bfdc014ce6bc085dc38fc7948f11d35a",
+      "size_bytes": 1177912
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgblack_img_0394"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgblack_img_0394/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "309bb557875319a8e7e1615d0331f2228500bdf3a7fb48ef5d004354e8a30d98",
+      "size_bytes": 1866235
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bggreen_img_0368"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bggreen_img_0368/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "2a61c57b44f1b427beaf3ed3f1ceeeeb2608856550bff8dd670299aaa15c10c6",
+      "size_bytes": 812051
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bggreen_img_0368"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bggreen_img_0368/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "661058cdbe93f333e1aad26093b476d9f79d3bae0293e98096cca79b29be26f0",
+      "size_bytes": 752460
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bggreen_img_0369"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bggreen_img_0369/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "0b3ec208c54340306efd1b474b1966b7cb7dcecb17b900d861004c176a88850a",
+      "size_bytes": 822534
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bggreen_img_0369"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bggreen_img_0369/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "1baa3d277ce78cc4ef013f3b25f51e651c3bf759c1060e0bdbd9b532fb3cf71e",
+      "size_bytes": 793713
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bggreen_img_0370"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bggreen_img_0370/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "03a9c714dea09ce69c2669eafe55ac3bb2915e27f5ca43face37b59f153170a3",
+      "size_bytes": 821115
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bggreen_img_0370"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bggreen_img_0370/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "30315d78e2ca9899ffec02d17f660a089d18119e910e6bc273c8f3d5dae22608",
+      "size_bytes": 694945
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bggreen_img_0372"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bggreen_img_0372/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "d15a15fe9b46a834816cbdd763caaa37cf55d80d4de419a2b6e2d240e0720596",
+      "size_bytes": 818169
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bggreen_img_0372"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bggreen_img_0372/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "4d8f1500ad78d03b0b2fc239bce4a9e6d20de60be4717330470e21fd127af27c",
+      "size_bytes": 794472
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bggreen_img_0373"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bggreen_img_0373/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "bad2cb709ca0eda3c1681c4135e3c8e6ee892248162511942311ed9f8ab8e017",
+      "size_bytes": 811067
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bggreen_img_0373"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bggreen_img_0373/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "83d59638bd65fb498482c7b2eff4e2fbee7fbbc57bdbae9ed320cef7e0e8d7e7",
+      "size_bytes": 857174
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgoil_img_0336"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgoil_img_0336/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "74a70d42c0c7aa02d9ba166c08e353ffc0a492f24fe48a4c90f006b216248cb2",
+      "size_bytes": 1157320
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgoil_img_0336"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgoil_img_0336/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "1dd003e5e7fcd51d5eef3b77ab1489858751de9c95ee3e5da1c78fdf0b5365b7",
+      "size_bytes": 1172325
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgoil_img_0337"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgoil_img_0337/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "13fe54955d57e73df549281d4c8c6aab229e571a67b60196812d55002c71ebbf",
+      "size_bytes": 1168336
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgoil_img_0337"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgoil_img_0337/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "1849b8e205a2ce82e164ba441abc073fdf1227fd5dc0622330b08c78fd6a300b",
+      "size_bytes": 1613248
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgoil_img_0338"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgoil_img_0338/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "e4cefa5fc867505913518f923d0392a1ddb64a01b8c7285042ed0b767c069a19",
+      "size_bytes": 1172357
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgoil_img_0338"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgoil_img_0338/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "dbb7523ea57ad894462f9fcd0bbeace21627dfdd28148f171fe574fa7c58de0f",
+      "size_bytes": 984482
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgoil_img_0339"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgoil_img_0339/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "8f6762ad3da8e51abf5718a300c4e37921f7947b9346c244ffe5f641541d2089",
+      "size_bytes": 1178771
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgoil_img_0339"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgoil_img_0339/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "ccc8200384a8390f352da70d3d8efa588aa9e779d38043cbdc7b81a49ab7f48c",
+      "size_bytes": 1203259
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgoil_img_0340"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgoil_img_0340/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "7b7c576e5e1cf9ba8b9fcdf83a61d50e3b8a83af998bf7327e6ff5b164653503",
+      "size_bytes": 1181102
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgoil_img_0340"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgoil_img_0340/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "56715e35bb6cb7f5720bc6096b2c1c7d46cf3df6cf3219c95acea1842258a0f9",
+      "size_bytes": 1416570
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgwhite_img_0299"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgwhite_img_0299/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "9113088b7fb0cd0db7ddfbb5b5bd7c3bd370e25335e48dd3d3d47297e9cc96ef",
+      "size_bytes": 787812
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgwhite_img_0299"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgwhite_img_0299/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "35d01b6402014e49c444331651ede514dacdcfe9ace0d25295c8cbe0167129aa",
+      "size_bytes": 1021302
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgwhite_img_0300"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgwhite_img_0300/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "0a08d7437d9c8d5d5d7bb8718d01b55cfb2cf201ef425c776582435e3317bf2d",
+      "size_bytes": 784941
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgwhite_img_0300"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgwhite_img_0300/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "d09a50a3abcbf23f192750f8711439fe341ba7a475bd031b23c0df2f855ee26f",
+      "size_bytes": 1241127
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgwhite_img_0302"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgwhite_img_0302/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "e4c11c1030191c2a22d8410ef68a42e47bee143effaeb3330abacabb9ee53883",
+      "size_bytes": 782620
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgwhite_img_0302"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgwhite_img_0302/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "ea43697fe5f56413c43852d48e397b677c2981e55059816dcd67688901b35a18",
+      "size_bytes": 1016595
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgwhite_img_0303"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgwhite_img_0303/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "c9ab00967907116789aa843f0f0be72e00a0152bba741ba1e89901e3275cb259",
+      "size_bytes": 760455
+    },
+    {
+      "case_ids": [
+        "incline_r1_a44deg_bgwhite_img_0303"
+      ],
+      "path": "assets/inclined_plane_slide/incline_r1_a44deg_bgwhite_img_0303/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "11ad4ae3e9d619acadd7f085b4fa1cfd384a5ab2ab72ddc38f9bf5363cfea60e",
+      "size_bytes": 1013414
+    },
+    {
+      "case_ids": [
+        "pendulum_ltot0110mm_lrope0100mm_r010mm_a010deg_ood01"
+      ],
+      "path": "assets/pendulum/pendulum_ltot0110mm_lrope0100mm_r010mm_a010deg_ood01/canonical/first_frame.jpg",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "5623efb999b19f5a01ece59afb1ec18995ae52ce1c76ee46c9b6ec6988b93246",
+      "size_bytes": 95407
+    },
+    {
+      "case_ids": [
+        "pendulum_ltot0130mm_lrope0120mm_r010mm_a030deg_ood02"
+      ],
+      "path": "assets/pendulum/pendulum_ltot0130mm_lrope0120mm_r010mm_a030deg_ood02/canonical/first_frame.jpg",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "19aa06c38ff05203dd8b5f1a41c1b3fd0926742b9776dedfd4ea88099b365f7c",
+      "size_bytes": 72276
+    },
+    {
+      "case_ids": [
+        "pendulum_ltot0130mm_lrope0120mm_r010mm_a030deg_ood03"
+      ],
+      "path": "assets/pendulum/pendulum_ltot0130mm_lrope0120mm_r010mm_a030deg_ood03/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "d9a33d76f3734d8ad0ffbdb725353091ad3b751315036501c2e33f33b73c7715",
+      "size_bytes": 1488321
+    },
+    {
+      "case_ids": [
+        "pendulum_ltot0155mm_lrope0145mm_r010mm_a020deg_ood04"
+      ],
+      "path": "assets/pendulum/pendulum_ltot0155mm_lrope0145mm_r010mm_a020deg_ood04/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "877097cea48a9d9c8b7fc1386efb523f37db439ae20d3357e10f9ca8d5869c1c",
+      "size_bytes": 1890051
+    },
+    {
+      "case_ids": [
+        "pendulum_ltot0155mm_lrope0145mm_r010mm_a020deg_ood05"
+      ],
+      "path": "assets/pendulum/pendulum_ltot0155mm_lrope0145mm_r010mm_a020deg_ood05/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "05dde673dee11bc66471395102a9a0b57dc6083c9ef8a6ad96c7097f12ee4116",
+      "size_bytes": 1769654
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a005deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a005deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "ee75d62652744a6b60631be2714e5a49aadf0d3ccb4bca0fa4c09a94659fecb0",
+      "size_bytes": 361323
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a005deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a005deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "22b09f25b6badd134ace123190b46885d30b75b1ce0180f3023c02b5f131d0ea",
+      "size_bytes": 17431492
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a010deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a010deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "a97325c2f768593a74ef330fd63e82cfc93adb95222a42526cd7b1488cee2e76",
+      "size_bytes": 354794
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a010deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a010deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "cdb865f8f0efbd29e8af95bdf22ead72df0526898917aae779ceab97c0d374cd",
+      "size_bytes": 22480468
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a020deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a020deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "64cf3d2c6a2405e6c7dfae6b0ebf166253553421428e033bbf4ecb2b3e859363",
+      "size_bytes": 511695
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a020deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a020deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "c8b370b0f9096016e3e2623b830e95b65ed40c9530c2032672fc2a4e889d86c9",
+      "size_bytes": 24583840
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a025deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a025deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "3d090c2fb660ac6a7038a849e42f3e277473048be2ac0d64bb213dab49ee880e",
+      "size_bytes": 380649
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a025deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a025deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "2348186dc4ea6cbd2ba80e9fc6ad8a2936f8626e74a86d555d57fad80c0122eb",
+      "size_bytes": 25981733
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0240mm_lrope0230mm_r010mm_a005deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0240mm_lrope0230mm_r010mm_a005deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "5d5b0d7858b7d3f2cbe91f036eb14c253ee594fe5ea0020e91ef1de1e389c10f",
+      "size_bytes": 353114
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0240mm_lrope0230mm_r010mm_a005deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0240mm_lrope0230mm_r010mm_a005deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "e2747ff69001faa3feace0402ea81bd6bb3b5d9d173cc32289ddb4de30c1d135",
+      "size_bytes": 26916335
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0240mm_lrope0230mm_r010mm_a010deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0240mm_lrope0230mm_r010mm_a010deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "d3ea1aa81b565379a2201d000fda0b5b30432ea5dac5d956bfae5e2c864a2f11",
+      "size_bytes": 343990
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0240mm_lrope0230mm_r010mm_a010deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0240mm_lrope0230mm_r010mm_a010deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "843536122de108dcb190932801e234e984e4b31a98d2358562d835cc5e5d94a7",
+      "size_bytes": 18477200
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0240mm_lrope0230mm_r010mm_a020deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0240mm_lrope0230mm_r010mm_a020deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "91aa93ea929f278bca5e11ad7fbb7a2161557f57e627042820a077141a51eebd",
+      "size_bytes": 429413
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0240mm_lrope0230mm_r010mm_a020deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0240mm_lrope0230mm_r010mm_a020deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "b4af48588e0f32fd3d6bab0348cac83bf0a5c8e54cc8f397ea61d3b5bb87ba3a",
+      "size_bytes": 23191469
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0240mm_lrope0230mm_r010mm_a025deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0240mm_lrope0230mm_r010mm_a025deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "1de8944838038badaf860892d2123a5c1ad9029590770755b906daa1f926f4b4",
+      "size_bytes": 369139
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0240mm_lrope0230mm_r010mm_a025deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0240mm_lrope0230mm_r010mm_a025deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "601336d4bb150e3ad4ffefe10d60fa7098385f82d4af91fdfb6130f2137f36a9",
+      "size_bytes": 27734412
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a005deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a005deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "86a4d27d09b2f9bb2174f8397eeeea707887c9ced9fdf56069e9aa0d5ce8ea28",
+      "size_bytes": 405545
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a005deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a005deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "cd827b0aea6696e8dd03d9c59acfea7ac6377428f64b5a9fa9ba16794bf01e0d",
+      "size_bytes": 20287436
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a010deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a010deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "eb4f8a71d71a852e65b5d17355e85fc4980b1eb9eff549894848372a556f7847",
+      "size_bytes": 340823
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a010deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a010deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "b18e7f29dd8df4867326f8473aab507c2816d97bf86ac3ec0e24e54c5224d01f",
+      "size_bytes": 23627046
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a020deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a020deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "01bb24d96d03e7ca6c00d3a35e3701183f9c1ce2db6b4c62b58bdce19215c058",
+      "size_bytes": 484476
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a020deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a020deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "e96d902b05555a0b634e317602235206c8696027ef7b72f2044830eed6c294eb",
+      "size_bytes": 25111975
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a025deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a025deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "5487b33077eb50fbc22d1db9ae8826eb3b2816a43184349f23e510e16eb5bfd1",
+      "size_bytes": 480524
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a025deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a025deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "0cdeedfbe10bd5b0b24a92293fdea1bb5e7adb342e800301bb0f4dd51cdee681",
+      "size_bytes": 26424179
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0305mm_lrope0295mm_r010mm_a005deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0305mm_lrope0295mm_r010mm_a005deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "4f14435cb7aeca86f0f527f2d9ea494458f97f16e1a7f5eaef0b8e0cf5b56f83",
+      "size_bytes": 381877
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0305mm_lrope0295mm_r010mm_a005deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0305mm_lrope0295mm_r010mm_a005deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "8e207d12e196cca2dcbe41f2fd5407d50aeff38c6d586f98dc18d98648cf03c4",
+      "size_bytes": 23616289
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0305mm_lrope0295mm_r010mm_a010deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0305mm_lrope0295mm_r010mm_a010deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "159dc99f2ade765d8b6b0859d1070bfcd2f1fec92f7cb57ffc52df5310e779de",
+      "size_bytes": 420321
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0305mm_lrope0295mm_r010mm_a010deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0305mm_lrope0295mm_r010mm_a010deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "e43a7aadbe3a1ae39bd9ff43707a0a6f4940487567abcc1e9ea721b3201b61a4",
+      "size_bytes": 19444583
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0305mm_lrope0295mm_r010mm_a020deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0305mm_lrope0295mm_r010mm_a020deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "b514c6b0ad765d58b6f1efb899bea533304187b2e20eda021ad36cc0dbe52288",
+      "size_bytes": 411541
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0305mm_lrope0295mm_r010mm_a020deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0305mm_lrope0295mm_r010mm_a020deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "f2b640b8e275bb568259a1d65a4716e3165b17f9464d191a6fa511a044bb9cf1",
+      "size_bytes": 26822806
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0305mm_lrope0295mm_r010mm_a025deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0305mm_lrope0295mm_r010mm_a025deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "b3ac112bb029f4d6c11a3cca14c381fe2e41cad68acf504dc4549a951fb2f213",
+      "size_bytes": 607745
+    },
+    {
+      "case_ids": [
+        "pendulum_r1_ltot0305mm_lrope0295mm_r010mm_a025deg"
+      ],
+      "path": "assets/pendulum/pendulum_r1_ltot0305mm_lrope0295mm_r010mm_a025deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "575012409a1bb877e467b65630d4014a02a91ee8c43752e78a1dea4227552aa7",
+      "size_bytes": 24000586
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a005deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a005deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "345f770f538532fd1f6f466b9b157172a0eacd47a2f5812bdcc5f9499fc7c882",
+      "size_bytes": 468517
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a005deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a005deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "58399a5c977b3b04bb43a0e8753182fcac70ab18a7228b9fce572aee51194dca",
+      "size_bytes": 12188147
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a010deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a010deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "a10cc2f4eeef78a93c316cf9bc546f3c602c6e522379c58d1220cf360aead281",
+      "size_bytes": 586568
+    },
+    {
+      "case_ids": [
+        "pendulum_ltot0110mm_lrope0100mm_r010mm_a010deg_ood01",
+        "pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a010deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a010deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "795920b0557175053f820858260a035632163b7436ba7c237ab54c42354fa57d",
+      "size_bytes": 14286845
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a020deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a020deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "295db1515829c5f02a3f043aad8a4935183ebfd16dcef7d755cca77795293e77",
+      "size_bytes": 478584
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a020deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a020deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "86385e1706637e56f5dee25b9d37433f9dde9ff656fe4fbb726b42b43b76d7da",
+      "size_bytes": 12408214
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a025deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a025deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "d8ce82d07c71eb5e79f65734d07df2231379ae73ad82c3e9ad1dbc7e35eca212",
+      "size_bytes": 772124
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a025deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a025deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "79096dd42524091a6541a85ce181a0c41921a10b9974e7821d1fd8ee99194197",
+      "size_bytes": 7246468
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a030deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a030deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "057889d769997c82aa1a224d9e1372d72ceaba7e67f7150b248347eda703251d",
+      "size_bytes": 650826
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a030deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a030deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "523cdbebf5e8654645fba21216757db5c9ba45547dadaab8dba5f099a49203ba",
+      "size_bytes": 12832669
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a005deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a005deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "5cb5d304672ddf9dfe7b7dba1acc55549fb519e9ba9547b29fd63720c04c7387",
+      "size_bytes": 600467
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a005deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a005deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "86ec2e5ebcbfaa244f8dcf59ad44d9b904ddf8b418bb417d2523d9cc744508e5",
+      "size_bytes": 12701155
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a010deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a010deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "2a4861ce52601f67b97b398440cc7350167a8702a0f5ed9ef7a99b96c2868907",
+      "size_bytes": 521254
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a010deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a010deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "6f768e440ac8b7b787aeadf547cca6153997eeabafc26d07aa2f752aee0fd87b",
+      "size_bytes": 12565933
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a020deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a020deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "4692a2ce83c880ecfae2179ec3f2935c45a4768f7c534f1e067be519a0f41e06",
+      "size_bytes": 694589
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a020deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a020deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "cfc256fa5e55339a829c2253ed5f0dea1ff63a9927ee252b684381b6dbe30c15",
+      "size_bytes": 11554334
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a025deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a025deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "da2394dde3998278c7f7165926c82efadaa973ed243d86db1b3741ddc8761b17",
+      "size_bytes": 653631
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a025deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a025deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "5c5c5b0e19cdeb197477bc8f5b9da7adebfbcb694c9c06308d0cd2e80a9c95fb",
+      "size_bytes": 11998194
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a030deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a030deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "10361edf3ffd8852f5d4b813d54abd16c1c6edf82f1a7e2a4fae148566460cf4",
+      "size_bytes": 672611
+    },
+    {
+      "case_ids": [
+        "pendulum_ltot0130mm_lrope0120mm_r010mm_a030deg_ood02",
+        "pendulum_ltot0130mm_lrope0120mm_r010mm_a030deg_ood03",
+        "pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a030deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a030deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "f291fe9803eea149f38c59587bcd4f4e58c7d7ea4c560d7233ffd3c9b07a7e26",
+      "size_bytes": 12193297
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a005deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a005deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "020ddeb7df7e693bc51482876007696da7e72c873af636175bd66d523cda3eda",
+      "size_bytes": 567085
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a005deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a005deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "2ea6b1078999e519d29cc878b9fffe457c3a7e99496acc5138bc5c750c944f36",
+      "size_bytes": 12084502
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a010deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a010deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "ebc3f3272be83fde835933633be9d457f2264426fc0fc572ffb15ba01d3511e6",
+      "size_bytes": 635527
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a010deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a010deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "42f280207e0bffa0944992f73ae6ce0e58981816a7df1b86559bca763f3d6f20",
+      "size_bytes": 12162031
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a020deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a020deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "f5adcc71abb5a026b79b483a86cc23646f1afd5b703abc8c3e72a4366c6b896d",
+      "size_bytes": 666628
+    },
+    {
+      "case_ids": [
+        "pendulum_ltot0155mm_lrope0145mm_r010mm_a020deg_ood04",
+        "pendulum_ltot0155mm_lrope0145mm_r010mm_a020deg_ood05",
+        "pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a020deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a020deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "4beb30f863c7606929b4fdc5fb1bed16f6deab1c3ccadccf7f0dc682ef258331",
+      "size_bytes": 12518349
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a025deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a025deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "e09f38b17e439b4500cf11e75127199ee2f36c4f116d4f02f48654e78faf228f",
+      "size_bytes": 585070
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a025deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a025deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "4172af9df1a0c915b4b0e1b08c36ca7ef6383df49755173972ca8443bbfd04f0",
+      "size_bytes": 12174276
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a030deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a030deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "116ae836eb16805c08e963f553038f771e631f700a45f1b7b289c09733559946",
+      "size_bytes": 563397
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a030deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a030deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "98302d2e4bfecec14c828a0b9d7b6f46fdcec0e46e613a650770653dd53a23b7",
+      "size_bytes": 11837837
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0180mm_lrope0170mm_r010mm_a005deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0180mm_lrope0170mm_r010mm_a005deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "369c2ad4d73a86f83394acd61d656794a1b00fe4e20537d45752842dec8cb220",
+      "size_bytes": 620408
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0180mm_lrope0170mm_r010mm_a005deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0180mm_lrope0170mm_r010mm_a005deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "88cfdc353d2a8d19f96254e9cab190200149ba941bb2743a6ba3d3b184021243",
+      "size_bytes": 11754576
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0180mm_lrope0170mm_r010mm_a010deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0180mm_lrope0170mm_r010mm_a010deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "c944536713277968c4682934fdf2c0db239d5c2c2ce6785abb1a9e10b87125e5",
+      "size_bytes": 603890
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0180mm_lrope0170mm_r010mm_a010deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0180mm_lrope0170mm_r010mm_a010deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "553af3f7ccaffab61ac09916f362ac70137a4f778315016951d8cc5e2c4fa71a",
+      "size_bytes": 12598446
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0180mm_lrope0170mm_r010mm_a020deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0180mm_lrope0170mm_r010mm_a020deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "f51ae06edc52ac45e8c3a3bbe6fecc319f3f92bf8471cbe73364db36c20b3b42",
+      "size_bytes": 563717
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0180mm_lrope0170mm_r010mm_a020deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0180mm_lrope0170mm_r010mm_a020deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "5bfb823d0f4dda947ad7fea1047143bb5c03e577ece78edab986c9fa1985c887",
+      "size_bytes": 12064334
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0180mm_lrope0170mm_r010mm_a025deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0180mm_lrope0170mm_r010mm_a025deg/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "603938629c516d217fc426ad86f2075022914a307168374248758b7b33442501",
+      "size_bytes": 672270
+    },
+    {
+      "case_ids": [
+        "pendulum_r2_ltot0180mm_lrope0170mm_r010mm_a025deg"
+      ],
+      "path": "assets/pendulum/pendulum_r2_ltot0180mm_lrope0170mm_r010mm_a025deg/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "fceb62ec5b9d35f1f0fc4d84d01b4e65e2f45e30b22c5e571e90deb911127b56",
+      "size_bytes": 12339423
+    },
+    {
+      "case_ids": [
+        "incline_r1_a32deg_bgblack_img_0341",
+        "incline_r1_a32deg_bgblack_img_0342",
+        "incline_r1_a32deg_bgblack_img_0343",
+        "incline_r1_a32deg_bgblack_img_0344",
+        "incline_r1_a32deg_bgblack_img_0345",
+        "incline_r1_a32deg_bggreen_img_0346",
+        "incline_r1_a32deg_bggreen_img_0349",
+        "incline_r1_a32deg_bggreen_img_0350",
+        "incline_r1_a32deg_bggreen_img_0351",
+        "incline_r1_a32deg_bgoil_img_0313",
+        "incline_r1_a32deg_bgoil_img_0314",
+        "incline_r1_a32deg_bgoil_img_0317",
+        "incline_r1_a32deg_bgoil_img_0318",
+        "incline_r1_a32deg_bgoil_img_0319",
+        "incline_r1_a32deg_bgwhite_img_0271",
+        "incline_r1_a32deg_bgwhite_img_0273",
+        "incline_r1_a32deg_bgwhite_img_0274",
+        "incline_r1_a32deg_bgwhite_img_0275",
+        "incline_r1_a32deg_bgwhite_img_0276",
+        "incline_r1_a35deg_bgblack_img_0375",
+        "incline_r1_a35deg_bgblack_img_0376",
+        "incline_r1_a35deg_bgblack_img_0377",
+        "incline_r1_a35deg_bgblack_img_0378",
+        "incline_r1_a35deg_bgblack_img_0379",
+        "incline_r1_a35deg_bggreen_img_0352",
+        "incline_r1_a35deg_bggreen_img_0353",
+        "incline_r1_a35deg_bggreen_img_0355",
+        "incline_r1_a35deg_bggreen_img_0356",
+        "incline_r1_a35deg_bggreen_img_0357",
+        "incline_r1_a35deg_bgoil_img_0320",
+        "incline_r1_a35deg_bgoil_img_0321",
+        "incline_r1_a35deg_bgoil_img_0323",
+        "incline_r1_a35deg_bgoil_img_0324",
+        "incline_r1_a35deg_bgoil_img_0325",
+        "incline_r1_a35deg_bgwhite_img_0281",
+        "incline_r1_a35deg_bgwhite_img_0283",
+        "incline_r1_a35deg_bgwhite_img_0284",
+        "incline_r1_a35deg_bgwhite_img_0285",
+        "incline_r1_a35deg_bgwhite_img_0286",
+        "incline_r1_a38deg_bgblack_img_0380",
+        "incline_r1_a38deg_bgblack_img_0381",
+        "incline_r1_a38deg_bgblack_img_0384",
+        "incline_r1_a38deg_bggreen_img_0358",
+        "incline_r1_a38deg_bggreen_img_0359",
+        "incline_r1_a38deg_bggreen_img_0360",
+        "incline_r1_a38deg_bggreen_img_0361",
+        "incline_r1_a38deg_bggreen_img_0362",
+        "incline_r1_a38deg_bgoil_img_0326",
+        "incline_r1_a38deg_bgoil_img_0327",
+        "incline_r1_a38deg_bgoil_img_0328",
+        "incline_r1_a38deg_bgoil_img_0329",
+        "incline_r1_a38deg_bgoil_img_0330",
+        "incline_r1_a38deg_bgwhite_img_0287",
+        "incline_r1_a38deg_bgwhite_img_0288",
+        "incline_r1_a38deg_bgwhite_img_0290",
+        "incline_r1_a38deg_bgwhite_img_0291",
+        "incline_r1_a38deg_bgwhite_img_0292",
+        "incline_r1_a41deg_bgblack_img_0385",
+        "incline_r1_a41deg_bgblack_img_0386",
+        "incline_r1_a41deg_bgblack_img_0387",
+        "incline_r1_a41deg_bgblack_img_0388",
+        "incline_r1_a41deg_bgblack_img_0389",
+        "incline_r1_a41deg_bggreen_img_0363",
+        "incline_r1_a41deg_bggreen_img_0364",
+        "incline_r1_a41deg_bggreen_img_0365",
+        "incline_r1_a41deg_bggreen_img_0366",
+        "incline_r1_a41deg_bggreen_img_0367",
+        "incline_r1_a41deg_bgoil_img_0331",
+        "incline_r1_a41deg_bgoil_img_0332",
+        "incline_r1_a41deg_bgoil_img_0333",
+        "incline_r1_a41deg_bgoil_img_0334",
+        "incline_r1_a41deg_bgoil_img_0335",
+        "incline_r1_a41deg_bgwhite_img_0294",
+        "incline_r1_a41deg_bgwhite_img_0295",
+        "incline_r1_a41deg_bgwhite_img_0296",
+        "incline_r1_a41deg_bgwhite_img_0297",
+        "incline_r1_a41deg_bgwhite_img_0298",
+        "incline_r1_a44deg_bgblack_img_0390",
+        "incline_r1_a44deg_bgblack_img_0392",
+        "incline_r1_a44deg_bgblack_img_0393",
+        "incline_r1_a44deg_bgblack_img_0394",
+        "incline_r1_a44deg_bggreen_img_0368",
+        "incline_r1_a44deg_bggreen_img_0369",
+        "incline_r1_a44deg_bggreen_img_0370",
+        "incline_r1_a44deg_bggreen_img_0372",
+        "incline_r1_a44deg_bggreen_img_0373",
+        "incline_r1_a44deg_bgoil_img_0336",
+        "incline_r1_a44deg_bgoil_img_0337",
+        "incline_r1_a44deg_bgoil_img_0338",
+        "incline_r1_a44deg_bgoil_img_0339",
+        "incline_r1_a44deg_bgoil_img_0340",
+        "incline_r1_a44deg_bgwhite_img_0299",
+        "incline_r1_a44deg_bgwhite_img_0300",
+        "incline_r1_a44deg_bgwhite_img_0302",
+        "incline_r1_a44deg_bgwhite_img_0303"
+      ],
+      "path": "assets/source_archives/20260723_new_scenes/inclined_plane_raw.zip",
+      "roles": [
+        "source_archive"
+      ],
+      "sha256": "1f26262841d2d079eb0fc27a59e4e35c2dce6f1a0d707c9057e600708bfea395",
+      "size_bytes": 3999943671
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_img_0370",
+        "circular_r1_silver02cm_img_0374",
+        "circular_r1_silver02cm_img_0378",
+        "circular_r1_silver02cm_wood06cm_img_0392",
+        "circular_r1_silver02cm_wood06cm_img_0400",
+        "circular_r1_silver02cm_wood06cm_img_0401",
+        "circular_r1_silver02cm_wood08cm_img_0393",
+        "circular_r1_silver02cm_wood08cm_img_0399",
+        "circular_r1_silver02cm_wood08cm_img_0402",
+        "circular_r1_silver04cm_img_0369",
+        "circular_r1_silver04cm_img_0373",
+        "circular_r1_silver04cm_img_0377",
+        "circular_r1_silver06cm_img_0368",
+        "circular_r1_silver06cm_img_0372",
+        "circular_r1_silver06cm_img_0376",
+        "circular_r1_silver06cm_wood02cm_img_0394",
+        "circular_r1_silver06cm_wood02cm_img_0397",
+        "circular_r1_silver06cm_wood02cm_img_0403",
+        "circular_r1_silver08cm_img_0367",
+        "circular_r1_silver08cm_img_0371",
+        "circular_r1_silver08cm_img_0375",
+        "circular_r1_silver08cm_wood02cm_img_0395",
+        "circular_r1_silver08cm_wood02cm_img_0396",
+        "circular_r1_silver08cm_wood02cm_img_0404",
+        "circular_r1_wood02cm_img_0382",
+        "circular_r1_wood02cm_img_0386",
+        "circular_r1_wood02cm_img_0391",
+        "circular_r1_wood04cm_img_0381",
+        "circular_r1_wood04cm_img_0385",
+        "circular_r1_wood04cm_img_0390",
+        "circular_r1_wood06cm_img_0380",
+        "circular_r1_wood06cm_img_0384",
+        "circular_r1_wood06cm_img_0389",
+        "circular_r1_wood08cm_img_0379",
+        "circular_r1_wood08cm_img_0383",
+        "circular_r1_wood08cm_img_0388"
+      ],
+      "path": "assets/source_archives/20260723_new_scenes/uniform_circular_motion_processed.zip",
+      "roles": [
+        "source_archive"
+      ],
+      "sha256": "20fb2124c0198d456776328e563a4c2824fb0841c0837e6b2538f3795e2b3d84",
+      "size_bytes": 1083837514
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_img_0370"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_img_0370/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "ea93086d896da1fd2a0e38a6e58326f8dfceb089adf93632a8f595d433e82da4",
+      "size_bytes": 3995327
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_img_0370"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_img_0370/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "4bdbbd22341f501bd075dc3d35453ce97d7bfaef51febca94539d124992db8d9",
+      "size_bytes": 28522536
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_img_0374"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_img_0374/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "b1f5bdab7c4e96e21b826906fd0a59a346dcd0695196c598b7eccfdac87bb819",
+      "size_bytes": 2811724
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_img_0374"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_img_0374/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "3f6b9c32e421661e9e085f3454ac47ba3dbf8fb4da5280f4a0542934ba6bb16d",
+      "size_bytes": 29493987
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_img_0378"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_img_0378/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "4770666b4e06442b5aaeb14e63cbb1e108a59a3d130962cef4ad0e0abff7310e",
+      "size_bytes": 3446571
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_img_0378"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_img_0378/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "fc921dfd6839d1b7a86cb916ba14537a6a5367284687acefaa4b6a0e2efd07a3",
+      "size_bytes": 30067946
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_wood06cm_img_0392"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_wood06cm_img_0392/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "c3cb4bba972bf074aac7abca1b890f6a52cea5a1ccbb5aa1d63c6612c814cfe0",
+      "size_bytes": 4221493
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_wood06cm_img_0392"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_wood06cm_img_0392/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "64228e74e527fa431cf244343650f30f914f0be34f8b31c51269cf5a47b2478e",
+      "size_bytes": 33856766
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_wood06cm_img_0400"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_wood06cm_img_0400/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "cc00a9c2b6f3ab34ed0b9659876fa47ec5e81d74f7f58938aed23e93896c6124",
+      "size_bytes": 2941511
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_wood06cm_img_0400"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_wood06cm_img_0400/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "9e2d6c808eb409003a954045924cce40a921ea96d5cd924e6765fc258922178f",
+      "size_bytes": 30143374
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_wood06cm_img_0401"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_wood06cm_img_0401/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "95cf08c2748fd4ffac75a889f7d4cbf95ffd695d0dd03c957492633bb8626004",
+      "size_bytes": 2571697
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_wood06cm_img_0401"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_wood06cm_img_0401/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "649567cc88eca2667985c545c7640e20b9868c3342b4e9e4ec0bbf42fed12d24",
+      "size_bytes": 26959034
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_wood08cm_img_0393"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_wood08cm_img_0393/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "8d47067b80a888706be8426216a445501d6831c62c5b157806b929c25e4d01c5",
+      "size_bytes": 3519104
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_wood08cm_img_0393"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_wood08cm_img_0393/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "05928ef84d0b1fbcacb9742000b0e767aa97f1163f33452e475bbf1d9d836f06",
+      "size_bytes": 31145662
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_wood08cm_img_0399"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_wood08cm_img_0399/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "d25175508a9328cb1f09aff2e18fa95c56c4e4848354b791c9a4f419b368952b",
+      "size_bytes": 2990774
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_wood08cm_img_0399"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_wood08cm_img_0399/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "dde357079ae874bcf5df0a230a1589301951bbda136bfb515caa5be12646f951",
+      "size_bytes": 29612914
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_wood08cm_img_0402"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_wood08cm_img_0402/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "5cba383fb5a2eb1e1694e5f37db5d6dd2e1a924de5ada527ba1abb444991239c",
+      "size_bytes": 2571552
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver02cm_wood08cm_img_0402"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver02cm_wood08cm_img_0402/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "274da4fd6d6ea25b4e671845d4fde6f164bcbc348ec68ab285f829dcf23a3a35",
+      "size_bytes": 27484398
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver04cm_img_0369"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver04cm_img_0369/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "0ea7e495ff9bb1f5236d6f8b95ddd757b2399062108575ab2a9db95232f33862",
+      "size_bytes": 4072486
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver04cm_img_0369"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver04cm_img_0369/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "136a257dea236aa8849c1f4209fa836609b18dab9e573d290d2046471e84918f",
+      "size_bytes": 28270802
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver04cm_img_0373"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver04cm_img_0373/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "f8827a3c0470cad95cc1e663a8d71c4c92bda7307a9fd8d0f459c87804d14b08",
+      "size_bytes": 2664694
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver04cm_img_0373"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver04cm_img_0373/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "73b3e74c54e3f3ada0ec45399a8e9a0f80b0799510c867a4933ad5db6b8957e0",
+      "size_bytes": 29348185
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver04cm_img_0377"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver04cm_img_0377/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "1147337ace91d899478cdfab3a4de8a649e522f61705a213fcff88dee053fe02",
+      "size_bytes": 3298158
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver04cm_img_0377"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver04cm_img_0377/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "b1aa390557fef159882b72ead14e3e3982a0ca732c3ae1db3214225dd538e046",
+      "size_bytes": 29020971
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver06cm_img_0368"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver06cm_img_0368/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "ca745e55133fd390d78de7c98471ab004823eef39aa6fc63947ba56171bac2be",
+      "size_bytes": 4155737
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver06cm_img_0368"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver06cm_img_0368/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "cd0026e834d13217340df870c86ab8d56f1373c64fdf00ef0825844a4a3d2727",
+      "size_bytes": 27989836
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver06cm_img_0372"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver06cm_img_0372/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "507aad1436658b2dbcf1b25009e179d6ed62424c09f9d31ac5c98819bc9a1874",
+      "size_bytes": 2435526
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver06cm_img_0372"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver06cm_img_0372/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "b980d4c28332d6eb36fff4bea1ebf903bb72d2d50c876c5f7b488afed77aa6ce",
+      "size_bytes": 31122374
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver06cm_img_0376"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver06cm_img_0376/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "1274d44aba4e4e738309d45bed202f7beee3e7a90905488ca31ebe5794b828a2",
+      "size_bytes": 3513332
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver06cm_img_0376"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver06cm_img_0376/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "102c5c99b8bb8c28dd0bbc6fb261bef90f32e047ba4247cb7beb09b9ead6f757",
+      "size_bytes": 30131509
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver06cm_wood02cm_img_0394"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver06cm_wood02cm_img_0394/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "44f585f7baf986ad01491b68721b3563b4dcfce3b84caafef93fff1db69a9720",
+      "size_bytes": 3492687
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver06cm_wood02cm_img_0394"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver06cm_wood02cm_img_0394/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "21e6c7a00a8c923c2f5de0f5d2ce45c62eccbaef2d9c71d7670df6a99a042d3d",
+      "size_bytes": 30591430
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver06cm_wood02cm_img_0397"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver06cm_wood02cm_img_0397/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "296fa2d618b0f98d40ca1ff8b44464db0f3689ed73c9bdf0e80667709ce3daa2",
+      "size_bytes": 2920686
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver06cm_wood02cm_img_0397"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver06cm_wood02cm_img_0397/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "ec88da5d56d962fe6db0a80526429ce127ed8fb19638f0aa43385aec3c2cf7af",
+      "size_bytes": 30618971
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver06cm_wood02cm_img_0403"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver06cm_wood02cm_img_0403/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "5b7c6fda121a75cc8da9f728aff508b91e47b9f1d961ef407c2750bcc1b8edf5",
+      "size_bytes": 2544342
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver06cm_wood02cm_img_0403"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver06cm_wood02cm_img_0403/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "36d12af8ae14a345b5b8721a6ccc8598509df20ac8ae7e77dffc588e38b8e913",
+      "size_bytes": 27089589
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver08cm_img_0367"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver08cm_img_0367/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "b06e93cbdbb7e3e954c54adfd80b052019603a06f3b8557e91aecd6af00b8eae",
+      "size_bytes": 3701447
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver08cm_img_0367"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver08cm_img_0367/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "a0b6b5b1b94a1d392afcf2baba58c002280621cb929adb6faa7bc73a02dddc79",
+      "size_bytes": 26068148
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver08cm_img_0371"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver08cm_img_0371/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "022a02fd653fe4cc11a0922f5e51cbf94d38b64a73ece897f2b4d526b06b76ec",
+      "size_bytes": 2986254
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver08cm_img_0371"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver08cm_img_0371/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "fa4861e3ca2d8cc3b9126d069e6f5e938e7634fec05c9c07a47c0838c097d4d7",
+      "size_bytes": 28107733
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver08cm_img_0375"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver08cm_img_0375/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "8d4603cbfb7def252a9901da6f109d1104a4e58c674147927c08923896d619b9",
+      "size_bytes": 3223755
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver08cm_img_0375"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver08cm_img_0375/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "82ac2d4cad407c84e96984a4279707962411536ddea1398ff84b056c661c63b1",
+      "size_bytes": 28317759
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver08cm_wood02cm_img_0395"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver08cm_wood02cm_img_0395/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "d8c7ef8e1b0b0116782c98a105a3d465e4806999e98a63b8c51bf365a9376506",
+      "size_bytes": 3608555
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver08cm_wood02cm_img_0395"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver08cm_wood02cm_img_0395/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "780b47dd8f3440651495c154f354fc5106c853b7c5d0185af830454d9fcf6fbe",
+      "size_bytes": 30864274
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver08cm_wood02cm_img_0396"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver08cm_wood02cm_img_0396/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "a458931d7634f3b26bee474bc2b65f055eea080264dee35166c0c14277a3ab5a",
+      "size_bytes": 2852012
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver08cm_wood02cm_img_0396"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver08cm_wood02cm_img_0396/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "b0e527362f246dda75cc74e2379acd163216594a8831f22d3f8b29163d2d1a95",
+      "size_bytes": 30121820
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver08cm_wood02cm_img_0404"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver08cm_wood02cm_img_0404/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "2e9ba12c4c0765a8acdfbdbfe3afc97a0bda9b2306f967a299deb22b6abc373a",
+      "size_bytes": 2728585
+    },
+    {
+      "case_ids": [
+        "circular_r1_silver08cm_wood02cm_img_0404"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_silver08cm_wood02cm_img_0404/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "fe4871a20c133c62f086aa6803872da7b6bb5f8e29e855370fcea51ba65bd40f",
+      "size_bytes": 29045787
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood02cm_img_0382"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood02cm_img_0382/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "3328fcfe63b75a6f79603f4fb19e1db2aaa791ffb829a7603a8dad5976218593",
+      "size_bytes": 3247364
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood02cm_img_0382"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood02cm_img_0382/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "0c28517615a481b72dff9602e251bb712eaf1ab7a8e9f77f7339202ff69af52a",
+      "size_bytes": 29880920
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood02cm_img_0386"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood02cm_img_0386/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "91801e5897dea8ef0a2695e20d1558925a1c861655e405310b7e59c83d8ae9c8",
+      "size_bytes": 2951677
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood02cm_img_0386"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood02cm_img_0386/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "28e6a0624998dc02aab16f12bf79e4dd9a3dfdbb8d51f378dbb823908be0fe9e",
+      "size_bytes": 33893954
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood02cm_img_0391"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood02cm_img_0391/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "505ac01b1070b71ddd31b9ee39746a39d4eca1860f29151f3379c170b60c11ff",
+      "size_bytes": 4103398
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood02cm_img_0391"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood02cm_img_0391/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "786b730729b08711640ccc4e144c38d5aded3ac5e979341c0f6958b4d1043624",
+      "size_bytes": 32390267
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood04cm_img_0381"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood04cm_img_0381/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "0faf114014281aae51a20972902f31b979a2d157bda9aceab8feb9e3d9bb6225",
+      "size_bytes": 3202117
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood04cm_img_0381"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood04cm_img_0381/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "5326b0374af0baa9441494c4d7a9cb25bc486bc3da2eb690e65133568822d042",
+      "size_bytes": 30572130
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood04cm_img_0385"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood04cm_img_0385/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "f36cfec0b18615111ed5041a0abee000dd6909405bfe9e09687b74c0a5e1ee14",
+      "size_bytes": 2898150
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood04cm_img_0385"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood04cm_img_0385/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "a2374f7aade1f958692870c60e60846b0a10ee1abedcfae4e4e2fcfb22620434",
+      "size_bytes": 29955264
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood04cm_img_0390"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood04cm_img_0390/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "3f84646d6393992b1cf53490f11c9d143ae41716bbe3b6abc62a82c73c1dc763",
+      "size_bytes": 4442440
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood04cm_img_0390"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood04cm_img_0390/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "046d08b02f74bcd510ff94b0a22983912cfb8a14d367ddb548484aacdbf0272c",
+      "size_bytes": 34873433
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood06cm_img_0380"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood06cm_img_0380/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "5f2008f664939fc9f5b8a4d425b8974796001e4f9b9d8f49b0a454a64fa8d926",
+      "size_bytes": 3100561
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood06cm_img_0380"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood06cm_img_0380/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "e4b2be568042ec087f791ae6ebd75236c057d81e67bfade10d79a7acb7274ac9",
+      "size_bytes": 30558109
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood06cm_img_0384"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood06cm_img_0384/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "4cd26aa6d55395da4cebe3b68207e09b4215e100a35654988b86467bebd52bdf",
+      "size_bytes": 2983451
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood06cm_img_0384"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood06cm_img_0384/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "3dad98e798675faed8187e08f3536905679d0e3a34e8792dee855149e0bebf0f",
+      "size_bytes": 29246665
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood06cm_img_0389"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood06cm_img_0389/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "171065560172e4f10a42a0cb4f1be89e912b3daae84134aabec6928af6f6c174",
+      "size_bytes": 4352921
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood06cm_img_0389"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood06cm_img_0389/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "ff44abc43196e1ad6ed021b05a57e9388fe61f5c5ddc2e41c0dcc2ff69ca37db",
+      "size_bytes": 34932044
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood08cm_img_0379"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood08cm_img_0379/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "b4b99faa34a88cc54df9f7a15582a83cb3c3f420894013763edb3e72dd3fea04",
+      "size_bytes": 2873160
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood08cm_img_0379"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood08cm_img_0379/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "1b20f65b170e5acf348a5b109ecfb8161cd1e50ded5dcadf898ebe4477cd7c76",
+      "size_bytes": 29594691
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood08cm_img_0383"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood08cm_img_0383/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "50ef8a36fd9b20d9cee3cfef6d9d02268afb29ba2df0527d15be38f9d69e49bf",
+      "size_bytes": 2984859
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood08cm_img_0383"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood08cm_img_0383/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "24369f5e42464edb5c98ba66ea676a0a384fa22748adf6b31fc734056b0ad721",
+      "size_bytes": 30103007
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood08cm_img_0388"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood08cm_img_0388/canonical/first_frame.png",
+      "roles": [
+        "first_frame"
+      ],
+      "sha256": "ca0687cece8200b40f2e50a76957609288759201afa5611126fd8e811a02f057",
+      "size_bytes": 4133240
+    },
+    {
+      "case_ids": [
+        "circular_r1_wood08cm_img_0388"
+      ],
+      "path": "assets/uniform_circular_motion/circular_r1_wood08cm_img_0388/canonical/reference.mp4",
+      "roles": [
+        "physics_reference_video",
+        "reference_video"
+      ],
+      "sha256": "9579f5e1760ed807fdfea24a0bd25036c220b91b3afeaddccceac6cd7eb944b3",
+      "size_bytes": 34064177
+    }
+  ],
+  "files_digest": "b0c216111e96a1d1f4e697a0a222720fbf3fa1dbc5b21f831cb11317e8004933",
+  "release": "4.0.0",
+  "schema_version": "1.0"
+}

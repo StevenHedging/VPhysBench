@@ -8,226 +8,316 @@ Benchmark：
 /root/miniconda3/envs/phybench
 ```
 
-WAN 执行：
+WAN 模型进程通常使用：
 
 ```text
 /root/miniconda3/envs/dlp
 ```
 
-Cosmos3 执行：
+Cosmos 模型进程通常使用其工程虚拟环境：
 
 ```text
 /root/Nico/cosmos/packages/cosmos3/.venv
 ```
 
-不要混用：Benchmark 环境负责 Dataset、Registry、managed runtime、command host、
-OpenCV、SAM2 和 evaluator；WAN/Cosmos 模型环境只由各自 Bundle driver/executor 调用。
+`phybench` 环境负责 Dataset、Registry、TaskBuilder、run orchestration 和 evaluator；
+模型环境只由 Bundle driver 调用。实际路径以各目录 Git-ignored 的
+`baseline.local.json` 为准。
 
-## 2. 安装
+## 2. 安装与测试
 
 ```bash
 cd /root/Steven/physics_video_benchmark
+
 /root/miniconda3/envs/phybench/bin/pip install -e ".[scene-evaluation]"
 /root/miniconda3/envs/phybench/bin/pip install -e /root/Jensen/Eval/sam2-main
 ```
 
-验证：
-
-```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python - <<'PY'
-import cv2
-import numpy
-import torch
-import sam2
-print("opencv", cv2.__version__)
-print("numpy", numpy.__version__)
-print("cuda", torch.cuda.is_available())
-print("sam2", sam2.__file__)
-PY
-```
-
-## 3. 测试
-
-```bash
-make test
-```
-
-系统 Python 缺少 evaluation extras 时，scene 测试明确 skip。正式完整测试：
+完整测试：
 
 ```bash
 PYTHONPATH=src:tests /root/miniconda3/envs/phybench/bin/python \
   -m unittest discover -s tests -v
 ```
 
-源码编译检查：
+静态检查：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
   -m compileall -q src tests baselines
+
 git diff --check
 ```
 
-## 4. Dataset 验收
+## 3. Dataset 验收
 
-快速 metadata 验收：
+快速检查 metadata 与资产存在性：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json
+  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --check-assets
 ```
 
-发布前完整验收：
+发布或迁移机器前执行完整哈希验收：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
+  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
   --check-asset-hashes
 ```
 
-完整验收读取 468 个锁定文件，耗时取决于磁盘。
+预期 Dataset identity：
+
+```text
+physics_video_five_scene_v4
+be5ea8880be3cf8e0d0d316ee025cf02905ef5aeb544f3df5f4b966e5e14782d
+```
+
+## 4. Baseline 本机配置
+
+新机器先复制目标目录的模板：
+
+```bash
+cp baselines/wan22_lora/baseline.local.example.json \
+  baselines/wan22_lora/baseline.local.json
+```
+
+填写 checkpoint、模型 Python、工程根目录与 GPU。Local override 只能覆盖 `model` 和
+`runtime`；不要把绝对路径写回 portable manifest。
+
+同目录的 `baseline.json` 与 `physics.baseline.json` 共享该 local override。它们表示
+同一模型部署的不同固定输入策略，而不是 Task 的两个运行模式。
 
 ## 5. Baseline 发现与部署验收
-
-首次接入模型前，先按[自定义 Baseline 集成指南](BASELINE_INTEGRATION.md)选择
-submission、managed 或 command 接口并完成 Bundle。
-
-只读取 manifests：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   baseline list
 ```
 
-解析 `baseline.local.json` 并查看 portable/deployment identity：
+当前应发现六个 Baseline ID。检查解析结果：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline inspect wan22_ti2v_5b_lora_r32_v3
+  baseline inspect wan22_ti2v_5b_lora_r32_v3_generic
+
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline inspect wan22_ti2v_5b_lora_r32_v3_physics
 ```
 
-按各 Bundle 的 kind 验证 command endpoint 或 managed/submission runtime，并检查组件
-指纹：
+验证部署与指纹：
 
 ```bash
 for baseline_id in \
-  wan22_ti2v_5b_lora_r32_v3 \
-  cosmos3_nano_i2v \
-  wan22_g15_sparse_motion_r32_e20
+  wan22_ti2v_5b_lora_r32_v3_generic \
+  wan22_ti2v_5b_lora_r32_v3_physics \
+  cosmos3_nano_i2v_generic \
+  cosmos3_nano_i2v_physics \
+  wan22_g15_sparse_motion_r32_e20_generic \
+  wan22_g15_sparse_motion_r32_e20_physics
 do
   PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
     baseline validate "$baseline_id"
 done
 ```
 
-新机器必须先从目标 Bundle 的 `baseline.local.example.json` 创建
-`baseline.local.json`。不要把机器绝对路径写回 portable manifest。Cosmos build 会
-验证轻量 snapshot identity；G15 task build 会验证完整 154 MiB LoRA SHA-256。
+`baseline validate` 不应加载完整 GPU 模型，但会检查 driver、关键外部依赖、
+checkpoint identity 与 adapter/TaskBuilder fingerprint。
 
-创建新接入目录：
+## 6. 编译 TaskInstance
 
-```bash
-# 标准 I2V managed Bundle
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline init my_i2v --backend managed-i2v
-
-# 标准 V2V 协议模板
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline init my_v2v --backend managed-v2v
-
-# output-only submission Bundle
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline init my_outputs --backend submission
-```
-
-脚手架生成后会立即经过正式 Registry 校验。I2V 通用 CLI 的稳定 v1 参数是
-`--prompt/--image/--output/--seed`；新模板通过 `job_spec_arg` 额外发送
-`--job-spec`。V2V 使用 `--prompt/--video/--output/--seed/--job-spec`。不满足该
-契约时只需替换 Bundle 内的 adapter/driver，无需修改 Registry。
-
-正式 3.0.0 release 当前没有 `assets.input_video`，V2V 模板不能直接运行官方任务；
-必须先增加独立条件视频，禁止用 GT/reference 冒充。
-
-## 6. 编译任务
+Direct-eval：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
-  --task tasks/official/five_scene_finetune_eval_generic.json \
-  --baseline wan22_ti2v_5b_lora_r32_v3 \
-  --output /tmp/task_instance.json
+  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
+  --baseline cosmos3_nano_i2v_generic \
+  --output /tmp/cosmos3_generic_task_instance.json
 ```
 
-重复执行后比较 fingerprint，结果必须稳定。
+Fine-tune + eval：
 
-`--baseline` 也可传 Bundle 目录或 manifest 路径。重复执行后比较 instance、bundle 和
-deployment fingerprint，结果必须稳定。
+```bash
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  task-build \
+  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --task tasks/official/five_scene_finetune_eval.json \
+  --baseline wan22_ti2v_5b_lora_r32_v3_physics \
+  --output /tmp/wan22_physics_finetune_task_instance.json
+```
+
+重复构建相同 Dataset + Task + Baseline deployment 时，TaskInstance digest 必须稳定。
+重点核对 `canonical_plan`、`adaptations`、`input_policy`、used parameters、
+generation shape 与 identity。
 
 ## 7. AtomicRun
 
-冻结但不执行：
+不执行模型的 dry-run：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval_physics.json \
-  --baseline wan22_ti2v_5b_lora_r32_v3 \
+  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
+  --baseline cosmos3_nano_i2v_generic \
+  --scene-id pendulum \
+  --case-id CASE_ID \
+  --run-id cosmos3_generic_pendulum_dryrun \
   --output-root runs_v2
 ```
 
-确认实例、路径、checkpoint 和 GPU 后加 `--execute`。
-
-Cosmos 一个 job 默认同时占用四张 GPU；WAN 为每张可用 GPU 创建一个常驻 worker。
-运行前用 `nvidia-smi` 检查实际空闲设备，并通过 local override 改 GPU 列表。修改后
-deployment digest 会变化，必须重新 build。
-
-G15 是污染审计明确的 diagnostic baseline。全量 AtomicRun 可用于复现和诊断，但
-`evaluation_score` 不得进入无泄漏排名。clean subset 必须明确选择
-`provenance/benchmark_overlap_v3.json` 所述 source-unseen case，且覆盖率不是完整
-Task coverage。
-
-## 8. 重新评估
-
-Prediction 修复或拷贝完成后：
+Dry-run 会冻结 plan/TaskInstance、展开 adapter、写 job 与 planned prediction，但不启动
+推理。确认 checkpoint、prompt、首帧、shape、seed 与输出路径后，使用新的 run ID 并
+加 `--execute`：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  evaluate --run-dir runs_v2/<run_id>
+  atomic-run \
+  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
+  --baseline cosmos3_nano_i2v_generic \
+  --scene-id pendulum \
+  --case-id CASE_ID \
+  --run-id cosmos3_generic_pendulum_execute \
+  --output-root runs_v2 \
+  --execute
 ```
 
-评估会覆盖 run 内当前 evaluation 输出，但不会修改 prediction 或 Dataset。
+AtomicRun 不覆盖已有目录。单 case 或 subset run 是工程诊断，coverage 不完整时没有正式
+Task score。
 
-### 导入已有预测
+## 8. 同 Task 的 Baseline 矩阵
 
-模型目录中已有的视频必须先复制到 Bench 内，不能直接把外部路径写入
-`predictions.jsonl`：
+```bash
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  matrix-run \
+  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
+  --baseline cosmos3_nano_i2v_generic \
+  --baseline cosmos3_nano_i2v_physics \
+  --matrix-id cosmos3_generic_vs_physics \
+  --output-root runs_v2
+```
+
+矩阵在执行前验证两个 Baseline 的 Dataset、split、seed 与 jobs 完全一致。不加
+`--execute` 只创建两个 dry-run；加 `--execute` 才启动模型。
+
+输出：
+
+```text
+runs_v2/cosmos3_generic_vs_physics.matrix.json
+runs_v2/cosmos3_generic_vs_physics__cosmos3_nano_i2v_generic/
+runs_v2/cosmos3_generic_vs_physics__cosmos3_nano_i2v_physics/
+```
+
+每个元素是独立 AtomicRun，不能把两个 Baseline 的预测写进同一个 run。
+
+矩阵索引的 `orchestration_status` 表示编排过程是否完整，`status` 汇总 AtomicRun
+本身的状态。正常 dry-run 会得到 `orchestration_status=complete` 与
+`status=planned`；只有所有预测真正完成时，聚合 `status` 才是 `complete`。
+
+## 9. Run 输出
+
+```text
+runs_v2/<run_id>/
+├── run.json
+├── state.json
+├── plan.json
+├── report.md
+├── component_fingerprints.json
+├── artifact_policy.json
+├── task_builder.json
+├── data_adapter.json
+├── frozen/
+│   ├── dataset.json
+│   ├── cases.jsonl
+│   ├── task.json
+│   ├── baseline.json
+│   ├── views.json
+│   └── assets.lock.json
+├── task_instance/
+│   ├── manifest.json
+│   ├── canonical_plan.json
+│   ├── adaptations.jsonl
+│   ├── training.json
+│   ├── inference_jobs.jsonl
+│   ├── execution_graph.json
+│   ├── cache_bindings.json
+│   └── baseline_payload.json
+├── adaptations/
+├── training/
+├── jobs/
+├── predictions/
+├── predictions.jsonl
+├── logs/
+├── artifacts/
+│   └── prediction_artifacts.json
+└── evaluation/
+    ├── manifest.json
+    ├── case_results.jsonl
+    ├── task_result.json
+    ├── case_metrics.jsonl        # legacy consumer projection
+    ├── summary.json              # legacy consumer projection
+    └── cases/<job_id>/
+```
+
+预测路径不再按 Task 输入分支分层；Baseline ID 已唯一表达输入策略。具体模型可在
+`predictions/` 下增加自己的 job 目录，例如 Cosmos 使用
+`predictions/<job_id>/vision.mp4`。
+
+除模型代码、权重与可重建 cache 外，prediction、job payload、日志、训练派生物与
+evaluation 都必须位于当前 run。Artifact validator 会检查路径、存在性、大小和
+SHA-256。
+
+## 10. 导入已有预测
+
+外部视频必须复制进 run：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   prediction-import \
   --source /path/to/existing_prediction.mp4 \
-  --run-dir runs_v2/<run_id> \
-  --baseline-id <baseline_id> \
-  --case-id <case_id> \
-  --job-id <job_id> \
+  --run-dir runs_v2/RUN_ID \
+  --baseline-id BASELINE_ID \
+  --case-id CASE_ID \
+  --job-id JOB_ID \
   --seed 42
 ```
 
-命令执行原子复制，验证源与目标 SHA-256，并写入
-`provenance/prediction_imports.json`。重复导入相同内容是幂等的；目标存在但内容不同
-时会失败。外部源文件不会被删除。评测记录应改为导入后返回的
-`destination_path`。
+该命令原子复制并记录源/目标 digest。外部源不会被删除；正式 prediction record 应使用
+返回的 run-local `destination_path`。
 
-## 9. 结果检查
+## 11. 重新评估
+
+当前 AtomicRun：
+
+```bash
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  evaluate --run-dir runs_v2/RUN_ID
+```
+
+命令读取冻结 TaskInstance、Case 与 `predictions.jsonl`，重建 evaluation；不重新规划
+Task，也不调用 Baseline。
+
+对于没有 `task_instance/manifest.json` 的历史 v1 run，CLI 保留 legacy evaluator
+路径。它对冻结模型输入与任务语义只读，只允许从已有 prediction 重建 evaluation
+产物；不会重新规划或调用 Baseline。旧的主动 prompt/task registry 与 planner 已移除，
+不能用于创建新实验或重新产生旧 prompt arms。
+
+## 12. 评估结果检查
+
+先看：
 
 ```text
 evaluation/task_result.json
 ```
 
-首先检查：
+重点字段：
 
 - `status`；
 - `coverage`；
@@ -245,105 +335,97 @@ evaluation/cases/<job_id>/per_frame.csv
 evaluation/cases/<job_id>/physical_subject_iou_curve.png
 ```
 
-## 10. 常见错误
+正式 Task score 只在严格 coverage 为 1 时存在。不要把部分运行的
+`observed_mean_score` 当作正式结果。
+
+## 13. 常见错误
 
 ### `unknown baseline ID`
 
-运行 `physbench baseline list`。确认目录直接位于 `baselines/` 下、文件名为
-`baseline.json` 且 `baseline_id` 全局唯一。路径引用不存在时不会回退为 ID。
+运行 `baseline list`。确认 manifest 位于 `baselines/<dir>/baseline.json` 或
+`baselines/<dir>/*.baseline.json`，且 `baseline_id` 全局唯一。
 
-### `Baseline command produced no response`
+### `baseline bundle must use schema_version=5.0`
 
-只适用于 `implementation.kind=command`。
-先运行 `baseline validate`。检查 entrypoint 位于 Bundle 内、使用 Benchmark
-`phybench` Python 可 import `physbench`，并确认 endpoint 无语法错误。模型 runtime
-Python 不是协议 endpoint Python。
-
-### `managed baseline driver not found` / `managed driver must export Driver`
-
-`implementation.driver` 必须是 Bundle 内相对路径，且模块必须导出
-`ManagedDriver` 子类 `Driver`。普通 direct-eval I2V/V2V 可分别 re-export
-`StandardI2VCLIDriver` / `StandardV2VCLIDriver`。
-
-### `submission coverage mismatch`
-
-submission JSONL 与 canonical jobs 不完全相同。检查是否缺 job、混入另一 Task 的 job，
-以及 case/conditioning/seed 是否一致。不要把 coverage 检查改成“有多少评多少”。
-
-### `task instance targets a different Baseline deployment`
-
-构建实例后 `baseline.local.json`、portable manifest、driver/endpoint 代码或 profile 已改变。
-重新构建 TaskInstance；不要复用旧实例绕过 digest 检查。
+旧 v3/v4 Bundle 不能编译新 Task。迁移 manifest、input policy、adapter 与 managed
+driver，不要绕过 loader。
 
 ### `baseline does not support task family finetune_eval`
 
-Cosmos3 base 与冻结 G15 都是 direct-only，这是能力约束，不是部署错误。使用
-`five_scene_direct_eval_{generic,physics}.json`。只有
-`wan22_ti2v_5b_lora_r32_v3` 当前支持 View A fine-tuning。
+Cosmos3 与 G15 是 direct-only。使用 `five_scene_direct_eval.json`；当前只有
+`wan22_ti2v_5b_lora_r32_v3_*` 声明 finetune-eval trainer。
 
-### `Cosmos3 checkpoint identity mismatch`
+### `managed finetune_eval baseline requires trainer recipe`
 
-local checkpoint 不是 manifest 声明的 base snapshot，或 identity 文件已变化。不要
-覆盖 digest；为另一个 snapshot/SFT 建立新的 baseline ID。
+Baseline capability 声明了 fine-tune family，但 manifest 没有 `trainer`。补齐真实训练
+recipe，或删除虚假 capability。
 
-### `frozen LoRA checkpoint digest mismatch`
+### `physics-ignored adaptation ...`
 
-G15 local path 没有指向 step-2840，或文件损坏。预期 SHA-256 在 manifest 与
-provenance audit 中各保存一份。
+该 Baseline 声明 `usage=ignored`，adapter 却登记了物理参数/channel。修正 adapter；
+若模型确实使用物理信息，应注册 physics Baseline identity。
+
+### `physics-required adaptation ...`
+
+该 Baseline 要求物理输入，但某条 adaptation 没有消费 annotated 参数。检查模板白名单、
+单位与 Case 标注；不要静默退化成 generic 行为。
+
+### `managed I2V case has no first-frame asset`
+
+回到 Dataset provenance 流程补齐 `assets.first_frame`。不要从 reference 临时抽帧。
+
+### V2V input aliases reference/source
+
+V2V 输入资产与 evaluator reference 或 source video 相同，或内容 digest 相同。提供真正
+独立的输入视频；其中 `conditioning_video` 只是媒体角色。
+
+### `task instance targets a different managed Baseline deployment`
+
+TaskInstance 构建后 manifest、local override、driver、adapter、checkpoint 或外部依赖
+变化。重新 build，不要修改 digest 绕过验证。
+
+### `managed output must be inside run predictions`
+
+Driver 把视频写到了模型工程或 `/tmp`。改为
+`run_dir / "predictions" / ...`。
 
 ### `prediction_video_missing`
 
-Prediction record 的 `video_path` 为空、相对到错误目录或文件不存在。修复 record/path，
-不要把该 case 记零。
+Prediction 标记 complete 但文件缺失或路径错误。修复模型输出；不要把该 case 静默记零。
 
 ### `insufficient_duration`
 
-生成视频没有覆盖协议物理区间。检查 predictor 时长、容器 FPS 和时间戳。
-不要通过补 GT 首帧、复制末帧或放宽 evaluator tolerance 处理。WAN 当前分别记录
-`target_frames`（reference derivative）与 `generation_target_frames`（prediction
-coverage）；若两者被旧产物错误混用，应重新生成。
+生成视频没有覆盖评估物理区间。修正生成帧数、FPS 或容器时间戳；不要补 GT 首帧、
+复制末帧或放宽 evaluator tolerance。
 
-### `motion_prompt_failed`
+### `insufficient_valid_masks`
 
-主体运动 proposal 不可靠。查看采样帧和 scene-specific observation 配置，不要直接使用
-reference mask 作为 prediction mask。
-
-### `insufficient_valid_masks` / `insufficient_instance_tracks`
-
-分割覆盖率低于协议阈值。检查主体 prompt、遮挡、模糊和 mask 面积；错误状态优于伪造分数。
-
-### SAM2 `_C` warning
-
-当前 fallback 可运行，但缺少 hole-filling 后处理。正式部署应按 SAM2 官方安装流程编译
-扩展，并用真实自比测试验证环境变化没有改变 evaluator fingerprint/结果。
+查看 Case 目录的采样帧、mask 与 IoU 曲线。错误状态优于伪造分数。
 
 ### Task score 为 `null`
 
-这是严格 coverage 的预期行为。查看 `status_counts` 和缺失 case；不要使用
-`observed_mean_score` 冒充正式分数。
+严格 coverage 未满足。查看 `status_counts` 与缺失 job，不要用 observed mean 替代。
 
-## 11. 运行产物保留与清理
+## 14. 运行保留与清理
 
-- 可删除：失败的 smoke、`execute=false` dry-run、import-validation 临时 run、
-  `__pycache__`/`*.pyc`，前提是没有发布报告按 run ID 引用。
-- 应保留：当前 `baseline.local.json` 引用的 checkpoint、正式可比 AtomicRun、
-  昂贵训练产物，以及 Dataset provenance/alignment 冻结证据。
-- 不要整体清空 `runs/`：先从 Bundle local config 解析 checkpoint 依赖并校验 SHA-256。
-- 长期 checkpoint 应迁入稳定模型制品库；`runs_v2/` 只承担不可变 AtomicRun，
-  `results/` 只承担跨 run 汇总。
+- `runs_v2/`：当前、不可混合的 AtomicRun；
+- `runs/`：历史实验，只为 provenance 或 legacy reevaluate 保留；
+- `results/`：可选的跨 run 汇总，不是生成视频或 TaskInstance 的权威来源；
+- 可删除失败 smoke、无引用 dry-run、`__pycache__` 与可重建 cache；
+- 应保留发布报告引用的 run、昂贵训练制品、checkpoint identity 与 Dataset provenance。
 
-## 12. 发布检查单
+清理前先检查 `baseline.local.json` 是否仍引用历史 run 内的 checkpoint。不要整体删除
+`runs/` 或 `runs_v2/`。
 
-1. 工作树只包含本次有意修改。
-2. Dataset hash 验收通过。
-3. Baseline discovery、三档实现加载和两类 digest 验收通过。
-4. 三个 Bundle 的能力拒绝、TaskBuilder 配对计划与 canonical-plan 防篡改测试通过。
-5. 五 scene scorer 恒等性与扰动测试通过。
-6. 五 scene 真实自比为 1。
-7. 空 mask 的 observed ratio 正确。
-8. 系统测试与 phybench 环境完整测试通过。
-9. 文档链接无断链。
-10. `git diff --check` 通过。
-11. 提交后工作树干净。
-12. 预训练数据重叠 audit 已复核，诊断结果没有混入正式可比结果。
-13. `artifacts/prediction_artifacts.json` 中所有预测都位于当前 run，digest 可复核。
+## 15. 发布检查单
+
+1. Dataset 完整哈希验收通过。
+2. 六个当前 manifest 均可 discovery/validate。
+3. 同一 Task 的 generic/physics canonical plan 完全相同。
+4. ignored/required input policy audit 通过。
+5. TaskInstance deterministic，bundle/deployment/adapter 指纹齐全。
+6. 预测、日志与评估均 run-local。
+7. 五个 scene evaluator 的 identity/扰动测试通过。
+8. 正式 Task coverage 为 1。
+9. G15 等数据重叠 Baseline 标为 diagnostic。
+10. unittest、compileall 与 `git diff --check` 通过。

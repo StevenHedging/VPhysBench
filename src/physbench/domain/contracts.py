@@ -37,10 +37,6 @@ class TaskSpec:
     def family(self) -> str:
         return str(self.value["family"])
 
-    @property
-    def conditioning(self) -> str:
-        return str(self.value["conditioning"])
-
 
 @dataclass(frozen=True)
 class BaselineBundle:

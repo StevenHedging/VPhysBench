@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from ..baseline_api.interfaces import DataAdapter
+from ..baseline_api.input_policy import validate_input_policy
 from ..domain import BaselineBundle
 from .bundle_loader import (
     load_bundle_module,
@@ -78,12 +79,16 @@ def _validate_adapter(
             "DataAdapter.describe().generation_mode is not declared in "
             "Baseline capabilities"
         )
-    described_representations = description.get(
-        "physics_representations"
-    )
-    declared_representations = bundle.value["capabilities"].get(
-        "physics_representations"
-    )
+    declared_policy = validate_input_policy(bundle.value["input_policy"])
+    if description.get("input_policy") != declared_policy:
+        raise TypeError(
+            "DataAdapter.describe().input_policy differs from the Baseline "
+            "manifest"
+        )
+    described_representations = description.get("physics_representations")
+    declared_representations = declared_policy["physics"][
+        "representations"
+    ]
     if described_representations is not None and (
         not isinstance(described_representations, list)
         or any(
@@ -91,8 +96,7 @@ def _validate_adapter(
             for item in described_representations
         )
         or (
-            declared_representations is not None
-            and not set(described_representations)
+            not set(described_representations)
             <= set(declared_representations)
         )
     ):
@@ -134,18 +138,21 @@ def _entrypoint_path(bundle: BaselineBundle, relative: str) -> Path:
 
 
 def load_data_adapter(bundle: BaselineBundle) -> DataAdapter:
-    """Construct the Baseline-owned adapter declared by a schema-v4 Bundle.
+    """Construct the Baseline-owned adapter declared by a schema-v5 Bundle.
 
-    Existing v4 manifests remain compatible: an omitted ``adapter.kind`` is
-    interpreted as the built-in standard adapter. A Python adapter is trusted
-    Bundle code and must expose ``create_adapter(bundle)``.
+    An omitted ``adapter.kind`` selects the built-in standard adapter. A
+    Python adapter is trusted Bundle code and must expose
+    ``create_adapter(bundle)``.
     """
     config = bundle.value["adapter"]
     kind = config.get("kind", "standard")
     if kind == "standard":
         from .adapter import StandardDataAdapter
 
-        return _validate_adapter(StandardDataAdapter(config), bundle)
+        return _validate_adapter(
+            StandardDataAdapter(config, bundle.value["input_policy"]),
+            bundle,
+        )
     if kind != "python":
         raise ValueError(
             f"unsupported Baseline adapter kind {kind!r}; "

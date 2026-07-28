@@ -1,220 +1,139 @@
 # 自定义 Baseline 集成指南
 
-本文面向需要把新视频生成模型接入 Physics Video Benchmark 的开发者，给出从目录创建、
-manifest 配置、driver 编写，到 dry-run、正式执行和结果验收的完整流程。
+本文面向新增模型或算法。当前新实验只使用 schema 5.0 Baseline；Task 不再为物理信息
+使用方式复制实验臂。
 
-命令默认从仓库根目录执行：
+## 1. 先确定 Baseline identity
 
-```text
-/root/Steven/physics_video_benchmark
-```
+一个 Baseline identity 应固定：
 
-正式 Benchmark Python：
+- 模型与 checkpoint；
+- T2V/I2V/V2V/hybrid 输入范式；
+- `case.text.prompt` 的使用方式；
+- 是否使用结构化物理信息；
+- 物理 representation 与 adapter；
+- trainer、runner 和生成超参数。
 
-```text
-/root/miniconda3/envs/phybench/bin/python
-```
-
-## 1. 先选择接入方式
-
-Benchmark 提供三档接口：
-
-| kind | schema | 适用情况 | 需要实现 |
-| --- | --- | --- | --- |
-| `submission` | `4.0` | 模型已在外部生成完整视频，只需要统一评估 | manifest + submission JSONL |
-| `managed` | `4.0` | 文本条件 T2V/I2V/V2V、token/轨迹/mask/flow 等控制 | manifest + adapter + 薄 driver |
-| `command` | `3.0` | 微调、训练或完全自定义的多进程生命周期 | 完整 command endpoint |
-
-选择顺序：
+如果同一底模要比较“不使用物理”和“追加物理文本”，应注册两个 Baseline：
 
 ```text
-已经有完整预测视频？
-├── 是：submission
-└── 否
-    ├── direct evaluation：managed
-    └── 训练、微调或自定义生命周期：command
+my_model_generic
+my_model_physics
 ```
 
-推荐原则：
+两者运行同一 Task。不要创建两份 Task，也不要用运行时 flag 在同一个 Baseline ID 下
+切换语义。
 
-- 对外部结果和闭源模型，优先使用 `submission`。
-- 对仓库维护的普通开源推理 Baseline，优先使用 `managed`。
-- 只有 managed 无法自然表达时才使用 `command`。
+## 2. 选择实现类型
 
-三档接口都会生成同一种 sealed `BaselineTaskInstance`，并进入同一套 scene evaluator。
-具体模型名不会写入核心 Registry，因此增加或移除 Baseline 不需要修改
-`src/physbench/baseline_api/registry.py`。
+schema 5.0 支持两种 implementation：
 
-## 2. 接入边界
+| kind | 适用场景 |
+| --- | --- |
+| `managed` | Benchmark 调用 Bundle driver 执行训练/推理 |
+| `submission` | 已有完整外部预测，Benchmark 负责身份校验与复制归档 |
 
-Benchmark 负责：
+Managed 又有两种 adapter：
 
-```text
-Dataset + Task
-→ canonical train/evaluation case plan
-→ canonical job_id / case_id / partition / seed
-→ TaskInstance identity and seal
-→ run-local artifact validation
-→ scene-local evaluation
-→ strict Task aggregation
-```
+| adapter kind | 适用场景 |
+| --- | --- |
+| `standard` | 文本 + 常规 T2V/I2V/V2V；可选结构化物理文本追加 |
+| `python` | token、trajectory、mask、flow、控制视频或其它模型原生表示 |
 
-Baseline 负责：
+历史冻结 run 中可能仍含已废弃的 Baseline metadata；当前 Registry 不加载它们。
+Legacy evaluator 只消费已有产物做兼容性重评，不能编译新 Task 或启动旧执行面。
 
-```text
-capabilities
-model/checkpoint identity
-Case-to-model input adaptation
-model-native payload
-model execution
-prediction video
-output-affecting dependency fingerprints
-```
-
-Baseline 不得：
-
-- 重新选择或跳过 canonical jobs；
-- 修改 case、partition、conditioning 或 seed；
-- 回写 `datasets/`；
-- 在 generic 分支读取结构化 physics；
-- 在模型工程目录保存正式 prediction；
-- 自行替换 Benchmark evaluator；
-- 用外部视频路径或软链接绕过 run-local 归档。
-
-## 3. Managed：推荐的标准接入
-
-### 3.1 目录树
-
-推荐目录：
-
-```text
-baselines/
-└── my_custom_i2v/
-    ├── baseline.json                  # portable contract
-    ├── driver.py                      # 模型专有边界
-    ├── baseline.local.example.json    # 本机配置模板，提交
-    ├── baseline.local.json            # 本机真实路径，不提交
-    ├── .gitignore
-    ├── README.md
-    ├── inference.py                   # 可选：Bundle-local CLI wrapper
-    └── provenance/                    # 可选
-        ├── model_revision.json
-        ├── training_data_audit.json
-        └── benchmark_overlap.json
-```
-
-最小必需内容：
-
-```text
-my_custom_i2v/
-├── baseline.json
-└── driver.py
-```
-
-建议始终补齐 local template、`.gitignore`、README 和训练来源审计。
-
-### 3.2 创建模板
+## 3. 创建脚手架
 
 ```bash
+# 标准 I2V
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline init my_custom_i2v --backend managed-i2v
+  baseline init my_i2v --backend managed-i2v
+
+# 标准 V2V 协议模板
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline init my_v2v --backend managed-v2v
+
+# 已有输出
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline init my_outputs --backend submission
 ```
 
-命令会创建：
+生成目录：
 
 ```text
-baselines/my_custom_i2v/
+baselines/my_i2v/
 ├── baseline.json
 ├── baseline.local.example.json
+├── baseline.local.json          # 本机创建，Git ignored
 ├── driver.py
 ├── README.md
 └── .gitignore
 ```
 
-生成后会立即走正式 Registry 校验。命令不会创建真实
-`baseline.local.json`，需要开发者从模板复制：
+Registry 自动扫描：
 
-```bash
-cp \
-  baselines/my_custom_i2v/baseline.local.example.json \
-  baselines/my_custom_i2v/baseline.local.json
+```text
+baselines/*/baseline.json
+baselines/*/*.baseline.json
 ```
 
-脚手架直接支持 `managed-i2v` 和 `managed-v2v`：
+同一目录可放共享 driver 的多个 manifest，例如 `baseline.json` 与
+`physics.baseline.json`。它们共享一个 `baseline.local.json`，适合底模与部署完全相同
+的输入策略变体；若 checkpoint 或 runtime 不同，应使用不同目录。
 
-```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline init my_custom_v2v --backend managed-v2v
-```
+## 4. Manifest 最小结构
 
-纯 T2V 模型可以先生成 I2V 模板，再把 preset 与 driver 改为 T2V。
-
-### 3.3 `baseline.json` 完整示例
+下面是只支持 pendulum direct-eval 的 I2V 示例：
 
 ```json
 {
-  "schema_version": "4.0",
-  "baseline_id": "my_custom_i2v",
+  "schema_version": "5.0",
+  "baseline_id": "my_i2v_generic",
   "baseline_version": "1.0.0",
-  "description": "My custom image-to-video baseline.",
+  "description": "My I2V model using the Case prompt as-is.",
   "implementation": {
     "kind": "managed",
     "driver": "driver.py",
     "fingerprint_paths": []
   },
-  "supported_scenes": [
-    "pendulum",
-    "free_fall",
-    "collision_1d",
-    "inclined_plane_slide",
-    "uniform_circular_motion"
-  ],
+  "supported_scenes": ["pendulum"],
   "capabilities": {
     "task_families": ["direct_eval"],
-    "conditioning": ["generic", "physics"],
     "generation_modes": ["i2v"],
-    "physics_representations": ["structured_text"],
     "train": false,
     "finetune": false,
     "generate": true
   },
+  "input_policy": {
+    "schema_version": "1.0",
+    "case_view": "conditionable_case_v1",
+    "text": {
+      "source": "case.text.prompt",
+      "usage": "required"
+    },
+    "physics": {
+      "source": "case.physics[annotated=true]",
+      "usage": "ignored",
+      "representations": []
+    }
+  },
   "model": {
-    "model_id": "vendor/my-video-model",
-    "variant": "base",
-    "checkpoint": null,
-    "revision": "frozen-model-revision"
+    "model_id": "org/model",
+    "checkpoint": null
   },
   "runtime": {
     "python": "python",
-    "cuda_visible_devices": "0"
+    "project_root": "."
   },
   "adapter": {
     "kind": "standard",
     "preset": "standard_i2v_v1",
-    "profile_set": "five_scene_i2v_v1",
     "first_frame_policy": "require_asset",
+    "physics_transform": {"type": "none"},
     "spatial": {
       "scene_profiles": {
-        "pendulum": {
-          "width": 480,
-          "height": 832
-        },
-        "free_fall": {
-          "width": 480,
-          "height": 832
-        },
-        "collision_1d": {
-          "width": 832,
-          "height": 480
-        },
-        "inclined_plane_slide": {
-          "width": 832,
-          "height": 480
-        },
-        "uniform_circular_motion": {
-          "width": 480,
-          "height": 832
-        }
+        "pendulum": {"width": 832, "height": 480}
       }
     },
     "temporal": {
@@ -224,434 +143,198 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
     }
   },
   "runner": {
-    "type": "my_custom_i2v_v1",
-    "config": {
-      "num_inference_steps": 50,
-      "guidance_scale": 5.0,
-      "negative_prompt": "camera shake, flicker, blur, physically implausible motion"
+    "type": "my_i2v_v1",
+    "config": {}
+  }
+}
+```
+
+要注册结构化文本物理版本，复制为 `physics.baseline.json` 并至少修改：
+
+```json
+{
+  "baseline_id": "my_i2v_physics",
+  "input_policy": {
+    "schema_version": "1.0",
+    "case_view": "conditionable_case_v1",
+    "text": {
+      "source": "case.text.prompt",
+      "usage": "required"
+    },
+    "physics": {
+      "source": "case.physics[annotated=true]",
+      "usage": "required",
+      "representations": ["structured_text"]
+    }
+  },
+  "adapter": {
+    "kind": "standard",
+    "preset": "standard_i2v_v1",
+    "first_frame_policy": "require_asset",
+    "physics_transform": {
+      "type": "append_structured_text_v1",
+      "template_set": "five_scene_physics_clauses_v1"
     }
   }
 }
 ```
 
-### 3.4 Manifest 字段
+实际 manifest 仍需保留 generic 版本中的 spatial、temporal、model、runtime、runner
+等完整字段；上段仅展示差异。
 
-#### `baseline_id`
+## 5. `input_policy` 是不可变模型契约
 
-ID 必须全仓库唯一，只能包含字母、数字、点、下划线和连字符。建议让 ID 表达模型族和
-训练身份：
-
-```text
-cogvideox_5b_i2v
-my_model_base_v1
-wan22_custom_lora_r32_e10
-```
-
-避免使用 `test`、`latest` 或 `baseline1` 等不稳定名称。
-
-#### `baseline_version`
-
-当 checkpoint、prompt recipe、推理参数、输入适配、FPS、帧数、训练方法或 scene
-profile 发生语义变化时，应提升版本。本机路径变化只影响 deployment digest，不要求
-提升 portable version。
-
-#### `implementation`
-
-Managed 固定使用：
-
-```json
-{
-  "kind": "managed",
-  "driver": "driver.py",
-  "fingerprint_paths": []
-}
-```
-
-driver 必须是 Bundle 内相对路径，不能使用绝对路径或 `../`。schema v4 Bundle 中
-所有 `.py`（driver、adapter 及相对导入 helper）会自动进入 portable bundle digest，
-不需要重复写入 `fingerprint_paths`。
-
-其他影响输出的 Bundle-local 非 Python 文件应显式登记：
-
-```json
-{
-  "fingerprint_paths": [
-    "inference.py",
-    "configs/*.json",
-    "provenance/*.json"
-  ]
-}
-```
-
-每个 glob 必须匹配至少一个文件。没有额外文件时使用空列表。
-
-#### `supported_scenes`
-
-当前正式 scene：
+所有 Baseline 都要求：
 
 ```text
-pendulum
-free_fall
-collision_1d
-inclined_plane_slide
-uniform_circular_motion
+text.source = case.text.prompt
+text.usage  = required
 ```
 
-只声明模型实际支持的 scene。即使使用 `"all"`，标准 adapter 仍需要为实际请求的每个
-scene 提供 spatial profile。
+物理策略：
 
-#### `capabilities`
+| usage | 要求 |
+| --- | --- |
+| `ignored` | `representations=[]`，不得产生 physics channel |
+| `optional` | representation 非空；按 case 使用时登记 channel 与参数 |
+| `required` | representation 非空；每条 adaptation 必须使用 annotated 参数 |
 
-普通 `DirectManagedDriver` 使用：
+对 standard adapter：
 
-```json
-{
-  "task_families": ["direct_eval"],
-  "conditioning": ["generic", "physics"],
-  "generation_modes": ["i2v"],
-  "physics_representations": ["structured_text"],
-  "train": false,
-  "finetune": false,
-  "generate": true
-}
-```
+- `ignored` 配 `physics_transform.type=none`；
+- `optional|required` 当前配
+  `append_structured_text_v1 + representations=["structured_text"]`。
 
-不要为普通 direct driver 声明 `finetune_eval`。`conditioning` 是 Benchmark 实验臂，
-`generation_modes` 是生成范式，`physics_representations` 是注入载体，三者不可混用。
-Python adapter 必须显式声明后两项。
+其它注入方式使用 Python adapter。Manifest 声明的是实际可审计行为，不应夸大模型
+能力，也不应由 Task 或 local override 改写。
 
-#### `model`
+## 6. Standard adapter
 
-portable manifest 应记录可迁移模型身份：
+### I2V
 
-- model repository ID；
-- base/SFT/LoRA variant；
-- Hugging Face revision 或 Git commit；
-- checkpoint step/epoch；
-- LoRA rank/target modules；
-- checkpoint SHA-256 或轻量 identity files；
-- 训练数据来源与 benchmark overlap 分类。
-
-本机 checkpoint 绝对路径由 local override 提供。
-
-#### `runtime`
-
-runtime 是 driver 私有配置，可以包含：
+`preset=standard_i2v_v1` 使用：
 
 ```text
-python
-project_root
-framework_root
-model_base
-torchrun
-cuda_visible_devices
-hf_home
-cache_root
-offline
-compile
-parallelism_preset
+case.text.prompt
+assets.first_frame
+scene spatial profile
+temporal recipe
+optional Baseline-owned physics transform
 ```
 
-Benchmark 不解释这些字段。机器相关绝对路径放进 `baseline.local.json`。
+`first_frame_policy=require_asset` 是当前官方路径。缺失首帧应修复 Dataset，不得从 GT
+临时提取。
 
-#### `runner`
+### T2V
 
-runner 保存影响生成结果的模型配置，例如：
+`preset=standard_t2v_v1` 不声明媒体 channel，但仍要求非空文本。Driver 不应读取
+Case 资产。
 
-- inference steps；
-- guidance/CFG；
-- sampler 和 scheduler；
-- negative prompt；
-- LoRA alpha；
-- motion strength；
-- conditioning strength；
-- tiling；
-- quality；
-- audio 开关。
+### V2V
 
-driver 通过以下方式读取：
-
-```python
-config = self.bundle.value["runner"]["config"]
-```
-
-不要依赖模型工程中未冻结的隐藏默认值。
-
-### 3.5 Adapter 配置
-
-Managed runtime 当前提供：
-
-```text
-standard_i2v_v1
-standard_t2v_v1
-standard_v2v_v1
-```
-
-它统一负责：
-
-- family、conditioning 和 scene capability 校验；
-- 必需的语言文本 binding；
-- generation mode、媒体和 physics channel 审计；
-- generic/physics 信息访问隔离；
-- 首帧或独立条件视频来源；
-- scene spatial profile；
-- temporal profile；
-- adaptation fingerprint；
-- materialization fingerprint；
-- canonical jobs、operation DAG、cache binding 和 TaskInstance seal。
-
-#### I2V
+`preset=standard_v2v_v1` 还要声明：
 
 ```json
 {
-  "preset": "standard_i2v_v1",
-  "profile_set": "five_scene_i2v_v1",
-  "first_frame_policy": "require_asset"
-}
-```
-
-`first_frame_policy=require_asset` 要求 `case.assets.first_frame` 存在。旧 manifest 的
-`asset_or_reference_frame0` 仍可被读取，但执行语义已收紧为 `require_asset`，不会再把
-GT/reference 的第 0 帧当输入。
-
-#### T2V
-
-```json
-{
-  "preset": "standard_t2v_v1",
-  "profile_set": "five_scene_i2v_v1"
-}
-```
-
-T2V 不声明 `first_frame_policy`，driver 也不读取 `native_inputs.vision` 中的首帧。
-
-#### V2V
-
-```json
-{
-  "kind": "standard",
-  "preset": "standard_v2v_v1",
-  "profile_set": "five_scene_i2v_v1",
   "video_asset_key": "input_video"
 }
 ```
 
-对应 capability 必须声明 `"generation_modes": ["v2v"]`。`video_asset_key` 必须指向
-Dataset 中独立的 conditioning video；`reference_video`、
-`physics_reference_video` 和 `source_video` 被硬拒绝。普通 CLI 可复用
-`StandardV2VCLIDriver`。
+Adapter audit 中的 `conditioning_video` 表示 V2V 输入媒体角色，并非 Task 的物理信息
+分组。该资产必须独立于 GT/reference/source。当前 Dataset 4.0.0 没有正式
+`assets.input_video`，所以 V2V 脚手架不能直接运行官方 Task。
 
-当前正式 3.0.0 release 的 214 个 case 都没有 `assets.input_video`，因此该 preset
-和 `managed-v2v` 脚手架目前是协议模板，不能直接编译官方任务。应先通过 Dataset
-provenance 流程增加独立条件视频；不要把 GT 重命名为 `input_video`。
+## 7. Python adapter
 
-#### Python adapter 与 input contract
-
-非文本物理注入无需退回 command 接口：
+Manifest：
 
 ```json
 {
   "adapter": {
     "kind": "python",
     "entrypoint": "adapter.py",
-    "config": {}
+    "config": {},
+    "cache_policy": "content_addressed_immutable"
   }
 }
 ```
 
-`adapter.py` 导出 `create_adapter(bundle) -> DataAdapter`。所有 Bundle-local Python
-helper 自动进入 digest；Bundle 外共享 solver/encoder 文件由 `dependency_paths()`
-声明。loader 支持正常 package 相对导入。每条 v4 adaptation 必须带
-`input_contract`，而模型私有 tensor/control 继续放在 opaque `native_inputs`；
-schema v3 command adaptation 为兼容旧 endpoint 可保持 opaque：
-
-```json
-{
-  "schema_version": "1.0",
-  "generation_mode": "i2v",
-  "text": {"required": true, "binding": "native_inputs.text.prompt"},
-  "media_channels": [{
-    "id": "initial_frame",
-    "kind": "image",
-    "asset_key": "first_frame",
-    "binding": "native_inputs.vision.first_frame_asset"
-  }],
-  "physics_channels": [],
-  "asset_access": ["first_frame"]
-}
-```
-
-大型 mask/flow/trajectory/proxy-video 使用
-`artifact://sha256/<64-hex>` 或 `cache://sha256/<64-hex>`，并声明
-`content_sha256`、`producer_fingerprint` 和 `source_digest`，不要内嵌进
-TaskInstance JSON。核心会校验 URI/content identity 与 active producer，但当前没有
-公共 artifact store；custom driver 必须解析实体、复验实际字节 SHA-256，并核验其
-`source_digest`。`StandardV2VCLIDriver` 只处理 Dataset-origin 视频；derived proxy
-video 需要 custom driver。
-
-#### Spatial profile
-
-宽高型模型：
-
-```json
-{
-  "pendulum": {
-    "width": 480,
-    "height": 832
-  },
-  "collision_1d": {
-    "width": 832,
-    "height": 480
-  }
-}
-```
-
-模型原生 token 也可以直接声明，例如 Cosmos：
-
-```json
-{
-  "pendulum": {
-    "resolution": 480,
-    "aspect_ratio": "9,16"
-  },
-  "collision_1d": {
-    "resolution": 480,
-    "aspect_ratio": "16,9"
-  }
-}
-```
-
-这些字段会进入 `native_inputs.generation_shape`，由 driver 解释。Benchmark 不要求所有
-模型生成同一原始分辨率。
-
-#### Temporal profile
-
-固定长度：
-
-```json
-{
-  "fps": 24,
-  "num_frames": 121,
-  "valid_frame_rule": "4n+1"
-}
-```
-
-动态长度：
-
-```json
-{
-  "fps": 24,
-  "min_frames": 5,
-  "max_frames": 121,
-  "valid_frame_rule": "4n+1",
-  "policy": "physical-time prefix"
-}
-```
-
-当规则是 `4n+1` 时，所有帧数边界必须满足：
-
-```text
-(frame_count - 1) % 4 == 0
-```
-
-不要通过补 GT 首帧、复制末帧或拼接 GT 片段来满足模型帧数。
-
-### 3.6 Generic/physics 隔离
-
-标准 adapter 的条件边界：
-
-```text
-generic
-├── scene/process description
-├── no structured physics input
-└── used_parameters = {}
-
-physics
-├── same scene/process description
-├── whitelisted physical values and units
-└── used_parameters audit
-```
-
-driver 应直接使用：
+Entrypoint：
 
 ```python
-prompt = job["native_inputs"]["text"]["prompt"]
+from physbench.baseline_api.interfaces import DataAdapter
+
+
+class MyAdapter(DataAdapter):
+    ...
+
+
+def create_adapter(bundle):
+    return MyAdapter(bundle)
 ```
 
-不要在 driver 中重新读取 `case["physics"]` 并拼接 prompt，否则会破坏条件对照和
-fingerprint 审计。
+Adapter 必须：
 
-这里的隔离面向正常、受审计的 Baseline 实现：Python adapter/driver 是受信任
-Bundle 代码。公共 compiler 不提供结构化 physics 或 GT/reference/provenance，但
-case ID、资产路径仍可能带有语义；当前不承诺抵御恶意扩展的严格信息流推断。
+- 实现 `adapt_case(case, *, role)`；
+- 输出 JSON-serializable `native_inputs` 和 `input_contract`；
+- 精确登记 `used_parameters`；
+- 只使用 `annotated=true` 数值并保持值/单位一致；
+- 给出完整与 media-materialization 两种 SHA-256 fingerprint；
+- 通过 `dependency_paths()` 登记 Bundle 外的输出相关实现。
 
-## 4. 本机配置
+大型 trajectory/mask/flow/control 不得内嵌进 TaskInstance；使用带 producer/source
+provenance 的内容寻址 artifact URI。完整契约见
+[DataAdapter 与输入策略](DATA_ADAPTER.md)。
 
-`baseline.local.example.json` 可以提交：
+## 8. Managed driver
 
-```json
-{
-  "model": {
-    "checkpoint": "/absolute/path/to/checkpoint"
-  },
-  "runtime": {
-    "python": "/absolute/path/to/model/python",
-    "project_root": "/absolute/path/to/model/project",
-    "cuda_visible_devices": "0,1"
-  }
-}
+`implementation.driver` 指向 Bundle-local Python 文件，并导出 `Driver`。
+
+普通 direct-eval 模型继承 `DirectManagedDriver`：
+
+```python
+from physbench.baseline_runtime import DirectManagedDriver
+
+
+class Driver(DirectManagedDriver):
+    def validate_deployment(self):
+        ...
+
+    def dependency_paths(self):
+        return {}
+
+    def prepare_job(
+        self, *, job, case, adaptation, source_root, run_dir
+    ):
+        output = run_dir / "predictions" / f"{job['job_id']}.mp4"
+        return {
+            "job_id": job["job_id"],
+            "case_id": job["case_id"],
+            "seed": int(job["seed"]),
+            "prompt": job["native_inputs"]["text"]["prompt"],
+            "output_video": str(output.resolve())
+        }
+
+    def execute_job(self, spec, *, log_path):
+        ...
+        return {"return_code": 0, "log_path": str(log_path)}
 ```
 
-真实配置写入 Git-ignored `baseline.local.json`。local override 只允许覆盖：
+职责：
 
-```text
-model
-runtime
-```
+- `validate_deployment()` 验证 Python、checkpoint 与 identity，不加载大模型；
+- `dependency_paths()` 登记 Bundle 外的 inference/preprocess 等关键代码；
+- `prepare_job()` 只构造 payload，原样保留 canonical job ID 和 seed；
+- `execute_job()` 执行一个 job；
+- 所有预测必须位于当前 `run_dir/predictions/`。
 
-不能覆盖：
+公共 runtime 只在 `return_code == 0` 且文件存在时标记 complete。Driver 不能返回或
+覆盖 reference、canonical identity、status、video path 等受保护字段。
 
-```text
-baseline_id
-baseline_version
-implementation
-supported_scenes
-capabilities
-adapter
-runner
-trainer
-```
+高成本模型可覆盖 `execute_jobs()` 实现常驻 worker。需要训练时实现完整
+`ManagedDriver.run_task()`；WAN 是当前参考实现。
 
-Benchmark 区分：
-
-```text
-bundle digest
-= portable manifest + Bundle-local fingerprinted files
-
-deployment digest
-= 应用 baseline.local.json 后的 manifest
-```
-
-因此 Bundle Python、显式登记的 profile/配置和 local Python/GPU 配置变化都会进入
-身份。checkpoint 路径变化会改变 deployment digest，但路径不等于内容身份；模型
-Bundle 仍必须保存 revision、identity file 或 checkpoint SHA-256。
-
-## 5. Driver 实现
-
-### 5.1 最简单：标准 I2V CLI
-
-如果推理程序支持：
-
-```text
-<command>
-  --prompt TEXT
-  --image PATH
-  --output PATH
-  --seed INT
-  [--job-spec PATH]
-```
-
-`driver.py` 只需：
+常见 CLI driver 可直接复用：
 
 ```python
 from physbench.baseline_runtime.drivers.subprocess_i2v import (
@@ -659,437 +342,13 @@ from physbench.baseline_runtime.drivers.subprocess_i2v import (
 )
 ```
 
-runner：
+其外部程序接收 `--prompt --image --output --seed`，新脚手架还通过
+`runner.config.job_spec_arg` 传 `--job-spec`。V2V 版本使用 `--video`。
 
-```json
-{
-  "type": "standard_i2v_cli_v1",
-  "config": {
-    "command": ["python", "inference.py"],
-    "job_spec_arg": "--job-spec",
-    "extra_args": [
-      "--num-inference-steps",
-      "50"
-    ]
-  }
-}
-```
+## 9. Submission
 
-`job_spec_arg` 是向后兼容的 opt-in：新脚手架默认开启，job JSON 含
-`native_inputs.generation_shape` 对应的宽高、FPS 和帧数；删除该字段时，v1 driver
-仍只发送旧的 prompt/image/output/seed 四类参数。外部程序应把 job spec 视为只读。
-
-`StandardV2VCLIDriver` 使用 `--video` 代替 `--image`，并始终发送
-`--job-spec PATH`。
-
-适合：
-
-- 模型有稳定 CLI；
-- command 不依赖机器专有绝对路径；
-- 不需要首帧预处理；
-- 不需要多 GPU `torchrun`；
-- 不需要模型常驻 worker。
-
-如果需要本机模型 Python、外部 project root、复杂环境变量或 payload，使用自定义 driver。
-
-### 5.2 自定义 `DirectManagedDriver`
-
-需要实现：
-
-```text
-Driver(DirectManagedDriver)
-├── validate_deployment()      # 可选
-├── dependency_paths()         # 可选
-├── prepare_job()              # 必需
-├── execute_job()              # 必需
-└── execute_jobs()             # 可选，多 GPU/常驻 worker
-```
-
-完整骨架：
-
-```python
-from __future__ import annotations
-
-import os
-import subprocess
-from pathlib import Path
-from typing import Any
-
-from physbench.baseline_runtime import (
-    DirectManagedDriver,
-    resolve_dataset_asset_path,
-)
-from physbench.io import sha256_file, write_json
-
-
-class Driver(DirectManagedDriver):
-    def validate_deployment(self) -> None:
-        model = self.bundle.value["model"]
-        runtime = self.bundle.value["runtime"]
-
-        checkpoint = Path(model["checkpoint"])
-        python = Path(runtime["python"])
-        project_root = Path(runtime["project_root"])
-        inference = project_root / "inference.py"
-
-        if not checkpoint.exists():
-            raise FileNotFoundError(
-                f"checkpoint not found: {checkpoint}"
-            )
-        if not python.is_file():
-            raise FileNotFoundError(
-                f"model Python not found: {python}"
-            )
-        if not inference.is_file():
-            raise FileNotFoundError(
-                f"inference script not found: {inference}"
-            )
-
-        expected = model.get("checkpoint_sha256")
-        if expected and checkpoint.is_file():
-            actual = sha256_file(checkpoint)
-            if actual != expected:
-                raise ValueError(
-                    "checkpoint digest mismatch: "
-                    f"expected={expected}, actual={actual}"
-                )
-
-    def dependency_paths(self) -> dict[str, Path]:
-        project_root = Path(
-            self.bundle.value["runtime"]["project_root"]
-        )
-        return {
-            "external/my_model/inference.py": (
-                project_root / "inference.py"
-            )
-        }
-
-    def prepare_job(
-        self,
-        *,
-        job: dict[str, Any],
-        case: dict[str, Any],
-        adaptation: dict[str, Any],
-        source_root: Path,
-        run_dir: Path,
-    ) -> dict[str, Any]:
-        native = job["native_inputs"]
-        first_frame_asset = native["vision"].get(
-            "first_frame_asset"
-        )
-        if not first_frame_asset:
-            raise ValueError(
-                f"job has no first-frame asset: {job['job_id']}"
-            )
-
-        if (
-            first_frame_asset
-            != case["assets"].get("first_frame")
-        ):
-            raise ValueError("unauthorized first-frame binding")
-        first_frame = resolve_dataset_asset_path(
-            source_root,
-            first_frame_asset,
-            label="first frame",
-        )
-        if not first_frame.is_file():
-            raise FileNotFoundError(
-                f"first frame not found: {first_frame}"
-            )
-
-        output_video = (
-            run_dir
-            / "predictions"
-            / adaptation["conditioning"]
-            / f"{job['job_id']}.mp4"
-        ).resolve()
-        payload_path = (
-            run_dir
-            / "jobs"
-            / f"{job['job_id']}.payload.json"
-        )
-
-        runner = self.bundle.value["runner"]["config"]
-        payload = {
-            "job_id": job["job_id"],
-            "case_id": job["case_id"],
-            "prompt": native["text"]["prompt"],
-            "first_frame": str(first_frame),
-            "generation_shape": native["generation_shape"],
-            "seed": int(job["seed"]),
-            "num_inference_steps": int(
-                runner["num_inference_steps"]
-            ),
-            "guidance_scale": float(
-                runner["guidance_scale"]
-            ),
-            "output_video": str(output_video),
-        }
-        write_json(payload_path, payload)
-
-        return {
-            "job_id": job["job_id"],
-            "case_id": job["case_id"],
-            "seed": int(job["seed"]),
-            "payload_path": str(payload_path),
-            "output_video": str(output_video),
-        }
-
-    def execute_job(
-        self,
-        spec: dict[str, Any],
-        *,
-        log_path: Path,
-    ) -> dict[str, Any]:
-        runtime = self.bundle.value["runtime"]
-        project_root = Path(runtime["project_root"])
-        command = [
-            str(runtime["python"]),
-            str(project_root / "inference.py"),
-            "--payload",
-            spec["payload_path"],
-        ]
-
-        Path(spec["output_video"]).parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-
-        env = os.environ.copy()
-        visible = runtime.get("cuda_visible_devices")
-        if visible is not None:
-            env["CUDA_VISIBLE_DEVICES"] = str(visible)
-
-        with log_path.open("w", encoding="utf-8") as log:
-            completed = subprocess.run(
-                command,
-                cwd=project_root,
-                env=env,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                check=False,
-            )
-
-        return {
-            "return_code": completed.returncode,
-            "command": command,
-            "log_path": str(log_path),
-        }
-```
-
-### 5.3 Driver 各方法的职责
-
-`validate_deployment()` 应检查 checkpoint、Python、关键脚本和模型 identity，但不应
-加载完整模型、占用 GPU 或产生 prediction。
-
-`dependency_paths()` 应登记 Bundle 外部但会影响输出的关键代码，例如 inference entry、
-自定义 scheduler 或 preprocessing。不要登记日志、cache、prediction 和临时文件。
-
-`prepare_job()` 应是轻量、确定性的，只构造 payload 和 run-local output path。它必须
-原样返回 canonical `job_id`，不得修改 seed 或重新选择 prompt。
-
-`execute_job()` 执行一个 job。公共 runtime 根据：
-
-```text
-return_code == 0 AND output_video exists
-```
-
-决定 prediction 是否 complete。
-
-driver 返回值不能覆盖：
-
-```text
-job_id
-case_id
-baseline_id
-conditioning
-evaluation_partition
-status
-video_path
-seed
-prompt_profile_id
-evaluation_reference_video
-visual_reference_video
-```
-
-后三个字段由 managed runtime 禁止：公共分组使用 `conditioning`，Evaluator 从冻结
-Dataset 自行解析 reference。
-
-### 5.4 多 GPU 或常驻 worker
-
-默认 lifecycle 会逐 job 调用 `execute_job()`。模型加载代价很高时，可以覆盖：
-
-```python
-def execute_jobs(
-    self,
-    specs,
-    *,
-    run_dir,
-):
-    ...
-```
-
-返回以 canonical job ID 为 key 的结果：
-
-```python
-{
-    spec["job_id"]: {
-        "return_code": 0,
-        "worker_index": 0,
-    }
-    for spec in specs
-}
-```
-
-需要训练或完全不同生命周期时，实现完整 `ManagedDriver.run_task()`，或直接使用
-command 接口。不要把训练逻辑塞进 `DirectManagedDriver`。
-
-### 5.5 T2V driver
-
-T2V adapter：
-
-```json
-{
-  "preset": "standard_t2v_v1",
-  "profile_set": "five_scene_i2v_v1",
-  "spatial": {
-    "scene_profiles": {
-      "pendulum": {
-        "width": 832,
-        "height": 480
-      }
-    }
-  },
-  "temporal": {
-    "fps": 24,
-    "num_frames": 121,
-    "valid_frame_rule": "4n+1"
-  }
-}
-```
-
-T2V `prepare_job()` 不读取 first frame：
-
-```python
-def prepare_job(
-    self,
-    *,
-    job,
-    case,
-    adaptation,
-    source_root,
-    run_dir,
-):
-    native = job["native_inputs"]
-    output_video = (
-        run_dir
-        / "predictions"
-        / adaptation["conditioning"]
-        / f"{job['job_id']}.mp4"
-    ).resolve()
-    return {
-        "job_id": job["job_id"],
-        "case_id": job["case_id"],
-        "seed": int(job["seed"]),
-        "prompt": native["text"]["prompt"],
-        "generation_shape": native["generation_shape"],
-        "output_video": str(output_video),
-    }
-```
-
-## 6. Submission：已有视频接入
-
-### 6.1 目录树
-
-```text
-baselines/
-└── my_submission/
-    ├── baseline.json
-    ├── baseline.local.example.json
-    ├── baseline.local.json
-    ├── README.md
-    └── .gitignore
-```
-
-submission 没有 driver 或 command endpoint。
-
-### 6.2 创建模板
-
-```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline init my_submission --backend submission
-```
-
-portable manifest 使用：
-
-```json
-{
-  "schema_version": "4.0",
-  "implementation": {
-    "kind": "submission",
-    "fingerprint_paths": []
-  },
-  "capabilities": {
-    "task_families": ["direct_eval"],
-    "conditioning": ["generic", "physics"]
-  }
-}
-```
-
-submission 仍需声明标准 adapter，使 TaskInstance、prompt、shape 和 canonical jobs 可审计。
-submission 当前只支持 `direct_eval`。
-
-### 6.3 获取 canonical jobs
-
-```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  task-build \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval_physics.json \
-  --baseline my_submission \
-  --output /tmp/my_submission_task.json
-```
-
-外部模型应严格按照：
-
-```text
-/tmp/my_submission_task.json
-└── inference.jobs[]
-    ├── job_id
-    ├── case_id
-    ├── scene_id
-    ├── evaluation_partition
-    ├── conditioning
-    └── seed
-```
-
-生成视频。
-
-### 6.4 Submission JSONL
-
-每行对应一个 canonical job：
-
-```json
-{
-  "job_id": "five_scene_direct_eval_physics_v3__case_id__physics__seed000042",
-  "case_id": "case_id",
-  "conditioning": "physics",
-  "seed": 42,
-  "video_path": "/external/model/results/video.mp4"
-}
-```
-
-要求：
-
-- 每个 canonical job 恰好出现一次；
-- 不允许缺失、额外或重复 job；
-- case、conditioning 和 seed 必须一致；
-- 视频必须存在；
-- 后缀必须是 `.mp4`、`.mov`、`.mkv` 或 `.webm`；
-- submission manifest 在 deployment 加载后不能变化。
-
-`baseline.local.json`：
+Submission Bundle 仍需要 input policy 和 adapter，因为 Benchmark 必须先编译同一
+TaskInstance。`baseline.local.json` 指向外部 JSONL：
 
 ```json
 {
@@ -1099,322 +358,151 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 }
 ```
 
-执行：
-
-```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  atomic-run \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval_physics.json \
-  --baseline my_submission \
-  --output-root runs_v2 \
-  --execute
-```
-
-外部视频会原子复制到当前 run，并记录源/目标 SHA-256 和 import provenance。正式
-`predictions.jsonl` 不会直接引用外部模型目录。
-
-## 7. Command：高级接入
-
-Command 适用于 View A fine-tuning、训练 + 推理、多阶段 pipeline、复杂非标准输入或
-独立进程隔离。
-
-目录：
-
-```text
-baselines/
-└── my_advanced_baseline/
-    ├── baseline.json
-    ├── baseline.local.example.json
-    ├── baseline.local.json
-    ├── README.md
-    ├── .gitignore
-    └── plugin/
-        ├── main.py
-        ├── implementation.py
-        └── resources/
-            ├── generic.json
-            └── physics.json
-```
-
-manifest：
+每行精确对应一个 canonical job：
 
 ```json
 {
-  "schema_version": "3.0",
-  "baseline_id": "my_advanced_baseline",
-  "baseline_version": "1.0.0",
-  "implementation": {
-    "kind": "command",
-    "protocol": "physbench-baseline-v1",
-    "entrypoint": ["{python}", "plugin/main.py"],
-    "fingerprint_paths": [
-      "plugin/*.py",
-      "plugin/resources/*.json"
-    ]
-  },
-  "capabilities": {
-    "task_families": ["finetune_eval", "direct_eval"],
-    "conditioning": ["generic", "physics"]
-  },
-  "model": {},
-  "runtime": {},
-  "components": {}
+  "job_id": "five_scene_direct_eval_v4__case_id__seed000042",
+  "case_id": "case_id",
+  "seed": 42,
+  "video_path": "/external/output/case_id.mp4"
 }
 ```
 
-endpoint 实现：
+不包含 Task 层的物理开关字段。Benchmark 要求：
+
+- job 完整覆盖且无额外/重复记录；
+- case 与 seed 完全一致；
+- 视频存在；
+- submission manifest 加载后不变。
+
+执行时视频会原子复制到当前 run，并记录源/目标 SHA-256；正式
+`predictions.jsonl` 不直接引用外部模型目录。
+
+## 10. Portable 配置与本机配置
+
+提交到 Git 的 manifest 保存稳定、可迁移语义。本机路径只写入 Git-ignored
+`baseline.local.json`：
+
+```json
+{
+  "model": {
+    "checkpoint": "/absolute/path/to/checkpoint"
+  },
+  "runtime": {
+    "python": "/absolute/path/to/python",
+    "project_root": "/absolute/path/to/model/repo"
+  }
+}
+```
+
+Local override 只能覆盖 `model` 与 `runtime`，不能修改：
 
 ```text
-physbench-baseline-v1
-├── describe
-├── adapt_case
-├── build_task_instance
-└── run_task
+baseline_id / version
+implementation / capabilities
+input_policy / adapter
+runner / trainer
 ```
 
-`plugin/main.py` 通常只做分发：
-
-```python
-from physbench.baseline_api.endpoint import main
-from implementation import MyBaselinePlugin
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(MyBaselinePlugin))
-```
-
-具体实现需要提供 `DataAdapter`、`TaskBuilder` 和 `BaselinePlugin`。可参考：
+身份分层：
 
 ```text
-baselines/wan22_lora/
-src/physbench/baseline_plugins/wan22.py
+bundle digest
+= portable manifest + Bundle-local fingerprinted files
+
+deployment digest
+= 应用 local override 后的 manifest
+
+TaskBuilder fingerprint
+= bundle/deployment + adapter + runner/trainer + runtime dependencies
 ```
 
-Command endpoint 由 `phybench` Python 启动。模型实际训练/推理应由 executor 使用
-`runtime.python` 启动模型环境，避免把模型专有依赖导入 Benchmark 进程。
+schema v5 会自动纳入 Bundle 内所有 Python 文件；其它资源用
+`implementation.fingerprint_paths`。Checkpoint 应另有 revision、identity file 或
+完整 SHA-256，仅记录路径不够。
 
-## 8. 验证流程
+## 11. 验证流程
 
-### 8.1 发现
+### 发现
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   baseline list
 ```
 
-`baseline list` 只扫描 manifest，不 import driver 或执行 endpoint。
-
-### 8.2 检查解析结果
+### 检查解析结果
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline inspect my_custom_i2v
+  baseline inspect my_i2v_generic
 ```
 
-重点检查：
+重点检查 `input_policy`、adapter、bundle/deployment digest、model/runtime 与
+TaskBuilder/DataAdapter fingerprint。
 
-```text
-bundle_digest
-deployment_digest
-implementation
-capabilities
-supported_scenes
-model
-runtime
-adapter_recipe
-runner
-task_builder
-data_adapter
-```
-
-### 8.3 验证部署
+### 验证部署
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  baseline validate my_custom_i2v
+  baseline validate my_i2v_generic
 ```
 
-Managed validation 会调用 `validate_deployment()` 和 `dependency_paths()`，但不应加载完整
-GPU 模型。
-
-### 8.4 构建 TaskInstance
+### 编译 TaskInstance
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval_generic.json \
-  --baseline my_custom_i2v \
-  --output /tmp/my_custom_i2v_task.json
+  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
+  --baseline my_i2v_generic \
+  --output /tmp/my_i2v_generic_task.json
+```
+
+### 单 case dry-run
+
+```bash
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  atomic-run \
+  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
+  --baseline my_i2v_generic \
+  --scene-id pendulum \
+  --case-id CASE_ID \
+  --run-id my_i2v_generic_dryrun \
+  --output-root runs_v2
 ```
 
 检查：
 
-```text
-identity
-canonical_plan
-adaptations
-inference.jobs
-execution_graph
-cache_bindings
-baseline_payload
-instance_digest
-```
+- prompt 是否源自 `case.text.prompt`；
+- ignored Baseline 的 `used_parameters` 与 physics channel 是否为空；
+- required Baseline 是否只使用预期字段和值/单位；
+- 首帧、shape、FPS、帧数与 seed；
+- checkpoint、adapter 与 TaskInstance identity；
+- prediction/job/log path 是否 run-local；
+- Dataset 是否保持未修改。
 
-generic adaptation 应满足：
+用新的 run ID 加 `--execute` 做单 case 推理。部分 run 只用于工程 smoke，不是正式
+Task score。
 
-```text
-used_parameters == {}
-stages.physics.enabled == false
-```
+## 12. 推荐测试
 
-### 8.5 单 case dry-run
-
-首次接入不要直接执行全量任务：
-
-```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  atomic-run \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval_generic.json \
-  --baseline my_custom_i2v \
-  --scene-id pendulum \
-  --case-id <pendulum_case_id> \
-  --output-root runs_v2 \
-  --run-id my_custom_i2v_dry_run
-```
-
-不加 `--execute` 时仍会完成：
+至少覆盖：
 
 ```text
-deployment validation
-canonical plan
-adaptation
-prepare_job
-job/payload materialization
-planned prediction
-evaluation state
-```
-
-但不会启动模型推理。
-
-重点检查：
-
-- prompt 与 conditioning；
-- physics 字段使用审计；
-- first frame；
-- generation shape；
-- FPS/帧数；
-- seed；
-- checkpoint identity；
-- output path；
-- job spec 和 payload；
-- Dataset 未被修改。
-
-### 8.6 单 case execute
-
-使用新 run ID：
-
-```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  atomic-run \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval_generic.json \
-  --baseline my_custom_i2v \
-  --scene-id pendulum \
-  --case-id <pendulum_case_id> \
-  --output-root runs_v2 \
-  --run-id my_custom_i2v_execute_smoke \
-  --execute
-```
-
-AtomicRun 不允许覆盖已存在目录，因此 dry-run 和 execute 必须使用不同 run ID。
-
-单 case 只用于工程 smoke，不是完整正式 Task score。正式结果必须覆盖完整 canonical
-plan。
-
-## 9. AtomicRun 输出
-
-```text
-runs_v2/<run_id>/
-├── run.json
-├── state.json
-├── plan.json
-├── report.md
-├── frozen/
-│   ├── dataset.json
-│   ├── cases.jsonl
-│   ├── task.json
-│   ├── baseline.json
-│   ├── views.json
-│   └── assets.lock.json
-├── task_instance/
-│   ├── manifest.json
-│   ├── canonical_plan.json
-│   ├── adaptations.jsonl
-│   ├── inference_jobs.jsonl
-│   ├── execution_graph.json
-│   ├── cache_bindings.json
-│   └── baseline_payload.json
-├── jobs/
-│   ├── <job_id>.json
-│   └── <job_id>.payload.json
-├── predictions/
-│   └── <conditioning>/
-│       └── <job_id>.mp4
-├── predictions.jsonl
-├── logs/
-│   └── <baseline_id>/
-│       └── <job_id>.log
-├── artifacts/
-│   └── prediction_artifacts.json
-└── evaluation/
-    ├── manifest.json
-    ├── case_results.jsonl
-    ├── task_result.json
-    └── cases/<job_id>/
-```
-
-模型代码、权重和可重建 cache 可以在 Bench 外部。prediction、job payload、日志、训练
-曲线、import provenance 和 evaluation 必须在当前 run 内。
-
-正确输出：
-
-```text
-runs_v2/<run_id>/predictions/<conditioning>/<job_id>.mp4
-```
-
-错误输出：
-
-```text
-/root/MyModel/outputs/video.mp4
-/tmp/video.mp4
-```
-
-每个非空 prediction path 会经过 run-local 检查、文件存在检查、大小记录和 SHA-256
-计算。`status=complete` 但视频不存在会使 run 失败。
-
-## 10. 推荐测试
-
-为新 Baseline 增加：
-
-```text
-tests/
-└── test_my_custom_baseline.py
-    ├── test_bundle_is_discovered
-    ├── test_manifest_is_valid
-    ├── test_checkpoint_identity
-    ├── test_generic_has_no_physics_leak
-    ├── test_physics_uses_expected_parameters
-    ├── test_scene_profiles
-    ├── test_temporal_shape
-    ├── test_canonical_plan_is_unchanged
-    ├── test_task_instance_is_deterministic
-    ├── test_output_is_run_local
-    ├── test_direct_only_rejects_finetune
-    ├── test_dry_run_payload
-    └── test_dataset_is_not_modified
+bundle discovery / schema validation
+deployment identity
+input_policy 与 adapter 一致
+ignored physics produces no channel
+required physics uses annotated parameters
+canonical plan unchanged across Baselines
+materialization fingerprint shared when media recipe identical
+TaskInstance deterministic and sealed
+unsupported family rejected
+output is run-local
+missing video cannot be complete
+Dataset remains immutable
 ```
 
 关键不变量：
@@ -1425,177 +513,34 @@ tests/
 ```
 
 ```text
-改变 case.physics
-→ generic native_inputs 不变
-```
-
-```text
 不同 Baseline 执行同一 Task
-→ canonical_plan 相同
+→ 相同 canonical plan
 ```
 
 ```text
-return_code == 0 但 output 不存在
-→ prediction failed
+修改物理使用方式
+→ Baseline/DataAdapter/TaskInstance identity 改变，Task 不变
 ```
-
-执行完整测试：
-
-```bash
-PYTHONPATH=src:tests /root/miniconda3/envs/phybench/bin/python \
-  -m unittest discover -s tests -v
-```
-
-编译和差异检查：
-
-```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
-  -m compileall -q src tests baselines
-
-git diff --check
-```
-
-## 11. 常见错误
-
-### `unknown baseline ID`
-
-确认目录直接位于 `baselines/` 下，文件名为 `baseline.json`，且 ID 全局唯一。运行
-`baseline list` 查看发现结果。
-
-### `managed baseline driver not found`
-
-`implementation.driver` 必须是 Bundle 内实际存在的相对路径，不能使用绝对路径或
-`../`。
-
-### `managed driver must export Driver subclass`
-
-driver 模块必须导出名为 `Driver` 的 `ManagedDriver` 或 `DirectManagedDriver` 子类。
-
-### `baseline fingerprint glob matched no files`
-
-`fingerprint_paths` 中存在没有匹配任何文件的 glob。删除该 glob，或创建并提交对应
-文件。
-
-### `managed adapter has no spatial profile`
-
-任务请求了某个 scene，但 `spatial.scene_profiles` 没有该 scene。
-
-### `managed I2V case has no first-frame asset`
-
-该 case 没有独立首帧资产。应先在 Dataset provenance 流程中生成并登记
-`assets.first_frame`；managed evaluation 不允许从 GT/reference 提取输入帧。
-
-### `managed driver changed or omitted canonical job_id`
-
-`prepare_job()` 必须原样返回输入的 `job["job_id"]`。
-
-### `managed output must be inside run predictions`
-
-driver 把 output 指向了模型工程目录或临时目录。使用 `run_dir / "predictions" / ...`
-构造路径。
-
-### `task instance targets a different managed Baseline deployment`
-
-TaskInstance 构建后，manifest、driver、local override、checkpoint、Python、profile 或
-外部依赖发生了变化。重新构建 TaskInstance。
-
-### `submission coverage mismatch`
-
-Submission JSONL 缺少 canonical job、混入另一 Task 的 job，或出现重复 job。应从当前
-TaskInstance 的 `inference.jobs` 重新生成 submission 清单。
-
-### 子进程返回 0，但 prediction 仍 failed
-
-公共 runtime 同时要求 return code 为 0 且 output 文件存在。检查模型实际输出路径、
-扩展名、异步落盘和视频封装过程。
-
-## 12. 完成检查单
-
-### Manifest
-
-- [ ] `baseline_id` 唯一且有稳定语义。
-- [ ] `baseline_version` 正确。
-- [ ] `supported_scenes` 没有虚假声明。
-- [ ] capabilities 与 driver 能力一致。
-- [ ] portable manifest 不含本机绝对路径。
-- [ ] fingerprint glob 全部有效。
-
-### 模型身份
-
-- [ ] 记录 model ID 和 revision。
-- [ ] 记录 base/SFT/LoRA 身份。
-- [ ] 记录 checkpoint step/epoch。
-- [ ] checkpoint 有 digest 或 identity file 验证。
-- [ ] 训练来源已记录。
-- [ ] 与 Benchmark Dataset 的 source overlap 已审计。
-
-### Adapter
-
-- [ ] 每个支持 scene 都有 spatial profile。
-- [ ] FPS 和帧数符合模型约束。
-- [ ] I2V first-frame 来源明确。
-- [ ] generic 不读取 physics。
-- [ ] physics 只使用白名单字段。
-- [ ] driver 不重复拼接 prompt。
-- [ ] Dataset 资产未被修改。
-
-### Driver
-
-- [ ] deployment validation 不加载 GPU 模型。
-- [ ] 关键外部代码进入 dependency fingerprint。
-- [ ] dry-run 不执行昂贵推理。
-- [ ] canonical job ID 和 seed 不变。
-- [ ] prediction 和日志 run-local。
-- [ ] return code 被记录。
-- [ ] 视频完成落盘后才返回成功。
-
-### 验证
-
-- [ ] `baseline list` 能发现。
-- [ ] `baseline inspect` 内容正确。
-- [ ] `baseline validate` 通过。
-- [ ] generic/physics TaskInstance 均可构建。
-- [ ] 单 case dry-run 通过。
-- [ ] 单 case execute 通过。
-- [ ] prediction artifact SHA-256 已生成。
-- [ ] evaluator 能读取输出。
-- [ ] 完整测试和 compileall 通过。
-- [ ] `git diff --check` 通过。
 
 ## 13. 当前参考实现
-
-标准 managed Cosmos：
 
 ```text
 baselines/cosmos3_nano_i2v/
 ├── baseline.json
+├── physics.baseline.json
+└── driver.py
+
+baselines/wan22_lora/
+├── baseline.json
+├── physics.baseline.json
+└── driver.py
+
+baselines/wan22_g15_sparse_motion/
+├── baseline.json
+├── physics.baseline.json
 └── driver.py
 ```
 
-一行 Bundle driver + 共享 managed driver：
-
-```text
-baselines/wan22_g15_sparse_motion/
-├── baseline.json
-├── driver.py
-└── provenance/
-
-src/physbench/baseline_runtime/drivers/wan22.py
-```
-
-高级 command + fine-tuning：
-
-```text
-baselines/wan22_lora/
-├── baseline.json
-└── plugin/main.py
-
-src/physbench/baseline_plugins/wan22.py
-```
-
-通用架构和操作参考：
-
-- `docs/TASKS.md`：Task、三档接口和 identity contract；
-- `docs/DATA_ADAPTER.md`：五阶段 adapter 和条件隔离；
-- `docs/ARCHITECTURE.md`：系统边界与不变量；
-- `docs/OPERATIONS.md`：运行、评估和故障排查。
+三组均使用 schema 5.0 managed runtime。WAN 两组共享
+`Wan22ManagedDriver`；Cosmos 使用薄模型专属 driver。完整运行命令见
+[运行与故障排查](OPERATIONS.md)。

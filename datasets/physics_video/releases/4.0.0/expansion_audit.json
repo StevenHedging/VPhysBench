@@ -1,0 +1,59 @@
+{
+  "accepted_source_counts": {
+    "inclined_plane_slide": 95,
+    "uniform_circular_motion": 36
+  },
+  "added_case_count": 131,
+  "added_scenes": [
+    "inclined_plane_slide",
+    "uniform_circular_motion"
+  ],
+  "base_case_count": 83,
+  "base_release": "../2.0.0/dataset.json",
+  "case_count": 214,
+  "case_ids_sha256": "689765514f3a4f171cda63e9d0232738a3d7217f98bbf20bbd1ab61702911658",
+  "normalized_annotation_digest": "149ac6a750416c39e2311289e156103a36b68d5f90dfaf32ad27e8cd08b14af5",
+  "schema_version": "1.0",
+  "view_a_excluded_new_cases": {
+    "circular_r1_silver02cm_wood06cm_img_0400": "duplicate held-out condition not selected for View A",
+    "circular_r1_silver02cm_wood06cm_img_0401": "duplicate held-out condition not selected for View A",
+    "circular_r1_silver02cm_wood08cm_img_0399": "duplicate held-out condition not selected for View A",
+    "circular_r1_silver02cm_wood08cm_img_0402": "duplicate held-out condition not selected for View A",
+    "circular_r1_silver04cm_img_0373": "duplicate held-out condition not selected for View A",
+    "circular_r1_silver04cm_img_0377": "duplicate held-out condition not selected for View A",
+    "circular_r1_silver06cm_wood02cm_img_0397": "duplicate held-out condition not selected for View A",
+    "circular_r1_silver06cm_wood02cm_img_0403": "duplicate held-out condition not selected for View A",
+    "circular_r1_silver08cm_wood02cm_img_0396": "duplicate held-out condition not selected for View A",
+    "circular_r1_silver08cm_wood02cm_img_0404": "duplicate held-out condition not selected for View A",
+    "circular_r1_wood04cm_img_0385": "duplicate held-out condition not selected for View A",
+    "circular_r1_wood04cm_img_0390": "duplicate held-out condition not selected for View A",
+    "incline_r1_a32deg_bgblack_img_0345": "not selected by pure-factor View A sampling",
+    "incline_r1_a35deg_bgblack_img_0379": "not selected by pure-factor View A sampling",
+    "incline_r1_a38deg_bgblack_img_0380": "not selected by pure-factor View A sampling",
+    "incline_r1_a38deg_bgblack_img_0381": "not selected by pure-factor View A sampling",
+    "incline_r1_a38deg_bgblack_img_0384": "not selected by pure-factor View A sampling",
+    "incline_r1_a38deg_bggreen_img_0360": "not selected by pure-factor View A sampling",
+    "incline_r1_a38deg_bggreen_img_0361": "not selected by pure-factor View A sampling",
+    "incline_r1_a38deg_bggreen_img_0362": "not selected by pure-factor View A sampling",
+    "incline_r1_a38deg_bgoil_img_0328": "not selected by pure-factor View A sampling",
+    "incline_r1_a38deg_bgoil_img_0329": "not selected by pure-factor View A sampling",
+    "incline_r1_a38deg_bgoil_img_0330": "not selected by pure-factor View A sampling",
+    "incline_r1_a38deg_bgwhite_img_0290": "not selected by pure-factor View A sampling",
+    "incline_r1_a38deg_bgwhite_img_0291": "not selected by pure-factor View A sampling",
+    "incline_r1_a38deg_bgwhite_img_0292": "not selected by pure-factor View A sampling",
+    "incline_r1_a41deg_bgblack_img_0389": "not selected by pure-factor View A sampling"
+  },
+  "view_a_exclusion_reason": "retain all valid cases in Dataset/View B while keeping View A factor-pure and training-dominant; mixed unseen-number plus unseen-environment cases are reserved for future OOD2",
+  "view_a_selected_counts": {
+    "inclined_plane_slide": {
+      "test_id": 6,
+      "test_ood1": 16,
+      "train": 58
+    },
+    "uniform_circular_motion": {
+      "test_id": 2,
+      "test_ood1": 4,
+      "train": 18
+    }
+  }
+}

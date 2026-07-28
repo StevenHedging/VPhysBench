@@ -1,6 +1,8 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+build/
+*.egg-info/
 runs/*
 !runs/README.md
 runs_v2/*

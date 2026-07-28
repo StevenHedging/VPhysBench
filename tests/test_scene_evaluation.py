@@ -511,7 +511,6 @@ class SceneEvaluationTests(unittest.TestCase):
         plan = {
             "task_id": "task",
             "family": "direct_eval",
-            "conditioning": "generic",
             "scene_ids": ["pendulum"],
             "jobs": [
                 {
@@ -519,7 +518,6 @@ class SceneEvaluationTests(unittest.TestCase):
                     "case_id": "case-a",
                     "scene_id": "pendulum",
                     "evaluation_partition": "group_1",
-                    "conditioning": "generic",
                     "seed": 42,
                 },
                 {
@@ -527,7 +525,6 @@ class SceneEvaluationTests(unittest.TestCase):
                     "case_id": "case-b",
                     "scene_id": "pendulum",
                     "evaluation_partition": "group_1",
-                    "conditioning": "generic",
                     "seed": 42,
                 },
             ],

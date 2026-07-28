@@ -1,6 +1,6 @@
 {
   "model": {
-    "frozen_lora_checkpoint": "/absolute/path/to/checkpoint.safetensors"
+    "frozen_lora_checkpoint": "/absolute/path/to/step-410.safetensors"
   },
   "runtime": {
     "project_root": "/absolute/path/to/wan22_pipeline",

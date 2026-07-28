@@ -1,13 +1,13 @@
 {
-  "schema_version": "4.0",
-  "baseline_id": "wan22_g15_sparse_motion_r32_e20",
-  "baseline_version": "1.1.0",
+  "schema_version": "5.0",
+  "baseline_id": "wan22_g15_sparse_motion_r32_e20_generic",
+  "baseline_version": "2.0.0",
   "implementation": {
     "kind": "managed",
     "driver": "driver.py",
     "fingerprint_paths": ["provenance/*.json"]
   },
-  "description": "Frozen G15 WAN2.2-TI2V-5B sparse-motion LoRA; diagnostic direct-eval baseline with explicit benchmark-overlap audit.",
+  "description": "Frozen G15 WAN2.2-TI2V-5B sparse-motion LoRA using each Case's canonical prompt without structured physics injection; diagnostic only due to benchmark overlap.",
   "supported_scenes": [
     "pendulum",
     "free_fall",
@@ -17,12 +17,23 @@
   ],
   "capabilities": {
     "task_families": ["direct_eval"],
-    "conditioning": ["generic", "physics"],
     "generation_modes": ["i2v"],
-    "physics_representations": ["structured_text"],
     "train": false,
     "finetune": false,
     "generate": true
+  },
+  "input_policy": {
+    "schema_version": "1.0",
+    "case_view": "conditionable_case_v1",
+    "text": {
+      "source": "case.text.prompt",
+      "usage": "required"
+    },
+    "physics": {
+      "source": "case.physics[annotated=true]",
+      "usage": "ignored",
+      "representations": []
+    }
   },
   "model": {
     "base_model": "WAN2.2-TI2V-5B",
@@ -48,9 +59,11 @@
   "adapter": {
     "kind": "standard",
     "preset": "standard_i2v_v1",
-    "profile_set": "five_scene_i2v_v1",
     "first_frame_policy": "require_asset",
     "cache_policy": "content_addressed_shared_immutable",
+    "physics_transform": {
+      "type": "none"
+    },
     "spatial": {
       "type": "wan22_spatial_v1",
       "policy": "scene_aspect_ratio_bucket_then_fit_and_pad",
@@ -95,12 +108,12 @@
   "runner": {
     "type": "wan22_ti2v_v1",
     "config": {
-        "num_inference_steps": 50,
-        "cfg_scale": 5.0,
-        "lora_alpha": 1.0,
-        "tiled": true,
-        "quality": 5,
-        "negative_prompt": "camera shake, changing apparatus identity, discontinuous motion, flicker, blur, text, watermark, low quality"
+      "num_inference_steps": 50,
+      "cfg_scale": 5.0,
+      "lora_alpha": 1.0,
+      "tiled": true,
+      "quality": 5,
+      "negative_prompt": "camera shake, changing apparatus identity, discontinuous motion, flicker, blur, text, watermark, low quality"
     }
   }
 }

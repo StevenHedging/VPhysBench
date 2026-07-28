@@ -6,574 +6,18 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from physbench.baseline_api.interfaces import BaselinePlugin, DataAdapter, TaskBuilder
 from physbench.baselines.wan22_lora import Wan22LoraAdapter
-from physbench.baselines.wan22_media import Wan22MediaAdapter
-from physbench.domain import (
-    AtomicPlan,
-    BaselineBundle,
-    BaselineTaskInstance,
-    DatasetSnapshot,
-    TaskSpec,
-)
-from physbench.io import (
-    canonical_sha256,
-    load_jsonl,
-    sha256_file,
-    write_json,
-    write_jsonl,
-)
-from physbench.prompts import PromptRegistry
-
-
-RESOURCE_ROOT = Path(__file__).resolve().parent / "resources"
-
-
-class Wan22DataAdapter(DataAdapter):
-    """WAN-owned, five-stage Case-to-model adaptation pipeline."""
-
-    REQUIRED_STAGES = {"spatial", "temporal", "paradigm", "text", "physics"}
-
-    def __init__(
-        self,
-        config: dict[str, Any],
-        bundle_root: Path,
-        implementation_digest: str,
-    ):
-        self.config = config
-        self.implementation_digest = implementation_digest
-        missing = self.REQUIRED_STAGES - set(config)
-        if missing:
-            raise ValueError(f"WAN data adapter missing stages: {sorted(missing)}")
-        profile_set = config["text"].get("profile_set")
-        profile_dir = (
-            RESOURCE_ROOT / profile_set
-            if profile_set
-            else bundle_root / config["text"]["profiles_dir"]
-        )
-        if not profile_dir.is_dir():
-            raise FileNotFoundError(
-                f"WAN data-adapter profile set not found: {profile_dir}"
-            )
-        self.registry = PromptRegistry(profile_dir)
-        if set(self.registry.profiles) != {"generic", "physics"}:
-            raise ValueError(
-                "WAN data-adapter profiles must define exactly generic and physics"
-            )
-        self.media = Wan22MediaAdapter(self.media_config)
-
-    @property
-    def stage_fingerprints(self) -> dict[str, str]:
-        profiles = self.registry.snapshot(["generic", "physics"])["profiles"]
-        return {
-            "spatial": canonical_sha256({
-                "config": self.config["spatial"],
-                "implementation": self.implementation_digest,
-            }),
-            "temporal": canonical_sha256({
-                "config": self.config["temporal"],
-                "implementation": self.implementation_digest,
-            }),
-            "paradigm": canonical_sha256({
-                "config": self.config["paradigm"],
-                "implementation": self.implementation_digest,
-            }),
-            "text": canonical_sha256({
-                "config": self.config["text"],
-                "generic_profile": profiles["generic"],
-                "implementation": self.implementation_digest,
-            }),
-            "physics": canonical_sha256({
-                "config": self.config["physics"],
-                "physics_profile": profiles["physics"],
-                "implementation": self.implementation_digest,
-            }),
-        }
-
-    @property
-    def fingerprint(self) -> str:
-        return canonical_sha256({
-            "type": "wan22_case_data_v2",
-            "stages": self.stage_fingerprints,
-        })
-
-    @property
-    def materialization_fingerprint(self) -> str:
-        fingerprints = self.stage_fingerprints
-        return canonical_sha256({
-            name: fingerprints[name]
-            for name in ("spatial", "temporal", "paradigm")
-        })
-
-    @property
-    def media_config(self) -> dict[str, Any]:
-        spatial = self.config["spatial"]
-        temporal = self.config["temporal"]
-        return {
-            "width": spatial["width"],
-            "height": spatial["height"],
-            "spatial_policy": spatial["policy"],
-            "pad_color": spatial["pad_color"],
-            "aspect_ratio_buckets": spatial["aspect_ratio_buckets"],
-            "fps": temporal["fps"],
-            "max_frames": temporal["max_frames"],
-            "min_frames": temporal["min_frames"],
-            "temporal_policy": temporal["policy"],
-            "cache_policy": self.config.get("cache", {}).get(
-                "policy", "run_private"
-            ),
-        }
-
-    def _spatial_profile(self, scene_id: str) -> dict[str, Any]:
-        buckets = self.config["spatial"]["aspect_ratio_buckets"]
-        if not buckets.get("enabled", False):
-            return {
-                "name": "default",
-                "width": self.config["spatial"]["width"],
-                "height": self.config["spatial"]["height"],
-            }
-        for name, profile in buckets["buckets"].items():
-            if scene_id in profile.get("scene_ids", []):
-                return {
-                    "name": name,
-                    "width": profile["width"],
-                    "height": profile["height"],
-                }
-        raise ValueError(f"no WAN spatial profile configured for scene {scene_id}")
-
-    def describe(self) -> dict[str, Any]:
-        return {
-            "type": "wan22_case_data_v2",
-            "fingerprint": self.fingerprint,
-            "materialization_fingerprint": self.materialization_fingerprint,
-            "stage_fingerprints": self.stage_fingerprints,
-            "stages": [
-                "spatial",
-                "temporal",
-                "paradigm",
-                "text",
-                "physics",
-            ],
-            "ownership": "baseline",
-            "source_assets_mutated": False,
-            "native_inputs_are_opaque_to_benchmark": True,
-            "cache_policy": self.config.get("cache", {}).get(
-                "policy", "run_private"
-            ),
-            "config": self.config,
-        }
-
-    def adapt_case(
-        self, case: dict[str, Any], conditioning: str, *, role: str
-    ) -> dict[str, Any]:
-        if conditioning not in {"generic", "physics"}:
-            raise ValueError(f"unsupported WAN conditioning {conditioning}")
-        # Text adaptation never receives structured physics.  The physics stage is
-        # the only stage allowed to observe case["physics"].
-        text_case = {
-            "case_id": case["case_id"],
-            "scene_id": case["scene_id"],
-            "physical_parameters": {},
-        }
-        generic_record = self.registry.resolve(text_case, "generic", role=role)
-        if generic_record["used_parameters"]:
-            raise AssertionError("WAN text adaptation leaked physical parameters")
-
-        if conditioning == "physics":
-            physics_case = {
-                "case_id": case["case_id"],
-                "scene_id": case["scene_id"],
-                "physical_parameters": case["physics"],
-            }
-            record = self.registry.resolve(physics_case, "physics", role=role)
-        else:
-            record = generic_record
-
-        assets = case["assets"]
-        first_frame = assets.get("first_frame")
-        first_frame_source = (
-            "assets.first_frame"
-            if first_frame
-            else "assets.physics_reference_video:frame0"
-        )
-        profile = self._spatial_profile(case["scene_id"])
-        physics_strategy = (
-            self.config["physics"]["strategy"]
-            if conditioning == "physics"
-            else "disabled"
-        )
-        native_inputs = {
-            "vision": {
-                "paradigm": self.config["paradigm"]["mode"],
-                "first_frame_source": first_frame_source,
-            },
-            # This field is WAN-native.  Another baseline may expose tokens,
-            # tensors, control streams, or any other opaque native payload.
-            "text": {"prompt": record["prompt"]},
-        }
-
-        record["conditioning"] = conditioning
-        record["schema_version"] = "2.0"
-        record["data_adapter_fingerprint"] = self.fingerprint
-        record["materialization_fingerprint"] = self.materialization_fingerprint
-        record["stages"] = {
-            "spatial": {
-                "type": self.config["spatial"]["type"],
-                "policy": self.config["spatial"]["policy"],
-                "target_profile": profile,
-                "materialization": "deferred_to_baseline_runtime",
-            },
-            "temporal": {
-                "type": self.config["temporal"]["type"],
-                "policy": self.config["temporal"]["policy"],
-                "target_fps": self.config["temporal"]["fps"],
-                "max_frames": self.config["temporal"]["max_frames"],
-                "valid_frame_rule": "4n+1",
-                "materialization": "deferred_to_baseline_runtime",
-            },
-            "paradigm": {
-                "type": self.config["paradigm"]["type"],
-                "mode": self.config["paradigm"]["mode"],
-                "source": first_frame_source,
-            },
-            "text": {
-                "type": self.config["text"]["type"],
-                "generic_description": generic_record["prompt"],
-                "contains_detailed_physics": False,
-            },
-            "physics": {
-                "type": self.config["physics"]["type"],
-                "enabled": conditioning == "physics",
-                "strategy": physics_strategy,
-                "native_target": (
-                    self.config["physics"].get("native_target")
-                    if conditioning == "physics"
-                    else None
-                ),
-                "used_parameters": record["used_parameters"],
-            },
-        }
-        record["native_inputs"] = native_inputs
-        if conditioning == "generic" and record["used_parameters"]:
-            raise AssertionError("generic conditioning leaked physical parameters")
-        return record
-
-
-class Wan22TaskBuilder(TaskBuilder):
-    """Compile a canonical Benchmark plan into a sealed WAN-native task."""
-
-    TYPE = "wan22_task_builder_v1"
-
-    def __init__(self, bundle: BaselineBundle):
-        self.bundle = bundle
-        self._dependency_fingerprints = (
-            self._compute_dependency_fingerprints()
-        )
-        components = bundle.value["components"]
-        builder_config = components["task_builder"]["config"]
-        implementation_digest = canonical_sha256({
-            name: digest
-            for name, digest in self.dependency_fingerprints.items()
-            if name in {
-                "src/physbench/baseline_plugins/wan22.py",
-                "src/physbench/baseline_plugins/resources/"
-                "five_scene_i2v_v1/generic.json",
-                "src/physbench/baseline_plugins/resources/"
-                "five_scene_i2v_v1/physics.json",
-                "src/physbench/baseline_api/endpoint.py",
-                "src/physbench/baselines/wan22_lora.py",
-                "src/physbench/baselines/wan22_media.py",
-            }
-        })
-        self.data_adapter = Wan22DataAdapter(
-            builder_config["data_adapter"],
-            bundle.root,
-            implementation_digest,
-        )
-
-    @staticmethod
-    def _compute_dependency_fingerprints() -> dict[str, str]:
-        repository_root = Path(__file__).resolve().parents[3]
-        paths = {
-            "src/physbench/baseline_plugins/wan22.py": Path(__file__),
-            "src/physbench/baseline_plugins/resources/"
-            "five_scene_i2v_v1/generic.json": (
-                RESOURCE_ROOT / "five_scene_i2v_v1" / "generic.json"
-            ),
-            "src/physbench/baseline_plugins/resources/"
-            "five_scene_i2v_v1/physics.json": (
-                RESOURCE_ROOT / "five_scene_i2v_v1" / "physics.json"
-            ),
-            "src/physbench/baseline_api/endpoint.py": (
-                repository_root / "src" / "physbench" / "baseline_api"
-                / "endpoint.py"
-            ),
-            "src/physbench/baselines/wan22_lora.py": (
-                repository_root / "src" / "physbench" / "baselines"
-                / "wan22_lora.py"
-            ),
-            "src/physbench/baselines/wan22_media.py": (
-                repository_root / "src" / "physbench" / "baselines"
-                / "wan22_media.py"
-            ),
-            "scripts/wan22_generate.py": (
-                repository_root / "scripts" / "wan22_generate.py"
-            ),
-            "scripts/wan22_generate_batch.py": (
-                repository_root / "scripts" / "wan22_generate_batch.py"
-            ),
-            "scripts/plot_wan22_loss.py": (
-                repository_root / "scripts" / "plot_wan22_loss.py"
-            ),
-        }
-        missing = [str(path) for path in paths.values() if not path.is_file()]
-        if missing:
-            raise FileNotFoundError(
-                f"WAN Baseline runtime dependencies missing: {missing}"
-            )
-        return {
-            name: sha256_file(path)
-            for name, path in sorted(paths.items())
-        }
-
-    @property
-    def dependency_fingerprints(self) -> dict[str, str]:
-        return dict(self._dependency_fingerprints)
-
-    @property
-    def fingerprint(self) -> str:
-        components = self.bundle.value["components"]
-        return canonical_sha256({
-            "type": self.TYPE,
-            "data_adapter": self.data_adapter.fingerprint,
-            "trainer": components.get("trainer"),
-            "predictor": components["predictor"],
-            "model": self.bundle.value.get("model", {}),
-            "bundle_digest": self.bundle.digest,
-            "deployment_digest": self.bundle.deployment_digest,
-            "runtime_dependencies": self.dependency_fingerprints,
-        })
-
-    def describe(self) -> dict[str, Any]:
-        return {
-            "type": self.TYPE,
-            "fingerprint": self.fingerprint,
-            "ownership": "baseline",
-            "build_is_side_effect_free": True,
-            "canonical_plan_owner": "benchmark",
-            "runtime_dependency_fingerprints": self.dependency_fingerprints,
-            "data_adapter": self.data_adapter.describe(),
-            "output": "BaselineTaskInstance",
-        }
-
-    def _validate_compatibility(
-        self,
-        dataset: DatasetSnapshot,
-        task: TaskSpec,
-        plan: AtomicPlan,
-    ) -> None:
-        value = self.bundle.value
-        supported_families = set(value["capabilities"]["task_families"])
-        if task.family not in supported_families:
-            raise ValueError(f"baseline does not support task family {task.family}")
-        supported_conditioning = set(value["capabilities"]["conditioning"])
-        if task.conditioning not in supported_conditioning:
-            raise ValueError(f"baseline does not support {task.conditioning}")
-        supported_scenes = value.get("supported_scenes", "all")
-        if supported_scenes != "all":
-            requested_scenes = set(plan.value["scene_ids"]) | {
-                job["scene_id"] for job in plan.jobs
-            }
-            unknown = requested_scenes - set(supported_scenes)
-            if unknown:
-                raise ValueError(
-                    f"baseline does not support scenes {sorted(unknown)}"
-                )
-        if task.family == "direct_eval":
-            model = value.get("model", {})
-            checkpoint = model.get("frozen_lora_checkpoint")
-            if checkpoint and not Path(checkpoint).is_file():
-                raise FileNotFoundError(
-                    f"frozen LoRA checkpoint not found: {checkpoint}"
-                )
-            expected_digest = model.get("checkpoint_sha256")
-            if checkpoint and expected_digest:
-                actual_digest = sha256_file(checkpoint)
-                if actual_digest != expected_digest:
-                    raise ValueError(
-                        "frozen LoRA checkpoint digest mismatch: "
-                        f"expected={expected_digest}, actual={actual_digest}"
-                    )
-
-    def compile(
-        self,
-        dataset: DatasetSnapshot,
-        task: TaskSpec,
-        canonical_plan: AtomicPlan,
-    ) -> BaselineTaskInstance:
-        self._validate_compatibility(dataset, task, canonical_plan)
-        by_id = {case["case_id"]: case for case in dataset.cases}
-        train_ids = list(canonical_plan.train_case_ids)
-        eval_case_ids = sorted({job["case_id"] for job in canonical_plan.jobs})
-        selected_ids = sorted(set(train_ids) | set(eval_case_ids))
-
-        adaptations: list[dict[str, Any]] = []
-        adaptation_by_key: dict[tuple[str, str], dict[str, Any]] = {}
-        for role, case_ids in (("train", train_ids), ("eval", eval_case_ids)):
-            for case_id in case_ids:
-                adaptation = self.data_adapter.adapt_case(
-                    by_id[case_id], task.conditioning, role=role
-                )
-                adaptation_id = (
-                    f"{case_id}::{role}::{task.conditioning}"
-                )
-                adaptation["adaptation_id"] = adaptation_id
-                adaptations.append(adaptation)
-                adaptation_by_key[(case_id, role)] = adaptation
-        adaptations.sort(key=lambda item: item["adaptation_id"])
-
-        model_ref = (
-            "artifact://train/model"
-            if task.family == "finetune_eval"
-            else "baseline://frozen_model"
-        )
-        inference_jobs = []
-        for job in canonical_plan.jobs:
-            adaptation = adaptation_by_key[(job["case_id"], "eval")]
-            inference_jobs.append({
-                **job,
-                "adaptation_id": adaptation["adaptation_id"],
-                "model_ref": model_ref,
-                "native_inputs": adaptation["native_inputs"],
-            })
-        inference_jobs.sort(key=lambda item: item["job_id"])
-
-        components = self.bundle.value["components"]
-        training = None
-        operations = []
-        if task.family == "finetune_eval":
-            if "trainer" not in components:
-                raise ValueError(
-                    "finetune_eval baseline requires a trainer component"
-                )
-            training = {
-                "operation_id": "train",
-                "case_ids": train_ids,
-                "adaptation_ids": [
-                    adaptation_by_key[(case_id, "train")]["adaptation_id"]
-                    for case_id in train_ids
-                ],
-                "seed": canonical_plan.value["training_seed"],
-                "trainer": components["trainer"],
-                "outputs": {"model": "artifact://train/model"},
-            }
-            operations.append({
-                "operation_id": "train",
-                "kind": "train",
-                "depends_on": [],
-                "outputs": ["artifact://train/model"],
-            })
-        operations.extend([
-            {
-                "operation_id": "infer",
-                "kind": "infer",
-                "depends_on": ["train"] if training else [],
-                "model_ref": model_ref,
-                "job_ids": [job["job_id"] for job in inference_jobs],
-            },
-            {
-                "operation_id": "evaluate",
-                "kind": "evaluate",
-                "depends_on": ["infer"],
-                "job_ids": [job["job_id"] for job in inference_jobs],
-            },
-        ])
-
-        cache_root = (
-            Path(__file__).resolve().parents[3]
-            / "cache"
-            / "baselines"
-            / self.bundle.baseline_id
-            / self.data_adapter.materialization_fingerprint
-            / dataset.digest
-        )
-        plan_digest = canonical_sha256(canonical_plan.value)
-        instance_id = (
-            f"{task.task_id}__{self.bundle.baseline_id}"
-            f"__{self.fingerprint[:12]}"
-        )
-        return BaselineTaskInstance.seal({
-            "schema_version": "2.1",
-            "instance_id": instance_id,
-            "identity": {
-                "dataset": {
-                    "dataset_id": dataset.dataset_id,
-                    "digest": dataset.digest,
-                },
-                "task": {
-                    "task_id": task.task_id,
-                    "digest": task.digest,
-                },
-                "baseline": {
-                    "baseline_id": self.bundle.baseline_id,
-                    "baseline_version": self.bundle.baseline_version,
-                    "digest": self.bundle.digest,
-                    "deployment_digest": self.bundle.deployment_digest,
-                },
-                "task_builder": {
-                    "type": self.TYPE,
-                    "fingerprint": self.fingerprint,
-                },
-                "data_adapter": {
-                    "fingerprint": self.data_adapter.fingerprint,
-                    "materialization_fingerprint": (
-                        self.data_adapter.materialization_fingerprint
-                    ),
-                },
-                "canonical_plan_digest": plan_digest,
-            },
-            "semantics": {
-                "family": task.family,
-                "conditioning": task.conditioning,
-                "scene_ids": canonical_plan.value["scene_ids"],
-            },
-            "canonical_plan": canonical_plan.value,
-            "source": {
-                "asset_root": str(dataset.asset_root),
-                "cases": [by_id[case_id] for case_id in selected_ids],
-            },
-            "adaptations": adaptations,
-            "training": training,
-            "inference": {
-                "predictor": components["predictor"],
-                "jobs": inference_jobs,
-            },
-            "execution_graph": {"operations": operations},
-            "cache_bindings": [{
-                "kind": "media_derivatives",
-                "policy": "content_addressed_shared_immutable",
-                "root": str(cache_root),
-                "dataset_digest": dataset.digest,
-                "materialization_fingerprint": (
-                    self.data_adapter.materialization_fingerprint
-                ),
-            }],
-            "baseline_payload": {
-                "type": "wan22_task_v1",
-                "model": self.bundle.value.get("model", {}),
-                "runtime": self.bundle.value["runtime"],
-                "media_adapter": self.data_adapter.media_config,
-            },
-        })
+from physbench.domain import BaselineBundle, BaselineTaskInstance
+from physbench.io import load_jsonl, write_json, write_jsonl
 
 
 class Wan22ExecutionEngine:
-    """Shared WAN execution layer for command and managed integrations."""
+    """Compatibility execution layer behind the managed WAN driver."""
 
     def __init__(
         self,
         bundle: BaselineBundle,
-        task_builder: TaskBuilder,
+        task_builder: Any,
     ):
         self.bundle = bundle
         self.task_builder = task_builder
@@ -625,6 +69,9 @@ class Wan22ExecutionEngine:
         case: dict[str, Any], *, asset_root: Path, train_case_ids: set[str]
     ) -> dict[str, Any]:
         assets = dict(case["assets"])
+        supervised = case.get("supervised_targets", {}).get("video")
+        if isinstance(supervised, dict):
+            assets[supervised["asset_key"]] = supervised["asset"]
         split = (
             "train"
             if case["case_id"] in train_case_ids
@@ -640,8 +87,6 @@ class Wan22ExecutionEngine:
             "case_id": case["case_id"],
             "scene_id": case["scene_id"],
             "view_a_split": split,
-            # Managed direct-eval TaskInstances intentionally omit raw
-            # physics; their adapter-produced prompt/control is authoritative.
             "physical_parameters": case.get("physics", {}),
             "appearance": case["appearance"],
             "temporal": case["temporal"],
@@ -658,7 +103,10 @@ class Wan22ExecutionEngine:
                     "parent_case_id": None,
                 },
             ),
-            "text": {"description": f"{case['scene_id']} physical video case"},
+            "text": {
+                "description": case["text"]["prompt"],
+                "prompt": case["text"]["prompt"],
+            },
             "input_views": input_views,
             "_dataset_asset_root": str(asset_root),
         }
@@ -769,9 +217,6 @@ class Wan22ExecutionEngine:
             run_dir / "adaptations" / "case_adaptations.jsonl",
             adaptation_records,
         )
-        # Private compatibility projection consumed by the existing WAN trainer.
-        # It is not a Benchmark-level ConditionAdapter contract.
-        write_jsonl(run_dir / "resolved_prompts.jsonl", adaptation_records)
 
         legacy_config = self._legacy_config(instance_value)
         cache_binding = instance_value["cache_bindings"][0]
@@ -822,13 +267,12 @@ class Wan22ExecutionEngine:
 
         legacy_by_id = {case["case_id"]: case for case in legacy_cases}
         predictions = []
-        conditioning = instance_value["semantics"]["conditioning"]
         for raw_job in instance_value["inference"]["jobs"]:
             adaptation = adaptations_by_id[raw_job["adaptation_id"]]
             compatibility_job = {
                 **raw_job,
-                "prompt_profile_id": conditioning,
-                "resolved_prompt": adaptation,
+                "text_transform_id": adaptation["text_transform_id"],
+                "adaptation": adaptation,
             }
             prepared = legacy_adapter.prepare_job(
                 compatibility_job,
@@ -851,48 +295,18 @@ class Wan22ExecutionEngine:
                     "job_id": prepared["job_id"],
                     "case_id": prepared["case_id"],
                     "baseline_id": self.bundle.baseline_id,
-                    "conditioning": conditioning,
-                    "prompt_profile_id": conditioning,
                     "evaluation_partition": prepared["evaluation_partition"],
                     "status": "staged",
                     "video_path": None,
                     "manual_scores": {},
                     "job_spec": str(job_path),
+                    "seed": int(prepared["seed"]),
                 })
             elif not execute:
                 prediction = legacy_adapter.generate(prepared, job_path)
-                prediction["conditioning"] = conditioning
                 predictions.append(prediction)
         if execute and not stop_after_training:
             predictions = self._parallel_generate(
                 run_dir, len(instance_value["inference"]["jobs"])
             )
-            for prediction in predictions:
-                prediction["conditioning"] = conditioning
         return training, predictions
-
-
-class Wan22BaselinePlugin(BaselinePlugin):
-    """Advanced command Bundle wrapper retained for finetune_eval."""
-
-    def __init__(self, bundle: BaselineBundle):
-        self.bundle = bundle
-        self.task_builder = Wan22TaskBuilder(bundle)
-        self.execution = Wan22ExecutionEngine(
-            bundle, self.task_builder
-        )
-
-    def run_task(
-        self,
-        *,
-        instance: BaselineTaskInstance,
-        run_dir: Path,
-        execute: bool,
-        stop_after_training: bool,
-    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-        return self.execution.run_task(
-            instance=instance,
-            run_dir=run_dir,
-            execute=execute,
-            stop_after_training=stop_after_training,
-        )

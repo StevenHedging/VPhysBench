@@ -51,7 +51,7 @@ class DataAdapter(ABC):
 
     @abstractmethod
     def adapt_case(
-        self, case: dict[str, Any], conditioning: str, *, role: str
+        self, case: dict[str, Any], *, role: str
     ) -> dict[str, Any]:
         """Return an auditable baseline-native adaptation record."""
         raise NotImplementedError
