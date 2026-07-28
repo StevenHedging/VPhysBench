@@ -5,13 +5,16 @@ from pathlib import Path
 from typing import Any
 
 from ..driver import DirectManagedDriver
+from ..input_contract import resolve_dataset_asset_path
 
 
 class StandardI2VCLIDriver(DirectManagedDriver):
     """Portable CLI contract for ordinary image-to-video generators.
 
-    The configured command receives ``--prompt``, ``--image``, ``--output``
-    and ``--seed``. Extra model-specific flags belong in
+    The v1 command always receives ``--prompt``, ``--image``, ``--output`` and
+    ``--seed``. Set ``runner.config.job_spec_arg`` (new scaffolds use
+    ``--job-spec``) to also pass the JSON job specification containing the
+    requested generation shape. Extra model-specific flags belong in
     ``runner.config.extra_args``.
     """
 
@@ -36,7 +39,17 @@ class StandardI2VCLIDriver(DirectManagedDriver):
             raise ValueError(
                 f"standard I2V job has no first-frame asset: {job['job_id']}"
             )
-        first_frame = (source_root / first_frame_asset).resolve()
+        expected_asset = case.get("assets", {}).get("first_frame")
+        if first_frame_asset != expected_asset:
+            raise ValueError(
+                "standard I2V native input does not match the contract-"
+                "authorized first-frame asset"
+            )
+        first_frame = resolve_dataset_asset_path(
+            source_root,
+            first_frame_asset,
+            label="standard I2V first frame",
+        )
         if not first_frame.is_file():
             raise FileNotFoundError(
                 f"standard I2V first frame not found: {first_frame}"
@@ -47,6 +60,9 @@ class StandardI2VCLIDriver(DirectManagedDriver):
             / adaptation["conditioning"]
             / f"{job['job_id']}.mp4"
         ).resolve()
+        job_spec = (
+            run_dir / "jobs" / f"{job['job_id']}.json"
+        ).resolve()
         return {
             "job_id": job["job_id"],
             "case_id": job["case_id"],
@@ -54,6 +70,7 @@ class StandardI2VCLIDriver(DirectManagedDriver):
             "prompt": native["text"]["prompt"],
             "first_frame": str(first_frame),
             "output_video": str(output),
+            "job_spec": str(job_spec),
             "generation_shape": native["generation_shape"],
         }
 
@@ -83,8 +100,17 @@ class StandardI2VCLIDriver(DirectManagedDriver):
             spec["output_video"],
             "--seed",
             str(spec["seed"]),
-            *[str(item) for item in config.get("extra_args", [])],
         ]
+        job_spec_arg = config.get("job_spec_arg")
+        if job_spec_arg is not None:
+            if not isinstance(job_spec_arg, str) or not job_spec_arg:
+                raise ValueError(
+                    "runner.config.job_spec_arg must be a non-empty string"
+                )
+            command.extend([job_spec_arg, spec["job_spec"]])
+        command.extend(
+            str(item) for item in config.get("extra_args", [])
+        )
         output = Path(spec["output_video"])
         output.parent.mkdir(parents=True, exist_ok=True)
         log_path.parent.mkdir(parents=True, exist_ok=True)

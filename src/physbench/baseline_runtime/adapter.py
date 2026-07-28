@@ -291,6 +291,7 @@ class StandardDataAdapter(DataAdapter):
             media_channels.append({
                 "id": "initial_frame",
                 "kind": "image",
+                "origin": "dataset_asset",
                 "asset_key": "first_frame",
                 "binding": "native_inputs.vision.first_frame_asset",
             })
@@ -312,6 +313,7 @@ class StandardDataAdapter(DataAdapter):
             media_channels.append({
                 "id": "conditioning_video",
                 "kind": "video",
+                "origin": "dataset_asset",
                 "asset_key": asset_key,
                 "binding": "native_inputs.vision.input_video_asset",
             })

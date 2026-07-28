@@ -9,9 +9,10 @@ model-specific representation.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
-
 
 INPUT_CONTRACT_SCHEMA_VERSION = "1.0"
 GENERATION_MODES = frozenset({"t2v", "i2v", "v2v", "hybrid"})
@@ -35,11 +36,15 @@ LARGE_PHYSICS_REPRESENTATIONS = frozenset({
     "control_video",
 })
 ARTIFACT_REFERENCE_PREFIXES = ("artifact://", "cache://")
+ARTIFACT_REFERENCE_RE = re.compile(
+    r"^(?:artifact|cache)://sha256/([0-9a-f]{64})$"
+)
 DEFAULT_PHYSICS_REPRESENTATIONS = frozenset({"structured_text"})
 MAX_INLINE_CONTROL_BYTES = 4096
 
 __all__ = [
     "ARTIFACT_REFERENCE_PREFIXES",
+    "ARTIFACT_REFERENCE_RE",
     "CONDITIONING_MODES",
     "DEFAULT_PHYSICS_REPRESENTATIONS",
     "FORBIDDEN_ASSET_KEYS",
@@ -50,8 +55,35 @@ __all__ = [
     "MAX_INLINE_CONTROL_BYTES",
     "NATIVE_INPUT_BINDING_PREFIX",
     "resolve_binding",
+    "resolve_dataset_asset_path",
     "validate_adaptation_record",
 ]
+
+
+def resolve_dataset_asset_path(
+    asset_root: str | Path,
+    value: Any,
+    *,
+    label: str,
+) -> Path:
+    """Resolve a Dataset asset while rejecting absolute and escaping paths."""
+
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{label} must be a non-empty relative asset path")
+    relative = Path(value)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError(
+            f"{label} must stay inside the Dataset asset root: {value!r}"
+        )
+    root = Path(asset_root).resolve()
+    resolved = (root / relative).resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(
+            f"{label} escapes the Dataset asset root: {value!r}"
+        ) from exc
+    return resolved
 
 
 def resolve_binding(
@@ -170,13 +202,68 @@ def _validate_capability_representations(
     return frozenset(representations)
 
 
-def _is_artifact_reference(value: Any) -> bool:
+def _artifact_digest(value: Any) -> str | None:
     if not isinstance(value, str):
-        return False
-    return any(
-        value.startswith(prefix) and len(value) > len(prefix)
-        for prefix in ARTIFACT_REFERENCE_PREFIXES
+        return None
+    match = ARTIFACT_REFERENCE_RE.fullmatch(value)
+    return match.group(1) if match else None
+
+
+def _require_sha256(value: Any, *, label: str) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise ValueError(f"{label} must be a lowercase SHA-256 digest")
+    return value
+
+
+def _validate_artifact_provenance(
+    *,
+    bound_value: Any,
+    provenance_value: Any,
+    label: str,
+) -> None:
+    artifact_digest = _artifact_digest(bound_value)
+    if artifact_digest is None:
+        raise ValueError(
+            f"{label}.binding must resolve to "
+            "artifact://sha256/<digest> or cache://sha256/<digest>"
+        )
+    provenance = _require_object(
+        provenance_value,
+        label=f"{label}.artifact_provenance",
     )
+    allowed = {
+        "content_sha256",
+        "producer_fingerprint",
+        "source_digest",
+    }
+    unknown = sorted(set(provenance) - allowed)
+    missing = sorted(allowed - set(provenance))
+    if missing or unknown:
+        raise ValueError(
+            f"{label}.artifact_provenance fields mismatch: "
+            f"missing={missing}, unknown={unknown}"
+        )
+    content_sha256 = _require_sha256(
+        provenance.get("content_sha256"),
+        label=f"{label}.artifact_provenance.content_sha256",
+    )
+    _require_sha256(
+        provenance.get("producer_fingerprint"),
+        label=f"{label}.artifact_provenance.producer_fingerprint",
+    )
+    _require_sha256(
+        provenance.get("source_digest"),
+        label=f"{label}.artifact_provenance.source_digest",
+    )
+    if content_sha256 != artifact_digest:
+        raise ValueError(
+            f"{label}.artifact_provenance.content_sha256 must match "
+            "the digest in its artifact URI"
+        )
 
 
 def validate_adaptation_record(
@@ -234,6 +321,22 @@ def validate_adaptation_record(
         record.get("input_contract"),
         label="adaptation record.input_contract",
     )
+    contract_fields = {
+        "schema_version",
+        "generation_mode",
+        "text",
+        "media_channels",
+        "physics_channels",
+        "asset_access",
+    }
+    unknown_contract_fields = sorted(set(contract) - contract_fields)
+    missing_contract_fields = sorted(contract_fields - set(contract))
+    if unknown_contract_fields or missing_contract_fields:
+        raise ValueError(
+            "input_contract fields mismatch: "
+            f"missing={missing_contract_fields}, "
+            f"unknown={unknown_contract_fields}"
+        )
     if contract.get("schema_version") != INPUT_CONTRACT_SCHEMA_VERSION:
         raise ValueError(
             "input_contract.schema_version must be "
@@ -250,6 +353,10 @@ def validate_adaptation_record(
         contract.get("text"),
         label="input_contract.text",
     )
+    if set(text_contract) != {"required", "binding"}:
+        raise ValueError(
+            "input_contract.text must contain exactly required and binding"
+        )
     if text_contract.get("required") is not True:
         raise ValueError("input_contract.text.required must be true")
     text_binding = _require_non_empty_string(
@@ -299,6 +406,22 @@ def validate_adaptation_record(
     for index, raw_channel in enumerate(media_channels):
         label = f"input_contract.media_channels[{index}]"
         channel = _require_object(raw_channel, label=label)
+        allowed_media_fields = {
+            "id",
+            "kind",
+            "origin",
+            "asset_key",
+            "binding",
+            "artifact_provenance",
+        }
+        unknown_media_fields = sorted(
+            set(channel) - allowed_media_fields
+        )
+        if unknown_media_fields:
+            raise ValueError(
+                f"{label} contains unknown fields: "
+                f"{unknown_media_fields}"
+            )
         _validate_channel_id(
             channel.get("id"),
             label=label,
@@ -311,20 +434,12 @@ def validate_adaptation_record(
                 f"got {kind!r}"
             )
         media_kinds.add(kind)
-        asset_key = _require_non_empty_string(
-            channel.get("asset_key"),
-            label=f"{label}.asset_key",
-        )
-        if (
-            generation_mode == "v2v"
-            and _normalized_asset_key(asset_key)
-            in FORBIDDEN_ASSET_KEYS
-        ):
+        origin = channel.get("origin", "dataset_asset")
+        if origin not in {"dataset_asset", "derived_artifact"}:
             raise ValueError(
-                f"{label}.asset_key {asset_key!r} is reserved and cannot "
-                "be used as V2V input"
+                f"{label}.origin must be dataset_asset or "
+                "derived_artifact"
             )
-        required_media_assets.add(asset_key)
         binding = _require_non_empty_string(
             channel.get("binding"),
             label=f"{label}.binding",
@@ -334,6 +449,37 @@ def validate_adaptation_record(
             raise ValueError(
                 f"{label}.binding must resolve to a non-empty asset string"
             )
+        if origin == "dataset_asset":
+            asset_key = _require_non_empty_string(
+                channel.get("asset_key"),
+                label=f"{label}.asset_key",
+            )
+            if "artifact_provenance" in channel:
+                raise ValueError(
+                    f"{label}.artifact_provenance is only valid for "
+                    "derived_artifact"
+                )
+            if (
+                generation_mode == "v2v"
+                and _normalized_asset_key(asset_key)
+                in FORBIDDEN_ASSET_KEYS
+            ):
+                raise ValueError(
+                    f"{label}.asset_key {asset_key!r} is reserved and "
+                    "cannot be used as V2V input"
+                )
+            required_media_assets.add(asset_key)
+        else:
+            if "asset_key" in channel:
+                raise ValueError(
+                    f"{label}.asset_key must be omitted for "
+                    "derived_artifact"
+                )
+            _validate_artifact_provenance(
+                bound_value=bound_media,
+                provenance_value=channel.get("artifact_provenance"),
+                label=label,
+            )
 
     missing_assets = required_media_assets - declared_assets
     if missing_assets:
@@ -341,15 +487,25 @@ def validate_adaptation_record(
             "input_contract.asset_access must include every media asset key; "
             f"missing {sorted(missing_assets)}"
         )
-    if generation_mode == "i2v" and "image" not in media_kinds:
+    if generation_mode == "t2v" and media_channels:
         raise ValueError(
-            "input_contract for generation_mode 'i2v' requires at least "
-            "one image media channel"
+            "input_contract for generation_mode 't2v' must not declare "
+            "media channels"
         )
-    if generation_mode == "v2v" and "video" not in media_kinds:
+    if generation_mode == "i2v" and media_kinds != {"image"}:
         raise ValueError(
-            "input_contract for generation_mode 'v2v' requires at least "
-            "one video media channel"
+            "input_contract for generation_mode 'i2v' requires one or more "
+            "image channels and no video channels"
+        )
+    if generation_mode == "v2v" and media_kinds != {"video"}:
+        raise ValueError(
+            "input_contract for generation_mode 'v2v' requires one or more "
+            "video channels and no image channels"
+        )
+    if generation_mode == "hybrid" and media_kinds != {"image", "video"}:
+        raise ValueError(
+            "input_contract for generation_mode 'hybrid' requires both "
+            "image and video channels"
         )
 
     parameter_bindings: set[str] = set()
@@ -361,6 +517,22 @@ def validate_adaptation_record(
     for index, raw_channel in enumerate(physics_channels):
         label = f"input_contract.physics_channels[{index}]"
         channel = _require_object(raw_channel, label=label)
+        allowed_physics_fields = {
+            "id",
+            "representation",
+            "binding",
+            "transport",
+            "used_parameters",
+            "artifact_provenance",
+        }
+        unknown_physics_fields = sorted(
+            set(channel) - allowed_physics_fields
+        )
+        if unknown_physics_fields:
+            raise ValueError(
+                f"{label} contains unknown fields: "
+                f"{unknown_physics_fields}"
+            )
         _validate_channel_id(
             channel.get("id"),
             label=label,
@@ -384,33 +556,47 @@ def validate_adaptation_record(
             label=f"{label}.binding",
         )
         bound_value = resolve_binding(record, binding)
-        if (
-            transport != "artifact_ref"
-            and isinstance(bound_value, (list, dict))
-            and len(
-                json.dumps(
-                    bound_value,
-                    ensure_ascii=False,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                ).encode("utf-8")
+        if transport == "artifact_ref":
+            _validate_artifact_provenance(
+                bound_value=bound_value,
+                provenance_value=channel.get("artifact_provenance"),
+                label=label,
             )
-            > MAX_INLINE_CONTROL_BYTES
-        ):
-            raise ValueError(
-                f"{label}.binding exceeds {MAX_INLINE_CONTROL_BYTES} inline "
-                "bytes and therefore requires transport='artifact_ref'"
+        else:
+            if "artifact_provenance" in channel:
+                raise ValueError(
+                    f"{label}.artifact_provenance requires "
+                    "transport='artifact_ref'"
+                )
+            semantic_text = (
+                representation == "structured_text"
+                and binding == text_binding
             )
+            if not semantic_text:
+                try:
+                    inline_size = len(
+                        json.dumps(
+                            bound_value,
+                            ensure_ascii=False,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        ).encode("utf-8")
+                    )
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(
+                        f"{label}.binding is not a JSON value"
+                    ) from exc
+                if inline_size > MAX_INLINE_CONTROL_BYTES:
+                    raise ValueError(
+                        f"{label}.binding exceeds "
+                        f"{MAX_INLINE_CONTROL_BYTES} inline bytes and "
+                        "therefore requires transport='artifact_ref'"
+                    )
         if representation in LARGE_PHYSICS_REPRESENTATIONS:
             if transport != "artifact_ref":
                 raise ValueError(
                     f"{label} uses large representation {representation!r} "
                     "and therefore requires transport='artifact_ref'"
-                )
-            if not _is_artifact_reference(bound_value):
-                raise ValueError(
-                    f"{label}.binding must resolve to a non-empty "
-                    "artifact:// or cache:// URI"
                 )
 
         raw_parameters = _require_list(
@@ -444,6 +630,11 @@ def validate_adaptation_record(
     elif not physics_channels:
         raise ValueError(
             "physics adaptation requires at least one physics channel"
+        )
+    elif not used_parameters:
+        raise ValueError(
+            "physics adaptation must consume at least one annotated "
+            "physical parameter"
         )
 
     used_parameter_keys = set(used_parameters)

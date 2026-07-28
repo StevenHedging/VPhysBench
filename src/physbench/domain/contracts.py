@@ -114,7 +114,13 @@ class BaselineTaskInstance:
         cls, value: dict[str, Any]
     ) -> "BaselineTaskInstance":
         recorded = value.get("instance_digest")
-        instance = cls.seal(value)
+        try:
+            instance = cls.seal(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"BaselineTaskInstance document was modified or invalid: "
+                f"{exc}"
+            ) from exc
         if recorded != instance.digest:
             raise ValueError(
                 f"BaselineTaskInstance document was modified: "

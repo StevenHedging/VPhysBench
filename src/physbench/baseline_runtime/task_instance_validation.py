@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from typing import Any
 
@@ -20,10 +22,28 @@ _TOP_LEVEL_FIELDS = frozenset({
     "baseline_payload",
 })
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_CANONICAL_JOB_FIELDS = frozenset({
+    "job_id",
+    "case_id",
+    "scene_id",
+    "evaluation_partition",
+    "conditioning",
+    "seed",
+})
 
 
 def _invalid(path: str, message: str) -> ValueError:
     return ValueError(f"Invalid BaselineTaskInstance at {path}: {message}")
+
+
+def _canonical_sha256(value: Any) -> str:
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _require_object(value: Any, path: str) -> dict[str, Any]:
@@ -186,51 +206,63 @@ def _validate_source(source_value: Any) -> set[str]:
     return case_ids
 
 
-def _validate_adaptations(adaptations_value: Any) -> set[str]:
+def _validate_adaptations(
+    adaptations_value: Any,
+) -> dict[str, dict[str, Any]]:
     adaptations = _require_list(adaptations_value, "adaptations")
-    adaptation_ids: set[str] = set()
+    by_id: dict[str, dict[str, Any]] = {}
     for index, adaptation_value in enumerate(adaptations):
         path = f"adaptations[{index}]"
         adaptation = _require_object(adaptation_value, path)
-        _require_fields(adaptation, {"adaptation_id"}, path)
+        _require_fields(
+            adaptation,
+            {"adaptation_id", "case_id", "native_inputs"},
+            path,
+        )
         adaptation_id = _require_non_empty_string(
             adaptation["adaptation_id"], f"{path}.adaptation_id"
         )
-        if adaptation_id in adaptation_ids:
+        if adaptation_id in by_id:
             raise _invalid(
                 f"{path}.adaptation_id",
                 f"duplicate adaptation_id {adaptation_id!r}",
             )
-        adaptation_ids.add(adaptation_id)
-    return adaptation_ids
+        _require_non_empty_string(
+            adaptation["case_id"], f"{path}.case_id"
+        )
+        _require_object(
+            adaptation["native_inputs"], f"{path}.native_inputs"
+        )
+        by_id[adaptation_id] = adaptation
+    return by_id
 
 
 def _validate_inference(
     inference_value: Any,
-    adaptation_ids: set[str],
+    adaptations: dict[str, dict[str, Any]],
     case_ids: set[str],
-) -> set[str]:
+) -> dict[str, dict[str, Any]]:
     inference = _require_object(inference_value, "inference")
     _require_fields(inference, {"predictor", "jobs"}, "inference")
     _require_object(inference["predictor"], "inference.predictor")
 
     jobs = _require_list(inference["jobs"], "inference.jobs")
-    job_ids: set[str] = set()
+    by_id: dict[str, dict[str, Any]] = {}
     for index, job_value in enumerate(jobs):
         path = f"inference.jobs[{index}]"
         job = _require_object(job_value, path)
         _require_fields(
             job,
-            {"job_id", "case_id", "adaptation_id"},
+            {"job_id", "case_id", "adaptation_id", "native_inputs"},
             path,
         )
         job_id = _require_non_empty_string(job["job_id"], f"{path}.job_id")
-        if job_id in job_ids:
+        if job_id in by_id:
             raise _invalid(
                 f"{path}.job_id",
                 f"duplicate job_id {job_id!r}",
             )
-        job_ids.add(job_id)
+        by_id[job_id] = job
 
         case_id = _require_non_empty_string(
             job["case_id"], f"{path}.case_id"
@@ -244,12 +276,220 @@ def _validate_inference(
         adaptation_id = _require_non_empty_string(
             job["adaptation_id"], f"{path}.adaptation_id"
         )
-        if adaptation_id not in adaptation_ids:
+        if adaptation_id not in adaptations:
             raise _invalid(
                 f"{path}.adaptation_id",
                 f"references unknown adaptation_id {adaptation_id!r}",
             )
-    return job_ids
+        adaptation = adaptations[adaptation_id]
+        if adaptation["case_id"] != case_id:
+            raise _invalid(
+                f"{path}.adaptation_id",
+                "adaptation case_id does not match inference job case_id",
+            )
+        native_inputs = _require_object(
+            job["native_inputs"], f"{path}.native_inputs"
+        )
+        if native_inputs != adaptation["native_inputs"]:
+            raise _invalid(
+                f"{path}.native_inputs",
+                "must equal the referenced adaptation.native_inputs",
+            )
+    return by_id
+
+
+def _validate_plan_identity(
+    canonical_plan: dict[str, Any],
+    identity: dict[str, Any],
+    semantics: dict[str, Any],
+) -> None:
+    _require_fields(
+        canonical_plan,
+        {
+            "task_id",
+            "family",
+            "conditioning",
+            "dataset_id",
+            "dataset_digest",
+            "scene_ids",
+            "train_case_ids",
+            "training_seed",
+            "jobs",
+        },
+        "canonical_plan",
+    )
+    comparisons = {
+        "task_id": identity["task"]["task_id"],
+        "dataset_id": identity["dataset"]["dataset_id"],
+        "dataset_digest": identity["dataset"]["digest"],
+        "family": semantics["family"],
+        "conditioning": semantics["conditioning"],
+        "scene_ids": semantics["scene_ids"],
+    }
+    mismatched = sorted(
+        field
+        for field, expected in comparisons.items()
+        if canonical_plan.get(field) != expected
+    )
+    if mismatched:
+        raise _invalid(
+            "canonical_plan",
+            "identity/semantics mismatch for field(s): "
+            f"{', '.join(mismatched)}",
+        )
+
+
+def _validate_plan_jobs(
+    canonical_plan: dict[str, Any],
+    inference_jobs: dict[str, dict[str, Any]],
+) -> set[str]:
+    plan_jobs = _require_list(
+        canonical_plan["jobs"], "canonical_plan.jobs"
+    )
+    by_id: dict[str, dict[str, Any]] = {}
+    for index, job_value in enumerate(plan_jobs):
+        path = f"canonical_plan.jobs[{index}]"
+        job = _require_object(job_value, path)
+        _require_fields(job, _CANONICAL_JOB_FIELDS, path)
+        job_id = _require_non_empty_string(
+            job["job_id"], f"{path}.job_id"
+        )
+        if job_id in by_id:
+            raise _invalid(
+                f"{path}.job_id",
+                f"duplicate job_id {job_id!r}",
+            )
+        by_id[job_id] = job
+
+    if set(by_id) != set(inference_jobs):
+        raise _invalid(
+            "inference.jobs",
+            "job IDs must exactly match canonical_plan.jobs",
+        )
+    for job_id, plan_job in by_id.items():
+        inference_job = inference_jobs[job_id]
+        mismatched = sorted(
+            field
+            for field in _CANONICAL_JOB_FIELDS
+            if inference_job.get(field) != plan_job[field]
+        )
+        if mismatched:
+            raise _invalid(
+                f"inference.jobs[{job_id!r}]",
+                "does not match canonical_plan job field(s): "
+                f"{', '.join(mismatched)}",
+            )
+    return set(by_id)
+
+
+def _validate_training(
+    training_value: Any,
+    canonical_plan: dict[str, Any],
+    adaptations: dict[str, dict[str, Any]],
+    source_case_ids: set[str],
+    inference_jobs: dict[str, dict[str, Any]],
+) -> None:
+    train_case_values = _require_list(
+        canonical_plan["train_case_ids"],
+        "canonical_plan.train_case_ids",
+    )
+    train_case_ids = [
+        _require_non_empty_string(
+            case_id,
+            f"canonical_plan.train_case_ids[{index}]",
+        )
+        for index, case_id in enumerate(train_case_values)
+    ]
+    if len(train_case_ids) != len(set(train_case_ids)):
+        raise _invalid(
+            "canonical_plan.train_case_ids",
+            "must not contain duplicates",
+        )
+    unknown = sorted(set(train_case_ids) - source_case_ids)
+    if unknown:
+        raise _invalid(
+            "canonical_plan.train_case_ids",
+            f"reference unknown source case IDs: {unknown}",
+        )
+    overlap = sorted(
+        set(train_case_ids)
+        & {job["case_id"] for job in inference_jobs.values()}
+    )
+    if overlap:
+        raise _invalid(
+            "canonical_plan",
+            f"training and inference cases overlap: {overlap}",
+        )
+
+    family = canonical_plan["family"]
+    if family == "direct_eval":
+        if train_case_ids:
+            raise _invalid(
+                "canonical_plan.train_case_ids",
+                "must be empty for direct_eval",
+            )
+        if canonical_plan.get("training_seed") is not None:
+            raise _invalid(
+                "canonical_plan.training_seed",
+                "must be null for direct_eval",
+            )
+        if training_value is not None:
+            raise _invalid("training", "must be null for direct_eval")
+        return
+    if family != "finetune_eval":
+        raise _invalid(
+            "canonical_plan.family",
+            "must be direct_eval or finetune_eval",
+        )
+
+    training = _require_object(training_value, "training")
+    _require_fields(
+        training,
+        {"case_ids", "adaptation_ids", "seed"},
+        "training",
+    )
+    training_case_ids = _require_list(
+        training["case_ids"], "training.case_ids"
+    )
+    if training_case_ids != train_case_ids:
+        raise _invalid(
+            "training.case_ids",
+            "must exactly match canonical_plan.train_case_ids",
+        )
+    if training["seed"] != canonical_plan.get("training_seed"):
+        raise _invalid(
+            "training.seed",
+            "must match canonical_plan.training_seed",
+        )
+    adaptation_ids = _require_list(
+        training["adaptation_ids"], "training.adaptation_ids"
+    )
+    if (
+        len(adaptation_ids) != len(train_case_ids)
+        or len(set(adaptation_ids)) != len(adaptation_ids)
+    ):
+        raise _invalid(
+            "training.adaptation_ids",
+            "must contain one unique adaptation per training case",
+        )
+    adaptation_case_ids: list[str] = []
+    for index, adaptation_id_value in enumerate(adaptation_ids):
+        path = f"training.adaptation_ids[{index}]"
+        adaptation_id = _require_non_empty_string(
+            adaptation_id_value, path
+        )
+        adaptation = adaptations.get(adaptation_id)
+        if adaptation is None:
+            raise _invalid(
+                path,
+                f"references unknown adaptation_id {adaptation_id!r}",
+            )
+        adaptation_case_ids.append(adaptation["case_id"])
+    if adaptation_case_ids != train_case_ids:
+        raise _invalid(
+            "training.adaptation_ids",
+            "adaptation case IDs must match training.case_ids in order",
+        )
 
 
 def _validate_reference_list(
@@ -290,6 +530,7 @@ def _validate_execution_graph(
 
     operation_ids: set[str] = set()
     parsed_operations: list[tuple[str, dict[str, Any]]] = []
+    job_coverage = {"infer": set(), "evaluate": set()}
     for index, operation_value in enumerate(operations):
         path = f"execution_graph.operations[{index}]"
         operation = _require_object(operation_value, path)
@@ -304,6 +545,19 @@ def _validate_execution_graph(
             )
         operation_ids.add(operation_id)
         parsed_operations.append((path, operation))
+        kind = operation.get("kind")
+        if kind in job_coverage:
+            if "job_ids" not in operation:
+                raise _invalid(
+                    path,
+                    f"{kind} operation requires job_ids",
+                )
+            references = _require_list(
+                operation["job_ids"], f"{path}.job_ids"
+            )
+            for reference in references:
+                if isinstance(reference, str):
+                    job_coverage[kind].add(reference)
 
     for path, operation in parsed_operations:
         operation_id = operation["operation_id"]
@@ -347,6 +601,13 @@ def _validate_execution_graph(
     for operation_id in dependencies:
         visit(operation_id)
 
+    for kind, covered in job_coverage.items():
+        if covered != job_ids:
+            raise _invalid(
+                "execution_graph.operations",
+                f"{kind} operations must cover every inference job",
+            )
+
 
 def validate_task_instance_document(document: dict) -> None:
     """Validate a schema-v2.1 BaselineTaskInstance runtime document.
@@ -376,18 +637,47 @@ def validate_task_instance_document(document: dict) -> None:
     _require_sha256(root["instance_digest"], "instance_digest")
     _validate_identity(root["identity"])
     _validate_semantics(root["semantics"])
-    _require_object(root["canonical_plan"], "canonical_plan")
+    identity = root["identity"]
+    semantics = root["semantics"]
+    canonical_plan = _require_object(
+        root["canonical_plan"], "canonical_plan"
+    )
+    if (
+        _canonical_sha256(canonical_plan)
+        != root["identity"]["canonical_plan_digest"]
+    ):
+        raise _invalid(
+            "identity.canonical_plan_digest",
+            "does not match canonical_plan",
+        )
+    _validate_plan_identity(canonical_plan, identity, semantics)
     case_ids = _validate_source(root["source"])
 
-    adaptation_ids = _validate_adaptations(root["adaptations"])
-    training = root["training"]
-    if training is not None:
-        _require_object(training, "training")
-    job_ids = _validate_inference(
+    adaptations = _validate_adaptations(root["adaptations"])
+    unknown_adaptation_cases = sorted({
+        item["case_id"]
+        for item in adaptations.values()
+        if item["case_id"] not in case_ids
+    })
+    if unknown_adaptation_cases:
+        raise _invalid(
+            "adaptations",
+            "reference unknown source case IDs: "
+            f"{unknown_adaptation_cases}",
+        )
+    inference_jobs = _validate_inference(
         root["inference"],
-        adaptation_ids,
+        adaptations,
         case_ids,
     )
+    _validate_training(
+        root["training"],
+        canonical_plan,
+        adaptations,
+        case_ids,
+        inference_jobs,
+    )
+    job_ids = _validate_plan_jobs(canonical_plan, inference_jobs)
     _validate_execution_graph(root["execution_graph"], job_ids)
 
     _require_list(root["cache_bindings"], "cache_bindings")

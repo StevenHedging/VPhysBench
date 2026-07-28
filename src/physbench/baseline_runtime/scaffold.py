@@ -105,6 +105,7 @@ def create_baseline_scaffold(
             "config": {
                 "command": ["python", "inference.py"],
                 "extra_args": [],
+                "job_spec_arg": "--job-spec",
             },
         }
         (target / "driver.py").write_text(

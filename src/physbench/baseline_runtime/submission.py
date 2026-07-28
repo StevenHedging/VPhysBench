@@ -9,7 +9,11 @@ from ..domain import BaselineBundle, BaselineTaskInstance
 from ..io import load_jsonl, sha256_file
 from .adapter_loader import load_data_adapter
 from .compiler import ManagedTaskBuilder
-from .plugin import _runtime_dependencies, verify_managed_instance
+from .plugin import (
+    _merge_dependency_paths,
+    _runtime_dependencies,
+    verify_managed_instance,
+)
 
 
 class SubmissionBaselinePlugin(BaselinePlugin):
@@ -40,16 +44,15 @@ class SubmissionBaselinePlugin(BaselinePlugin):
         )
         self.data_adapter = load_data_adapter(bundle)
         adapter_paths = self.data_adapter.dependency_paths()
-        overlap = sorted(set(extra) & set(adapter_paths))
-        if overlap:
-            raise ValueError(
-                "submission and DataAdapter dependencies collide: "
-                f"{overlap}"
-            )
+        dependency_paths = _merge_dependency_paths(
+            extra,
+            adapter_paths,
+            label="submission/DataAdapter",
+        )
         self.task_builder = ManagedTaskBuilder(
             bundle,
             _runtime_dependencies(
-                {**extra, **adapter_paths},
+                dependency_paths,
                 submission=True,
             ),
             self.data_adapter,

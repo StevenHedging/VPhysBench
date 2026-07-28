@@ -113,7 +113,10 @@
           "required": ["kind", "entrypoint"],
           "properties": {
             "kind": {"const": "python"},
-            "entrypoint": {"type": "string", "minLength": 1},
+            "entrypoint": {
+              "type": "string",
+              "pattern": "^(?:[A-Za-z_][A-Za-z0-9_]*/)*[A-Za-z_][A-Za-z0-9_]*\\.py$"
+            },
             "config": {"type": "object"},
             "cache_policy": {"type": "string", "minLength": 1}
           },
@@ -141,6 +144,54 @@
         }
       },
       "then": {"required": ["runner"]}
+    },
+    {
+      "if": {
+        "properties": {
+          "adapter": {
+            "properties": {"kind": {"const": "python"}},
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "capabilities": {
+            "required": ["generation_modes"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "allOf": [
+          {
+            "properties": {
+              "adapter": {
+                "properties": {"kind": {"const": "python"}},
+                "required": ["kind"]
+              }
+            }
+          },
+          {
+            "properties": {
+              "capabilities": {
+                "properties": {
+                  "conditioning": {"contains": {"const": "physics"}}
+                },
+                "required": ["conditioning"]
+              }
+            }
+          }
+        ]
+      },
+      "then": {
+        "properties": {
+          "capabilities": {
+            "required": ["physics_representations"]
+          }
+        }
+      }
     }
   ],
   "additionalProperties": false

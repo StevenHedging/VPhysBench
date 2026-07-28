@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import copy
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 from physbench.baseline_api import (
     load_baseline_bundle,
@@ -15,6 +18,9 @@ from physbench.baseline_runtime import (
     validate_adaptation_record,
 )
 from physbench.baseline_runtime.adapter import StandardDataAdapter
+from physbench.baseline_runtime.drivers.subprocess_i2v import (
+    StandardI2VCLIDriver,
+)
 from physbench.domain import (
     BaselineTaskInstance,
     DatasetSnapshot,
@@ -58,6 +64,8 @@ class FixtureAdapter(DataAdapter):
     def __init__(self, bundle):
         self.bundle = bundle
         self.received_has_physics = []
+        self.received_physics_keys = []
+        self.received_case_keys = []
 
     @property
     def fingerprint(self):
@@ -81,6 +89,10 @@ class FixtureAdapter(DataAdapter):
     def adapt_case(self, case, conditioning, *, role):
         has_physics = "physics" in case
         self.received_has_physics.append(has_physics)
+        self.received_physics_keys.append(
+            sorted(case.get("physics", {}))
+        )
+        self.received_case_keys.append(sorted(case))
         if conditioning == "generic":
             if has_physics:
                 raise AssertionError(
@@ -389,6 +401,147 @@ class AdapterFactoryTests(unittest.TestCase):
             second_bundle = load_baseline_bundle(root)
             self.assertNotEqual(first_bundle.digest, second_bundle.digest)
 
+    def test_python_adapter_relative_helper_is_loaded_and_fingerprinted(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = _create_bundle(Path(temporary))
+            (root / "helper.py").write_text(
+                "TOKEN = 'first'\n",
+                encoding="utf-8",
+            )
+            adapter_path = root / "adapter.py"
+            adapter_path.write_text(
+                "from .helper import TOKEN\n" + ADAPTER_SOURCE,
+                encoding="utf-8",
+            )
+            first = load_baseline_bundle(root)
+            self.assertIsNotNone(load_data_adapter(first))
+
+            (root / "helper.py").write_text(
+                "TOKEN = 'second'\n",
+                encoding="utf-8",
+            )
+            second = load_baseline_bundle(root)
+            self.assertNotEqual(first.digest, second.digest)
+
+    def test_nested_adapter_executes_package_initializer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = _create_bundle(Path(temporary))
+            package = root / "adapter_pkg"
+            package.mkdir()
+            (package / "__init__.py").write_text(
+                "TOKEN = 'package-initialized'\n",
+                encoding="utf-8",
+            )
+            (package / "adapter.py").write_text(
+                "from . import TOKEN\n" + ADAPTER_SOURCE,
+                encoding="utf-8",
+            )
+            write_json(
+                root / "baseline.json",
+                _manifest(
+                    "fixture",
+                    adapter={
+                        "kind": "python",
+                        "entrypoint": "adapter_pkg/adapter.py",
+                        "config": {},
+                    },
+                    custom_capabilities=True,
+                ),
+            )
+
+            adapter = load_data_adapter(load_baseline_bundle(root))
+            self.assertEqual(
+                "fixture_python_adapter_v1",
+                adapter.describe()["type"],
+            )
+
+    def test_identical_bundle_copies_use_distinct_module_namespaces(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            first_root = _create_bundle(parent / "first")
+            (parent / "second").mkdir()
+            second_root = parent / "second" / "fixture"
+            shutil.copytree(first_root, second_root)
+
+            first_bundle = load_baseline_bundle(first_root)
+            second_bundle = load_baseline_bundle(second_root)
+            first_adapter = load_data_adapter(first_bundle)
+            second_adapter = load_data_adapter(second_bundle)
+
+            self.assertEqual(first_bundle.digest, second_bundle.digest)
+            self.assertNotEqual(
+                first_adapter.__class__.__module__,
+                second_adapter.__class__.__module__,
+            )
+
+    def test_driver_relative_import_and_helper_enter_bundle_digest(
+        self,
+    ) -> None:
+        helper_source = """\
+from dataclasses import dataclass
+from physbench.baseline_runtime import DirectManagedDriver
+
+
+@dataclass(frozen=True)
+class Marker:
+    value: str
+
+
+class BaseDriver(DirectManagedDriver):
+    marker = Marker("loaded")
+
+    def prepare_job(
+        self, *, job, case, adaptation, source_root, run_dir
+    ):
+        return {
+            "job_id": job["job_id"],
+            "output_video": str(
+                run_dir / "predictions" / f"{job['job_id']}.mp4"
+            ),
+        }
+
+    def execute_job(self, spec, *, log_path):
+        raise AssertionError("fixture driver must not execute")
+"""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = _create_bundle(Path(temporary))
+            package = root / "runtime"
+            package.mkdir()
+            helper = package / "helper.py"
+            helper.write_text(helper_source, encoding="utf-8")
+            (package / "driver.py").write_text(
+                "from .helper import BaseDriver\n"
+                "class Driver(BaseDriver):\n"
+                "    pass\n",
+                encoding="utf-8",
+            )
+            manifest = _manifest(
+                "fixture",
+                adapter={
+                    "kind": "python",
+                    "entrypoint": "adapter.py",
+                    "config": {},
+                },
+                custom_capabilities=True,
+            )
+            manifest["implementation"]["driver"] = "runtime/driver.py"
+            write_json(root / "baseline.json", manifest)
+
+            first = load_baseline_bundle(root)
+            plugin = load_baseline_plugin(first)
+            self.assertEqual("loaded", plugin.driver.marker.value)
+
+            helper.write_text(
+                helper_source.replace('"loaded"', '"changed"'),
+                encoding="utf-8",
+            )
+            second = load_baseline_bundle(root)
+            self.assertNotEqual(first.digest, second.digest)
+
     def test_python_factory_rejects_wrong_return_type(self) -> None:
         source = "def create_adapter(bundle):\n    return object()\n"
         with tempfile.TemporaryDirectory() as temporary:
@@ -467,7 +620,7 @@ class InputContractTests(unittest.TestCase):
             kind="video",
             asset_key="input_video",
         )
-        with self.assertRaisesRegex(ValueError, "requires at least one image"):
+        with self.assertRaisesRegex(ValueError, "requires one or more image"):
             validate_adaptation_record(
                 wrong,
                 conditioning="generic",
@@ -486,6 +639,90 @@ class InputContractTests(unittest.TestCase):
                 capabilities=capabilities,
             )
 
+        qualified_gt = _generic_record(
+            mode="v2v",
+            kind="video",
+            asset_key="assets.reference_video",
+        )
+        with self.assertRaisesRegex(ValueError, "reserved"):
+            validate_adaptation_record(
+                qualified_gt,
+                conditioning="generic",
+                capabilities=capabilities,
+            )
+
+    def test_generation_modes_have_unambiguous_media_modalities(
+        self,
+    ) -> None:
+        capabilities = {"physics_representations": ["structured_text"]}
+        t2v_with_image = _generic_record(
+            mode="t2v",
+            kind="image",
+            asset_key="first_frame",
+        )
+        with self.assertRaisesRegex(ValueError, "must not declare media"):
+            validate_adaptation_record(
+                t2v_with_image,
+                conditioning="generic",
+                capabilities=capabilities,
+            )
+
+        hybrid = _generic_record(
+            mode="hybrid",
+            kind="image",
+            asset_key="first_frame",
+        )
+        with self.assertRaisesRegex(ValueError, "both image and video"):
+            validate_adaptation_record(
+                hybrid,
+                conditioning="generic",
+                capabilities=capabilities,
+            )
+        hybrid["native_inputs"]["media"][
+            "input_video_asset"
+        ] = "assets/input_video"
+        hybrid["input_contract"]["media_channels"].append({
+            "id": "video",
+            "kind": "video",
+            "asset_key": "input_video",
+            "binding": "native_inputs.media.input_video_asset",
+        })
+        hybrid["input_contract"]["asset_access"].append("input_video")
+        validate_adaptation_record(
+            hybrid,
+            conditioning="generic",
+            capabilities=capabilities,
+        )
+
+    def test_derived_artifact_can_supply_v2v_conditioning(self) -> None:
+        capabilities = {"physics_representations": ["structured_text"]}
+        record = _generic_record(
+            mode="v2v",
+            kind="video",
+            asset_key="input_video",
+        )
+        digest = "c" * 64
+        record["native_inputs"]["media"][
+            "input_video_asset"
+        ] = f"artifact://sha256/{digest}"
+        record["input_contract"]["media_channels"] = [{
+            "id": "proxy_video",
+            "kind": "video",
+            "origin": "derived_artifact",
+            "binding": "native_inputs.media.input_video_asset",
+            "artifact_provenance": {
+                "content_sha256": digest,
+                "producer_fingerprint": "d" * 64,
+                "source_digest": "e" * 64,
+            },
+        }]
+        record["input_contract"]["asset_access"] = []
+        validate_adaptation_record(
+            record,
+            conditioning="generic",
+            capabilities=capabilities,
+        )
+
     def test_large_physics_payload_requires_artifact_reference(self) -> None:
         capabilities = {
             "physics_representations": ["optical_flow"],
@@ -502,8 +739,9 @@ class InputContractTests(unittest.TestCase):
                 "annotated": True,
             },
         }
+        content_sha256 = "c" * 64
         record["native_inputs"]["controls"] = {
-            "flow": "artifact://controls/case/flow.npz",
+            "flow": f"artifact://sha256/{content_sha256}",
         }
         record["input_contract"]["physics_channels"] = [{
             "id": "flow",
@@ -511,6 +749,11 @@ class InputContractTests(unittest.TestCase):
             "binding": "native_inputs.controls.flow",
             "transport": "artifact_ref",
             "used_parameters": ["gravity"],
+            "artifact_provenance": {
+                "content_sha256": content_sha256,
+                "producer_fingerprint": "d" * 64,
+                "source_digest": "e" * 64,
+            },
         }]
         validate_adaptation_record(
             record,
@@ -522,7 +765,7 @@ class InputContractTests(unittest.TestCase):
         inline["native_inputs"]["controls"]["flow"] = [[0.0, 1.0]]
         with self.assertRaisesRegex(
             ValueError,
-            "artifact:// or cache://",
+            "artifact://sha256",
         ):
             validate_adaptation_record(
                 inline,
@@ -557,6 +800,31 @@ class InputContractTests(unittest.TestCase):
                 record,
                 conditioning="generic",
                 capabilities=capabilities,
+            )
+
+    def test_physics_arm_must_consume_an_annotated_parameter(self) -> None:
+        record = _generic_record(
+            mode="i2v",
+            kind="image",
+            asset_key="first_frame",
+        )
+        record["input_contract"]["physics_channels"] = [{
+            "id": "empty_physics",
+            "representation": "structured_text",
+            "binding": "native_inputs.text.prompt",
+            "transport": "inline_text",
+            "used_parameters": [],
+        }]
+        with self.assertRaisesRegex(
+            ValueError,
+            "must consume at least one",
+        ):
+            validate_adaptation_record(
+                record,
+                conditioning="physics",
+                capabilities={
+                    "physics_representations": ["structured_text"],
+                },
             )
 
     def test_standard_v2v_uses_only_explicit_conditioning_video(self) -> None:
@@ -611,6 +879,10 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
             plugin, instance = self._compiled_fixture(Path(temporary))
 
             self.assertEqual([False], plugin.data_adapter.received_has_physics)
+            self.assertNotIn(
+                "provenance",
+                plugin.data_adapter.received_case_keys[0],
+            )
             adaptation = instance.value["adaptations"][0]
             self.assertTrue(
                 adaptation["native_inputs"]["custom_adapter"]
@@ -666,24 +938,18 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                 load_baseline_bundle(bundle_root)
             )
             dataset = _dataset(root)
-            dataset.cases[0]["physics"]["string_length"][
-                "annotated"
-            ] = False
-            with self.assertRaisesRegex(
-                ValueError,
-                "non-annotated physics",
-            ):
-                plugin.task_builder.build(
-                    dataset,
-                    _task(root, conditioning="physics"),
-                )
-
-            dataset.cases[0]["physics"]["string_length"][
-                "annotated"
-            ] = True
+            dataset.cases[0]["physics"]["derived_period"] = {
+                "value": 1.0,
+                "unit": "s",
+                "annotated": False,
+            }
             instance = plugin.task_builder.build(
                 dataset,
                 _task(root, conditioning="physics"),
+            )
+            self.assertEqual(
+                ["string_length"],
+                plugin.data_adapter.received_physics_keys[-1],
             )
             plugin.run_task(
                 instance=instance,
@@ -692,6 +958,272 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                 stop_after_training=False,
             )
             self.assertNotIn("physics", plugin.driver.received_case)
+
+    def test_physics_values_must_match_dataset_truth(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plugin = load_baseline_plugin(
+                load_baseline_bundle(_create_bundle(root))
+            )
+            original = plugin.data_adapter.adapt_case
+
+            def tampered_adapter(case, conditioning, *, role):
+                record = copy.deepcopy(
+                    original(case, conditioning, role=role)
+                )
+                record["used_parameters"]["string_length"][
+                    "value"
+                ] = 999.0
+                return record
+
+            plugin.data_adapter.adapt_case = tampered_adapter
+            with self.assertRaisesRegex(
+                ValueError,
+                "differ from Dataset truth",
+            ):
+                plugin.task_builder.build(
+                    _dataset(root),
+                    _task(root, conditioning="physics"),
+                )
+
+    def test_v2v_rejects_cross_case_reference_digest_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = _standard_adapter_config()
+            config["preset"] = "standard_v2v_v1"
+            config.pop("first_frame_policy")
+            config["video_asset_key"] = "input_video"
+            bundle_root = _create_bundle(
+                root,
+                name="v2v_fixture",
+                adapter_source=None,
+                adapter=config,
+            )
+            plugin = load_baseline_plugin(
+                load_baseline_bundle(bundle_root)
+            )
+
+            base = _dataset(root)
+            first = copy.deepcopy(base.cases[0])
+            second = copy.deepcopy(first)
+            second["case_id"] = "pendulum_other"
+            second["assets"][
+                "reference_video"
+            ] = "assets/other-reference.mp4"
+            digest = "f" * 64
+            dataset = DatasetSnapshot(
+                root=base.root,
+                descriptor=base.descriptor,
+                cases=(first, second),
+                views=base.views,
+                scene_configs=base.scene_configs,
+                asset_lock={
+                    "files": [
+                        {
+                            "path": first["assets"]["input_video"],
+                            "sha256": digest,
+                        },
+                        {
+                            "path": second["assets"]["reference_video"],
+                            "sha256": digest,
+                        },
+                    ],
+                },
+                digest=base.digest,
+                asset_root=base.asset_root,
+            )
+            with self.assertRaisesRegex(
+                ValueError,
+                "anywhere in the Dataset",
+            ):
+                plugin.task_builder.build(dataset, _task(root))
+
+    def test_runtime_revalidates_managed_contract_and_recipe(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plugin, instance = self._compiled_fixture(root)
+
+            contract_tamper = instance.value
+            source_case = contract_tamper["source"]["cases"][0]
+            source_case["assets"][
+                "reference_video"
+            ] = "assets/reference.mp4"
+            adaptation = contract_tamper["adaptations"][0]
+            adaptation["input_contract"][
+                "asset_access"
+            ] = ["reference_video"]
+            adaptation["input_contract"]["media_channels"][0][
+                "asset_key"
+            ] = "reference_video"
+            adaptation["native_inputs"]["vision"][
+                "first_frame_asset"
+            ] = "assets/reference.mp4"
+            contract_tamper["inference"]["jobs"][0][
+                "native_inputs"
+            ] = copy.deepcopy(adaptation["native_inputs"])
+            resealed = BaselineTaskInstance.seal(contract_tamper)
+            with self.assertRaisesRegex(
+                ValueError,
+                "exposes evaluator/source assets",
+            ):
+                plugin.run_task(
+                    instance=resealed,
+                    run_dir=root / "contract-tamper",
+                    execute=False,
+                    stop_after_training=False,
+                )
+
+            recipe_tamper = instance.value
+            recipe_tamper["inference"]["predictor"]["config"][
+                "tampered"
+            ] = True
+            resealed = BaselineTaskInstance.seal(recipe_tamper)
+            with self.assertRaisesRegex(
+                ValueError,
+                "differs from active Baseline runner recipe",
+            ):
+                plugin.run_task(
+                    instance=resealed,
+                    run_dir=root / "recipe-tamper",
+                    execute=False,
+                    stop_after_training=False,
+                )
+
+    def test_runtime_rejects_escaping_dataset_asset_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plugin, instance = self._compiled_fixture(root)
+            value = instance.value
+            value["source"]["cases"][0]["assets"][
+                "first_frame"
+            ] = "../outside.png"
+            adaptation = value["adaptations"][0]
+            adaptation["native_inputs"]["vision"][
+                "first_frame_asset"
+            ] = "../outside.png"
+            value["inference"]["jobs"][0][
+                "native_inputs"
+            ] = copy.deepcopy(adaptation["native_inputs"])
+            resealed = BaselineTaskInstance.seal(value)
+            with self.assertRaisesRegex(
+                ValueError,
+                "inside the Dataset asset root",
+            ):
+                plugin.run_task(
+                    instance=resealed,
+                    run_dir=root / "path-tamper",
+                    execute=False,
+                    stop_after_training=False,
+                )
+
+    def test_finetune_runtime_separates_targets_from_model_inputs(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle_root = _create_bundle(root)
+            manifest = _manifest(
+                "fixture",
+                adapter={
+                    "kind": "python",
+                    "entrypoint": "adapter.py",
+                    "config": {},
+                },
+                custom_capabilities=True,
+            )
+            manifest["capabilities"]["task_families"] = ["finetune_eval"]
+            manifest["capabilities"]["train"] = True
+            manifest["capabilities"]["finetune"] = True
+            manifest["trainer"] = {"type": "fixture_trainer_v1"}
+            write_json(bundle_root / "baseline.json", manifest)
+            plugin = load_baseline_plugin(
+                load_baseline_bundle(bundle_root)
+            )
+
+            train_case = _case()
+            train_case["case_id"] = "pendulum_train"
+            eval_case = copy.deepcopy(_case())
+            eval_case["case_id"] = "pendulum_eval"
+            views = {
+                "view_a": {
+                    "schema_version": "2.0",
+                    "coverage": "complete",
+                    "scenes": {
+                        "pendulum": {
+                            "train": ["pendulum_train"],
+                            "test_id": ["pendulum_eval"],
+                            "test_ood1": [],
+                        },
+                    },
+                },
+                "view_b": {
+                    "schema_version": "2.0",
+                    "coverage": "complete",
+                    "scenes": {"pendulum": {"group_1": []}},
+                },
+            }
+            descriptor = {
+                "dataset_id": "conditioning_contract_fixture"
+            }
+            dataset = DatasetSnapshot(
+                root=root,
+                descriptor=descriptor,
+                cases=(train_case, eval_case),
+                views=views,
+                scene_configs={
+                    "pendulum": {
+                        "schema_version": "2.0",
+                        "scene_id": "pendulum",
+                    },
+                },
+                asset_lock=None,
+                digest=canonical_sha256({
+                    "descriptor": descriptor,
+                    "cases": [train_case, eval_case],
+                    "views": views,
+                }),
+                asset_root=root,
+            )
+            task_value = {
+                "schema_version": "2.0",
+                "task_id": "fixture_finetune_generic",
+                "family": "finetune_eval",
+                "conditioning": "generic",
+                "dataset_id": "conditioning_contract_fixture",
+                "dataset_view": "view_a",
+                "selection": {
+                    "scene_ids": ["pendulum"],
+                    "eval_partitions": ["test_id"],
+                },
+                "ood2": {"enabled": False},
+                "seeds": {"training": [11], "inference": [7]},
+            }
+            task = TaskSpec(
+                path=root / "fixture_finetune_generic.json",
+                value=task_value,
+                digest=canonical_sha256(task_value),
+            )
+
+            instance = plugin.task_builder.build(dataset, task).value
+            source = {
+                case["case_id"]: case
+                for case in instance["source"]["cases"]
+            }
+            self.assertNotIn("physics", source["pendulum_train"])
+            self.assertNotIn(
+                "reference_video",
+                source["pendulum_train"]["assets"],
+            )
+            self.assertEqual(
+                "training_target_only",
+                source["pendulum_train"]["supervised_targets"][
+                    "video"
+                ]["role"],
+            )
+            self.assertNotIn(
+                "supervised_targets",
+                source["pendulum_eval"],
+            )
 
 
 class TaskInstanceContractTests(unittest.TestCase):
@@ -733,6 +1265,61 @@ class TaskInstanceContractTests(unittest.TestCase):
             ):
                 BaselineTaskInstance.seal(value)
 
+    def test_inference_job_must_match_canonical_job(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plugin = load_baseline_plugin(
+                load_baseline_bundle(_create_bundle(root))
+            )
+            value = plugin.task_builder.build(
+                _dataset(root),
+                _task(root),
+            ).value
+            value["inference"]["jobs"][0]["seed"] += 1
+            with self.assertRaisesRegex(
+                ValueError,
+                "does not match canonical_plan job field.*seed",
+            ):
+                BaselineTaskInstance.seal(value)
+
+    def test_inference_native_inputs_must_match_adaptation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plugin = load_baseline_plugin(
+                load_baseline_bundle(_create_bundle(root))
+            )
+            value = plugin.task_builder.build(
+                _dataset(root),
+                _task(root),
+            ).value
+            value["inference"]["jobs"][0]["native_inputs"]["text"][
+                "prompt"
+            ] = "tampered"
+            with self.assertRaisesRegex(
+                ValueError,
+                "must equal the referenced adaptation.native_inputs",
+            ):
+                BaselineTaskInstance.seal(value)
+
+    def test_execution_graph_must_cover_inference_jobs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plugin = load_baseline_plugin(
+                load_baseline_bundle(_create_bundle(root))
+            )
+            value = plugin.task_builder.build(
+                _dataset(root),
+                _task(root),
+            ).value
+            for operation in value["execution_graph"]["operations"]:
+                if operation["kind"] == "evaluate":
+                    operation["job_ids"] = []
+            with self.assertRaisesRegex(
+                ValueError,
+                "evaluate operations must cover every inference job",
+            ):
+                BaselineTaskInstance.seal(value)
+
 
 class ScaffoldContractTests(unittest.TestCase):
     def test_managed_v2v_scaffold_loads_through_registry(self) -> None:
@@ -757,6 +1344,51 @@ class ScaffoldContractTests(unittest.TestCase):
                 "v2v",
                 plugin.data_adapter.describe()["generation_mode"],
             )
+
+    def test_i2v_job_spec_flag_is_opt_in_and_new_scaffolds_enable_it(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = create_baseline_scaffold(
+                name="fixture_i2v",
+                backend="managed-i2v",
+                root=temporary,
+            )
+            bundle = load_baseline_bundle(root)
+            config = bundle.value["runner"]["config"]
+            self.assertEqual("--job-spec", config["job_spec_arg"])
+            driver = StandardI2VCLIDriver(bundle)
+            spec = {
+                "prompt": "fixture",
+                "first_frame": "/tmp/frame.png",
+                "output_video": "/tmp/output.mp4",
+                "seed": 7,
+                "job_spec": "/tmp/job.json",
+            }
+            with mock.patch(
+                "physbench.baseline_runtime.drivers.subprocess_i2v."
+                "subprocess.run",
+                return_value=SimpleNamespace(returncode=0),
+            ) as run:
+                driver.execute_job(
+                    spec,
+                    log_path=Path(temporary) / "new.log",
+                )
+            command = run.call_args.args[0]
+            self.assertIn("--job-spec", command)
+            self.assertIn("/tmp/job.json", command)
+
+            config.pop("job_spec_arg")
+            with mock.patch(
+                "physbench.baseline_runtime.drivers.subprocess_i2v."
+                "subprocess.run",
+                return_value=SimpleNamespace(returncode=0),
+            ) as run:
+                driver.execute_job(
+                    spec,
+                    log_path=Path(temporary) / "legacy.log",
+                )
+            self.assertNotIn("--job-spec", run.call_args.args[0])
 
 
 if __name__ == "__main__":

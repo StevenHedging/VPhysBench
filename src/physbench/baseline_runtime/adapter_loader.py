@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-import importlib.util
+import json
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 from ..baseline_api.interfaces import DataAdapter
 from ..domain import BaselineBundle
+from .bundle_loader import (
+    load_bundle_module,
+    resolve_bundle_module_path,
+)
 
 
 def _is_sha256(value: Any) -> bool:
@@ -17,12 +20,17 @@ def _is_sha256(value: Any) -> bool:
     )
 
 
-def _validate_adapter(adapter: DataAdapter) -> DataAdapter:
+def _validate_adapter(
+    adapter: DataAdapter,
+    bundle: BaselineBundle,
+) -> DataAdapter:
+    fingerprint = adapter.fingerprint
+    materialization_fingerprint = adapter.materialization_fingerprint
     for label, value in (
-        ("fingerprint", adapter.fingerprint),
+        ("fingerprint", fingerprint),
         (
             "materialization_fingerprint",
-            adapter.materialization_fingerprint,
+            materialization_fingerprint,
         ),
     ):
         if not _is_sha256(value):
@@ -32,6 +40,66 @@ def _validate_adapter(adapter: DataAdapter) -> DataAdapter:
     description = adapter.describe()
     if not isinstance(description, dict):
         raise TypeError("DataAdapter.describe() must return an object")
+    adapter_type = description.get("type")
+    if not isinstance(adapter_type, str) or not adapter_type:
+        raise TypeError(
+            "DataAdapter.describe().type must be a non-empty string"
+        )
+    expected_identity = {
+        "fingerprint": fingerprint,
+        "materialization_fingerprint": materialization_fingerprint,
+    }
+    mismatched = sorted(
+        key
+        for key, expected in expected_identity.items()
+        if description.get(key) != expected
+    )
+    if mismatched:
+        raise TypeError(
+            "DataAdapter.describe() identity differs from adapter "
+            f"properties: {mismatched}"
+        )
+    try:
+        json.dumps(description, ensure_ascii=False, sort_keys=True)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(
+            "DataAdapter.describe() must be JSON-serializable"
+        ) from exc
+    declared_modes = bundle.value["capabilities"].get(
+        "generation_modes"
+    )
+    described_mode = description.get("generation_mode")
+    if (
+        described_mode is not None
+        and declared_modes is not None
+        and described_mode not in declared_modes
+    ):
+        raise TypeError(
+            "DataAdapter.describe().generation_mode is not declared in "
+            "Baseline capabilities"
+        )
+    described_representations = description.get(
+        "physics_representations"
+    )
+    declared_representations = bundle.value["capabilities"].get(
+        "physics_representations"
+    )
+    if described_representations is not None and (
+        not isinstance(described_representations, list)
+        or any(
+            not isinstance(item, str) or not item
+            for item in described_representations
+        )
+        or (
+            declared_representations is not None
+            and not set(described_representations)
+            <= set(declared_representations)
+        )
+    ):
+        raise TypeError(
+            "DataAdapter.describe().physics_representations must be a "
+            "declared string list"
+        )
     dependencies = adapter.dependency_paths()
     if (
         not isinstance(dependencies, dict)
@@ -58,30 +126,11 @@ def adapter_entrypoint(config: dict[str, Any]) -> str | None:
 
 
 def _entrypoint_path(bundle: BaselineBundle, relative: str) -> Path:
-    value = Path(relative)
-    if value.is_absolute() or ".." in value.parts:
-        raise ValueError(
-            f"adapter.entrypoint must be a bundle-relative path: {relative}"
-        )
-    path = (bundle.root / value).resolve()
-    try:
-        path.relative_to(bundle.root)
-    except ValueError as exc:
-        raise ValueError(
-            f"adapter.entrypoint escapes the Baseline bundle: {relative}"
-        ) from exc
-    if not path.is_file():
-        raise FileNotFoundError(f"Baseline adapter entrypoint not found: {path}")
-    return path
-
-
-def _load_module(path: Path, module_name: str) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(module_name, path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"cannot load Baseline adapter module: {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return resolve_bundle_module_path(
+        bundle,
+        relative,
+        label="adapter.entrypoint",
+    )
 
 
 def load_data_adapter(bundle: BaselineBundle) -> DataAdapter:
@@ -96,7 +145,7 @@ def load_data_adapter(bundle: BaselineBundle) -> DataAdapter:
     if kind == "standard":
         from .adapter import StandardDataAdapter
 
-        return _validate_adapter(StandardDataAdapter(config))
+        return _validate_adapter(StandardDataAdapter(config), bundle)
     if kind != "python":
         raise ValueError(
             f"unsupported Baseline adapter kind {kind!r}; "
@@ -108,9 +157,10 @@ def load_data_adapter(bundle: BaselineBundle) -> DataAdapter:
             "Python Baseline adapter requires adapter.entrypoint"
         )
     path = _entrypoint_path(bundle, relative)
-    module = _load_module(
-        path,
-        f"_physbench_adapter_{bundle.baseline_id}_{bundle.digest[:12]}",
+    module = load_bundle_module(
+        bundle,
+        relative,
+        label="adapter.entrypoint",
     )
     factory = getattr(module, "create_adapter", None)
     if not callable(factory):
@@ -123,4 +173,4 @@ def load_data_adapter(bundle: BaselineBundle) -> DataAdapter:
             "create_adapter(bundle) must return a DataAdapter; "
             f"got {type(adapter).__name__}"
         )
-    return _validate_adapter(adapter)
+    return _validate_adapter(adapter, bundle)

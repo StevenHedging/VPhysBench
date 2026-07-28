@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import importlib.util
 from abc import ABC, abstractmethod
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 from ..domain import BaselineBundle, BaselineTaskInstance
 from ..io import write_json
+from .bundle_loader import load_bundle_module
 
 
 class ManagedDriver(ABC):
@@ -243,33 +242,14 @@ class DirectManagedDriver(ManagedDriver):
         return training, predictions
 
 
-def _load_module(path: Path, module_name: str) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(module_name, path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"cannot load managed driver module: {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def load_managed_driver(bundle: BaselineBundle) -> ManagedDriver:
     relative = bundle.value["implementation"]["driver"]
-    path = (bundle.root / relative).resolve()
-    try:
-        path.relative_to(bundle.root)
-    except ValueError as exc:
-        raise ValueError(
-            f"managed driver escapes Baseline bundle: {relative}"
-        ) from exc
-    if not path.is_file():
-        raise FileNotFoundError(f"managed driver not found: {path}")
-    module = _load_module(
-        path,
-        (
-            f"_physbench_driver_{bundle.baseline_id}_"
-            f"{bundle.digest[:12]}"
-        ),
+    module = load_bundle_module(
+        bundle,
+        relative,
+        label="implementation.driver",
     )
+    path = (bundle.root / relative).resolve()
     driver_type = getattr(module, "Driver", None)
     if not isinstance(driver_type, type) or not issubclass(
         driver_type, ManagedDriver

@@ -647,9 +647,17 @@ class Wan22ExecutionEngine:
             "temporal": case["temporal"],
             "alignment": case.get("alignment"),
             "assets": assets,
-            "has_real_reference_video": case["has_real_reference_video"],
+            "has_real_reference_video": case.get(
+                "has_real_reference_video", False
+            ),
             "ood": case["ood"],
-            "provenance": case["provenance"],
+            "provenance": case.get(
+                "provenance",
+                {
+                    "source_kind": "managed_runtime_projection",
+                    "parent_case_id": None,
+                },
+            ),
             "text": {"description": f"{case['scene_id']} physical video case"},
             "input_views": input_views,
             "_dataset_asset_root": str(asset_root),

@@ -14,9 +14,9 @@ from ..domain import (
 )
 from ..io import canonical_sha256
 from .input_contract import (
-    ARTIFACT_REFERENCE_PREFIXES,
     FORBIDDEN_ASSET_KEYS,
     resolve_binding,
+    resolve_dataset_asset_path,
     validate_adaptation_record,
 )
 
@@ -118,15 +118,31 @@ class ManagedTaskBuilder(TaskBuilder):
         conditioning: str,
     ) -> dict[str, Any]:
         """Project a Case onto assets and facts available to an adapter."""
-        projected = copy.deepcopy(case)
+        projected = {
+            key: copy.deepcopy(case[key])
+            for key in (
+                "schema_version",
+                "case_id",
+                "scene_id",
+                "appearance",
+                "temporal",
+                "ood",
+            )
+            if key in case
+        }
         projected["assets"] = {
-            key: value
+            key: copy.deepcopy(value)
             for key, value in case["assets"].items()
             if key not in _NON_RUNTIME_ASSET_KEYS
         }
-        if conditioning == "generic":
-            # Deliberate absence makes accidental access fail at the source.
-            projected.pop("physics", None)
+        if conditioning == "physics":
+            projected["physics"] = {
+                name: copy.deepcopy(quantity)
+                for name, quantity in case["physics"].items()
+                if quantity.get("annotated") is True
+            }
+        # Generic receives no physics key. Neither arm receives provenance,
+        # source locators, alignment evidence, or evaluator-only assets.
         return projected
 
     @staticmethod
@@ -136,22 +152,37 @@ class ManagedTaskBuilder(TaskBuilder):
         training_target: bool,
     ) -> dict[str, Any]:
         """Project source data embedded in the runnable TaskInstance."""
+        projected = ManagedTaskBuilder._adapter_case(case, "generic")
         if training_target:
-            return copy.deepcopy(case)
-        projected = copy.deepcopy(case)
-        projected["assets"] = {
-            key: value
-            for key, value in case["assets"].items()
-            if key not in _NON_RUNTIME_ASSET_KEYS
-        }
-        projected.pop("physics", None)
-        projected["has_real_reference_video"] = False
+            target_key = (
+                "reference_video"
+                if case["assets"].get("reference_video")
+                else "physics_reference_video"
+            )
+            target = case["assets"].get(target_key)
+            if not target:
+                raise ValueError(
+                    f"training case {case['case_id']} has no supervised "
+                    "video target"
+                )
+            projected["supervised_targets"] = {
+                "video": {
+                    "asset_key": target_key,
+                    "asset": target,
+                    "role": "training_target_only",
+                }
+            }
         return projected
 
     @staticmethod
     def _validate_asset_access(
         adaptation: dict[str, Any],
         case: dict[str, Any],
+        *,
+        asset_root: Path,
+        asset_digests: dict[str, str],
+        forbidden_media_paths: set[Path],
+        forbidden_media_digests: set[str],
     ) -> None:
         requested = adaptation["input_contract"]["asset_access"]
         missing = [
@@ -162,19 +193,58 @@ class ManagedTaskBuilder(TaskBuilder):
                 f"adaptation for {case['case_id']} requests unavailable "
                 f"assets: {sorted(missing)}"
             )
+        for key in requested:
+            resolve_dataset_asset_path(
+                asset_root,
+                case["assets"][key],
+                label=f"assets.{key}",
+            )
         for channel in adaptation["input_contract"]["media_channels"]:
+            if channel.get("origin", "dataset_asset") != "dataset_asset":
+                continue
             expected = case["assets"][channel["asset_key"]]
             actual = resolve_binding(adaptation, channel["binding"])
-            is_artifact = any(
-                actual.startswith(prefix)
-                for prefix in ARTIFACT_REFERENCE_PREFIXES
-            )
-            if actual != expected and not is_artifact:
+            if actual != expected:
                 raise ValueError(
                     f"adaptation for {case['case_id']} binds "
                     f"assets.{channel['asset_key']} to an unrelated media "
                     f"value: {actual!r}"
                 )
+        if adaptation["input_contract"]["generation_mode"] == "v2v":
+            for channel in adaptation["input_contract"]["media_channels"]:
+                if channel["kind"] != "video":
+                    continue
+                origin = channel.get("origin", "dataset_asset")
+                if origin == "dataset_asset":
+                    selected = case["assets"][channel["asset_key"]]
+                    selected_path = resolve_dataset_asset_path(
+                        asset_root,
+                        selected,
+                        label=f"assets.{channel['asset_key']}",
+                    )
+                    selected_digest = asset_digests.get(selected)
+                    aliases_reference = (
+                        selected_path in forbidden_media_paths
+                        or (
+                            selected_digest is not None
+                            and selected_digest
+                            in forbidden_media_digests
+                        )
+                    )
+                    label = channel["asset_key"]
+                else:
+                    selected_digest = channel[
+                        "artifact_provenance"
+                    ]["content_sha256"]
+                    aliases_reference = (
+                        selected_digest in forbidden_media_digests
+                    )
+                    label = channel["id"]
+                if aliases_reference:
+                    raise ValueError(
+                        f"V2V conditioning media {label!r} aliases an "
+                        "evaluator/source video anywhere in the Dataset"
+                    )
 
     @staticmethod
     def _validate_physics_access(
@@ -198,6 +268,252 @@ class ManagedTaskBuilder(TaskBuilder):
                 f"adaptation for {case['case_id']} uses missing or "
                 f"non-annotated physics fields: {sorted(invalid)}"
             )
+        mismatched = []
+        for name, recorded in adaptation["used_parameters"].items():
+            source = physics[name]
+            if (
+                not isinstance(recorded, dict)
+                or recorded.get("value") != source.get("value")
+                or recorded.get("unit") != source.get("unit")
+            ):
+                mismatched.append(name)
+        if mismatched:
+            raise ValueError(
+                f"adaptation for {case['case_id']} records physics values "
+                f"or units that differ from Dataset truth: "
+                f"{sorted(mismatched)}"
+            )
+
+    def _validate_artifact_producers(
+        self,
+        adaptation: dict[str, Any],
+    ) -> None:
+        """Bind declared artifacts to an active, fingerprinted producer."""
+
+        accepted = {
+            self.data_adapter.fingerprint,
+            self.data_adapter.materialization_fingerprint,
+            self.fingerprint,
+        }
+        invalid = sorted(
+            channel["id"]
+            for channel in (
+                *adaptation["input_contract"]["media_channels"],
+                *adaptation["input_contract"]["physics_channels"],
+            )
+            if (
+                (provenance := channel.get("artifact_provenance"))
+                is not None
+                and provenance["producer_fingerprint"] not in accepted
+            )
+        )
+        if invalid:
+            raise ValueError(
+                "artifact producer_fingerprint must identify the active "
+                "DataAdapter, media materializer, or managed TaskBuilder; "
+                f"invalid channels: {invalid}"
+            )
+
+    def _predictor_payload(self) -> dict[str, Any]:
+        return copy.deepcopy(self.bundle.value.get("runner", {
+            "type": "submission_v1",
+            "config": {},
+        }))
+
+    def _baseline_payload(self) -> dict[str, Any]:
+        value = self.bundle.value
+        return copy.deepcopy({
+            "type": "managed_baseline_task_v1",
+            "implementation": value["implementation"],
+            "model": value.get("model", {}),
+            "runtime": value.get("runtime", {}),
+            "adapter": value["adapter"],
+            "runner": value.get("runner"),
+            "trainer": value.get("trainer"),
+        })
+
+    def _cache_binding(self, dataset_digest: str) -> dict[str, Any]:
+        value = self.bundle.value
+        cache_root = (
+            Path(__file__).resolve().parents[3]
+            / "cache"
+            / "baselines"
+            / self.bundle.baseline_id
+            / self.data_adapter.materialization_fingerprint
+            / dataset_digest
+        )
+        return {
+            "kind": "media_derivatives",
+            "policy": value["adapter"].get(
+                "cache_policy",
+                "content_addressed_shared_immutable",
+            ),
+            "root": str(cache_root),
+            "dataset_digest": dataset_digest,
+            "materialization_fingerprint": (
+                self.data_adapter.materialization_fingerprint
+            ),
+        }
+
+    def validate_compiled_instance(
+        self,
+        document: dict[str, Any],
+    ) -> None:
+        """Revalidate managed-only contracts against the active deployment."""
+
+        plan = document["canonical_plan"]
+        conditioning = document["semantics"]["conditioning"]
+        train_ids = list(plan["train_case_ids"])
+        eval_ids = sorted({
+            job["case_id"] for job in plan["jobs"]
+        })
+        train_id_set = set(train_ids)
+        expected_source_ids = train_id_set | set(eval_ids)
+        source_cases = document["source"]["cases"]
+        source_by_id = {
+            case["case_id"]: case for case in source_cases
+        }
+        if set(source_by_id) != expected_source_ids:
+            raise ValueError(
+                "managed source cases must exactly match canonical train/eval "
+                "cases"
+            )
+
+        allowed_case_fields = {
+            "schema_version",
+            "case_id",
+            "scene_id",
+            "appearance",
+            "temporal",
+            "ood",
+            "assets",
+            "supervised_targets",
+        }
+        for case_id, case in source_by_id.items():
+            unexpected = sorted(set(case) - allowed_case_fields)
+            if unexpected:
+                raise ValueError(
+                    f"managed source case {case_id} contains forbidden or "
+                    f"unknown fields: {unexpected}"
+                )
+            assets = case.get("assets")
+            if not isinstance(assets, dict):
+                raise ValueError(
+                    f"managed source case {case_id} requires assets"
+                )
+            leaked_assets = sorted(
+                set(assets) & _NON_RUNTIME_ASSET_KEYS
+            )
+            if leaked_assets:
+                raise ValueError(
+                    f"managed source case {case_id} exposes evaluator/source "
+                    f"assets: {leaked_assets}"
+                )
+            target = case.get("supervised_targets")
+            if case_id not in train_id_set:
+                if target is not None:
+                    raise ValueError(
+                        f"evaluation case {case_id} exposes supervised targets"
+                    )
+                continue
+            if (
+                not isinstance(target, dict)
+                or set(target) != {"video"}
+                or not isinstance(target["video"], dict)
+                or set(target["video"])
+                != {"asset_key", "asset", "role"}
+                or target["video"].get("asset_key")
+                not in {"reference_video", "physics_reference_video"}
+                or not isinstance(target["video"].get("asset"), str)
+                or not target["video"]["asset"]
+                or target["video"].get("role") != "training_target_only"
+            ):
+                raise ValueError(
+                    f"training case {case_id} has invalid supervised target"
+                )
+
+        expected_adaptations = {
+            f"{case_id}::{role}::{conditioning}": (case_id, role)
+            for role, case_ids in (
+                ("train", train_ids),
+                ("eval", eval_ids),
+            )
+            for case_id in case_ids
+        }
+        adaptations = {
+            item["adaptation_id"]: item
+            for item in document["adaptations"]
+        }
+        if set(adaptations) != set(expected_adaptations):
+            raise ValueError(
+                "managed adaptations must exactly match canonical "
+                "train/eval cases"
+            )
+        capabilities = self.bundle.value["capabilities"]
+        declared_modes = capabilities.get("generation_modes")
+        for adaptation_id, (case_id, role) in (
+            expected_adaptations.items()
+        ):
+            adaptation = adaptations[adaptation_id]
+            expected_identity = {
+                "case_id": case_id,
+                "conditioning": conditioning,
+                "role": role,
+            }
+            actual_identity = {
+                key: adaptation.get(key)
+                for key in expected_identity
+            }
+            if actual_identity != expected_identity:
+                raise ValueError(
+                    "managed adaptation identity mismatch: "
+                    f"expected={expected_identity}, actual={actual_identity}"
+                )
+            validate_adaptation_record(
+                adaptation,
+                conditioning=conditioning,
+                capabilities=capabilities,
+            )
+            self._validate_artifact_producers(adaptation)
+            mode = adaptation["input_contract"]["generation_mode"]
+            if declared_modes is not None and mode not in declared_modes:
+                raise ValueError(
+                    f"managed adaptation mode {mode!r} is not declared by "
+                    "the active Baseline"
+                )
+            self._validate_asset_access(
+                adaptation,
+                source_by_id[case_id],
+                asset_root=Path(document["source"]["asset_root"]),
+                asset_digests={},
+                forbidden_media_paths=set(),
+                forbidden_media_digests=set(),
+            )
+
+        if document["inference"]["predictor"] != self._predictor_payload():
+            raise ValueError(
+                "managed inference predictor differs from active Baseline "
+                "runner recipe"
+            )
+        training = document["training"]
+        if (
+            training is not None
+            and training.get("trainer") != self.bundle.value.get("trainer")
+        ):
+            raise ValueError(
+                "managed trainer differs from active Baseline recipe"
+            )
+        if document["baseline_payload"] != self._baseline_payload():
+            raise ValueError(
+                "managed baseline payload differs from active deployment"
+            )
+        expected_cache = self._cache_binding(
+            document["identity"]["dataset"]["digest"]
+        )
+        if document["cache_bindings"] != [expected_cache]:
+            raise ValueError(
+                "managed cache binding differs from active deployment"
+            )
 
     def compile(
         self,
@@ -209,7 +525,36 @@ class ManagedTaskBuilder(TaskBuilder):
         by_id = {case["case_id"]: case for case in dataset.cases}
         train_ids = list(canonical_plan.train_case_ids)
         train_id_set = set(train_ids)
+        asset_digests = {
+            item["path"]: item["sha256"]
+            for item in (
+                dataset.asset_lock.get("files", [])
+                if dataset.asset_lock is not None
+                else []
+            )
+        }
+        forbidden_asset_values = {
+            value
+            for raw_case in dataset.cases
+            for key in FORBIDDEN_ASSET_KEYS
+            if (value := raw_case["assets"].get(key))
+        }
+        forbidden_media_paths = {
+            (dataset.asset_root / value).resolve()
+            for value in forbidden_asset_values
+        }
+        forbidden_media_digests = {
+            digest
+            for value in forbidden_asset_values
+            if (digest := asset_digests.get(value))
+        }
         eval_ids = sorted({job["case_id"] for job in canonical_plan.jobs})
+        overlap = train_id_set & set(eval_ids)
+        if overlap:
+            raise ValueError(
+                "managed canonical plan exposes training targets to "
+                f"evaluation cases: {sorted(overlap)}"
+            )
         selected_ids = sorted(set(train_ids) | set(eval_ids))
         adaptations: list[dict[str, Any]] = []
         adaptation_by_key: dict[tuple[str, str], dict[str, Any]] = {}
@@ -218,9 +563,15 @@ class ManagedTaskBuilder(TaskBuilder):
                 case = self._adapter_case(
                     by_id[case_id], task.conditioning
                 )
+                adapter_case = copy.deepcopy(case)
                 adaptation = self.data_adapter.adapt_case(
-                    case, task.conditioning, role=role
+                    adapter_case, task.conditioning, role=role
                 )
+                if adapter_case != case:
+                    raise ValueError(
+                        f"DataAdapter mutated its immutable Case input: "
+                        f"{case_id}"
+                    )
                 expected_identity = {
                     "case_id": case_id,
                     "conditioning": task.conditioning,
@@ -255,12 +606,20 @@ class ManagedTaskBuilder(TaskBuilder):
                         f"adapter generated mode {actual_mode!r}, which is "
                         "not declared in capabilities.generation_modes"
                     )
-                self._validate_asset_access(adaptation, case)
+                self._validate_asset_access(
+                    adaptation,
+                    case,
+                    asset_root=dataset.asset_root,
+                    asset_digests=asset_digests,
+                    forbidden_media_paths=forbidden_media_paths,
+                    forbidden_media_digests=forbidden_media_digests,
+                )
                 self._validate_physics_access(
                     adaptation,
                     case,
                     task.conditioning,
                 )
+                self._validate_artifact_producers(adaptation)
                 adaptation_id = (
                     f"{case_id}::{role}::{task.conditioning}"
                 )
@@ -323,14 +682,6 @@ class ManagedTaskBuilder(TaskBuilder):
             },
         ])
 
-        cache_root = (
-            Path(__file__).resolve().parents[3]
-            / "cache"
-            / "baselines"
-            / self.bundle.baseline_id
-            / self.data_adapter.materialization_fingerprint
-            / dataset.digest
-        )
         instance_id = (
             f"{task.task_id}__{self.bundle.baseline_id}"
             f"__{self.fingerprint[:12]}"
@@ -387,32 +738,10 @@ class ManagedTaskBuilder(TaskBuilder):
             "adaptations": adaptations,
             "training": training,
             "inference": {
-                "predictor": value.get("runner", {
-                    "type": "submission_v1",
-                    "config": {},
-                }),
+                "predictor": self._predictor_payload(),
                 "jobs": inference_jobs,
             },
             "execution_graph": {"operations": operations},
-            "cache_bindings": [{
-                "kind": "media_derivatives",
-                "policy": value["adapter"].get(
-                    "cache_policy",
-                    "content_addressed_shared_immutable",
-                ),
-                "root": str(cache_root),
-                "dataset_digest": dataset.digest,
-                "materialization_fingerprint": (
-                    self.data_adapter.materialization_fingerprint
-                ),
-            }],
-            "baseline_payload": {
-                "type": "managed_baseline_task_v1",
-                "implementation": value["implementation"],
-                "model": value.get("model", {}),
-                "runtime": value.get("runtime", {}),
-                "adapter": value["adapter"],
-                "runner": value.get("runner"),
-                "trainer": value.get("trainer"),
-            },
+            "cache_bindings": [self._cache_binding(dataset.digest)],
+            "baseline_payload": self._baseline_payload(),
         })

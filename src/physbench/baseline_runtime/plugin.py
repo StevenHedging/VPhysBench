@@ -11,6 +11,37 @@ from .compiler import ManagedTaskBuilder
 from .driver import load_managed_driver
 
 
+def _merge_dependency_paths(
+    *groups: dict[str, Path],
+    label: str,
+) -> dict[str, Path]:
+    merged: dict[str, Path] = {}
+    for group in groups:
+        if not isinstance(group, dict):
+            raise TypeError(f"{label} dependencies must be an object")
+        for name, path in group.items():
+            if (
+                not isinstance(name, str)
+                or not name
+                or not isinstance(path, Path)
+            ):
+                raise TypeError(
+                    f"{label} dependencies must map non-empty names to "
+                    "Path objects"
+                )
+            previous = merged.get(name)
+            if (
+                previous is not None
+                and previous.resolve() != path.resolve()
+            ):
+                raise ValueError(
+                    f"{label} dependency {name!r} maps to both "
+                    f"{previous} and {path}"
+                )
+            merged[name] = path
+    return merged
+
+
 def _runtime_dependencies(
     extra: dict[str, Path],
     *,
@@ -21,6 +52,9 @@ def _runtime_dependencies(
         "src/physbench/baseline_runtime/adapter.py": root / "adapter.py",
         "src/physbench/baseline_runtime/adapter_loader.py": (
             root / "adapter_loader.py"
+        ),
+        "src/physbench/baseline_runtime/bundle_loader.py": (
+            root / "bundle_loader.py"
         ),
         "src/physbench/baseline_runtime/compiler.py": root / "compiler.py",
         "src/physbench/baseline_runtime/driver.py": root / "driver.py",
@@ -36,12 +70,11 @@ def _runtime_dependencies(
         paths[
             "src/physbench/baseline_runtime/submission.py"
         ] = root / "submission.py"
-    overlap = sorted(set(paths) & set(extra))
-    if overlap:
-        raise ValueError(
-            f"managed driver dependency names shadow runtime files: {overlap}"
-        )
-    paths.update(extra)
+    paths = _merge_dependency_paths(
+        paths,
+        extra,
+        label="managed runtime",
+    )
     missing = [
         f"{name}={path}"
         for name, path in paths.items()
@@ -91,6 +124,7 @@ def verify_managed_instance(
         raise ValueError(
             "managed DataAdapter fingerprint does not match deployment"
         )
+    task_builder.validate_compiled_instance(instance.value)
 
 
 class ManagedBaselinePlugin(BaselinePlugin):
@@ -100,14 +134,13 @@ class ManagedBaselinePlugin(BaselinePlugin):
         self.driver = load_managed_driver(bundle)
         driver_paths = self.driver.dependency_paths()
         adapter_paths = self.data_adapter.dependency_paths()
-        overlap = sorted(set(driver_paths) & set(adapter_paths))
-        if overlap:
-            raise ValueError(
-                "managed driver and DataAdapter dependencies collide: "
-                f"{overlap}"
-            )
+        extra_paths = _merge_dependency_paths(
+            driver_paths,
+            adapter_paths,
+            label="managed driver/DataAdapter",
+        )
         dependencies = _runtime_dependencies(
-            {**driver_paths, **adapter_paths}
+            extra_paths
         )
         self.task_builder = ManagedTaskBuilder(
             bundle,

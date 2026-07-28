@@ -338,10 +338,32 @@ def _validate_manifest(value: dict[str, Any], descriptor_path: Path) -> None:
                 raise FileNotFoundError(
                     f"Baseline adapter entrypoint not found: {path}"
                 )
+            entrypoint_path = Path(entrypoint)
+            module_parts = [
+                *entrypoint_path.parts[:-1],
+                entrypoint_path.stem,
+            ]
+            if entrypoint_path.suffix != ".py" or any(
+                not part.isidentifier() for part in module_parts
+            ):
+                raise ValueError(
+                    "adapter.entrypoint must be a Python module path whose "
+                    f"components are identifiers: {entrypoint}"
+                )
             if "config" in adapter and not isinstance(
                 adapter["config"], dict
             ):
                 raise ValueError("adapter.config must be an object")
+            if (
+                "cache_policy" in adapter
+                and (
+                    not isinstance(adapter["cache_policy"], str)
+                    or not adapter["cache_policy"]
+                )
+            ):
+                raise ValueError(
+                    "adapter.cache_policy must be a non-empty string"
+                )
             if capabilities.get("generation_modes") is None:
                 raise ValueError(
                     "Python adapter requires "
@@ -505,6 +527,15 @@ def load_baseline_bundle(
     )
     if adapter_path and adapter_path not in patterns:
         patterns.append(adapter_path)
+    if (
+        portable_value["schema_version"] == "4.0"
+        and "**/*.py" not in patterns
+        and any(path.is_file() for path in root.rglob("*.py"))
+    ):
+        # Bundle-local driver, adapter and helper modules are implementation,
+        # not deployment state. Cover transitive imports automatically rather
+        # than trusting each Bundle author to enumerate them.
+        patterns.append("**/*.py")
     files = _fingerprinted_files(root, patterns)
     bundle_digest = canonical_sha256({
         "manifest": portable_value,
