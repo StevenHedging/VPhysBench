@@ -245,26 +245,49 @@ runs_v2/<run_id>/
 正式成绩的最低验收条件：
 
 ```text
+predictions.jsonl:
+  每个 planned job 恰好有一条 status == "complete" 的 prediction
+  每条 status == "evaluated" 的 Case 结果必须对应 complete prediction
+
 evaluation/task_result.json:
   status == "complete"
   coverage == 1.0
   score != null
   integrity_issues == []
+  protocol.fingerprint == component_fingerprints.evaluation_protocol
+  breakdown / by_scene / score 与合法 case_results 经官方 Task 聚合器重算的结果完全一致
 
 artifacts/wan22/checkpoint.json:
-  inventory.lora_tensor_count > 0
-  inventory.quantity_encoder_tensor_count > 0
+  inventory.tensor_count == 619
+  inventory.lora_tensor_count == 600
+  inventory.quantity_encoder_tensor_count == 19
+  上述 inventory 必须从实际 safetensors header 重算并与 manifest 一致
+  checkpoint size / SHA-256 / baseline identity 必须一致
+  若 save_optimizer_state=true，optimizer/scheduler 与所有 rank RNG sidecar 必须齐全
+  state manifest 必须与最终 step、world size、checkpoint 文件名一致，RNG 文件名/数量按 rank 核对
+  optimizer/scheduler 的 SHA-256 由 checkpoint manifest 锚定；RNG SHA-256 仅记录当前文件摘要，
+  没有外部 manifest 摘要锚，也不反序列化验证其语义内容
 
 artifacts/wan22/checkpoints/gradient_audit.json:
-  positive_quantity_gradient_count > 0
+  sample_count == expected_total_optimizer_steps
+  positive_quantity_gradient_count == sample_count
+  每个 sample 的 quantity_gradient_tensor_count == 19
   text_encoder_gradient_tensor_count_max == 0
+
+artifacts/wan22/loss_analysis/loss_summary.json:
+  first_step == 1
+  last_step == recorded_steps == expected_total_optimizer_steps
+  finite_fraction == 1.0
+  loss_curve.csv 必须逐步覆盖 1..expected_total_optimizer_steps，并与 summary 统计一致
 ```
 
 每条训练/推理量值还应能在 token audit 中追溯到 registry fingerprint、SI value、
-量纲、type ID、sentinel token ID 和唯一 token span。
+量纲、type ID、sentinel token ID 和唯一 token span；每个训练 Case 和每个完成推理的
+job 都必须恰好有一份与 sealed TaskInstance 输入一致的审计记录。
 
-完整 AtomicRun 结束后，用只读汇总器生成逐 scene、逐 partition、总体统计以及训练
-审计索引。缺失项会保持 `null`/`N/A`，不会被补成 0：
+AtomicRun 进入 `complete`、`inference_incomplete` 或 `failed` 终态后，可用只读汇总器
+生成逐 scene、逐 partition、逐 job 结果、官方聚合结果以及训练审计索引。缺失项会保持
+`null`/`N/A`，不会被补成 0：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
@@ -272,6 +295,28 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
   --run-dir runs_v2/<run_id> \
   --output-dir results/<run_id>
 ```
+
+若执行异常只留下 `state.json: stage=failed` 而尚未来得及写 `run.json`，汇总器会明确
+标记并使用 frozen identity/component fingerprints 构造“失败状态身份投影”；该投影
+只用于部分故障报告，自身会产生 integrity issue，绝不会被视为正式运行身份或成绩。
+
+汇总器中的 scene×partition、by-scene 和 overall 描述性统计同时给出两种权重：
+`job_micro_mean` 对成功评估的推理 job 等权；Case macro 则先在 Case 内对可用 seed
+求均值，再对 Case 等权。Benchmark 官方 by-scene 分数是 partition macro，Task
+分数再对 scene 做 macro。汇总器使用 Benchmark 自身的 Task 聚合器从合法
+`case_results` 独立重算 `breakdown`、`by_scene` 和 `score`，并与冻结结果逐字段核对。
+逐 job 输出保留 evaluator、metrics、quality、artifacts（包括 IoU 曲线）和 provenance。
+
+唯一权威的发布开关是
+`reporting_status.benchmark_score_publishable`；它只有在 sealed TaskInstance、
+全部 planned prediction 完成、Case/prediction 跨记录一致性、协议 fingerprint、
+官方聚合以及所有训练证据全部通过时才为 `true`。部分运行仍会列出 coverage、失败
+job ID 和 reason code，但其严格官方分数不可发布。若 reevaluate 使用了与 AtomicRun
+冻结 fingerprint 不同的修订协议，则必须作为单独标识的 alternate-protocol 结果报告，
+不能通过该发布开关。checkpoint、恢复状态、loss、gradient 或训练/推理 token audit
+缺失或未通过验收时，汇总器会写入 `integrity_issues`，不会以“无问题”掩盖缺失证据。
+当前 TensorBoard loss 是每个 optimizer step 的 rank-0 本地 batch loss，不是八卡
+loss 的 all-reduce 均值；它适合检查训练轨迹和有限性，不应解释为全局 batch loss。
 
 ## 8. 结果记录模板
 

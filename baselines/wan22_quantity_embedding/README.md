@@ -85,11 +85,18 @@ runs_v2/<run_id>/
 └── evaluation/task_result.json
 ```
 
-Do not publish a score unless `evaluation/task_result.json` reports
-`status=complete`, `coverage=1.0`, and a non-null `score`.
+There is one authoritative publication gate:
+`reporting_status.benchmark_score_publishable`. It is fail-closed and becomes
+true only when the run and official Task result are complete, the score has full
+coverage, every planned prediction is complete, every evaluated Case refers to
+a complete prediction, the official partition/scene/Task aggregates reproduce
+exactly from validated Case results, the evaluation-protocol fingerprint
+matches the frozen AtomicRun, the sealed TaskInstance and prediction artifacts
+verify, and all checkpoint/training/token audits pass.
 
-Create deterministic scene/partition statistics and training-evidence indexes
-from a completed AtomicRun with:
+Create deterministic scene/partition statistics, per-job records, official
+macro-result projections, and training-evidence indexes from a terminal
+`complete`, `inference_incomplete`, or `failed` AtomicRun with:
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
@@ -99,7 +106,19 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
 ```
 
 Missing, failed, and evaluator-unavailable cases remain explicit; the summary
-does not impute them as zero.
+does not impute them as zero. Descriptive tables expose both the evaluated-job
+micro mean and a Case-macro mean computed after averaging available inference
+seeds within each Case. Official partition/scene/Task macro results are
+independently recomputed with the Benchmark Task aggregator and compared with
+`evaluation/task_result.json`. Per-job output preserves evaluator metrics,
+quality, artifacts (including IoU curves), and provenance.
+
+A partial or failed run remains reportable but can never publish a strict
+Benchmark score. A reevaluation whose protocol fingerprint differs from the
+frozen AtomicRun is explicitly rejected by the publication gate and must be
+reported as a separately identified alternate-protocol result. Missing or
+rejected checkpoint, recovery-state, loss, gradient, training-token, or
+inference-token evidence is recorded as an integrity issue.
 
 ## Paired comparison
 
