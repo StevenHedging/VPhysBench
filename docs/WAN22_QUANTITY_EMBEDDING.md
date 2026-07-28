@@ -4,8 +4,10 @@
 
 ```text
 Baseline ID: wan22_ti2v_5b_lora_r32_quantity_embedding_v1
+Bundle:      1.0.1
 Base model:  WAN2.2-TI2V-5B
-Task:        five_scene_finetune_eval_v4
+Source run:  five_scene_finetune_eval_v4 / scene_default_v1
+Current Task: five_scene_finetune_eval_v5 / scene_default_v2
 Dataset:     physics_video_five_scene_v4 / View A
 ```
 
@@ -14,6 +16,12 @@ Dataset:     physics_video_five_scene_v4 / View A
 `case.text.prompt`，并从 `case.physics[annotated=true]` 中消费由 registry 明确筛选的
 物理量子集；它不会把全部结构化标注都送入模型。registry 会记录每个字段是 primary
 还是 derived，并不假设所选字段彼此统计独立。当前仅支持 `finetune_eval` Task family。
+
+2026-07-28 启动的正式 source run 固定在提交 `918e9f7`，因此保留当时的 v4 Task 和
+`scene_default_v1` native evaluation identity。修正后的官方 Task 使用 v5/v2；source
+run 的最终官方分数会另存为不可变的 v2 reevaluation variant，不会回写或伪装成其
+canonical v1 evaluation。下文命令引用当前 `tasks/official` 文件，因此新运行会生成
+v5 Task，而不是复用历史 v4 job identity。
 
 ## 2. 从设想到可训练实现
 
@@ -106,8 +114,50 @@ dtype。负面 prompt 不注入物理量。
 FlowMatch SFT 使用 AdamW、ConstantLR、学习率 `1e-4`、weight decay `0.01`、
 10 epochs、dataset repeat 4、bf16、gradient checkpointing、seed 42。五个 scene
 共同训练，并把每个 scene 过采样到最大 scene 的 metadata 行数。最终 checkpoint
-必须同时包含 LoRA 和 `pipe.quantity_encoder.*` tensors；推理拒绝只有 LoRA 的旧
-checkpoint。
+必须恰好包含当前 WAN2.2-TI2V-5B 拓扑的 300 个 rank-32 LoRA A/B pair（600 个
+LoRA tensor，30 blocks × 每 block 10 个 target），以及 19 个
+`pipe.quantity_encoder.*` tensor。缺 pair、额外 target、错误 rank、错误 shape 或
+非有限权重都会在融合前失败。推理拒绝只有 LoRA 的旧 checkpoint。
+
+训练 DataLoader 的 shuffle 显式绑定由 trainer seed 初始化的
+`torch.Generator`。sampler seed 同时写入 `training_sampling_plan.json`、
+`checkpoints/training_args.json`、`checkpoints/run.env` 与
+`checkpoints/training_sampling_runtime.json`，从而区分公共 sampler seed 和
+`TRAIN_SEED + rank` 的进程随机数策略。训练开始前还会强制
+`len(repeated_dataset) % world_size == 0`，否则直接失败，避免 Accelerate
+`even_batches=True` 用 epoch 开头的样本补齐各 rank。runtime audit 会记录 Dataset
+长度、每 rank 每 epoch 样本数和 `BatchSamplerShard` 策略。每个 rank 的 RNG sidecar
+包含显式 sampler generator state；但因为没有保存当前 DataLoader iterator/
+permutation 的位置，也没有自动 resume 入口，这些文件仅是 diagnostic snapshot，
+不能宣称为精确可恢复的 “state-complete checkpoint”。
+
+每个推理 worker 在加载模型前必须读取 schema-2 `checkpoint.json`，核对 job 中的
+checkpoint 路径、文件 size 与 SHA-256；manifest 缺失、字段缺失或字节不一致均
+fail closed。真正加载时会拒绝 checkpoint 叶节点 symlink，在平台支持时以
+`O_NOFOLLOW` 打开文件，只从同一个 file descriptor 完整读取一次，然后对这份 bytes
+计算 SHA-256，并把同一个 bytes 对象交给 `safetensors.torch.load`。校验后不会再按
+路径重新打开文件，因此瞬时 swap-and-restore 不能让解析器消费另一份权重。
+persistent batch worker 还会逐 job 比较所有只加载一次的配置：
+checkpoint、manifest、runtime/model-base、QuantityEncoder 配置、LoRA alpha 及未知的
+load-time generation 选项；任一不一致都会在加载模型前拒绝整个 batch，不会静默复用
+首个 job 的配置。
+
+同一 bytes 信任边界会分配一份完整的已认证 checkpoint buffer。当前正式 rank-32
+checkpoint 为 175,649,752 bytes（167.5 MiB）。由于
+`safetensors.torch.load(bytes)` 返回独立的 tensor backing，解析瞬间二者会短暂共存；
+一次实际无 GPU 解析测得每 worker 增量峰值 RSS 约 304 MiB，8 个 worker 若同时达到
+峰值约 2.38 GiB，而不是只有 167.5 MiB 的输入 buffer。解析返回后会立即显式释放输入
+buffer，校验及 LoRA fusion 完成后释放其余临时 CPU state，不增加逐视频生成的常驻
+内存。
+
+这里的 SHA-256 是 AtomicRun 内部一致性检查，不是外部真实性锚或数字签名。若某个
+主体能同时重写 checkpoint 与同目录的 `checkpoint.json`，它可以生成新的自洽文件
+对；需要对抗这种发布者级篡改时，必须由 run 目录之外的可信系统签名或固定 manifest
+digest。
+
+训练在 backward 前跨 rank 检查 loss finite，在 optimizer step 前检查
+QuantityEncoder gradient finite；最终 safetensors 会验证完整 payload 布局并用浮点
+指数位扫描拒绝 NaN/Inf，之后才写 schema-2 checkpoint manifest。
 
 先配置本机部署：
 
@@ -230,6 +280,9 @@ runs_v2/<run_id>/
 │   ├── checkpoints/
 │   │   ├── *.safetensors
 │   │   ├── quantity_encoder_spec.json
+│   │   ├── training_args.json
+│   │   ├── run.env
+│   │   ├── training_sampling_runtime.json
 │   │   ├── gradient_audit.json
 │   │   └── training_state_latest/
 │   └── inference_quantity_token_audits/<job_id>.json
@@ -261,8 +314,12 @@ artifacts/wan22/checkpoint.json:
   inventory.tensor_count == 619
   inventory.lora_tensor_count == 600
   inventory.quantity_encoder_tensor_count == 19
-  上述 inventory 必须从实际 safetensors header 重算并与 manifest 一致
+  严格重算结果中的 lora_pair_count == 300、lora_rank == 32
+  上述 inventory、LoRA topology/shape 与 tensor finite 状态始终从实际
+  safetensors bytes 严格重算
   checkpoint size / SHA-256 / baseline identity 必须一致
+  严格重算结果中的 safetensors_layout_verified == true
+  严格重算结果中的 finite_payload_verified == true
   若 save_optimizer_state=true，optimizer/scheduler 与所有 rank RNG sidecar 必须齐全
   state manifest 必须与最终 step、world size、checkpoint 文件名一致，RNG 文件名/数量按 rank 核对
   optimizer/scheduler 的 SHA-256 由 checkpoint manifest 锚定；RNG SHA-256 仅记录当前文件摘要，
@@ -280,6 +337,21 @@ artifacts/wan22/loss_analysis/loss_summary.json:
   finite_fraction == 1.0
   loss_curve.csv 必须逐步覆盖 1..expected_total_optimizer_steps，并与 summary 统计一致
 ```
+
+Checkpoint inventory 的声明协议由冻结的 Baseline 版本决定，而且只在
+`run.json`、`frozen/baseline.json` 与 sealed TaskInstance 三处 Baseline ID/版本
+完全一致后选择。`1.0.0` 的历史 manifest 必须声明
+`tensor_count`、`parameter_count`、`lora_tensor_count`、
+`quantity_encoder_tensor_count` 与 `dtype_tensor_counts`；严格解析器新增得到的
+pair/rank/topology/layout/finite 字段会记录为 `derived_not_declared`。
+`1.0.1` 则必须在 manifest 中完整声明全部十个 hardened 字段。两种协议下，
+manifest 已声明的每个字段都必须与实际 bytes 的严格重算值一致；未知版本、三处身份
+不一致、字段缺失或值不一致都会 fail closed。
+
+汇总器不会先按路径 hash、再按路径重开 checkpoint。它通过 `O_NOFOLLOW` descriptor
+一次读取 immutable buffer，SHA-256、size、header、layout、finite scan 与 inventory
+全部绑定这同一份 bytes，并在解析结束后复核 descriptor 和路径身份；因此
+swap-and-restore 不能把 A 文件的摘要与 B 文件的 inventory 拼接成可发布证据。
 
 每条训练/推理量值还应能在 token audit 中追溯到 registry fingerprint、SI value、
 量纲、type ID、sentinel token ID 和唯一 token span；每个训练 Case 和每个完成推理的
@@ -315,6 +387,11 @@ job ID 和 reason code，但其严格官方分数不可发布。若 reevaluate �
 冻结 fingerprint 不同的修订协议，则必须作为单独标识的 alternate-protocol 结果报告，
 不能通过该发布开关。checkpoint、恢复状态、loss、gradient 或训练/推理 token audit
 缺失或未通过验收时，汇总器会写入 `integrity_issues`，不会以“无问题”掩盖缺失证据。
+prediction 的身份规则按冻结 Baseline bundle version 解释：历史 `1.0.0` 未要求
+重复输出 `scene_id`，汇总时可由 sealed plan/job/case 唯一确定；若历史记录带有
+`scene_id`，其值仍须一致。自 `1.0.1` 起，所有 prediction 都必须显式携带并匹配
+`scene_id`；未知版本或三份冻结身份不一致时不会退回宽松规则。Case evaluation
+同样始终严格要求 `scene_id`，避免跨 scene 误聚合。
 当前 TensorBoard loss 是每个 optimizer step 的 rank-0 本地 batch loss，不是八卡
 loss 的 all-reduce 均值；它适合检查训练轨迹和有限性，不应解释为全局 batch loss。
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -48,11 +49,23 @@ class QuantityRegistry:
             if (
                 not isinstance(dimension, list)
                 or len(dimension) != 7
-                or any(not isinstance(value, int) for value in dimension)
+                or any(
+                    not isinstance(value, int) or isinstance(value, bool)
+                    for value in dimension
+                )
             ):
                 raise ValueError(f"unit {unit!r} has an invalid SI dimension")
             scale = spec.get("si_scale")
-            if not isinstance(scale, (int, float)) or scale <= 0:
+            try:
+                numeric_scale = float(scale)
+            except (TypeError, ValueError, OverflowError):
+                numeric_scale = float("nan")
+            if (
+                not isinstance(scale, (int, float))
+                or isinstance(scale, bool)
+                or not math.isfinite(numeric_scale)
+                or numeric_scale <= 0
+            ):
                 raise ValueError(f"unit {unit!r} has an invalid SI scale")
         for scene_id, scene in scenes.items():
             parameters = scene.get("parameters")
@@ -79,7 +92,11 @@ class QuantityRegistry:
                         f"parameter {scene_id}/{name} requires {{quantity}}"
                     )
                 precision = parameter.get("precision")
-                if not isinstance(precision, int) or precision < 0:
+                if (
+                    not isinstance(precision, int)
+                    or isinstance(precision, bool)
+                    or precision < 0
+                ):
                     raise ValueError(
                         f"parameter {scene_id}/{name} has invalid precision"
                     )
@@ -128,26 +145,49 @@ class QuantityRegistry:
                 raise ValueError(
                     f"case {case['case_id']} physics.{name} must be numeric"
                 )
+            try:
+                numeric_value = float(value)
+            except (ValueError, OverflowError) as exc:
+                raise ValueError(
+                    f"case {case['case_id']} physics.{name} must be "
+                    "finite and representable"
+                ) from exc
+            if not math.isfinite(numeric_value):
+                raise ValueError(
+                    f"case {case['case_id']} physics.{name} must be finite"
+                )
             unit = str(raw.get("unit", "")).strip()
             if unit != parameter["unit"]:
                 raise ValueError(
                     f"case {case['case_id']} physics.{name} unit {unit!r} "
                     f"!= expected {parameter['unit']!r}"
                 )
-            rendered_value = f"{float(value):.{parameter['precision']}f}"
+            rendered_value = (
+                f"{numeric_value:.{parameter['precision']}f}"
+            )
+            rounded_value = float(rendered_value)
+            if not math.isfinite(rounded_value):
+                raise ValueError(
+                    f"case {case['case_id']} physics.{name} rendered "
+                    "to a non-finite value"
+                )
             rendered_quantity = (
                 rendered_value if unit == "1" else f"{rendered_value} {unit}"
             )
             unit_spec = self.value["units"][unit]
+            si_value = rounded_value * float(unit_spec["si_scale"])
+            if not math.isfinite(si_value):
+                raise ValueError(
+                    f"case {case['case_id']} physics.{name} SI conversion "
+                    "is non-finite"
+                )
             quantity = {
                 "name": name,
                 "raw_value": value,
                 "raw_unit": unit,
                 "rendered_value": rendered_value,
                 "rendered_quantity": rendered_quantity,
-                "si_value": (
-                    float(rendered_value) * float(unit_spec["si_scale"])
-                ),
+                "si_value": si_value,
                 "canonical_si_unit": unit_spec["canonical_si_unit"],
                 "dimension": list(unit_spec["dimension"]),
                 "dimension_basis": list(self.value["dimension_basis"]),

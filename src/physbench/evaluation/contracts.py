@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -46,6 +47,72 @@ class CaseEvaluationResult:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "CaseEvaluationResult":
+        """Validate and reconstruct the canonical serialized result contract."""
+        if not isinstance(value, dict):
+            raise TypeError("case evaluation result must be an object")
+        required = {
+            "job_id",
+            "case_id",
+            "scene_id",
+            "evaluator",
+            "status",
+            "score",
+            "reason_code",
+            "reason",
+            "metrics",
+            "quality",
+            "artifacts",
+            "provenance",
+        }
+        missing = sorted(required - set(value))
+        extra = sorted(set(value) - required)
+        if missing or extra:
+            raise ValueError(
+                "case evaluation result fields differ from the canonical "
+                f"contract: missing={missing}, extra={extra}"
+            )
+        for name in ("job_id", "case_id", "scene_id"):
+            if not isinstance(value[name], str) or not value[name]:
+                raise ValueError(
+                    f"case evaluation result {name} must be a non-empty string"
+                )
+        for name in (
+            "evaluator",
+            "metrics",
+            "quality",
+            "artifacts",
+            "provenance",
+        ):
+            if not isinstance(value[name], dict):
+                raise TypeError(
+                    f"case evaluation result {name} must be an object"
+                )
+        evaluator = value["evaluator"]
+        for name in ("id", "version", "scene_id"):
+            if not isinstance(evaluator.get(name), str) or not evaluator[name]:
+                raise ValueError(
+                    f"case evaluator {name} must be a non-empty string"
+                )
+        if evaluator["scene_id"] != value["scene_id"]:
+            raise ValueError(
+                "case evaluator scene_id differs from result scene_id"
+            )
+        for name in ("reason_code", "reason"):
+            if value[name] is not None and not isinstance(value[name], str):
+                raise TypeError(
+                    f"case evaluation result {name} must be null or a string"
+                )
+        score = value["score"]
+        if score is not None and (
+            isinstance(score, bool)
+            or not isinstance(score, (int, float))
+            or not math.isfinite(float(score))
+        ):
+            raise ValueError("case evaluation score must be a finite number")
+        return cls(**value)
 
 
 class SceneCaseEvaluator(Protocol):

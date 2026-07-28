@@ -11,12 +11,17 @@ CanonicalTaskPlan + frozen cases + predictions.jsonl + evaluation protocol
 当前协议：
 
 ```text
-configs/evaluation/protocols/scene_default_v1.json
+configs/evaluation/protocols/scene_default_v2.json
 ```
 
-协议阈值版本仍是 `scene_default_v1`；五个 scene evaluator 的当前实现版本是 `1.1`。
-`1.1` 将 reference-relative similarity 与 reference 自身的绝对物理诊断分离，并把
-实现版本写入 evaluator 指纹，修复前后的结果不能混合。
+官方 v5 Task 使用 `scene_default_v2`，五个 scene evaluator 都使用实现版本 `1.2`。
+`scene_default_v1` 作为可复现历史结果的 legacy 协议保留：文件字节、协议指纹、五个
+evaluator 的 `1.1` identity 和 random-seek 解码行为均被冻结；v1 仍使用固定 0–5 秒
+单摆时间轴。
+
+v2 让单摆与其余 scene 一样采用 reference-bounded 时间轴，并为所有 scene 显式固定
+顺序前向解码。协议、evaluator 版本、解码策略和完整 config 都进入 identity，因此
+v1/v2 结果不能混合。
 
 `plan.jobs` 是主表。缺失 prediction、重复 prediction、失败生成或未知 case 都必须产生
 一个显式 case result。
@@ -69,28 +74,44 @@ similarity   = exp(-scaled_error)
 
 Reference 与 prediction 可以有不同分辨率、FPS 和帧数，但必须覆盖相同物理区间。
 
-公共步骤：
+两版共有的步骤：
 
 1. probe source metadata；
 2. 建立物理时间戳；
-3. 分别按时间戳取最近 source frame；
-4. 保持宽高比 resize；
-5. letterbox 到 scene canvas；
-6. 保存 source indices 和空间变换。
+3. 用 `np.rint(time × source_fps)` 选择最近 source frame；
+4. 按协议的 decode policy 解码；
+5. 保持宽高比 resize；
+6. letterbox 到 scene canvas；
+7. 保存 source indices 和空间变换。
 
 不会补 GT 首帧，不会重复末帧掩盖时长不足。
 
-| scene | timeline | 最小时长 | 最大时长 | canvas |
-| --- | --- | ---: | ---: | --- |
-| pendulum | 固定 0–5 s，16 Hz，81 点 | 5 s | 5 s | 480 × 832 |
-| free_fall | reference-bounded，32 Hz | 0.2 s | 1 s | 480 × 832 |
-| inclined_plane_slide | reference-bounded，16 Hz | 1 s | 5 s | 640 × 480 |
-| uniform_circular_motion | reference-bounded，8 Hz | 3 s | 5 s | 640 × 480 |
-| collision_1d | reference-bounded，16 Hz | 1.5 s | 5 s | 640 × 360 |
+- v1 `legacy_random_seek`：按请求顺序对每个 index 执行一次
+  `CAP_PROP_POS_FRAMES` seek，保留历史 decoder 行为。
+- v2 `sequential_forward`：从帧 0 解到最大目标 index，再按原时间戳顺序重组，避免
+  对长视频重复 seek。
 
-所有源视频最低要求为 8 FPS。除单摆外，时间轴由 reference 的实际时长决定，但不会
-超过协议的最大时长。prediction 必须覆盖同一个时间区间；时长不足会返回
+两种策略使用相同的 `np.rint` source index，也都保留非单调请求和重复 index；但不能
+声称跨 codec 像素或失败语义等价。真实长 GOP HEVC 上，random seek 与从帧 0 顺序解码
+可能得到不同像素，未请求中间帧损坏也只会阻断顺序解码。正因如此，两种策略属于不同
+evaluator identity。
+
+| scene | v2 timeline | decode | 最小时长 | 最大时长 | canvas |
+| --- | --- | --- | ---: | ---: | --- |
+| pendulum | reference-bounded，16 Hz | sequential | 4.8 s | 5 s | 480 × 832 |
+| free_fall | reference-bounded，32 Hz | sequential | 0.2 s | 1 s | 480 × 832 |
+| inclined_plane_slide | reference-bounded，16 Hz | sequential | 1 s | 5 s | 640 × 480 |
+| uniform_circular_motion | reference-bounded，8 Hz | sequential | 3 s | 5 s | 640 × 480 |
+| collision_1d | reference-bounded，16 Hz | sequential | 1.5 s | 5 s | 640 × 360 |
+
+所有源视频最低要求为 8 FPS。时间轴由 reference 的实际末帧时间决定，但不会超过
+协议的最大时长。采样点保持协议 FPS，因此最后一个采样点是不晚于 reference 边界的
+最大网格点。prediction 必须覆盖同一个时间区间；时长不足会返回
 `unavailable/insufficient_duration`，不会补帧或重复末帧。
+
+单摆 v2 的 4.8 秒下限覆盖当前冻结数据集中最短的可信 reference，同时仍提供足够的
+周期观测区间。需要复现旧运行时必须显式使用 `scene_default_v1`，其固定 5 秒要求
+不会被 v2 行为静默改写。
 
 ## 5. Reference 模式
 
@@ -1017,7 +1038,7 @@ visual_judgment
 ```
 
 其默认配置位于 `configs/metrics/default.json`，目前都是 disabled placeholder。当前
-AtomicRun 的正式五场景分数来自 `scene_default_v1` 下的 scene-specific evaluator，
+AtomicRun 的正式五场景分数来自 `scene_default_v2` 下的 scene-specific evaluator，
 不是这三个旧 placeholder metric。
 
 ## 15. 回归验证
@@ -1052,14 +1073,119 @@ PYTHONPATH=src:tests /root/miniconda3/envs/phybench/bin/python \
   -m unittest discover -s tests -v
 ```
 
-## 16. 实现位置
+## 16. AtomicRun 并存式重评
+
+已封印 AtomicRun 的 canonical evaluation 不允许原地覆盖。重评必须显式指定目标协议和
+本次评估 ID：
+
+```bash
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  evaluate \
+  --run-dir runs_v2/RUN_ID \
+  --protocol-id scene_default_v2 \
+  --evaluation-id protocol-v2-audit-001
+```
+
+输出目录由协议内容指纹确定：
+
+```text
+runs_v2/RUN_ID/reevaluations/
+└── scene_default_v2/
+    └── <protocol_sha256>/
+        └── protocol-v2-audit-001/
+            ├── reevaluation.json
+            ├── protocol.json
+            ├── source_integrity.json
+            ├── reference_assets.json
+            ├── artifact_manifest.json
+            ├── report.md
+            └── evaluation/
+```
+
+同一 `(protocol_id, protocol_sha256, evaluation_id)` 使用独占创建，重复执行会失败，不会
+覆盖旧变体。协议 ID 和 evaluation ID 必须是 path-safe identifier。AtomicRun 内部的
+canonical source tree 和 reevaluation 目标路径不允许 symlink、路径穿越或逃逸；
+显式传入的 `run-dir` 会先 resolve。Dataset reference 可以使用解析后仍位于
+`asset_root` 内部的 symlink，但不能逃逸。
+
+### 16.1 Preflight 信任边界
+
+创建变体前必须全部通过：
+
+1. `task_instance/manifest.json` 的 seal 与 digest；
+2. `plan.json` 与 sealed canonical plan 完全一致；
+3. `frozen/task.json` digest 与 sealed Task identity 一致；
+4. 从 `source.asset_root/releases/<release>/dataset.json` 重新加载原始 release，
+   重算 digest 并与 sealed Dataset identity 对齐；frozen descriptor、cases、views 和
+   asset lock 必须与该 release 完全一致。原始 release 不可用时拒绝重评；
+5. `predictions.jsonl` 覆盖全部 frozen jobs，identity、状态和 run-local artifact
+   与 `artifacts/prediction_artifacts.json` 一致；
+6. canonical native protocol 的实际指纹与
+   `component_fingerprints.evaluation_protocol` 一致；
+7. native `case_results.jsonl` 的每条记录通过 `CaseEvaluationResult` contract，与
+   `evaluation/cases/<job>/result.json` 及 compatibility projection 完全一致，并由
+   当前 Task 聚合器重算得到同一个 `task_result.json`；
+8. 目标协议实际会评估的 complete prediction 所消费的 same-case 或 OOD parent
+   physics reference，其路径、角色、case binding、大小和 SHA-256 必须与已认证的
+   asset lock 一致。
+
+Native evaluation 可以是严格意义上的 `partial`，例如 prediction 都是 `planned`；但它
+不能缺 prediction 或 case-result 记录。`planned`、`failed` 等非 complete prediction
+会得到显式 `unavailable`，不会伪造分数。非 complete prediction 或目标协议标为
+unsupported 的 job 不会提前读取其 reference，避免把不会被 evaluator 消费的资产变成
+额外 blocker。
+
+### 16.2 Provenance 与失败审计
+
+每个变体固定保存：
+
+- 目标 protocol 原文快照与 fingerprint；
+- canonical AtomicRun 源文件 size/SHA-256 manifest；
+- sealed Dataset release digest 的重算结果及四份 frozen 文档 digest；
+- 实际 reference 及 OOD parent binding；
+- evaluator source tree hash、Git commit 和限定路径 dirty status；
+- Python 与相关 package 版本；
+- 本地可解析的 SAM2 snapshot、revision 与 weight SHA-256；
+- 变体内全部常规文件的 artifact manifest。
+
+Dataset 输入有 sealed digest 作为真实性锚。Prediction 和 native evaluation 是运行时
+输出，历史 AtomicRun 没有外部签名；preflight 能证明其 artifact/明细/聚合在当前
+canonical run 内部自洽，不能把它们描述成“外部已签名”。这个边界会明确写入
+`source_integrity.json` 的 `authenticity_boundary`。
+
+若 evaluator 中途失败，变体目录仍保留，`reevaluation.json` 标记
+`workflow_status=failed` 并记录异常类型与消息；失败前已写出的 case/summary 产物也会
+进入 artifact manifest。失败 ID 同样不能重用。
+
+以下 canonical 内容在该流程中始终只读：
+
+```text
+evaluation/
+run.json
+report.md
+state.json
+component_fingerprints.json
+```
+
+因此同一 AtomicRun 的 v1、v2 或未来协议结果可以并存审计，但不得跨 fingerprint
+混合聚合。
+
+旧的 Python 符号 `physbench.orchestration.reevaluate_atomic` 仅作为 fail-closed
+兼容守卫保留：调用它会报错并指向 `reevaluate_atomic_variant`，不会再写 canonical
+目录。只有没有 AtomicRun v2 markers 且 `run.json.schema_version=1.0` 的历史 run
+可以继续通过 `physbench.runner.reevaluate_run` 或 CLI legacy 分支原地重建其旧评估
+产物。
+
+## 17. 实现位置
 
 正式协议与 Task 聚合：
 
 ```text
-configs/evaluation/protocols/scene_default_v1.json
+configs/evaluation/protocols/scene_default_v2.json
+configs/evaluation/protocols/scene_default_v1.json  # frozen legacy
 src/physbench/evaluation/task_evaluator.py
 src/physbench/evaluation/common/
+src/physbench/orchestration/evaluation_variants.py
 ```
 
 五个 scene evaluator：

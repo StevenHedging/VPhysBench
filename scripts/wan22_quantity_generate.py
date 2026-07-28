@@ -51,8 +51,10 @@ def main() -> int:
     from physbench.baselines.wan22_quantity_model import (
         QuantityEncoder,
         install_quantity_prompt_unit,
-        load_combined_quantity_checkpoint,
+        load_verified_combined_quantity_checkpoint,
         quantity_inference_conditioning,
+        quantity_pipeline_shared_fingerprint,
+        verify_quantity_checkpoint_manifest,
     )
     from physbench.io import write_json
 
@@ -68,6 +70,18 @@ def main() -> int:
         raise FileNotFoundError(
             "quantity-embedding generation requires a combined checkpoint"
         )
+    checkpoint_manifest = job.get("checkpoint_manifest")
+    if not checkpoint_manifest:
+        raise FileNotFoundError(
+            "quantity-embedding generation requires a checkpoint manifest"
+        )
+    early_checkpoint_verification = verify_quantity_checkpoint_manifest(
+        checkpoint,
+        checkpoint_manifest,
+    )
+    checkpoint = early_checkpoint_verification["checkpoint"]
+    checkpoint_manifest = early_checkpoint_verification["manifest"]
+    shared_config_fingerprint = quantity_pipeline_shared_fingerprint(job)
     pipe = WanVideoPipeline.from_pretrained(
         torch_dtype=torch.bfloat16,
         device="cuda",
@@ -87,12 +101,16 @@ def main() -> int:
     encoder = QuantityEncoder(
         job["wan22"]["quantity_encoder"]
     ).to(device=pipe.device, dtype=torch.float32)
-    load_combined_quantity_checkpoint(
+    checkpoint_load = load_verified_combined_quantity_checkpoint(
         pipe,
         encoder,
         checkpoint,
+        checkpoint_manifest,
         lora_alpha=float(generation.get("lora_alpha", 1.0)),
     )
+    checkpoint_verification = checkpoint_load[
+        "checkpoint_verification"
+    ]
     encoder.eval()
     install_quantity_prompt_unit(pipe, encoder)
     prompt = job["model_input"]["prompt"]
@@ -132,6 +150,7 @@ def main() -> int:
     write_json(Path(job["quantity_token_audit"]), {
         "schema_version": "1.0",
         "case_id": job["case_id"],
+        "scene_id": job["scene_id"],
         "job_id": job["job_id"],
         "registry_id": quantity_payload["registry_id"],
         "registry_fingerprint": quantity_payload[
@@ -140,6 +159,14 @@ def main() -> int:
         "prompt": prompt,
         "audited_prompt": job["model_input"]["audited_prompt"],
         "quantities": pipe._last_quantity_token_audit,
+        "checkpoint_verification": checkpoint_verification,
+        "load_boundary_verified": checkpoint_load[
+            "load_boundary_verified"
+        ],
+        "checkpoint_load_mode": checkpoint_load[
+            "checkpoint_load_mode"
+        ],
+        "pipeline_shared_config_fingerprint": shared_config_fingerprint,
     })
     return 0
 

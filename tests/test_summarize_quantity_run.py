@@ -2,16 +2,24 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import statistics
 import struct
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from physbench.artifacts import prediction_artifact_manifest
 from physbench.baselines.wan22_quantity import Wan22QuantityLoraAdapter
+from physbench.baselines.wan22_quantity_model import (
+    QUANTITY_CHECKPOINT_PREFIX,
+    QUANTITY_ENCODER_STATE_KEYS,
+    WAN22_TI2V_5B_LORA_RANK,
+    expected_wan22_ti2v_5b_lora_targets,
+)
 from physbench.domain import BaselineTaskInstance
-from physbench.evaluation.task_evaluator import _aggregate
+from physbench.evaluation.task_evaluator import aggregate_task_results
 from scripts.summarize_quantity_run import (
     OUTPUT_JSON,
     OUTPUT_MARKDOWN,
@@ -157,24 +165,40 @@ class QuantityRunSummaryTests(unittest.TestCase):
         }
 
     @staticmethod
-    def _write_real_safetensors(path: Path) -> None:
+    def _write_real_safetensors(
+        path: Path,
+        *,
+        bad_topology: bool = False,
+        non_finite: bool = False,
+    ) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         entries: dict[str, dict] = {}
         offset = 0
-        for index in range(300):
+        targets = sorted(expected_wan22_ti2v_5b_lora_targets())
+        if bad_topology:
+            targets[0] = f"{targets[0]}_unexpected"
+        for target in targets:
             for side in ("A", "B"):
                 key = (
-                    f"diffusion_model.blocks.{index}.q."
+                    f"diffusion_model.{target}."
                     f"lora_{side}.default.weight"
+                )
+                shape = (
+                    [WAN22_TI2V_5B_LORA_RANK, 1]
+                    if side == "A"
+                    else [1, WAN22_TI2V_5B_LORA_RANK]
+                )
+                tensor_bytes = (
+                    shape[0] * shape[1] * struct.calcsize("<f")
                 )
                 entries[key] = {
                     "dtype": "F32",
-                    "shape": [1, 1],
-                    "data_offsets": [offset, offset + 4],
+                    "shape": shape,
+                    "data_offsets": [offset, offset + tensor_bytes],
                 }
-                offset += 4
-        for index in range(19):
-            key = f"pipe.quantity_encoder.parameter_{index:02d}"
+                offset += tensor_bytes
+        for state_key in sorted(QUANTITY_ENCODER_STATE_KEYS):
+            key = f"{QUANTITY_CHECKPOINT_PREFIX}{state_key}"
             entries[key] = {
                 "dtype": "F32",
                 "shape": [1],
@@ -186,10 +210,13 @@ class QuantityRunSummaryTests(unittest.TestCase):
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
+        payload = bytearray(offset)
+        if non_finite:
+            struct.pack_into("<f", payload, 0, float("inf"))
         path.write_bytes(
             struct.pack("<Q", len(header))
             + header
-            + bytes(offset)
+            + payload
         )
 
     def _case_result(
@@ -242,6 +269,7 @@ class QuantityRunSummaryTests(unittest.TestCase):
         data_adapter_fingerprint: str,
         materialization_fingerprint: str,
         cases: list[dict],
+        baseline_version: str,
     ) -> BaselineTaskInstance:
         train_ids = plan["train_case_ids"]
         eval_ids = list(dict.fromkeys(
@@ -315,7 +343,7 @@ class QuantityRunSummaryTests(unittest.TestCase):
                 },
                 "baseline": {
                     "baseline_id": self.BASELINE_ID,
-                    "baseline_version": "1.0.0",
+                    "baseline_version": baseline_version,
                     "digest": baseline_digest,
                     "deployment_digest": deployment_digest,
                 },
@@ -364,6 +392,7 @@ class QuantityRunSummaryTests(unittest.TestCase):
         *,
         inference_seeds: tuple[int, ...] = (42,),
         include_ood2: bool = False,
+        baseline_version: str = "1.0.0",
     ) -> Path:
         run_dir = root / "atomic_run"
         train_cases = [
@@ -487,6 +516,7 @@ class QuantityRunSummaryTests(unittest.TestCase):
             data_adapter_fingerprint=data_adapter_fingerprint,
             materialization_fingerprint=materialization_fingerprint,
             cases=cases,
+            baseline_version=baseline_version,
         )
         instance_value = instance.value
         components = {
@@ -513,7 +543,7 @@ class QuantityRunSummaryTests(unittest.TestCase):
             run_dir / "frozen" / "baseline.json",
             {
                 "baseline_id": self.BASELINE_ID,
-                "baseline_version": "1.0.0",
+                "baseline_version": baseline_version,
                 "trainer": {
                     "config": {"save_optimizer_state": True}
                 },
@@ -587,7 +617,7 @@ class QuantityRunSummaryTests(unittest.TestCase):
                 / record["job_id"] / "result.json",
                 record,
             )
-        aggregation = _aggregate(
+        aggregation = aggregate_task_results(
             plan=plan,
             case_results=case_results,
         )
@@ -616,7 +646,7 @@ class QuantityRunSummaryTests(unittest.TestCase):
             "task_id": self.TASK_ID,
             "task_family": "finetune_eval",
             "baseline_id": self.BASELINE_ID,
-            "baseline_version": "1.0.0",
+            "baseline_version": baseline_version,
             "baseline_digest": baseline_digest,
             "baseline_deployment_digest": deployment_digest,
             "task_instance_id": instance.instance_id,
@@ -692,8 +722,23 @@ class QuantityRunSummaryTests(unittest.TestCase):
             / "step-4.safetensors"
         )
         self._write_real_safetensors(checkpoint)
-        inventory = Wan22QuantityLoraAdapter._checkpoint_inventory(
+        strict_inventory = Wan22QuantityLoraAdapter._checkpoint_inventory(
             checkpoint
+        )
+        legacy_inventory_fields = (
+            "tensor_count",
+            "parameter_count",
+            "lora_tensor_count",
+            "quantity_encoder_tensor_count",
+            "dtype_tensor_counts",
+        )
+        inventory = (
+            strict_inventory
+            if baseline_version == "1.0.1"
+            else {
+                field: strict_inventory[field]
+                for field in legacy_inventory_fields
+            }
         )
         state_root = checkpoint.parent / "training_state_latest"
         state_root.mkdir(parents=True, exist_ok=True)
@@ -790,7 +835,10 @@ class QuantityRunSummaryTests(unittest.TestCase):
         records = self._read_jsonl(
             run_dir / "evaluation" / "case_results.jsonl"
         )
-        aggregation = _aggregate(plan=plan, case_results=records)
+        aggregation = aggregate_task_results(
+            plan=plan,
+            case_results=records,
+        )
         result = self._read_json(
             run_dir / "evaluation" / "task_result.json"
         )
@@ -848,6 +896,46 @@ class QuantityRunSummaryTests(unittest.TestCase):
                     "tensor_count"
                 ],
             )
+            checkpoint = first["provenance"]["checkpoint"]
+            self.assertEqual(
+                "wan22_quantity_checkpoint_inventory_v1_legacy",
+                checkpoint["inventory_profile"]["profile_id"],
+            )
+            self.assertTrue(
+                checkpoint["inventory_profile"]["verified"]
+            )
+            self.assertEqual(
+                "single_fd_single_bytes",
+                checkpoint["byte_binding"]["checkpoint_read_mode"],
+            )
+            self.assertTrue(checkpoint["byte_binding"]["verified"])
+            self.assertTrue(
+                checkpoint["byte_binding"][
+                    "descriptor_identity_verified_after_consume"
+                ]
+            )
+            self.assertTrue(
+                checkpoint["byte_binding"][
+                    "path_identity_verified_after_consume"
+                ]
+            )
+            self.assertTrue(
+                checkpoint["inventory_declaration"]["verified"]
+            )
+            self.assertEqual(
+                {
+                    "finite_payload_verified",
+                    "lora_pair_count",
+                    "lora_rank",
+                    "lora_target_topology",
+                    "safetensors_layout_verified",
+                },
+                set(
+                    checkpoint["inventory_declaration"][
+                        "derived_not_declared"
+                    ]
+                ),
+            )
             self.assertTrue(
                 first["provenance"]["checkpoint"]["training_state"][
                     "passed"
@@ -867,6 +955,94 @@ class QuantityRunSummaryTests(unittest.TestCase):
             markdown = render_markdown(first)
             self.assertIn(self.PROTOCOL_FINGERPRINT, markdown)
             self.assertIn("Benchmark score publishable: `yes`", markdown)
+
+    def test_prediction_scene_projection_is_optional_but_consistent(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._fixture_run(Path(temporary))
+            predictions_path = run_dir / "predictions.jsonl"
+            predictions = self._read_jsonl(predictions_path)
+            for prediction in predictions:
+                prediction.pop("scene_id")
+            self._write_jsonl(predictions_path, predictions)
+
+            summary = summarize_run(run_dir)
+
+            self.assertEqual([], summary["integrity_issues"])
+            self.assertTrue(
+                summary["reporting_status"][
+                    "benchmark_score_publishable"
+                ]
+            )
+
+            predictions[0]["scene_id"] = "wrong_scene"
+            self._write_jsonl(predictions_path, predictions)
+            mismatched = summarize_run(run_dir)
+            self.assertIn(
+                "prediction_identity_mismatch",
+                {
+                    issue["code"]
+                    for issue in mismatched["integrity_issues"]
+                },
+            )
+
+    def test_hardened_prediction_scene_identity_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._fixture_run(
+                Path(temporary),
+                baseline_version="1.0.1",
+            )
+            predictions_path = run_dir / "predictions.jsonl"
+            predictions = self._read_jsonl(predictions_path)
+            for prediction in predictions:
+                prediction.pop("scene_id")
+            self._write_jsonl(predictions_path, predictions)
+
+            summary = summarize_run(run_dir)
+
+            self.assertIn(
+                "prediction_identity_mismatch",
+                {
+                    issue["code"]
+                    for issue in summary["integrity_issues"]
+                },
+            )
+            self.assertFalse(
+                summary["reporting_status"][
+                    "benchmark_score_publishable"
+                ]
+            )
+
+    def test_unknown_version_does_not_enable_legacy_scene_projection(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._fixture_run(
+                Path(temporary),
+                baseline_version="9.9.9",
+            )
+            predictions_path = run_dir / "predictions.jsonl"
+            predictions = self._read_jsonl(predictions_path)
+            for prediction in predictions:
+                prediction.pop("scene_id")
+            self._write_jsonl(predictions_path, predictions)
+
+            summary = summarize_run(run_dir)
+            codes = {
+                issue["code"] for issue in summary["integrity_issues"]
+            }
+
+            self.assertIn(
+                "checkpoint_inventory_profile_unsupported",
+                codes,
+            )
+            self.assertIn("prediction_identity_mismatch", codes)
+            self.assertFalse(
+                summary["reporting_status"][
+                    "benchmark_score_publishable"
+                ]
+            )
 
     def test_cli_writes_json_and_markdown_without_mutating_run(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -978,49 +1154,6 @@ class QuantityRunSummaryTests(unittest.TestCase):
             }
             self.assertIn("prediction_status_invalid", codes)
             self.assertIn("case_evaluation_score_invalid", codes)
-            self.assertFalse(
-                summary["reporting_status"][
-                    "benchmark_score_publishable"
-                ]
-            )
-
-    def test_prediction_may_omit_optional_scene_id(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = self._fixture_run(Path(temporary))
-            predictions_path = run_dir / "predictions.jsonl"
-            predictions = self._read_jsonl(predictions_path)
-            for prediction in predictions:
-                prediction.pop("scene_id")
-            self._write_jsonl(predictions_path, predictions)
-
-            summary = summarize_run(run_dir)
-
-            self.assertEqual([], summary["integrity_issues"])
-            self.assertTrue(
-                summary["reporting_status"][
-                    "benchmark_score_publishable"
-                ]
-            )
-
-    def test_explicit_prediction_scene_id_mismatch_fails_closed(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            run_dir = self._fixture_run(Path(temporary))
-            predictions_path = run_dir / "predictions.jsonl"
-            predictions = self._read_jsonl(predictions_path)
-            predictions[0]["scene_id"] = "wrong_scene"
-            self._write_jsonl(predictions_path, predictions)
-
-            summary = summarize_run(run_dir)
-            mismatches = [
-                issue
-                for issue in summary["integrity_issues"]
-                if issue["code"] == "prediction_identity_mismatch"
-            ]
-
-            self.assertEqual(1, len(mismatches))
-            self.assertIn("scene_id='wrong_scene'", mismatches[0]["error"])
             self.assertFalse(
                 summary["reporting_status"][
                     "benchmark_score_publishable"
@@ -1151,6 +1284,319 @@ class QuantityRunSummaryTests(unittest.TestCase):
             manifest = self._read_json(manifest_path)
             checkpoint = Path(manifest["checkpoint"])
             checkpoint.write_bytes(b"not a safetensors checkpoint")
+            manifest["checkpoint_sha256"] = _file_sha256(checkpoint)
+            manifest["checkpoint_size"] = checkpoint.stat().st_size
+            self._write_json(manifest_path, manifest)
+
+            summary = summarize_run(run_dir)
+            self.assertIn(
+                "checkpoint_inventory_read_failed",
+                {
+                    issue["code"]
+                    for issue in summary["integrity_issues"]
+                },
+            )
+            self.assertFalse(
+                summary["training_acceptance"]["checkpoint_passed"]
+            )
+
+    def test_summary_binds_checkpoint_hash_and_inventory_to_same_bytes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._fixture_run(Path(temporary))
+            manifest = self._read_json(
+                run_dir / "artifacts" / "wan22" / "checkpoint.json"
+            )
+            checkpoint = Path(manifest["checkpoint"])
+            backup = checkpoint.with_name("checkpoint.original")
+            replacement = checkpoint.with_name("checkpoint.replacement")
+            original_bytes = checkpoint.read_bytes()
+            replacement.write_bytes(
+                original_bytes[:-1]
+                + bytes([original_bytes[-1] ^ 1])
+            )
+            real_sha256 = hashlib.sha256
+            swapped = False
+
+            def swap_checkpoint() -> None:
+                nonlocal swapped
+                if swapped:
+                    return
+                os.rename(checkpoint, backup)
+                os.rename(replacement, checkpoint)
+                swapped = True
+
+            def legacy_path_hash(path: Path) -> str:
+                data = Path(path).read_bytes()
+                digest = real_sha256(data).hexdigest()
+                if Path(path) == checkpoint:
+                    swap_checkpoint()
+                return digest
+
+            def descriptor_hash(data: bytes = b""):
+                digest = real_sha256(data)
+                if data != original_bytes:
+                    return digest
+
+                class SwapOnHexdigest:
+                    def hexdigest(self) -> str:
+                        swap_checkpoint()
+                        return digest.hexdigest()
+
+                    def __getattr__(self, name: str):
+                        return getattr(digest, name)
+
+                return SwapOnHexdigest()
+
+            try:
+                with patch(
+                    "scripts.summarize_quantity_run._file_sha256",
+                    side_effect=legacy_path_hash,
+                ), patch(
+                    (
+                        "physbench.baselines.wan22_quantity_model"
+                        ".hashlib.sha256"
+                    ),
+                    side_effect=descriptor_hash,
+                ):
+                    summary = summarize_run(run_dir)
+            finally:
+                if backup.is_file():
+                    if checkpoint.is_file():
+                        os.rename(checkpoint, replacement)
+                    os.rename(backup, checkpoint)
+
+            self.assertTrue(swapped)
+            self.assertIn(
+                "checkpoint_inventory_read_failed",
+                {
+                    issue["code"]
+                    for issue in summary["integrity_issues"]
+                },
+            )
+            self.assertIn(
+                "identity changed",
+                next(
+                    issue["error"]
+                    for issue in summary["integrity_issues"]
+                    if issue["code"]
+                    == "checkpoint_inventory_read_failed"
+                ),
+            )
+            self.assertFalse(
+                summary["training_acceptance"]["checkpoint_passed"]
+            )
+            self.assertFalse(
+                summary["reporting_status"][
+                    "benchmark_score_publishable"
+                ]
+            )
+
+    def test_hardened_checkpoint_inventory_profile_is_publishable(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._fixture_run(
+                Path(temporary),
+                baseline_version="1.0.1",
+            )
+
+            summary = summarize_run(run_dir)
+            checkpoint = summary["provenance"]["checkpoint"]
+            self.assertEqual([], summary["integrity_issues"])
+            self.assertTrue(
+                summary["reporting_status"][
+                    "benchmark_score_publishable"
+                ]
+            )
+            self.assertEqual(
+                "wan22_quantity_checkpoint_inventory_v1_hardened",
+                checkpoint["inventory_profile"]["profile_id"],
+            )
+            self.assertTrue(
+                checkpoint["inventory_profile"]["verified"]
+            )
+            self.assertEqual(
+                [],
+                checkpoint["inventory_declaration"][
+                    "derived_not_declared"
+                ],
+            )
+            self.assertTrue(
+                checkpoint["inventory_declaration"]["verified"]
+            )
+
+    def test_legacy_checkpoint_declared_value_tamper_fails_closed(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._fixture_run(Path(temporary))
+            manifest_path = (
+                run_dir / "artifacts" / "wan22" / "checkpoint.json"
+            )
+            manifest = self._read_json(manifest_path)
+            manifest["inventory"]["tensor_count"] = 1
+            self._write_json(manifest_path, manifest)
+
+            summary = summarize_run(run_dir)
+            checkpoint = summary["provenance"]["checkpoint"]
+            self.assertFalse(
+                summary["training_acceptance"]["checkpoint_passed"]
+            )
+            self.assertFalse(
+                checkpoint["inventory_declaration"]["verified"]
+            )
+            self.assertIn(
+                "checkpoint_declared_inventory_mismatch",
+                {
+                    issue["code"]
+                    for issue in summary["integrity_issues"]
+                },
+            )
+
+    def test_hardened_checkpoint_missing_field_fails_closed(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._fixture_run(
+                Path(temporary),
+                baseline_version="1.0.1",
+            )
+            manifest_path = (
+                run_dir / "artifacts" / "wan22" / "checkpoint.json"
+            )
+            manifest = self._read_json(manifest_path)
+            manifest["inventory"].pop("finite_payload_verified")
+            self._write_json(manifest_path, manifest)
+
+            summary = summarize_run(run_dir)
+            checkpoint = summary["provenance"]["checkpoint"]
+            self.assertFalse(
+                summary["training_acceptance"]["checkpoint_passed"]
+            )
+            self.assertFalse(
+                checkpoint["inventory_declaration"]["verified"]
+            )
+            self.assertIn(
+                "checkpoint_inventory_declaration_missing_field",
+                {
+                    issue["code"]
+                    for issue in summary["integrity_issues"]
+                },
+            )
+
+    def test_checkpoint_inventory_profile_identity_mismatch_fails_closed(
+        self,
+    ) -> None:
+        for source in ("run", "frozen_baseline", "sealed_task_instance"):
+            with self.subTest(source=source):
+                with tempfile.TemporaryDirectory() as temporary:
+                    run_dir = self._fixture_run(Path(temporary))
+                    if source == "run":
+                        path = run_dir / "run.json"
+                        document = self._read_json(path)
+                        document["baseline_version"] = "1.0.1"
+                    elif source == "frozen_baseline":
+                        path = run_dir / "frozen" / "baseline.json"
+                        document = self._read_json(path)
+                        document["baseline_version"] = "1.0.1"
+                    else:
+                        path = (
+                            run_dir / "task_instance" / "manifest.json"
+                        )
+                        document = self._read_json(path)
+                        document["identity"]["baseline"][
+                            "baseline_version"
+                        ] = "1.0.1"
+                    self._write_json(path, document)
+
+                    summary = summarize_run(run_dir)
+                    checkpoint = summary["provenance"]["checkpoint"]
+                    self.assertFalse(
+                        summary["training_acceptance"][
+                            "checkpoint_passed"
+                        ]
+                    )
+                    self.assertFalse(
+                        checkpoint["inventory_profile"]["verified"]
+                    )
+                    self.assertIn(
+                        (
+                            "checkpoint_inventory_profile_"
+                            "identity_mismatch"
+                        ),
+                        {
+                            issue["code"]
+                            for issue in summary["integrity_issues"]
+                        },
+                    )
+
+    def test_unknown_checkpoint_inventory_profile_fails_closed(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._fixture_run(
+                Path(temporary),
+                baseline_version="9.9.9",
+            )
+
+            summary = summarize_run(run_dir)
+            checkpoint = summary["provenance"]["checkpoint"]
+            self.assertFalse(
+                summary["training_acceptance"]["checkpoint_passed"]
+            )
+            self.assertFalse(
+                checkpoint["inventory_profile"]["verified"]
+            )
+            self.assertIn(
+                "checkpoint_inventory_profile_unsupported",
+                {
+                    issue["code"]
+                    for issue in summary["integrity_issues"]
+                },
+            )
+
+    def test_bad_lora_topology_fails_checkpoint_acceptance(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._fixture_run(Path(temporary))
+            manifest_path = (
+                run_dir / "artifacts" / "wan22" / "checkpoint.json"
+            )
+            manifest = self._read_json(manifest_path)
+            checkpoint = Path(manifest["checkpoint"])
+            self._write_real_safetensors(
+                checkpoint,
+                bad_topology=True,
+            )
+            manifest["checkpoint_sha256"] = _file_sha256(checkpoint)
+            manifest["checkpoint_size"] = checkpoint.stat().st_size
+            self._write_json(manifest_path, manifest)
+
+            summary = summarize_run(run_dir)
+            self.assertIn(
+                "checkpoint_inventory_read_failed",
+                {
+                    issue["code"]
+                    for issue in summary["integrity_issues"]
+                },
+            )
+            self.assertFalse(
+                summary["training_acceptance"]["checkpoint_passed"]
+            )
+
+    def test_non_finite_checkpoint_payload_fails_acceptance(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._fixture_run(Path(temporary))
+            manifest_path = (
+                run_dir / "artifacts" / "wan22" / "checkpoint.json"
+            )
+            manifest = self._read_json(manifest_path)
+            checkpoint = Path(manifest["checkpoint"])
+            self._write_real_safetensors(
+                checkpoint,
+                non_finite=True,
+            )
             manifest["checkpoint_sha256"] = _file_sha256(checkpoint)
             manifest["checkpoint_size"] = checkpoint.stat().st_size
             self._write_json(manifest_path, manifest)

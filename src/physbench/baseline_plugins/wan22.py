@@ -309,6 +309,7 @@ class Wan22ExecutionEngine:
                 predictions.append({
                     "job_id": prepared["job_id"],
                     "case_id": prepared["case_id"],
+                    "scene_id": prepared["scene_id"],
                     "baseline_id": self.bundle.baseline_id,
                     "evaluation_partition": prepared["evaluation_partition"],
                     "status": "staged",

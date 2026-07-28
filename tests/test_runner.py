@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import tempfile
 import unittest
 from pathlib import Path
 
 from _paths import FIXTURES, METRICS, SCENES
+from physbench.cli import main
 from physbench.io import (
     load_json,
     load_jsonl,
@@ -61,6 +64,15 @@ class LegacyReevaluationTests(unittest.TestCase):
                 "legacy-run",
                 (run_dir / "report.md").read_text(encoding="utf-8"),
             )
+            with contextlib.redirect_stdout(io.StringIO()):
+                status = main([
+                    "evaluate",
+                    "--run-dir",
+                    str(run_dir),
+                    "--scene-config-dir",
+                    str(SCENES),
+                ])
+            self.assertEqual(0, status)
 
 
 if __name__ == "__main__":

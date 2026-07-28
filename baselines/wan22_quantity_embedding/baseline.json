@@ -1,7 +1,7 @@
 {
   "schema_version": "5.0",
   "baseline_id": "wan22_ti2v_5b_lora_r32_quantity_embedding_v1",
-  "baseline_version": "1.0.0",
+  "baseline_version": "1.0.1",
   "implementation": {
     "kind": "managed",
     "driver": "driver.py",

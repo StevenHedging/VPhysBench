@@ -16,16 +16,81 @@ from .scoring import (
     write_per_frame_csv,
 )
 from .segmentation import Sam2PendulumSegmenter, SegmentationError
-from .timeline import VideoProtocolError, sample_video
+from .timeline import VideoProtocolError, reference_timeline, sample_video
+
+
+def build_pendulum_timeline(
+    reference_path: Path,
+    config: dict[str, Any],
+) -> tuple[list[float], str]:
+    """Build the protocol-specific pendulum sampling timeline."""
+    timeline = config["timeline"]
+    fps = float(timeline["fps"])
+    evaluator_type = config.get("type")
+    if evaluator_type == "pendulum_state_v1":
+        duration_s = float(timeline["duration_s"])
+        frame_count = int(round(duration_s * fps)) + 1
+        return (
+            (np.arange(frame_count, dtype=np.float64) / fps).tolist(),
+            "fixed_duration_legacy",
+        )
+    if evaluator_type == "pendulum_state_v2":
+        return (
+            reference_timeline(
+                reference_path,
+                fps=fps,
+                max_duration_s=float(timeline["maximum_duration_s"]),
+                minimum_duration_s=float(timeline["minimum_duration_s"]),
+            ),
+            "case_reference_bounded",
+        )
+    raise ValueError(f"unsupported pendulum evaluator type: {evaluator_type!r}")
+
+
+def _timeline_provenance(
+    config: dict[str, Any],
+    *,
+    fps: float,
+    duration_s: float,
+    frame_count: int,
+    policy: str,
+) -> dict[str, Any]:
+    value = {
+        "fps": fps,
+        "duration_s": duration_s,
+        "frame_count": frame_count,
+        "prediction_frame_zero_injected": False,
+    }
+    if config.get("type") == "pendulum_state_v2":
+        value["policy"] = policy
+    return value
 
 
 class PendulumCaseEvaluator:
     evaluator_id = "pendulum_state"
     evaluator_version = "1.1"
+    sequential_evaluator_version = "1.2"
     scene_id = "pendulum"
 
     def __init__(self, config: dict[str, Any]):
         self.config = config
+        decode_policy = config.get("timeline", {}).get(
+            "decode_policy",
+            "legacy_random_seek",
+        )
+        evaluator_type = config.get("type")
+        expected_policy = (
+            "legacy_random_seek"
+            if evaluator_type == "pendulum_state_v1"
+            else "sequential_forward"
+        )
+        if decode_policy != expected_policy:
+            raise ValueError(
+                f"{evaluator_type} requires decode_policy={expected_policy!r}; "
+                f"got {decode_policy!r}"
+            )
+        if decode_policy == "sequential_forward":
+            self.evaluator_version = self.sequential_evaluator_version
         self._segmenter = Sam2PendulumSegmenter(config["sam2"])
         self.fingerprint = canonical_sha256(
             {
@@ -185,9 +250,11 @@ class PendulumCaseEvaluator:
             reference_path, reference_mode, parent_id = self._reference(request)
             timeline = self.config["timeline"]
             fps = float(timeline["fps"])
-            duration_s = float(timeline["duration_s"])
-            frame_count = int(round(duration_s * fps)) + 1
-            times_s = (np.arange(frame_count) / fps).tolist()
+            times_s, timeline_policy = build_pendulum_timeline(
+                reference_path,
+                self.config,
+            )
+            duration_s = times_s[-1]
             spatial = self.config["spatial"]
             sampling_kwargs = {
                 "sample_times_s": times_s,
@@ -197,6 +264,9 @@ class PendulumCaseEvaluator:
                 "min_source_fps": float(timeline["minimum_source_fps"]),
                 "duration_tolerance_s": float(
                     timeline.get("duration_tolerance_s", 0.02)
+                ),
+                "decode_policy": str(
+                    timeline.get("decode_policy", "legacy_random_seek")
                 ),
             }
             reference_video = sample_video(reference_path, **sampling_kwargs)
@@ -305,12 +375,13 @@ class PendulumCaseEvaluator:
                 "prediction_video": str(prediction_path),
                 "prediction_video_sha256": sha256_file(prediction_path),
                 "parent_case_id": parent_id,
-                "timeline": {
-                    "fps": fps,
-                    "duration_s": duration_s,
-                    "frame_count": len(times_s),
-                    "prediction_frame_zero_injected": False,
-                },
+                "timeline": _timeline_provenance(
+                    self.config,
+                    fps=fps,
+                    duration_s=duration_s,
+                    frame_count=len(times_s),
+                    policy=timeline_policy,
+                ),
                 "sampling": {
                     "reference": {
                         "source": reference_video.info.to_dict(),

@@ -84,6 +84,7 @@ fi
   echo "lora_target_modules=$LORA_TARGET_MODULES"
   echo "gradient_accumulation_steps=$GRAD_ACCUM"
   echo "train_seed=$TRAIN_SEED"
+  echo "sampler_seed=$TRAIN_SEED"
   echo "save_steps=${SAVE_STEPS:-none}"
   echo "lora_checkpoint=${LORA_CHECKPOINT:-none}"
   echo "save_optimizer_state=$SAVE_OPTIMIZER_STATE"
@@ -132,5 +133,6 @@ cd "$DS"
   --enable_tensorboard_log \
   --quantity_encoder_config_json "$QUANTITY_ENCODER_CONFIG_JSON" \
   --quantity_token_audit_path "$QUANTITY_TOKEN_AUDIT_PATH" \
+  --sampler_seed "$TRAIN_SEED" \
   "${extra_args[@]}" \
   2>&1 | tee "$OUTPUT_DIR/train.log"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -15,7 +16,7 @@ from .io import load_json, load_jsonl, write_json
 from .datasets import load_dataset
 from .orchestration import (
     build_task_instance,
-    reevaluate_atomic,
+    reevaluate_atomic_variant,
     run_atomic,
     run_matrix,
 )
@@ -26,6 +27,11 @@ from .validation import errors, load_scene_configs, validate_cases
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCENES = PROJECT_ROOT / "configs" / "scenes"
+ATOMIC_RUN_MARKERS = (
+    "component_fingerprints.json",
+    "frozen",
+    "task_instance",
+)
 
 
 def _validate(args: argparse.Namespace) -> int:
@@ -57,13 +63,43 @@ def _split(args: argparse.Namespace) -> int:
 
 
 def _evaluate(args: argparse.Namespace) -> int:
-    directory = Path(args.run_dir)
-    summary = (
-        reevaluate_atomic(directory)
-        if (directory / "task_instance" / "manifest.json").is_file()
-        else reevaluate_run(directory, args.scene_config_dir)
+    directory = Path(args.run_dir).resolve(strict=True)
+    if not directory.is_dir():
+        raise ValueError(f"run directory is not a directory: {directory}")
+    run_path = directory / "run.json"
+    if run_path.is_symlink():
+        raise ValueError("run.json must not be a symlink")
+    run = load_json(run_path) if run_path.is_file() else {}
+    schema_version = run.get("schema_version")
+    has_atomic_marker = any(
+        os.path.lexists(directory / marker)
+        for marker in ATOMIC_RUN_MARKERS
     )
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    is_atomic = schema_version == "2.0" or has_atomic_marker
+    if is_atomic:
+        if not args.protocol_id or not args.evaluation_id:
+            raise ValueError(
+                "AtomicRun evaluation requires both --protocol-id and "
+                "--evaluation-id; canonical evaluation is never overwritten"
+            )
+        result = reevaluate_atomic_variant(
+            directory,
+            protocol_id=args.protocol_id,
+            evaluation_id=args.evaluation_id,
+        )
+    else:
+        if schema_version != "1.0":
+            raise ValueError(
+                "evaluate requires either a schema_version=2.0 AtomicRun or "
+                "a schema_version=1.0 legacy run"
+            )
+        if args.protocol_id or args.evaluation_id:
+            raise ValueError(
+                "--protocol-id and --evaluation-id are only valid for "
+                "AtomicRun directories"
+            )
+        result = reevaluate_run(directory, args.scene_config_dir)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -235,8 +271,13 @@ def build_parser() -> argparse.ArgumentParser:
     split.add_argument("--seed", type=int, default=42)
     split.set_defaults(func=_split)
 
-    evaluate = sub.add_parser("evaluate", help="re-evaluate a run after predictions or scores are added")
+    evaluate = sub.add_parser(
+        "evaluate",
+        help="create a coexisting AtomicRun evaluation variant",
+    )
     evaluate.add_argument("--run-dir", required=True)
+    evaluate.add_argument("--protocol-id")
+    evaluate.add_argument("--evaluation-id")
     evaluate.add_argument("--scene-config-dir", default=str(DEFAULT_SCENES))
     evaluate.set_defaults(func=_evaluate)
 

@@ -20,12 +20,15 @@ from physbench.artifacts import (
     validate_prediction_records,
 )
 from physbench.baselines.wan22_quantity import Wan22QuantityLoraAdapter
+from physbench.baselines.wan22_quantity_model import (
+    verified_quantity_checkpoint_bytes,
+)
 from physbench.domain import BaselineTaskInstance
 from physbench.evaluation.contracts import (
     CASE_STATUSES,
     CaseEvaluationResult,
 )
-from physbench.evaluation.task_evaluator import _aggregate
+from physbench.evaluation.task_evaluator import aggregate_task_results
 
 
 BOOTSTRAP_SEED = 20260728
@@ -43,6 +46,35 @@ EXPECTED_COMBINED_TENSOR_COUNT = (
     EXPECTED_LORA_TENSOR_COUNT
     + EXPECTED_QUANTITY_ENCODER_TENSOR_COUNT
 )
+LEGACY_CHECKPOINT_INVENTORY_FIELDS = (
+    "tensor_count",
+    "parameter_count",
+    "lora_tensor_count",
+    "quantity_encoder_tensor_count",
+    "dtype_tensor_counts",
+)
+HARDENED_CHECKPOINT_INVENTORY_FIELDS = (
+    "tensor_count",
+    "parameter_count",
+    "lora_tensor_count",
+    "lora_pair_count",
+    "lora_rank",
+    "lora_target_topology",
+    "quantity_encoder_tensor_count",
+    "dtype_tensor_counts",
+    "safetensors_layout_verified",
+    "finite_payload_verified",
+)
+CHECKPOINT_INVENTORY_PROFILES = {
+    "1.0.0": {
+        "profile_id": "wan22_quantity_checkpoint_inventory_v1_legacy",
+        "required_fields": LEGACY_CHECKPOINT_INVENTORY_FIELDS,
+    },
+    "1.0.1": {
+        "profile_id": "wan22_quantity_checkpoint_inventory_v1_hardened",
+        "required_fields": HARDENED_CHECKPOINT_INVENTORY_FIELDS,
+    },
+}
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -234,24 +266,25 @@ def _validate_record_identity(
     job: dict[str, Any],
     *,
     label: str,
-    allow_missing_scene_id: bool = False,
-) -> None:
-    for field in (
+    required_fields: Sequence[str] = (
         "case_id",
         "scene_id",
         "evaluation_partition",
         "seed",
-    ):
-        if (
-            field == "scene_id"
-            and allow_missing_scene_id
-            and field not in record
-        ):
-            continue
+    ),
+    optional_fields: Sequence[str] = (),
+) -> None:
+    for field in required_fields:
         if record.get(field) != job[field]:
             raise ValueError(
                 f"{label} identity mismatch for {job['job_id']}: "
                 f"{field}={record.get(field)!r}, expected {job[field]!r}"
+            )
+    for field in optional_fields:
+        if field in record and record[field] != job[field]:
+            raise ValueError(
+                f"{label} identity mismatch for {job['job_id']}: "
+                f"{field}={record[field]!r}, expected {job[field]!r}"
             )
 
 
@@ -426,11 +459,226 @@ def _summarize_jobs(
     }
 
 
-def _checkpoint_provenance(
+def _checkpoint_inventory_profile(
     run_dir: Path,
     integrity_issues: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    run = _load_optional_json(run_dir / "run.json")
+    frozen_baseline = _load_optional_json(
+        run_dir / "frozen" / "baseline.json"
+    )
+    sealed_instance = _load_optional_json(
+        run_dir / "task_instance" / "manifest.json"
+    )
+    sealed_identity = (
+        sealed_instance.get("identity")
+        if isinstance(sealed_instance, dict)
+        else None
+    )
+    sealed_baseline = (
+        sealed_identity.get("baseline")
+        if isinstance(sealed_identity, dict)
+        else None
+    )
+    identity_documents = {
+        "run": run,
+        "frozen_baseline": frozen_baseline,
+        "sealed_task_instance": sealed_baseline,
+    }
+    identity_sources: dict[str, dict[str, Any]] = {}
+    invalid_sources: list[str] = []
+    for source, document in identity_documents.items():
+        baseline_id = (
+            document.get("baseline_id")
+            if isinstance(document, dict)
+            else None
+        )
+        baseline_version = (
+            document.get("baseline_version")
+            if isinstance(document, dict)
+            else None
+        )
+        identity_sources[source] = {
+            "baseline_id": baseline_id,
+            "baseline_version": baseline_version,
+        }
+        if (
+            not isinstance(baseline_id, str)
+            or not baseline_id
+            or not isinstance(baseline_version, str)
+            or not baseline_version
+        ):
+            invalid_sources.append(source)
+
+    source_pairs = {
+        (
+            identity["baseline_id"],
+            identity["baseline_version"],
+        )
+        for identity in identity_sources.values()
+        if (
+            isinstance(identity["baseline_id"], str)
+            and identity["baseline_id"]
+            and isinstance(identity["baseline_version"], str)
+            and identity["baseline_version"]
+        )
+    }
+    identity_verified = not invalid_sources and len(source_pairs) == 1
+    if not identity_verified:
+        _issue(
+            integrity_issues,
+            "checkpoint_inventory_profile_identity_mismatch",
+            invalid_sources=invalid_sources,
+            identity_sources=identity_sources,
+        )
+
+    baseline_id: str | None = None
+    baseline_version: str | None = None
+    if identity_verified:
+        baseline_id, baseline_version = next(iter(source_pairs))
+    selected = (
+        CHECKPOINT_INVENTORY_PROFILES.get(baseline_version)
+        if baseline_version is not None
+        else None
+    )
+    if identity_verified and selected is None:
+        _issue(
+            integrity_issues,
+            "checkpoint_inventory_profile_unsupported",
+            baseline_id=baseline_id,
+            baseline_version=baseline_version,
+            supported_versions=sorted(CHECKPOINT_INVENTORY_PROFILES),
+        )
+
+    return {
+        "profile_id": (
+            selected["profile_id"] if selected is not None else None
+        ),
+        "baseline_id": baseline_id,
+        "baseline_version": baseline_version,
+        "version_sources": {
+            source: identity["baseline_version"]
+            for source, identity in identity_sources.items()
+        },
+        "baseline_id_sources": {
+            source: identity["baseline_id"]
+            for source, identity in identity_sources.items()
+        },
+        "identity_sources": identity_sources,
+        "required_fields": (
+            list(selected["required_fields"])
+            if selected is not None
+            else []
+        ),
+        "verified": identity_verified and selected is not None,
+    }
+
+
+def _checkpoint_inventory_declaration(
+    *,
+    profile: dict[str, Any],
+    declared_inventory: dict[str, Any] | None,
+    actual_inventory: dict[str, Any] | None,
+    integrity_issues: list[dict[str, Any]],
+) -> dict[str, Any]:
+    required_fields = list(profile["required_fields"])
+    declared_fields = (
+        sorted(declared_inventory)
+        if declared_inventory is not None
+        else []
+    )
+    observed_fields = (
+        sorted(actual_inventory)
+        if actual_inventory is not None
+        else []
+    )
+    derived_not_declared = (
+        sorted(set(actual_inventory) - set(declared_inventory))
+        if actual_inventory is not None
+        and declared_inventory is not None
+        else []
+    )
+
+    missing_declared_fields: list[str] = []
+    missing_observed_fields: list[str] = []
+    undeclared_observed_fields: list[str] = []
+    mismatched_fields: list[str] = []
+    if declared_inventory is not None:
+        for field in required_fields:
+            if field not in declared_inventory:
+                missing_declared_fields.append(field)
+                _issue(
+                    integrity_issues,
+                    "checkpoint_inventory_declaration_missing_field",
+                    profile_id=profile["profile_id"],
+                    field=field,
+                )
+    if actual_inventory is not None:
+        missing_observed_fields = sorted(
+            set(required_fields) - set(actual_inventory)
+        )
+    if (
+        declared_inventory is not None
+        and actual_inventory is not None
+    ):
+        undeclared_observed_fields = sorted(
+            set(declared_inventory) - set(actual_inventory)
+        )
+        mismatched_fields = sorted(
+            field
+            for field in set(declared_inventory) & set(actual_inventory)
+            if not _values_equal(
+                declared_inventory[field],
+                actual_inventory[field],
+            )
+        )
+        if (
+            missing_observed_fields
+            or undeclared_observed_fields
+            or mismatched_fields
+        ):
+            _issue(
+                integrity_issues,
+                "checkpoint_declared_inventory_mismatch",
+                missing_observed_required_fields=missing_observed_fields,
+                declared_fields_absent_from_observed=(
+                    undeclared_observed_fields
+                ),
+                mismatched_fields=mismatched_fields,
+                declared=declared_inventory,
+                actual=actual_inventory,
+            )
+
+    verified = (
+        profile.get("verified") is True
+        and declared_inventory is not None
+        and actual_inventory is not None
+        and not missing_declared_fields
+        and not missing_observed_fields
+        and not undeclared_observed_fields
+        and not mismatched_fields
+    )
+    return {
+        "required_fields": required_fields,
+        "declared_fields": declared_fields,
+        "observed_fields": observed_fields,
+        "derived_not_declared": derived_not_declared,
+        "verified": verified,
+    }
+
+
+def _checkpoint_provenance(
+    run_dir: Path,
+    integrity_issues: list[dict[str, Any]],
+    *,
+    inventory_profile: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     issue_count_before = len(integrity_issues)
+    if inventory_profile is None:
+        inventory_profile = _checkpoint_inventory_profile(
+            run_dir,
+            integrity_issues,
+        )
     relative_manifest = "artifacts/wan22/checkpoint.json"
     manifest_path = run_dir / relative_manifest
     reference = _artifact_reference(run_dir, relative_manifest)
@@ -452,11 +700,19 @@ def _checkpoint_provenance(
             "path": None,
             "available": False,
             "digest_verified": None,
+            "byte_binding": None,
             "acceptance": {
                 "passed": False,
                 "expected_inventory": expected_inventory,
                 "observed_inventory": None,
             },
+            "inventory_profile": inventory_profile,
+            "inventory_declaration": _checkpoint_inventory_declaration(
+                profile=inventory_profile,
+                declared_inventory=None,
+                actual_inventory=None,
+                integrity_issues=integrity_issues,
+            ),
             "manifest": reference,
         }
     manifest = _load_json(manifest_path)
@@ -491,20 +747,10 @@ def _checkpoint_provenance(
             ),
             declared_sha256=declared,
         )
-    actual = _file_sha256(checkpoint_path) if available else None
-    digest = declared if declared_valid else actual
-    verified = (
-        actual == declared
-        if actual is not None and declared_valid
-        else None
-    )
-    if verified is False:
-        _issue(
-            integrity_issues,
-            "checkpoint_digest_mismatch",
-            declared_sha256=declared,
-            actual_sha256=actual,
-        )
+    actual: str | None = None
+    actual_size: int | None = None
+    actual_inventory: dict[str, Any] | None = None
+    checkpoint_byte_binding: dict[str, Any] | None = None
     if checkpoint_path is not None and not available:
         _issue(
             integrity_issues,
@@ -545,14 +791,6 @@ def _checkpoint_provenance(
         )
 
     declared_size = manifest.get("checkpoint_size")
-    actual_size = checkpoint_path.stat().st_size if available else None
-    if declared_size != actual_size:
-        _issue(
-            integrity_issues,
-            "checkpoint_size_mismatch",
-            declared=declared_size,
-            actual=actual_size,
-        )
 
     declared_inventory = manifest.get("inventory")
     if not isinstance(declared_inventory, dict):
@@ -563,31 +801,26 @@ def _checkpoint_provenance(
         )
         declared_inventory = None
 
-    actual_inventory: dict[str, Any] | None = None
     if available:
         try:
-            with checkpoint_path.open("rb") as handle:
-                header_size_raw = handle.read(8)
-            if len(header_size_raw) != 8:
-                raise ValueError("invalid safetensors checkpoint header")
-            header_size = int.from_bytes(header_size_raw, "little")
-            if (
-                header_size > checkpoint_path.stat().st_size - 8
-                or header_size > 64 * 1024 * 1024
-            ):
-                raise ValueError(
-                    "safetensors header length is invalid or unreasonably large"
+            with verified_quantity_checkpoint_bytes(
+                checkpoint_path,
+                manifest_path,
+            ) as (checkpoint_bytes, byte_binding):
+                actual_inventory = (
+                    Wan22QuantityLoraAdapter._checkpoint_inventory_bytes(
+                        checkpoint_bytes
+                    )
                 )
-            actual_inventory = (
-                Wan22QuantityLoraAdapter._checkpoint_inventory(
-                    checkpoint_path
-                )
-            )
+            checkpoint_byte_binding = byte_binding
+            actual = byte_binding["checkpoint_sha256"]
+            actual_size = byte_binding["checkpoint_size"]
         except (
             KeyError,
             MemoryError,
             OSError,
             OverflowError,
+            RuntimeError,
             TypeError,
             ValueError,
         ) as exc:
@@ -596,6 +829,26 @@ def _checkpoint_provenance(
                 "checkpoint_inventory_read_failed",
                 error=f"{type(exc).__name__}: {exc}",
             )
+    digest = declared if declared_valid else actual
+    verified = (
+        actual == declared
+        if actual is not None and declared_valid
+        else None
+    )
+    if verified is False:
+        _issue(
+            integrity_issues,
+            "checkpoint_digest_mismatch",
+            declared_sha256=declared,
+            actual_sha256=actual,
+        )
+    if actual_size is not None and declared_size != actual_size:
+        _issue(
+            integrity_issues,
+            "checkpoint_size_mismatch",
+            declared=declared_size,
+            actual=actual_size,
+        )
     if actual_inventory is not None:
         for field, expected in expected_inventory.items():
             observed = actual_inventory.get(field)
@@ -607,16 +860,12 @@ def _checkpoint_provenance(
                     expected=expected,
                     observed=observed,
                 )
-        if (
-            declared_inventory is not None
-            and not _values_equal(declared_inventory, actual_inventory)
-        ):
-            _issue(
-                integrity_issues,
-                "checkpoint_declared_inventory_mismatch",
-                declared=declared_inventory,
-                actual=actual_inventory,
-            )
+    inventory_declaration = _checkpoint_inventory_declaration(
+        profile=inventory_profile,
+        declared_inventory=declared_inventory,
+        actual_inventory=actual_inventory,
+        integrity_issues=integrity_issues,
+    )
 
     sampling = _load_optional_json(
         run_dir / "artifacts" / "wan22" / "training_sampling_plan.json"
@@ -842,11 +1091,18 @@ def _checkpoint_provenance(
         "size": actual_size,
         "status": status,
         "source": manifest.get("source"),
+        "byte_binding": checkpoint_byte_binding,
         "inventory": actual_inventory,
         "declared_inventory": declared_inventory,
+        "inventory_profile": inventory_profile,
+        "inventory_declaration": inventory_declaration,
         "training_state": recovery_summary,
         "acceptance": {
-            "passed": len(integrity_issues) == issue_count_before,
+            "passed": (
+                inventory_profile.get("verified") is True
+                and inventory_declaration.get("verified") is True
+                and len(integrity_issues) == issue_count_before
+            ),
             "expected_inventory": expected_inventory,
             "observed_inventory": actual_inventory,
         },
@@ -2363,7 +2619,7 @@ def _official_task_result(
             evaluations[job["job_id"]]
             for job in plan["jobs"]
         ]
-        recomputed = _aggregate(
+        recomputed = aggregate_task_results(
             plan=plan,
             case_results=ordered_results,
         )
@@ -2593,6 +2849,14 @@ def summarize_run(run_dir: str | Path) -> dict[str, Any]:
             run_status=run.get("status"),
             state_stage=state_document.get("stage"),
         )
+    baseline_contract_profile = _checkpoint_inventory_profile(
+        directory,
+        integrity_issues,
+    )
+    legacy_prediction_scene_projection = (
+        baseline_contract_profile.get("verified") is True
+        and baseline_contract_profile.get("baseline_version") == "1.0.0"
+    )
     prediction_values = _load_optional_jsonl(
         directory / "predictions.jsonl"
     )
@@ -2667,7 +2931,25 @@ def summarize_run(run_dir: str | Path) -> dict[str, Any]:
                 prediction,
                 by_job[job_id],
                 label="prediction",
-                allow_missing_scene_id=True,
+                required_fields=(
+                    (
+                        "case_id",
+                        "evaluation_partition",
+                        "seed",
+                    )
+                    if legacy_prediction_scene_projection
+                    else (
+                        "case_id",
+                        "scene_id",
+                        "evaluation_partition",
+                        "seed",
+                    )
+                ),
+                optional_fields=(
+                    ("scene_id",)
+                    if legacy_prediction_scene_projection
+                    else ()
+                ),
             )
         except ValueError as exc:
             _issue(
@@ -2765,7 +3047,11 @@ def summarize_run(run_dir: str | Path) -> dict[str, Any]:
                 "component_fingerprint": frozen,
             })
 
-    checkpoint = _checkpoint_provenance(directory, integrity_issues)
+    checkpoint = _checkpoint_provenance(
+        directory,
+        integrity_issues,
+        inventory_profile=baseline_contract_profile,
+    )
     scene_ids = plan.get("scene_ids")
     if not isinstance(scene_ids, list) or any(
         not isinstance(scene_id, str) or not scene_id

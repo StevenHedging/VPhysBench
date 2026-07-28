@@ -31,11 +31,22 @@ class ReferenceCaseEvaluator(ABC):
 
     evaluator_id: str
     evaluator_version: str
+    sequential_evaluator_version = "1.2"
     scene_id: str
     primary_score: str
 
     def __init__(self, config: dict[str, Any]):
         self.config = config
+        decode_policy = config.get("timeline", {}).get(
+            "decode_policy",
+            "legacy_random_seek",
+        )
+        if decode_policy == "sequential_forward":
+            self.evaluator_version = self.sequential_evaluator_version
+        elif decode_policy != "legacy_random_seek":
+            raise ValueError(
+                f"unsupported evaluator decode policy: {decode_policy!r}"
+            )
         self.fingerprint = canonical_sha256(
             {
                 "id": self.evaluator_id,
@@ -161,6 +172,9 @@ class ReferenceCaseEvaluator(ABC):
                 "min_source_fps": float(timeline["minimum_source_fps"]),
                 "duration_tolerance_s": float(
                     timeline.get("duration_tolerance_s", 0.02)
+                ),
+                "decode_policy": str(
+                    timeline.get("decode_policy", "legacy_random_seek")
                 ),
             }
             reference_video = sample_video(reference_path, **sampling)

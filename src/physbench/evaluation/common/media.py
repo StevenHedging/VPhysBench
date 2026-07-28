@@ -95,6 +95,7 @@ def sample_video(
     pad_value: int = 0,
     min_source_fps: float = 1.0,
     duration_tolerance_s: float = 0.02,
+    decode_policy: str = "legacy_random_seek",
 ) -> SampledVideo:
     if not sample_times_s:
         raise VideoProtocolError("empty_timeline", "sample timeline is empty")
@@ -112,6 +113,19 @@ def sample_video(
             f"but protocol requires {required_end:.6f}s",
         )
     raw_indices = np.rint(np.asarray(sample_times_s) * info.fps).astype(int)
+    if decode_policy not in {"legacy_random_seek", "sequential_forward"}:
+        raise VideoProtocolError(
+            "invalid_decode_policy",
+            f"unsupported video decode policy: {decode_policy!r}",
+        )
+    if (
+        decode_policy == "sequential_forward"
+        and raw_indices.min(initial=0) < 0
+    ):
+        raise VideoProtocolError(
+            "invalid_timeline",
+            "sample timeline contains a negative source-frame index",
+        )
     if raw_indices.max(initial=0) >= info.frame_count:
         raise VideoProtocolError(
             "insufficient_duration",
@@ -120,28 +134,74 @@ def sample_video(
     capture = cv2.VideoCapture(str(path))
     if not capture.isOpened():
         raise VideoProtocolError("video_open_failed", f"cannot open video: {path}")
-    frames: list[np.ndarray] = []
-    transform: dict | None = None
-    for index in raw_indices:
-        capture.set(cv2.CAP_PROP_POS_FRAMES, int(index))
-        ok, frame = capture.read()
-        if not ok:
-            capture.release()
-            raise VideoProtocolError(
-                "video_decode_failed", f"failed to decode frame {index} from {path}"
+    if decode_policy == "legacy_random_seek":
+        frames: list[np.ndarray] = []
+        transform: dict | None = None
+        for index in raw_indices:
+            capture.set(cv2.CAP_PROP_POS_FRAMES, int(index))
+            ok, frame = capture.read()
+            if not ok:
+                capture.release()
+                raise VideoProtocolError(
+                    "video_decode_failed",
+                    f"failed to decode frame {index} from {path}",
+                )
+            normalized, current_transform = _letterbox(
+                frame, width=width, height=height, pad_value=pad_value
             )
-        normalized, current_transform = _letterbox(
-            frame, width=width, height=height, pad_value=pad_value
+            transform = transform or current_transform
+            frames.append(normalized)
+        capture.release()
+        return SampledVideo(
+            frames=frames,
+            info=info,
+            sample_times_s=list(sample_times_s),
+            source_indices=raw_indices.astype(int).tolist(),
+            spatial_transform=transform or {},
         )
-        transform = transform or current_transform
-        frames.append(normalized)
-    capture.release()
+
+    requested = {int(index) for index in raw_indices}
+    normalized_by_index: dict[int, np.ndarray] = {}
+    transform_by_index: dict[int, dict] = {}
+    try:
+        for decoded_index in range(int(raw_indices.max()) + 1):
+            ok, frame = capture.read()
+            if not ok:
+                failed_index = next(
+                    int(index)
+                    for index in raw_indices
+                    if int(index) not in normalized_by_index
+                )
+                raise VideoProtocolError(
+                    "video_decode_failed",
+                    f"failed to decode frame {failed_index} from {path}",
+                )
+            if decoded_index not in requested:
+                continue
+            normalized, current_transform = _letterbox(
+                frame, width=width, height=height, pad_value=pad_value
+            )
+            normalized_by_index[decoded_index] = normalized
+            transform_by_index[decoded_index] = current_transform
+    finally:
+        capture.release()
+
+    frames: list[np.ndarray] = []
+    emitted: set[int] = set()
+    for index in raw_indices:
+        source_index = int(index)
+        normalized = normalized_by_index[source_index]
+        frames.append(
+            normalized.copy() if source_index in emitted else normalized
+        )
+        emitted.add(source_index)
+    first_index = int(raw_indices[0])
     return SampledVideo(
         frames=frames,
         info=info,
         sample_times_s=list(sample_times_s),
         source_indices=raw_indices.astype(int).tolist(),
-        spatial_transform=transform or {},
+        spatial_transform=transform_by_index[first_index],
     )
 
 

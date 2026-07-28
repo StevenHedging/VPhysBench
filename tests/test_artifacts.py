@@ -9,7 +9,7 @@ from physbench.artifacts import (
     prediction_artifact_manifest,
     validate_prediction_records,
 )
-from physbench.io import load_json, write_json, write_jsonl
+from physbench.io import load_json, write_json
 from physbench.orchestration import reevaluate_atomic
 
 
@@ -127,7 +127,7 @@ class PredictionArtifactTests(unittest.TestCase):
                     run_dir=temporary,
                 )
 
-    def test_reevaluation_detects_prediction_artifact_mutation(self) -> None:
+    def test_validation_detects_prediction_artifact_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = Path(temporary) / "run"
             video = run_dir / "predictions" / "fixture" / "job_1.mp4"
@@ -148,32 +148,37 @@ class PredictionArtifactTests(unittest.TestCase):
                 baseline_id="fixture",
                 run_dir=run_dir,
             )
-            (run_dir / "frozen").mkdir()
-            (run_dir / "task_instance").mkdir()
-            (run_dir / "artifacts").mkdir()
-            write_json(run_dir / "plan.json", {})
-            write_json(run_dir / "frozen" / "task.json", {})
-            write_jsonl(run_dir / "frozen" / "cases.jsonl", [])
-            write_jsonl(run_dir / "predictions.jsonl", [prediction])
-            write_json(
-                run_dir / "task_instance" / "manifest.json",
-                {
-                    "identity": {
-                        "baseline": {"baseline_id": "fixture"},
-                    },
-                    "inference": {"jobs": [self._job()]},
-                    "source": {"asset_root": str(run_dir)},
-                },
-            )
-            write_json(
-                run_dir / "artifacts" / "prediction_artifacts.json",
-                frozen_artifacts,
-            )
             video.write_bytes(b"modified")
             with self.assertRaisesRegex(
                 ValueError, "differ from the frozen AtomicRun manifest"
             ):
+                validate_prediction_records(
+                    [prediction],
+                    jobs=[self._job()],
+                    baseline_id="fixture",
+                    run_dir=run_dir,
+                    expected_artifact_manifest=frozen_artifacts,
+                )
+
+    def test_schema_v2_in_place_reevaluation_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary) / "run"
+            evaluation = run_dir / "evaluation"
+            evaluation.mkdir(parents=True)
+            write_json(
+                run_dir / "run.json",
+                {"schema_version": "2.0", "run_id": "sealed-run"},
+            )
+            sentinel = evaluation / "task_result.json"
+            sentinel.write_bytes(b"canonical-evaluation")
+
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "reevaluate_atomic_variant",
+            ):
                 reevaluate_atomic(run_dir)
+
+            self.assertEqual(b"canonical-evaluation", sentinel.read_bytes())
 
 
 if __name__ == "__main__":

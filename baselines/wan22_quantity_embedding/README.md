@@ -6,6 +6,8 @@ Baseline ID:
 wan22_ti2v_5b_lora_r32_quantity_embedding_v1
 ```
 
+Bundle version: `1.0.1`.
+
 This schema-v5 managed Baseline jointly fine-tunes a WAN2.2-TI2V-5B DiT
 LoRA and a small quantity encoder. It consumes the same first frame, Case
 prompt, and a registry-curated subset of annotated physical
@@ -71,12 +73,46 @@ Omit `--execute` for a dry-run. `--stop-after-training` is a checkpoint
 diagnostic and intentionally produces no benchmark result.
 
 The combined safetensors checkpoints contain both DiT LoRA tensors and
-`pipe.quantity_encoder.*` tensors. Important run-local records include:
+`pipe.quantity_encoder.*` tensors. Loading is fail-closed against the frozen
+WAN2.2-TI2V-5B topology: exactly 300 rank-32 A/B pairs (600 LoRA tensors,
+all 30 blocks × 10 targets) and exactly 19 QuantityEncoder tensors. Before
+inference, the checkpoint path, byte size, and SHA-256 must match the
+run-local schema-2 checkpoint manifest. At the actual load boundary the worker
+opens the non-symlink checkpoint with `O_NOFOLLOW` where the platform provides
+it, reads the complete file from that one descriptor, hashes those bytes, and
+passes the same byte object to `safetensors.torch.load`. It never verifies one
+path read and then reopens the path for parsing, so a transient
+swap-and-restore cannot substitute different weights. This hash is an internal
+consistency check for a frozen AtomicRun, not an external authenticity
+signature: a publisher who can rewrite both the checkpoint and its run-local
+manifest can create a new self-consistent pair.
+
+This descriptor-bound load deliberately allocates one complete authenticated
+checkpoint byte buffer. The observed official rank-32 checkpoint is
+175,649,752 bytes (167.5 MiB). `safetensors.torch.load(bytes)` briefly
+materializes independent tensor backing while that input buffer still exists;
+an actual no-GPU parse measured about 304 MiB incremental peak RSS per worker
+(about 2.38 GiB if eight workers peak simultaneously), rather than only the
+167.5 MiB input-buffer size. The input buffer is explicitly dropped as soon as
+parsing returns, and all temporary CPU state is released after validation and
+LoRA fusion; video-generation memory is otherwise unchanged.
+
+The shuffled training DataLoader owns an explicit `torch.Generator` seeded
+from the trainer seed. The same sampler seed is recorded in
+`training_sampling_plan.json`, `checkpoints/training_args.json`,
+`checkpoints/run.env`, and `checkpoints/training_sampling_runtime.json`.
+Training fails before its first step unless the repeated Dataset length is
+divisible by the distributed world size, so Accelerate cannot pad an epoch
+with duplicate samples. RNG sidecars include the sampler generator state, but
+remain diagnostic snapshots rather than exact-resume checkpoints because the
+live DataLoader iterator/permutation position is not captured.
+Important run-local records include:
 
 ```text
 runs_v2/<run_id>/
 ├── artifacts/wan22/checkpoints/
 ├── artifacts/wan22/checkpoint.json
+├── artifacts/wan22/checkpoints/training_sampling_runtime.json
 ├── artifacts/wan22/training_quantity_token_audit.jsonl
 ├── artifacts/wan22/inference_quantity_token_audits/
 ├── artifacts/wan22/training_sampling_plan.json
@@ -119,6 +155,23 @@ frozen AtomicRun is explicitly rejected by the publication gate and must be
 reported as a separately identified alternate-protocol result. Missing or
 rejected checkpoint, recovery-state, loss, gradient, training-token, or
 inference-token evidence is recorded as an integrity issue.
+
+The report reads the checkpoint once through an `O_NOFOLLOW` descriptor, hashes
+that immutable buffer, and computes its header/layout/finite/inventory evidence
+from the same bytes before rechecking descriptor and path identity. Frozen
+Baseline `1.0.0` runs may carry the original five-field manifest;
+the recomputed pair/rank/topology/layout/finite fields are then reported as
+`derived_not_declared`. Baseline `1.0.1` requires all ten hardened fields in the
+manifest. A profile is selected only when `run.json`, `frozen/baseline.json`,
+and the sealed TaskInstance agree on Baseline ID and version. Unknown versions,
+identity drift, missing required fields, or any declared/recomputed mismatch
+fail closed.
+
+The same version gate applies to prediction identity: historical `1.0.0`
+records may omit a redundant `scene_id` only when the sealed job resolves it
+unambiguously, while `1.0.1` emitters always write it and the summary requires
+an exact match. Unknown or inconsistent versions never inherit the legacy
+exception.
 
 ## Paired comparison
 
