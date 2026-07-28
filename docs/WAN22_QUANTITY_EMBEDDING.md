@@ -312,15 +312,14 @@ evaluation/task_result.json:
 
 artifacts/wan22/checkpoint.json:
   inventory.tensor_count == 619
-  inventory.lora_pair_count == 300
   inventory.lora_tensor_count == 600
-  inventory.lora_rank == 32
   inventory.quantity_encoder_tensor_count == 19
-  上述 inventory、LoRA topology/shape 与 tensor finite 状态必须从实际
-  safetensors bytes 严格重算并与 manifest 一致
+  严格重算结果中的 lora_pair_count == 300、lora_rank == 32
+  上述 inventory、LoRA topology/shape 与 tensor finite 状态始终从实际
+  safetensors bytes 严格重算
   checkpoint size / SHA-256 / baseline identity 必须一致
-  inventory.safetensors_layout_verified == true
-  inventory.finite_payload_verified == true
+  严格重算结果中的 safetensors_layout_verified == true
+  严格重算结果中的 finite_payload_verified == true
   若 save_optimizer_state=true，optimizer/scheduler 与所有 rank RNG sidecar 必须齐全
   state manifest 必须与最终 step、world size、checkpoint 文件名一致，RNG 文件名/数量按 rank 核对
   optimizer/scheduler 的 SHA-256 由 checkpoint manifest 锚定；RNG SHA-256 仅记录当前文件摘要，
@@ -338,6 +337,16 @@ artifacts/wan22/loss_analysis/loss_summary.json:
   finite_fraction == 1.0
   loss_curve.csv 必须逐步覆盖 1..expected_total_optimizer_steps，并与 summary 统计一致
 ```
+
+Checkpoint inventory 的声明协议由冻结的 Baseline 版本决定，而且只在
+`run.json`、`frozen/baseline.json` 与 sealed TaskInstance 三处 Baseline ID/版本
+完全一致后选择。`1.0.0` 的历史 manifest 必须声明
+`tensor_count`、`parameter_count`、`lora_tensor_count`、
+`quantity_encoder_tensor_count` 与 `dtype_tensor_counts`；严格解析器新增得到的
+pair/rank/topology/layout/finite 字段会记录为 `derived_not_declared`。
+`1.0.1` 则必须在 manifest 中完整声明全部十个 hardened 字段。两种协议下，
+manifest 已声明的每个字段都必须与实际 bytes 的严格重算值一致；未知版本、三处身份
+不一致、字段缺失或值不一致都会 fail closed。
 
 每条训练/推理量值还应能在 token audit 中追溯到 registry fingerprint、SI value、
 量纲、type ID、sentinel token ID 和唯一 token span；每个训练 Case 和每个完成推理的
