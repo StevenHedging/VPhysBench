@@ -8,6 +8,14 @@ wan22_ti2v_5b_lora_r32_quantity_embedding_v1
 
 Bundle version: `1.0.1`.
 
+The completed 2026-07-28 source experiment is a historical AtomicRun whose
+bundle `1.0.0` and baseline digest are sealed. The repository HEAD at execution
+was `918e9f7`; that commit is known provenance but is not separately sealed in
+the run manifest. The current commands create the current `1.0.1` / Task v5 /
+protocol v2 identities. Its full training evidence, canonical v1 result,
+alternate v2 reevaluation, and all 66 per-Case outcomes are recorded in
+[`docs/experiments/WAN22_QUANTITY_EMBEDDING_20260728.md`](../../docs/experiments/WAN22_QUANTITY_EMBEDDING_20260728.md).
+
 This schema-v5 managed Baseline jointly fine-tunes a WAN2.2-TI2V-5B DiT
 LoRA and a small quantity encoder. It consumes the same first frame, Case
 prompt, and a registry-curated subset of annotated physical
@@ -51,8 +59,9 @@ jointly, then generates every frozen ID and OOD1 job:
 
 ```bash
 cd /root/Steven/physics_video_benchmark
-cp baselines/wan22_quantity_embedding/baseline.local.example.json \
-  baselines/wan22_quantity_embedding/baseline.local.json
+test -e baselines/wan22_quantity_embedding/baseline.local.json || \
+  cp baselines/wan22_quantity_embedding/baseline.local.example.json \
+    baselines/wan22_quantity_embedding/baseline.local.json
 # Edit baseline.local.json for the WAN checkout, model root, Python,
 # Accelerate config, and GPUs.
 
@@ -97,8 +106,8 @@ an actual no-GPU parse measured about 304 MiB incremental peak RSS per worker
 parsing returns, and all temporary CPU state is released after validation and
 LoRA fusion; video-generation memory is otherwise unchanged.
 
-The shuffled training DataLoader owns an explicit `torch.Generator` seeded
-from the trainer seed. The same sampler seed is recorded in
+For new bundle `1.0.1` runs, the shuffled training DataLoader owns an explicit
+`torch.Generator` seeded from the trainer seed. The same sampler seed is recorded in
 `training_sampling_plan.json`, `checkpoints/training_args.json`,
 `checkpoints/run.env`, and `checkpoints/training_sampling_runtime.json`.
 Training fails before its first step unless the repeated Dataset length is
@@ -106,6 +115,10 @@ divisible by the distributed world size, so Accelerate cannot pad an epoch
 with duplicate samples. RNG sidecars include the sampler generator state, but
 remain diagnostic snapshots rather than exact-resume checkpoints because the
 live DataLoader iterator/permutation position is not captured.
+The historical `1.0.0` source run has a sampling plan, optimizer/scheduler
+state, and per-rank RNG sidecars, but no `training_sampling_runtime.json` or
+sampler generator state. It passes the versioned legacy acceptance profile and
+must not be described as carrying the newer runtime evidence.
 Important run-local records include:
 
 ```text
@@ -138,7 +151,7 @@ macro-result projections, and training-evidence indexes from a terminal
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
   scripts/summarize_quantity_run.py \
   --run-dir runs_v2/<run_id> \
-  --output-dir results/<run_id>
+  --output-dir results/<run_id>/<summary_id>
 ```
 
 Missing, failed, and evaluator-unavailable cases remain explicit; the summary
@@ -203,6 +216,7 @@ The selected fields match the structured-text comparison arm. The registry
 also records whether a selected field is primary or derived; it intentionally
 does not imply that every selected field is independent.
 
-The current View A limitations and a no-fabrication result template are
-documented in
+The current View A design, limitations, and result summary are documented in
 [`docs/WAN22_QUANTITY_EMBEDDING.md`](../../docs/WAN22_QUANTITY_EMBEDDING.md).
+The completed experiment is single-seed and partial: generic and structured
+text controls were not run, and the strict Task score is `null`.

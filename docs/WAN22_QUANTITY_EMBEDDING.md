@@ -4,7 +4,9 @@
 
 ```text
 Baseline ID: wan22_ti2v_5b_lora_r32_quantity_embedding_v1
-Bundle:      1.0.1
+Current bundle:       1.0.1
+Frozen source bundle: 1.0.0
+Execution-time HEAD:  918e9f7 (not separately sealed by the run manifest)
 Base model:  WAN2.2-TI2V-5B
 Source run:  five_scene_finetune_eval_v4 / scene_default_v1
 Current Task: five_scene_finetune_eval_v5 / scene_default_v2
@@ -17,11 +19,14 @@ Dataset:     physics_video_five_scene_v4 / View A
 物理量子集；它不会把全部结构化标注都送入模型。registry 会记录每个字段是 primary
 还是 derived，并不假设所选字段彼此统计独立。当前仅支持 `finetune_eval` Task family。
 
-2026-07-28 启动的正式 source run 固定在提交 `918e9f7`，因此保留当时的 v4 Task 和
-`scene_default_v1` native evaluation identity。修正后的官方 Task 使用 v5/v2；source
-run 的最终官方分数会另存为不可变的 v2 reevaluation variant，不会回写或伪装成其
-canonical v1 evaluation。下文命令引用当前 `tasks/official` 文件，因此新运行会生成
-v5 Task，而不是复用历史 v4 job identity。
+2026-07-28 完成的 source run 密封了 bundle `1.0.0` 和 baseline digest，并保留当时
+的 v4 Task 与 `scene_default_v1` native evaluation identity。执行时仓库 HEAD 为
+`918e9f7`，但该 commit 未被 run manifest 单独密封。当前官方 Task 使用 v5/v2；
+该 source run 已另存一份不可变的 `scene_default_v2` alternate reevaluation，没有
+回写或伪装成 canonical v1。完整实验身份、训练证据、两套协议和 66 条逐 Case 结果见
+[`experiments/WAN22_QUANTITY_EMBEDDING_20260728.md`](experiments/WAN22_QUANTITY_EMBEDDING_20260728.md)。
+下文命令引用当前 `tasks/official` 文件，因此新运行会生成 v5 Task 和 bundle 1.0.1
+身份，而不是复用历史 v4/v1 source identity。
 
 ## 2. 从设想到可训练实现
 
@@ -119,7 +124,8 @@ LoRA tensor，30 blocks × 每 block 10 个 target），以及 19 个
 `pipe.quantity_encoder.*` tensor。缺 pair、额外 target、错误 rank、错误 shape 或
 非有限权重都会在融合前失败。推理拒绝只有 LoRA 的旧 checkpoint。
 
-训练 DataLoader 的 shuffle 显式绑定由 trainer seed 初始化的
+以下 sampler runtime 约束适用于当前 bundle `1.0.1` 创建的新 run。训练 DataLoader
+的 shuffle 显式绑定由 trainer seed 初始化的
 `torch.Generator`。sampler seed 同时写入 `training_sampling_plan.json`、
 `checkpoints/training_args.json`、`checkpoints/run.env` 与
 `checkpoints/training_sampling_runtime.json`，从而区分公共 sampler seed 和
@@ -130,6 +136,12 @@ LoRA tensor，30 blocks × 每 block 10 个 target），以及 19 个
 包含显式 sampler generator state；但因为没有保存当前 DataLoader iterator/
 permutation 的位置，也没有自动 resume 入口，这些文件仅是 diagnostic snapshot，
 不能宣称为精确可恢复的 “state-complete checkpoint”。
+
+已完成的历史 source run 冻结的是 bundle `1.0.0`：它有 sampling plan、
+optimizer/scheduler state 与每 rank RNG sidecar，但没有
+`training_sampling_runtime.json`，sidecar 也没有 sampler generator state。该 run
+按 versioned legacy acceptance profile 通过；不能把 1.0.1 的 sampler runtime
+证据或 state-complete resume 能力追溯归因给它。
 
 每个推理 worker 在加载模型前必须读取 schema-2 `checkpoint.json`，核对 job 中的
 checkpoint 路径、文件 size 与 SHA-256；manifest 缺失、字段缺失或字节不一致均
@@ -163,8 +175,9 @@ QuantityEncoder gradient finite；最终 safetensors 会验证完整 payload 布
 
 ```bash
 cd /root/Steven/physics_video_benchmark
-cp baselines/wan22_quantity_embedding/baseline.local.example.json \
-  baselines/wan22_quantity_embedding/baseline.local.json
+test -e baselines/wan22_quantity_embedding/baseline.local.json || \
+  cp baselines/wan22_quantity_embedding/baseline.local.example.json \
+    baselines/wan22_quantity_embedding/baseline.local.json
 ```
 
 在 Git-ignored 的 `baseline.local.json` 中填写 WAN 工程、模型根目录、模型 Python、
@@ -254,8 +267,9 @@ inventory 和训练成本，不应只报告分数。
 - pendulum 的两个 20° OOD1 Case 使用了训练中未出现的 `initial_angle=20°`；
 - circular 的 OOD1 引入训练中不存在的第二物体及 `object_2_orbit_radius` 条件字段，
   不只是背景/颜色变化；
-- 27 个另行识别为“数值和环境同时未见”的 Case 未进入 View A，当前 Task 未启用
-  OOD2，但这并没有消除上述已进入 OOD1 的混合变化；
+- 另有 27 个新增 Case 因重复 held-out 条件或未被 View A 的固定采样选中而未纳入；
+  其中部分同时含未见物理数值和环境的条件，可留待未来 OOD2，但当前 Task 未启用
+  OOD2。这并没有消除上述已进入 OOD1 的混合变化；
 - `free_fall` 没有可用 OOD1，因此不能声称五个 scene 都具有 OOD1 证据；
 - collision train 仅占本 scene 34.4%，全局 train 占 View A 64.7%，没有达到统一 75%；
 - circular ID 只有 2 个 Case，当前官方 Task 也只有一个训练/推理 seed 42。
@@ -365,7 +379,7 @@ AtomicRun 进入 `complete`、`inference_incomplete` 或 `failed` 终态后，�
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
   scripts/summarize_quantity_run.py \
   --run-dir runs_v2/<run_id> \
-  --output-dir results/<run_id>
+  --output-dir results/<run_id>/<summary_id>
 ```
 
 若执行异常只留下 `state.json: stage=failed` 而尚未来得及写 `run.json`，汇总器会明确
@@ -395,48 +409,57 @@ prediction 的身份规则按冻结 Baseline bundle version 解释：历史 `1.0
 当前 TensorBoard loss 是每个 optimizer step 的 rank-0 本地 batch loss，不是八卡
 loss 的 all-reduce 均值；它适合检查训练轨迹和有限性，不应解释为全局 batch loss。
 
-## 8. 结果记录模板
+## 8. 2026-07-28 正式实验快照
 
-截至真正完成上述 `--execute` 运行前，所有分数必须标记为 `PENDING`，不能把 dry-run
-的 `planned`、部分运行的 `observed_mean_score` 或 reference self-test 当作模型成绩。
+完整报告及 66 条逐 Case 结果：
+[`experiments/WAN22_QUANTITY_EMBEDDING_20260728.md`](experiments/WAN22_QUANTITY_EMBEDDING_20260728.md)。
 
-### 8.1 运行身份
+### 8.1 记录身份
 
 | 字段 | 记录值 |
 | --- | --- |
-| Git commit | `PENDING` |
-| Dataset digest | `PENDING` |
-| TaskInstance digest | `PENDING` |
-| Baseline deployment digest | `PENDING` |
-| DiffSynth commit | `PENDING` |
-| Base-model asset manifest digest | `PENDING` |
-| Checkpoint path / SHA-256 / size | `PENDING` |
-| LoRA / QuantityEncoder tensor and parameter counts | `PENDING` |
-| GPU 型号、数量与总训练时间 | `PENDING` |
-| training / inference seed | `42 / 42` |
-| coverage / integrity issues | `PENDING` |
+| Frozen bundle | `1.0.0` |
+| Execution-time benchmark HEAD（run manifest 未单独密封） | `918e9f7` |
+| Hardened summary / v2 evaluator commit | `15b4a0b` |
+| Dataset digest | `be5ea8880be3cf8e0d0d316ee025cf02905ef5aeb544f3df5f4b966e5e14782d` |
+| TaskInstance digest | `a0f1e35c5c8401e39092e186c0a73f40817a4dfdbc1e36efa4bfb127032826ab` |
+| Baseline / deployment digest | `68af559e...e3423 / 5fce28e4...935dca` |
+| DiffSynth commit | `fb337fbb90945ff829de69dbd44ded618f73e889` |
+| Base-model asset manifest SHA-256 | `5ca3e1387969fcfe68a7336e062c611e9b99ec6504bccb17edcd16c590984eb7` |
+| Checkpoint | `step-1450.safetensors` / `d46f96d...b5e` / 175,649,752 bytes |
+| Trainable parameters | LoRA 80,609,280 + QuantityEncoder 3,589,888 = 84,199,168 |
+| Training | 8 GPU、10 epochs、1450 steps、seed 42 |
+| Predictions | 66/66 complete |
 
-### 8.2 Quantity Baseline 的 View A 分数
+AtomicRun 从 frozen 到 baseline stage 完成的间隔为 11,552.825 秒，但它包含准备、训练
+和该 bundle 的并行推理，不是纯训练耗时。`train.log` 文件跨度约 10,464 秒，也包含
+模型加载和 checkpoint 写入。GPU world size 与 assignment 已冻结；主机报告日核验为
+8 × NVIDIA A100-SXM4-40GB，GPU 型号本身没有写入不可变 run manifest。
 
-从 `evaluation/task_result.json` 的 `breakdown` 和 `by_scene` 原样抄录：
+### 8.2 当前 `scene_default_v2` alternate reevaluation
 
-| scene | ID jobs | ID score | OOD1 jobs | OOD1 score | scene macro score |
+下表的 `observed` 是部分覆盖描述性均值，不是 strict score：
+
+| scene | ID evaluated/expected | ID observed | OOD1 evaluated/expected | OOD1 observed | scene observed |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| pendulum | 8 | `PENDING` | 5 | `PENDING` | `PENDING` |
-| free_fall | 4 | `PENDING` | 0 | N/A | `PENDING` |
-| collision_1d | 3 | `PENDING` | 18 | `PENDING` | `PENDING` |
-| inclined_plane_slide | 6 | `PENDING` | 16 | `PENDING` | `PENDING` |
-| uniform_circular_motion | 2 | `PENDING` | 4 | `PENDING` | `PENDING` |
-| **Task macro** | **23** | 不跨 scene 微平均 | **43** | 不跨 scene 微平均 | `PENDING` |
+| pendulum | 8/8 | 0.568954 | 5/5 | 0.483335 | 0.526145 |
+| free_fall | 3/4 | 0.362257 | 0/0 | N/A | 0.362257 |
+| collision_1d | 1/3 | 0.290202 | 4/18 | 0.161618 | 0.225910 |
+| inclined_plane_slide | 6/6 | 0.578776 | 15/16 | 0.368440 | 0.473608 |
+| uniform_circular_motion | 2/2 | 0.374383 | 2/4 | 0.592492 | 0.483437 |
+| **Task** | **20/23** | 不跨 scene 微平均 | **26/43** | 不跨 scene 微平均 | **observed 0.414271** |
 
-### 8.3 三臂对照
+总计 46/66 成功评测，coverage `0.696970`，20 个 evaluator error，strict Task score
+`null`，`benchmark_score_publishable=false`。canonical v1 为 45/66、
+observed `0.413955`、strict `null`；v2 是不同 fingerprint 的并存结果，不能覆盖 v1。
 
-| Baseline | pendulum | free fall | collision | incline | circular | Task score |
+### 8.3 三臂对照状态
+
+| Baseline | pendulum | free fall | collision | incline | circular | Task |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| generic | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` |
-| structured text | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` |
-| quantity embedding | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` |
+| generic | 未运行 | 未运行 | 未运行 | 未运行 | 未运行 | 未运行 |
+| structured text | 未运行 | 未运行 | 未运行 | 未运行 | 未运行 | 未运行 |
+| quantity embedding | 0.526145 observed | 0.362257 observed | 0.225910 observed | 0.473608 observed | 0.483437 observed | 0.414271 observed；strict `null` |
 
-每个 scene score 是其所需 partition 的宏平均；Task score 再对五个 scene 宏平均。只有
-66/66 正式 jobs 全部成功评估时才填写正式 Task score。失败或缺失时保留
-`score=null`，另列 coverage 和失败原因。
+本次只有 single seed 42。由于 generic 与 structured-text 对照尚未运行，不能声称
+quantity-embedding 更优；OOD1 也包含若干环境与物理数值同时变化的混合因素。

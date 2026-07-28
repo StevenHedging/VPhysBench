@@ -154,6 +154,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 - [五场景评估协议](docs/EVALUATION.md)
 - [WAN2.2 Baseline](docs/WAN22.md)
 - [WAN2.2 物理量编码 Baseline](docs/WAN22_QUANTITY_EMBEDDING.md)
+- [WAN2.2 物理量编码五场景实验报告](docs/experiments/WAN22_QUANTITY_EMBEDDING_20260728.md)
 - [Cosmos3-Nano Baseline](docs/COSMOS3.md)
 - [运行、验证与故障排查](docs/OPERATIONS.md)
 
