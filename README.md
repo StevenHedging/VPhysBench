@@ -33,10 +33,13 @@ sealed BaselineTaskInstance
 - View A：训练或微调后评测数值 ID 与环境 OOD1。
 - View B：不训练，按确定性分组直接评测全部 case。
 - `finetune_eval/direct_eval × generic/physics` 四种原子任务。
-- Baseline 私有 DataAdapter，支持模型原生文本、首帧、时空规格和物理信息注入。
+- 可插拔 Baseline 私有 DataAdapter；所有模式有语言文本，物理可走文本、token、轨迹、
+  mask、flow 或代理视频等模型原生通道。
 - 三档自注册 Baseline：submission、managed（默认）与高级 command。
-- 标准 I2V/T2V 由公共 compiler 接管；新模型通常只需 manifest 和薄 driver。
-- 便携实现指纹与机器部署指纹分离，代码、profile、checkpoint 均可追踪。
+- T2V/I2V/V2V 由公共 compiler 与 input contract 接管；新模型通常只需 manifest、
+  adapter 和薄 driver。
+- 便携实现指纹与机器部署指纹分离；代码/profile 自动或显式入指纹，checkpoint
+  通过声明的 revision/hash 审计。
 - 五个 scene-local evaluator，以物理状态相似度作为正式分数。
 - Jensen 风格物理主体 IoU 曲线，以及场景专属几何或实例诊断。
 - Task 级严格 coverage：缺失 case 不会被静默计零，也不会被部分均值掩盖。
@@ -139,13 +142,19 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   baseline init my_i2v --backend managed-i2v
 
+# 标准 V2V 协议模板：要求 Dataset 提供独立 input_video，禁止使用 GT/reference
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline init my_v2v --backend managed-v2v
+
 # 已有视频：生成 output-only submission Bundle
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   baseline init my_outputs --backend submission
 ```
 
-managed 与 submission 复用 Benchmark 的 canonical plan、五阶段 DataAdapter、TaskInstance
+managed 与 submission 复用 canonical plan、DataAdapter input contract、TaskInstance
 seal、prediction 组装和 run-local 归档；复杂训练仍可使用 v3 command 接口。
+当前正式 3.0.0 release 的 214 个 case 尚无 `assets.input_video`，因此 V2V 模板需在
+增加独立条件视频资产后才能用于正式任务。
 
 对已有 AtomicRun 重新评估：
 

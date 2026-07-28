@@ -22,8 +22,8 @@ Benchmark 提供三档接口：
 | kind | schema | 适用情况 | 需要实现 |
 | --- | --- | --- | --- |
 | `submission` | `4.0` | 模型已在外部生成完整视频，只需要统一评估 | manifest + submission JSONL |
-| `managed` | `4.0` | 标准 T2V/I2V direct evaluation | manifest + 薄 driver |
-| `command` | `3.0` | 微调、训练、复杂多进程或特殊模型原生输入 | 完整 command endpoint |
+| `managed` | `4.0` | 文本条件 T2V/I2V/V2V、token/轨迹/mask/flow 等控制 | manifest + adapter + 薄 driver |
+| `command` | `3.0` | 微调、训练或完全自定义的多进程生命周期 | 完整 command endpoint |
 
 选择顺序：
 
@@ -31,8 +31,8 @@ Benchmark 提供三档接口：
 已经有完整预测视频？
 ├── 是：submission
 └── 否
-    ├── 标准 T2V/I2V 推理：managed
-    └── 训练、微调或复杂控制流：command
+    ├── direct evaluation：managed
+    └── 训练、微调或自定义生命周期：command
 ```
 
 推荐原则：
@@ -140,8 +140,14 @@ cp \
   baselines/my_custom_i2v/baseline.local.json
 ```
 
-当前脚手架直接支持 `managed-i2v`。纯 T2V 模型可以先生成该模板，再按本文 T2V
-小节修改 preset 和 driver。
+脚手架直接支持 `managed-i2v` 和 `managed-v2v`：
+
+```bash
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline init my_custom_v2v --backend managed-v2v
+```
+
+纯 T2V 模型可以先生成 I2V 模板，再把 preset 与 driver 改为 T2V。
 
 ### 3.3 `baseline.json` 完整示例
 
@@ -166,6 +172,8 @@ cp \
   "capabilities": {
     "task_families": ["direct_eval"],
     "conditioning": ["generic", "physics"],
+    "generation_modes": ["i2v"],
+    "physics_representations": ["structured_text"],
     "train": false,
     "finetune": false,
     "generate": true
@@ -181,6 +189,7 @@ cp \
     "cuda_visible_devices": "0"
   },
   "adapter": {
+    "kind": "standard",
     "preset": "standard_i2v_v1",
     "profile_set": "five_scene_i2v_v1",
     "first_frame_policy": "require_asset",
@@ -258,10 +267,11 @@ Managed 固定使用：
 }
 ```
 
-driver 必须是 Bundle 内相对路径，不能使用绝对路径或 `../`。driver 会自动进入
-portable bundle digest，不需要重复写入 `fingerprint_paths`。
+driver 必须是 Bundle 内相对路径，不能使用绝对路径或 `../`。schema v4 Bundle 中
+所有 `.py`（driver、adapter 及相对导入 helper）会自动进入 portable bundle digest，
+不需要重复写入 `fingerprint_paths`。
 
-其他影响输出的 Bundle-local 文件应显式登记：
+其他影响输出的 Bundle-local 非 Python 文件应显式登记：
 
 ```json
 {
@@ -298,14 +308,17 @@ scene 提供 spatial profile。
 {
   "task_families": ["direct_eval"],
   "conditioning": ["generic", "physics"],
+  "generation_modes": ["i2v"],
+  "physics_representations": ["structured_text"],
   "train": false,
   "finetune": false,
   "generate": true
 }
 ```
 
-不要为普通 direct driver 声明 `finetune_eval`。如果模型只支持 generic prompt，可以
-只声明 `["generic"]`。
+不要为普通 direct driver 声明 `finetune_eval`。`conditioning` 是 Benchmark 实验臂，
+`generation_modes` 是生成范式，`physics_representations` 是注入载体，三者不可混用。
+Python adapter 必须显式声明后两项。
 
 #### `model`
 
@@ -371,14 +384,16 @@ Managed runtime 当前提供：
 ```text
 standard_i2v_v1
 standard_t2v_v1
+standard_v2v_v1
 ```
 
 它统一负责：
 
 - family、conditioning 和 scene capability 校验；
-- generic/physics prompt；
-- physics 使用字段审计；
-- first-frame 来源；
+- 必需的语言文本 binding；
+- generation mode、媒体和 physics channel 审计；
+- generic/physics 信息访问隔离；
+- 首帧或独立条件视频来源；
 - scene spatial profile；
 - temporal profile；
 - adaptation fingerprint；
@@ -395,18 +410,9 @@ standard_t2v_v1
 }
 ```
 
-支持的首帧策略：
-
-```text
-require_asset
-asset_or_reference_frame0
-```
-
-`require_asset` 要求 `case.assets.first_frame` 存在。
-`asset_or_reference_frame0` 允许在缺失首帧时从 physics reference 第 0 帧确定性提取。
-
-`StandardI2VCLIDriver` 当前只直接支持真实 `first_frame_asset`。如果使用 fallback
-策略，应在自定义 driver 中实现 frame-0 提取，并把派生图像写入 run 或内容寻址 cache。
+`first_frame_policy=require_asset` 要求 `case.assets.first_frame` 存在。旧 manifest 的
+`asset_or_reference_frame0` 仍可被读取，但执行语义已收紧为 `require_asset`，不会再把
+GT/reference 的第 0 帧当输入。
 
 #### T2V
 
@@ -418,6 +424,70 @@ asset_or_reference_frame0
 ```
 
 T2V 不声明 `first_frame_policy`，driver 也不读取 `native_inputs.vision` 中的首帧。
+
+#### V2V
+
+```json
+{
+  "kind": "standard",
+  "preset": "standard_v2v_v1",
+  "profile_set": "five_scene_i2v_v1",
+  "video_asset_key": "input_video"
+}
+```
+
+对应 capability 必须声明 `"generation_modes": ["v2v"]`。`video_asset_key` 必须指向
+Dataset 中独立的 conditioning video；`reference_video`、
+`physics_reference_video` 和 `source_video` 被硬拒绝。普通 CLI 可复用
+`StandardV2VCLIDriver`。
+
+当前正式 3.0.0 release 的 214 个 case 都没有 `assets.input_video`，因此该 preset
+和 `managed-v2v` 脚手架目前是协议模板，不能直接编译官方任务。应先通过 Dataset
+provenance 流程增加独立条件视频；不要把 GT 重命名为 `input_video`。
+
+#### Python adapter 与 input contract
+
+非文本物理注入无需退回 command 接口：
+
+```json
+{
+  "adapter": {
+    "kind": "python",
+    "entrypoint": "adapter.py",
+    "config": {}
+  }
+}
+```
+
+`adapter.py` 导出 `create_adapter(bundle) -> DataAdapter`。所有 Bundle-local Python
+helper 自动进入 digest；Bundle 外共享 solver/encoder 文件由 `dependency_paths()`
+声明。loader 支持正常 package 相对导入。每条 v4 adaptation 必须带
+`input_contract`，而模型私有 tensor/control 继续放在 opaque `native_inputs`；
+schema v3 command adaptation 为兼容旧 endpoint 可保持 opaque：
+
+```json
+{
+  "schema_version": "1.0",
+  "generation_mode": "i2v",
+  "text": {"required": true, "binding": "native_inputs.text.prompt"},
+  "media_channels": [{
+    "id": "initial_frame",
+    "kind": "image",
+    "asset_key": "first_frame",
+    "binding": "native_inputs.vision.first_frame_asset"
+  }],
+  "physics_channels": [],
+  "asset_access": ["first_frame"]
+}
+```
+
+大型 mask/flow/trajectory/proxy-video 使用
+`artifact://sha256/<64-hex>` 或 `cache://sha256/<64-hex>`，并声明
+`content_sha256`、`producer_fingerprint` 和 `source_digest`，不要内嵌进
+TaskInstance JSON。核心会校验 URI/content identity 与 active producer，但当前没有
+公共 artifact store；custom driver 必须解析实体、复验实际字节 SHA-256，并核验其
+`source_digest`。`StandardV2VCLIDriver` 只处理 Dataset-origin 视频；derived proxy
+video 需要 custom driver。
 
 #### Spatial profile
 
@@ -511,6 +581,10 @@ prompt = job["native_inputs"]["text"]["prompt"]
 不要在 driver 中重新读取 `case["physics"]` 并拼接 prompt，否则会破坏条件对照和
 fingerprint 审计。
 
+这里的隔离面向正常、受审计的 Baseline 实现：Python adapter/driver 是受信任
+Bundle 代码。公共 compiler 不提供结构化 physics 或 GT/reference/provenance，但
+case ID、资产路径仍可能带有语义；当前不承诺抵御恶意扩展的严格信息流推断。
+
 ## 4. 本机配置
 
 `baseline.local.example.json` 可以提交：
@@ -558,7 +632,9 @@ deployment digest
 = 应用 baseline.local.json 后的 manifest
 ```
 
-因此 driver、profile、checkpoint、Python 和 GPU 配置变化都会被身份系统捕获。
+因此 Bundle Python、显式登记的 profile/配置和 local Python/GPU 配置变化都会进入
+身份。checkpoint 路径变化会改变 deployment digest，但路径不等于内容身份；模型
+Bundle 仍必须保存 revision、identity file 或 checkpoint SHA-256。
 
 ## 5. Driver 实现
 
@@ -572,6 +648,7 @@ deployment digest
   --image PATH
   --output PATH
   --seed INT
+  [--job-spec PATH]
 ```
 
 `driver.py` 只需：
@@ -589,6 +666,7 @@ runner：
   "type": "standard_i2v_cli_v1",
   "config": {
     "command": ["python", "inference.py"],
+    "job_spec_arg": "--job-spec",
     "extra_args": [
       "--num-inference-steps",
       "50"
@@ -596,6 +674,13 @@ runner：
   }
 }
 ```
+
+`job_spec_arg` 是向后兼容的 opt-in：新脚手架默认开启，job JSON 含
+`native_inputs.generation_shape` 对应的宽高、FPS 和帧数；删除该字段时，v1 driver
+仍只发送旧的 prompt/image/output/seed 四类参数。外部程序应把 job spec 视为只读。
+
+`StandardV2VCLIDriver` 使用 `--video` 代替 `--image`，并始终发送
+`--job-spec PATH`。
 
 适合：
 
@@ -630,7 +715,10 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from physbench.baseline_runtime import DirectManagedDriver
+from physbench.baseline_runtime import (
+    DirectManagedDriver,
+    resolve_dataset_asset_path,
+)
 from physbench.io import sha256_file, write_json
 
 
@@ -694,9 +782,16 @@ class Driver(DirectManagedDriver):
                 f"job has no first-frame asset: {job['job_id']}"
             )
 
-        first_frame = (
-            source_root / first_frame_asset
-        ).resolve()
+        if (
+            first_frame_asset
+            != case["assets"].get("first_frame")
+        ):
+            raise ValueError("unauthorized first-frame binding")
+        first_frame = resolve_dataset_asset_path(
+            source_root,
+            first_frame_asset,
+            label="first frame",
+        )
         if not first_frame.is_file():
             raise FileNotFoundError(
                 f"first frame not found: {first_frame}"
@@ -809,12 +904,17 @@ job_id
 case_id
 baseline_id
 conditioning
-prompt_profile_id
 evaluation_partition
 status
 video_path
 seed
+prompt_profile_id
+evaluation_reference_video
+visual_reference_video
 ```
+
+后三个字段由 managed runtime 禁止：公共分组使用 `conditioning`，Evaluator 从冻结
+Dataset 自行解析 reference。
 
 ### 5.4 多 GPU 或常驻 worker
 
@@ -1382,8 +1482,8 @@ driver 模块必须导出名为 `Driver` 的 `ManagedDriver` 或 `DirectManagedD
 
 ### `managed I2V case has no first-frame asset`
 
-使用了 `require_asset`，但 case 没有首帧。检查 Dataset，或切换到
-`asset_or_reference_frame0` 并实现确定性 frame-0 提取。
+该 case 没有独立首帧资产。应先在 Dataset provenance 流程中生成并登记
+`assets.first_frame`；managed evaluation 不允许从 GT/reference 提取输入帧。
 
 ### `managed driver changed or omitted canonical job_id`
 

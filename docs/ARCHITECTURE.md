@@ -66,9 +66,9 @@ baselines/*/baseline.json
 
 ```text
 submission v4 ─┐
-               ├─> ManagedTaskBuilder + StandardDataAdapter ─> TaskInstance
+               ├─> adapter loader ─> DataAdapter interface ─> ManagedTaskBuilder
 managed v4 ────┘                     │
-                                     └─> submission importer / managed driver
+                                     └─> TaskInstance ─> importer / driver
 
 command v3 ──────> isolated command host ─> Baseline-owned TaskBuilder/executor
 ```
@@ -80,9 +80,10 @@ command v3 ──────> isolated command host ─> Baseline-owned TaskBui
 
 ### Managed v4
 
-是标准 T2V/I2V 的默认接口。Bundle 声明 adapter、runner 和一个薄 driver。核心统一
-处理 capability、prompt 隔离、五阶段 adaptation、计划展开、seal、identity 和
-prediction 公共字段；driver 只处理模型专有 payload、命令和 checkpoint 身份。
+是 text-conditioned T2V/I2V/V2V 与结构化控制的默认接口。Bundle 可选内置
+`standard` adapter，也可提供 Bundle-local Python adapter。核心统一处理 capability、
+条件隔离、input contract、计划展开、seal 和 identity；`native_inputs` 与模型执行仍
+由 Baseline 持有。
 
 ### Command v3
 
@@ -93,6 +94,11 @@ prediction 公共字段；driver 只处理模型专有 payload、命令和 check
 这三档都输出同一种 TaskInstance 和 prediction contract，因此 evaluator 不需要知道
 Baseline 的 kind。
 
+扩展点遵循开闭原则与依赖倒置：新增物理注入 representation 时实现 `DataAdapter`
+接口，新增模型执行方式时实现薄 `Driver`；Dataset、Task planner、canonical plan 和
+Evaluator 依赖公共 contract，不依赖具体模型名称。只有出现新的任务语义或正式评分
+协议时，才应修改核心层。
+
 ## 4. 身份与依赖指纹
 
 每次运行冻结三层身份：
@@ -102,9 +108,11 @@ Baseline 的 kind。
 3. `TaskBuilder fingerprint`：adapter、runner/trainer、Bundle/deployment 以及共享
    runtime 和外部关键执行文件的指纹。
 
-managed driver 自动纳入 bundle digest。共享 prompt、WAN engine、生成脚本和 Cosmos
-外部 inference entry 纳入 runtime dependency fingerprint。checkpoint 使用稳定
-revision、identity files 或完整 SHA-256 验证。
+schema v4 Bundle 中所有 Python 文件自动纳入 bundle digest；JSON、shell、扩展模块等
+非 Python 文件由 `fingerprint_paths` 显式登记。Bundle 外共享 prompt、solver、
+生成脚本和 inference entry 由 `dependency_paths()` 纳入 TaskBuilder fingerprint。
+checkpoint 路径本身不代表内容身份，必须另外声明稳定 revision、identity file 或完整
+SHA-256。
 
 `baseline.local.json` 只允许覆盖 `model` 与 `runtime`。portable capability、adapter、
 implementation、ID 和版本不能由本机配置改变。
@@ -117,30 +125,50 @@ implementation、ID 和版本不能由本机配置改变。
 DatasetSnapshot + TaskSpec
 → Benchmark plan_atomic_task
 → capability/scene/conditioning validation
-→ StandardDataAdapter.adapt_case
+→ injected DataAdapter.adapt_case
+→ input_contract validation
 → adaptations + inference jobs
 → training/infer/evaluate operation DAG
 → cache bindings
 → BaselineTaskInstance.seal
 ```
 
-`StandardDataAdapter` 目前提供 `standard_i2v_v1` 和 `standard_t2v_v1` preset。五个审计
-阶段是：
+内置 `StandardDataAdapter` 提供 `standard_t2v_v1`、`standard_i2v_v1` 和
+`standard_v2v_v1`。自定义 adapter 通过 `adapter.kind=python` 和
+`create_adapter(bundle)` 接入；entrypoint 自动进入 Bundle digest。所有 adapter 都输出
+轻量 `input_contract`：
 
-1. spatial：scene profile；
-2. temporal：FPS、帧数与模型合法长度；
-3. paradigm：T2V 或 I2V、首帧来源；
-4. text：generic scene/process 描述；
-5. physics：physics 分支使用的白名单物理量。
+```text
+generation_mode + required text binding
++ media channels + physics channels
++ declared asset access
+→ opaque native_inputs
+```
 
-generic prompt resolver 只接收空物理字典，因此物理标注变化不能改变 generic
-`native_inputs`。physics 分支记录使用字段、值和单位。spatial/temporal/paradigm 的
-materialization fingerprint 与 prompt fingerprint 分离，换 conditioning 不会无意义
-重建媒体 cache。
+`conditioning=generic|physics` 只表示 Benchmark 信息访问臂，不表示物理注入载体。
+`generation_mode=t2v|i2v|v2v|hybrid` 与
+`physics representation=structured_text|trajectory|mask|flow|...` 是两个独立维度。
+所有 Baseline 必须有非空语言文本；physics 可以走文本、token、轨迹、mask、flow、
+force field 或代理视频等模型原生通道。
 
-managed 标准 envelope 是 Benchmark 可审计的数据结构，不宣称任意模型的
-`native_inputs` 都完全 opaque；复杂 token/tensor/control-stream 模型应使用自定义
-ManagedDriver 或 command 接口。
+compiler 不向 generic adapter 提供结构化 `case.physics`。physics adapter 只能登记
+`annotated=true` 的字段，且必须实际使用至少一个参数；每个 representation 必须由
+capability 声明。生成范式的媒体集合是严格的：T2V 无媒体、I2V 只有图像、V2V 只有
+视频，hybrid 同时含图像和视频。
+
+大型 control 只允许
+`artifact://sha256/<digest>` / `cache://sha256/<digest>` 引用，不能把数组复制进
+TaskInstance。核心校验 URI/content digest 一致以及 producer 属于当前 adapter、
+materializer 或 TaskBuilder；`source_digest` 是 Baseline 声明的上游身份。当前没有
+公共 artifact store，实际解析和字节 SHA-256 复验由 custom driver 负责。
+
+### 受信任扩展边界
+
+Bundle-local Python adapter/driver 与 command endpoint 都是受信任代码，并在 Benchmark
+进程或其授权子进程中执行。当前隔离保证是“公共 compiler 不提供结构化 physics、
+GT/reference/provenance，且运行前重验 contract”，不是针对恶意扩展的严格信息流
+安全：case ID 和资产路径仍可能编码物理值。若未来接受盲测第三方代码，应增加
+run-local opaque case handle、无语义媒体别名和进程级文件系统隔离。
 
 ## 6. Driver 与执行层
 
@@ -158,6 +186,17 @@ prepare_job
 子类不能覆盖 job、case、conditioning、partition、seed、status 和 output path。需要
 常驻多 GPU worker 时可覆盖 `execute_jobs`，需要完全不同的训练生命周期时可实现
 `ManagedDriver.run_task` 或使用 command。
+
+普通 `DirectManagedDriver` 只收到 contract 声明的资产和非物理元数据；direct-eval
+TaskInstance 不携带 GT/reference/source-video 或 raw physics。V2V 必须使用显式
+`assets.input_video`（或同类独立 conditioning key），不得回退到
+`reference_video`、`physics_reference_video` 或 `source_video`。高级
+`ManagedDriver.run_task` 是更宽的生命周期扩展点；所有 Bundle Python 代码均属于上述
+受信任边界。
+
+当前正式 3.0.0 release 的 214 个 case 都没有 `assets.input_video`。因此
+`managed-v2v` 目前是协议脚手架，只有 Dataset 增加独立条件视频（或 custom driver
+解析经审计的 derived artifact）后才能编译正式任务。
 
 当前复用关系：
 
@@ -201,8 +240,12 @@ baseline_payload
 instance_digest
 ```
 
-seal 是 canonical JSON SHA-256。TaskInstance 返回 fresh object，执行器不能通过内存引用
-修改冻结实例。运行时再次验证当前部署、TaskBuilder、DataAdapter 和 instance digest。
+seal 是 canonical JSON SHA-256 完整性校验，不是外部签名。TaskInstance 返回 fresh
+object，执行器不能通过内存引用修改冻结实例。运行时再次对齐 canonical plan/job、
+train/eval adaptation、input contract、runner/trainer/cache recipe、当前部署、
+TaskBuilder、DataAdapter 和 instance digest。`source.asset_root` 仍来自受信任的本次
+compiler/orchestrator；跨信任域导入实例时应重新绑定 active Dataset，而不能只重新
+计算 seal。
 
 ## 8. AtomicRun 与写入边界
 
@@ -269,7 +312,7 @@ G15 的 source-aware audit 发现 176/214 个源 case 重叠，其中精确 case
 3. TaskSpec 不保存 Baseline 私有执行参数。
 4. Registry 不包含具体模型分支。
 5. Baseline 不能修改 canonical plan。
-6. generic 适配不能观察结构化物理标注。
+6. 公共 compiler 不向 generic 适配提供结构化物理标注。
 7. 构建与执行使用同一 Bundle/deployment identity。
 8. checkpoint 和所有输出相关依赖必须可追踪。
 9. prediction 视频必须 run-local。
@@ -278,3 +321,5 @@ G15 的 source-aware audit 发现 176/214 个源 case 重叠，其中精确 case
 12. reference 自比的正式 case score 必须精确为 1。
 13. 外部数据变换必须有可重放 provenance。
 14. 训练重叠必须按 source identity 审计。
+15. 所有生成模式必须声明非空语言文本 binding。
+16. direct-eval 的模型输入不得绑定 evaluator reference；V2V 只能使用独立条件视频。

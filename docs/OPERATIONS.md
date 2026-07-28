@@ -132,14 +132,22 @@ done
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   baseline init my_i2v --backend managed-i2v
 
+# 标准 V2V 协议模板
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline init my_v2v --backend managed-v2v
+
 # output-only submission Bundle
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   baseline init my_outputs --backend submission
 ```
 
-脚手架生成后会立即经过正式 Registry 校验。managed 的通用 CLI driver 接受
-`--prompt/--image/--output/--seed`；不满足该契约时只需替换 Bundle 内的
-`driver.py`，无需修改 Registry。
+脚手架生成后会立即经过正式 Registry 校验。I2V 通用 CLI 的稳定 v1 参数是
+`--prompt/--image/--output/--seed`；新模板通过 `job_spec_arg` 额外发送
+`--job-spec`。V2V 使用 `--prompt/--video/--output/--seed/--job-spec`。不满足该
+契约时只需替换 Bundle 内的 adapter/driver，无需修改 Registry。
+
+正式 3.0.0 release 当前没有 `assets.input_video`，V2V 模板不能直接运行官方任务；
+必须先增加独立条件视频，禁止用 GT/reference 冒充。
 
 ## 6. 编译任务
 
@@ -254,8 +262,8 @@ Python 不是协议 endpoint Python。
 ### `managed baseline driver not found` / `managed driver must export Driver`
 
 `implementation.driver` 必须是 Bundle 内相对路径，且模块必须导出
-`ManagedDriver` 子类 `Driver`。普通 direct-eval I2V 可直接 re-export
-`StandardI2VCLIDriver`。
+`ManagedDriver` 子类 `Driver`。普通 direct-eval I2V/V2V 可分别 re-export
+`StandardI2VCLIDriver` / `StandardV2VCLIDriver`。
 
 ### `submission coverage mismatch`
 
@@ -314,7 +322,17 @@ reference mask 作为 prediction mask。
 这是严格 coverage 的预期行为。查看 `status_counts` 和缺失 case；不要使用
 `observed_mean_score` 冒充正式分数。
 
-## 11. 发布检查单
+## 11. 运行产物保留与清理
+
+- 可删除：失败的 smoke、`execute=false` dry-run、import-validation 临时 run、
+  `__pycache__`/`*.pyc`，前提是没有发布报告按 run ID 引用。
+- 应保留：当前 `baseline.local.json` 引用的 checkpoint、正式可比 AtomicRun、
+  昂贵训练产物，以及 Dataset provenance/alignment 冻结证据。
+- 不要整体清空 `runs/`：先从 Bundle local config 解析 checkpoint 依赖并校验 SHA-256。
+- 长期 checkpoint 应迁入稳定模型制品库；`runs_v2/` 只承担不可变 AtomicRun，
+  `results/` 只承担跨 run 汇总。
+
+## 12. 发布检查单
 
 1. 工作树只包含本次有意修改。
 2. Dataset hash 验收通过。

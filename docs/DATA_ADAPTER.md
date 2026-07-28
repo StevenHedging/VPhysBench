@@ -3,12 +3,12 @@
 ## 1. 定位
 
 DataAdapter recipe 属于 Baseline，不属于 Dataset。它将冻结 case 转换为模型原生
-输入，同时保证媒体派生可重现、generic/physics 条件隔离可验证。
+输入，同时使媒体派生与 generic/physics 条件使用可审计。
 
-schema v4 managed/submission Bundle 使用公共 `StandardDataAdapter` 执行声明式 recipe；
-schema v3 command Bundle 通过 `CommandDataAdapterProxy` 调用模型族实现。两条路径都
-返回同一种 adaptation record，并把 adapter、profile 和共享实现纳入 fingerprint。
-Benchmark 不把模型专有 runner payload 写入 Dataset。
+schema v4 managed/submission Bundle 通过 loader 注入 `DataAdapter`：普通 Baseline
+使用内置 `StandardDataAdapter`，结构化控制 Baseline 可提供 Bundle-local Python
+adapter。schema v3 command Bundle 继续通过 `CommandDataAdapterProxy` 调用模型族
+实现。Benchmark 不把模型专有 runner payload 写入 Dataset。
 
 ```text
 frozen case + frozen job + adapter config
@@ -27,22 +27,26 @@ frozen case + frozen job + adapter config
 
 ### 时间适配
 
-- 按物理时间读取视频；
-- 处理模型 FPS 和 `4n+1` 等帧数约束；
-- 保存 source indices、时间戳和截取区间；
+- 声明模型 FPS、目标帧数和 `4n+1` 等合法长度；
+- 保存生成覆盖区间与变换 recipe；
+- 只处理已授权的条件媒体，不读取 evaluator reference；
 - 不把 GT 帧注入生成结果。
 
-“可解码 reference 帧数”和“生成视频需要覆盖的时间戳数”必须分开：前者向下取合法
-帧数以禁止伪造 source frame，后者向上取合法帧数以保证 prediction 的最后时间戳覆盖
-评估区间。只比较容器 duration 会产生一帧偏差。
+reference 解码、公共 timeline 和 reference-bounded sampling 属于 Evaluator，不属于
+DataAdapter。Adapter 只需保证 prediction 的最后时间戳覆盖任务要求的物理区间。
 
-### 输入范式
+### 输入范式与审计契约
 
 - T2V：文本；
 - I2V：文本与首帧；
-- TI2V：文本、首帧及模型原生附加条件。
+- V2V：文本与独立条件视频；
+- hybrid：文本，同时包含图像和视频。
 
-首帧优先使用 `assets.first_frame`；缺失时只能从 canonical reference 第 0 帧确定性提取。
+所有模式都必须输出 `input_contract`，声明 generation mode、非空文本 binding、媒体
+channel、physics channel 和资产访问白名单。I2V 必须使用 `assets.first_frame`；不再
+从 reference 第 0 帧补首帧。V2V 必须使用显式条件资产（推荐
+`assets.input_video`），禁止使用 `reference_video`、`physics_reference_video` 或
+`source_video`。
 
 ### 文本适配
 
@@ -52,24 +56,37 @@ frozen case + frozen job + adapter config
 
 ### 物理注入
 
-仅 physics conditioning 可读取结构化 `case.physics`。注入必须：
+`generic|physics` 是信息访问策略，不是注入方法。公共 compiler 不向 generic adapter
+提供结构化 `case.physics`；仅 physics conditioning 可读取结构化标注。注入必须：
 
 - 只使用 profile 白名单字段；
 - 保留数值与单位；
 - 记录字段路径和渲染结果；
 - 写入 Baseline 声明的 native target；
+- 实际使用至少一个 `annotated=true` 参数；
 - 不修改公共 job 或 Dataset。
+
+representation 是开放字符串，例如 `structured_text`、`numeric_tokens`、
+`trajectory`、`mask`、`optical_flow`、`force_field` 或 `proxy_video`。大型控制内容
+必须用 `artifact://sha256/<digest>` / `cache://sha256/<digest>` URI 引用，
+TaskInstance 只冻结 binding 与 provenance。核心验证声明格式和 active producer；
+custom driver 负责解析实体、复验实际字节 SHA-256，并验证其自报 `source_digest`。
 
 ## 3. Generic 隔离
 
-generic 分支的安全边界不是“最后 prompt 没出现数字”，而是适配阶段不能访问 physics。
+generic 分支的公共契约不是“最后 prompt 没出现数字”，而是 compiler 不提供结构化
+physics 或 GT/reference/provenance。
 
 测试要求：
 
-1. 给 generic adapter 传入可监控 case 视图；
-2. 若访问 `physics` 立即失败；
-3. generic 与 physics 使用相同媒体 cache key；
-4. 两者只在条件 artifact/fingerprint 上不同。
+1. generic adapter 输入没有 `physics` key；
+2. physics adapter 只看到 `annotated=true` 的字段；
+3. 内置共享媒体 recipe 在 generic/physics 两臂使用相同 materialization key；
+4. 每条 adaptation 的字段、数值、单位、channel 和 binding 都可审计。
+
+Python adapter/driver 是受信任 Bundle 代码。case ID 和资产路径可能带有语义，因此当前
+不承诺对恶意扩展的严格 non-interference；第三方盲测需要另加 opaque handle、无语义
+资产别名和进程隔离。
 
 ## 4. 内容寻址 cache
 
@@ -87,8 +104,9 @@ source asset SHA-256
 必须报错，不能覆盖。
 
 完整 DataAdapter fingerprint 覆盖五个阶段；materialization fingerprint 只覆盖空间、
-时间和输入范式阶段。Bundle-local 文件进入 portable digest，共享实现/profile 进入
-TaskBuilder runtime dependency fingerprint。因此文本变化仍会使
+时间和输入范式阶段。schema v4 Bundle-local Python 文件自动进入 portable digest；
+其他 Bundle-local 文件用 `fingerprint_paths`，Bundle 外共享实现/profile 用
+`dependency_paths()`。因此文本变化仍会使
 TaskBuilder/TaskInstance 身份变化，但不会无意义地重建媒体 cache。
 
 ## 5. WAN2.2 当前配置

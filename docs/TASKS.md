@@ -43,7 +43,7 @@ Registry 自动扫描 `baselines/*/baseline.json`。具体模型名不进入 Reg
 | kind | schema | 适用情况 | 维护者需要实现 |
 | --- | --- | --- | --- |
 | `submission` | `4.0` | 已经生成好视频，只做统一评估 | manifest + submission JSONL |
-| `managed` | `4.0` | 标准 T2V/I2V 推理；默认选择 | manifest + 薄 driver |
+| `managed` | `4.0` | T2V/I2V/V2V 与结构化控制；默认选择 | manifest + adapter + 薄 driver |
 | `command` | `3.0` | 训练、多进程控制、特殊输入协议 | 完整四操作 endpoint |
 
 `schema_version=3.0` command 是稳定的高级接口，没有废弃。`schema_version=4.0`
@@ -111,12 +111,12 @@ manifest 的关键部分：
 }
 ```
 
-`StandardDataAdapter` 统一完成：
+managed compiler 通过接口注入内置或 Bundle-local `DataAdapter`，统一完成：
 
 - scene capability 与任务类型检查；
-- generic/physics prompt 解析和物理字段使用审计；
+- 必需文本、媒体与 physics channel 审计；
 - generic 分支不读取 `case.physics`；
-- I2V 首帧来源、空间 profile 与时间规格；
+- T2V/I2V/V2V 来源、空间 profile 与时间规格；
 - adaptation fingerprint、媒体 materialization fingerprint；
 - canonical jobs、operation DAG、cache binding 和 TaskInstance seal。
 
@@ -136,8 +136,9 @@ class Driver(DirectManagedDriver):
 
 `prepare_job` 返回的 `output_video` 必须在
 `<run_dir>/predictions/` 内。公共 runtime 负责写 job spec、prediction 公共字段、
-GT/reference 绑定、planned/staged/complete 状态和 run-local 路径检查。driver 返回值
-不能覆盖 job ID、case ID、conditioning、seed、status 或 video path。
+planned/staged/complete 状态和 run-local 路径检查；Evaluator 从冻结 Dataset 解析
+GT/reference。driver 返回值不能覆盖 job ID、case ID、conditioning、seed、status、
+video path 或任何 reference 字段。
 
 对于常见的命令行 I2V 模型，可直接复用
 `StandardI2VCLIDriver`。其外部程序契约是：
@@ -145,6 +146,11 @@ GT/reference 绑定、planned/staged/complete 状态和 run-local 路径检查�
 ```text
 <command> --prompt TEXT --image PATH --output PATH --seed INT [extra_args...]
 ```
+
+新脚手架还设置 `runner.config.job_spec_arg="--job-spec"`，把包含 scene-specific
+宽高、FPS 和帧数的 job JSON 传给外部程序。为兼容既有
+`standard_i2v_cli_v1`，删除该配置后仍保持旧四参数契约。V2V CLI 使用
+`--video PATH`，并始终传 `--job-spec PATH`。
 
 Bundle 的 `driver.py` 只需一行：
 
@@ -243,8 +249,8 @@ deployment digest
 = canonical(应用 baseline.local.json 后的 manifest)
 ```
 
-managed driver 总是自动进入 bundle digest，即使没有写进 `fingerprint_paths`。外部共享
-runtime、prompt profile 和执行脚本进入 TaskBuilder 的
+schema v4 Bundle-local Python 文件总是自动进入 bundle digest；其他本地文件由
+`fingerprint_paths` 登记。外部共享 runtime、prompt profile 和执行脚本进入 TaskBuilder 的
 `runtime_dependency_fingerprints`。本机 checkpoint、Python、模型根目录与 GPU 配置
 进入 deployment digest。
 
@@ -276,7 +282,9 @@ task_instance
 ```
 
 实例是 canonical JSON seal。修改 job、prompt、checkpoint、DAG、identity 或媒体绑定都会
-使 `instance_digest` 失效。执行前还会验证实例对应当前部署。
+使 `instance_digest` 失效。执行前还会验证 canonical job/adaptation/recipe 与当前
+部署。seal 是完整性 checksum，不是第三方签名；从外部信任域导入实例时仍需重新绑定
+active Dataset。
 
 ## 5. 新增和移除
 
@@ -289,6 +297,16 @@ task_instance
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   baseline init my_i2v --backend managed-i2v
 ```
+
+创建 managed V2V 模板：
+
+```bash
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline init my_v2v --backend managed-v2v
+```
+
+这是协议模板。正式 3.0.0 release 的 214 个 case 当前均无 `assets.input_video`；
+在 Dataset 增加独立条件视频前不能直接构建官方 V2V 任务。
 
 创建 output-only 模板：
 
