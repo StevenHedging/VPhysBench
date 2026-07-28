@@ -6,6 +6,8 @@ Baseline ID:
 wan22_ti2v_5b_lora_r32_quantity_embedding_v1
 ```
 
+Bundle version: `1.0.1`.
+
 This schema-v5 managed Baseline jointly fine-tunes a WAN2.2-TI2V-5B DiT
 LoRA and a small quantity encoder. It consumes the same first frame, Case
 prompt, and a registry-curated subset of annotated physical
@@ -75,11 +77,25 @@ The combined safetensors checkpoints contain both DiT LoRA tensors and
 WAN2.2-TI2V-5B topology: exactly 300 rank-32 A/B pairs (600 LoRA tensors,
 all 30 blocks × 10 targets) and exactly 19 QuantityEncoder tensors. Before
 inference, the checkpoint path, byte size, and SHA-256 must match the
-run-local schema-2 checkpoint manifest. The resolved checkpoint is verified
-again immediately before and after the actual safetensors load. This hash is
-an internal consistency check for a frozen AtomicRun, not an external
-authenticity signature: a publisher who can rewrite both the checkpoint and
-its run-local manifest can create a new self-consistent pair.
+run-local schema-2 checkpoint manifest. At the actual load boundary the worker
+opens the non-symlink checkpoint with `O_NOFOLLOW` where the platform provides
+it, reads the complete file from that one descriptor, hashes those bytes, and
+passes the same byte object to `safetensors.torch.load`. It never verifies one
+path read and then reopens the path for parsing, so a transient
+swap-and-restore cannot substitute different weights. This hash is an internal
+consistency check for a frozen AtomicRun, not an external authenticity
+signature: a publisher who can rewrite both the checkpoint and its run-local
+manifest can create a new self-consistent pair.
+
+This descriptor-bound load deliberately allocates one complete authenticated
+checkpoint byte buffer. The observed official rank-32 checkpoint is
+175,649,752 bytes (167.5 MiB). `safetensors.torch.load(bytes)` briefly
+materializes independent tensor backing while that input buffer still exists;
+an actual no-GPU parse measured about 304 MiB incremental peak RSS per worker
+(about 2.38 GiB if eight workers peak simultaneously), rather than only the
+167.5 MiB input-buffer size. The input buffer is explicitly dropped as soon as
+parsing returns, and all temporary CPU state is released after validation and
+LoRA fusion; video-generation memory is otherwise unchanged.
 
 The shuffled training DataLoader owns an explicit `torch.Generator` seeded
 from the trainer seed. The same sampler seed is recorded in

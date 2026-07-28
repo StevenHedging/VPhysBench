@@ -10,8 +10,12 @@ sentinel in the model prompt; the sentinel's contextual vector is replaced by
 
 from __future__ import annotations
 
+import errno
+import hashlib
 import math
+import os
 import re
+import stat
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable
@@ -19,7 +23,7 @@ from typing import Any, Iterable
 import torch
 from torch import nn
 
-from ..io import canonical_sha256, load_json, sha256_file
+from ..io import canonical_sha256, load_json
 
 
 QUANTITY_CHECKPOINT_PREFIX = "pipe.quantity_encoder."
@@ -563,21 +567,24 @@ def _validate_dit_lora_state_dict(
     return tuple(validated_targets)
 
 
-def verify_quantity_checkpoint_manifest(
+def _read_verified_quantity_checkpoint(
     checkpoint_path: str | Path,
     manifest_path: str | Path,
-) -> dict[str, Any]:
-    """Fail closed unless checkpoint bytes match their sealed run manifest."""
+) -> tuple[bytes, dict[str, Any]]:
+    """Read and verify the exact bytes later consumed by safetensors."""
 
-    checkpoint = Path(checkpoint_path).resolve()
+    checkpoint_argument = Path(checkpoint_path)
+    checkpoint_open_path = Path(
+        os.path.abspath(os.fspath(checkpoint_argument))
+    )
     manifest = Path(manifest_path).resolve()
-    if not checkpoint.is_file():
-        raise FileNotFoundError(f"quantity checkpoint not found: {checkpoint}")
     if not manifest.is_file():
         raise FileNotFoundError(
             f"quantity checkpoint manifest not found: {manifest}"
         )
     value = load_json(manifest)
+    if not isinstance(value, dict):
+        raise ValueError("quantity checkpoint manifest must be an object")
     if value.get("schema_version") != "2.0":
         raise ValueError(
             "quantity checkpoint manifest must use schema_version=2.0"
@@ -595,7 +602,19 @@ def verify_quantity_checkpoint_manifest(
     recorded_path = Path(recorded_checkpoint)
     if not recorded_path.is_absolute():
         recorded_path = manifest.parent / recorded_path
-    if recorded_path.resolve() != checkpoint:
+    try:
+        checkpoint_lstat = checkpoint_open_path.lstat()
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"quantity checkpoint not found: {checkpoint_open_path}"
+        ) from exc
+    if stat.S_ISLNK(checkpoint_lstat.st_mode):
+        raise ValueError(
+            "quantity checkpoint path must not be a symbolic link: "
+            f"{checkpoint_open_path}"
+        )
+    checkpoint = checkpoint_open_path.resolve(strict=True)
+    if recorded_path.resolve(strict=True) != checkpoint:
         raise ValueError(
             "quantity checkpoint path differs from its manifest: "
             f"job={checkpoint}, manifest={recorded_path.resolve()}"
@@ -617,35 +636,66 @@ def verify_quantity_checkpoint_manifest(
         raise ValueError(
             "quantity checkpoint manifest has no valid checkpoint_sha256"
         )
-    before = checkpoint.stat()
-    if before.st_size != expected_size:
-        raise ValueError(
-            "quantity checkpoint size differs from its manifest: "
-            f"expected={expected_size}, actual={before.st_size}"
-        )
-    actual_sha256 = sha256_file(checkpoint)
-    after = checkpoint.stat()
+
+    flags = os.O_RDONLY
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(checkpoint_open_path, flags)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise ValueError(
+                "quantity checkpoint path must not be a symbolic link: "
+                f"{checkpoint_open_path}"
+            ) from exc
+        if exc.errno == errno.ENOENT:
+            raise FileNotFoundError(
+                f"quantity checkpoint not found: {checkpoint_open_path}"
+            ) from exc
+        raise
+    with os.fdopen(descriptor, "rb", closefd=True) as handle:
+        before = os.fstat(handle.fileno())
+        if not stat.S_ISREG(before.st_mode):
+            raise ValueError(
+                "quantity checkpoint must be a regular file: "
+                f"{checkpoint_open_path}"
+            )
+        if before.st_size != expected_size:
+            raise ValueError(
+                "quantity checkpoint size differs from its manifest: "
+                f"expected={expected_size}, actual={before.st_size}"
+            )
+        checkpoint_bytes = handle.read(expected_size + 1)
+        after = os.fstat(handle.fileno())
     stable_identity = (
         before.st_dev,
         before.st_ino,
         before.st_size,
         before.st_mtime_ns,
+        before.st_ctime_ns,
     )
     if stable_identity != (
         after.st_dev,
         after.st_ino,
         after.st_size,
         after.st_mtime_ns,
+        after.st_ctime_ns,
     ):
         raise RuntimeError(
-            "quantity checkpoint changed while its digest was verified"
+            "quantity checkpoint changed while its bytes were read"
         )
+    if len(checkpoint_bytes) != expected_size:
+        raise ValueError(
+            "quantity checkpoint byte length differs from its manifest: "
+            f"expected={expected_size}, actual={len(checkpoint_bytes)}"
+        )
+    actual_sha256 = hashlib.sha256(checkpoint_bytes).hexdigest()
     if actual_sha256 != expected_sha256:
         raise ValueError(
             "quantity checkpoint SHA-256 differs from its manifest: "
             f"expected={expected_sha256}, actual={actual_sha256}"
         )
-    return {
+    audit = {
         "checkpoint": str(checkpoint),
         "manifest": str(manifest),
         "checkpoint_size": after.st_size,
@@ -655,9 +705,26 @@ def verify_quantity_checkpoint_manifest(
             "inode": after.st_ino,
             "size": after.st_size,
             "mtime_ns": after.st_mtime_ns,
+            "ctime_ns": after.st_ctime_ns,
         },
+        "checkpoint_read_mode": "single_fd_single_bytes",
+        "nofollow_requested": bool(getattr(os, "O_NOFOLLOW", 0)),
         "verified": True,
     }
+    return checkpoint_bytes, audit
+
+
+def verify_quantity_checkpoint_manifest(
+    checkpoint_path: str | Path,
+    manifest_path: str | Path,
+) -> dict[str, Any]:
+    """Fail closed unless exact checkpoint bytes match the run manifest."""
+
+    _, audit = _read_verified_quantity_checkpoint(
+        checkpoint_path,
+        manifest_path,
+    )
+    return audit
 
 
 def load_verified_combined_quantity_checkpoint(
@@ -668,43 +735,30 @@ def load_verified_combined_quantity_checkpoint(
     *,
     lora_alpha: float,
 ) -> dict[str, Any]:
-    """Verify, load the resolved path, then verify the load boundary again."""
+    """Verify and parse one descriptor-bound checkpoint byte buffer."""
 
-    before = verify_quantity_checkpoint_manifest(
+    checkpoint_bytes, verification = _read_verified_quantity_checkpoint(
         checkpoint_path,
         manifest_path,
     )
-    loaded = load_combined_quantity_checkpoint(
+    from safetensors.torch import load
+
+    state = load(checkpoint_bytes)
+    # safetensors.torch.load materializes independent tensor backing stores.
+    # Drop the authenticated input buffer before topology validation/fusion.
+    del checkpoint_bytes
+    loaded = _load_combined_quantity_checkpoint_state(
         pipe,
         encoder,
-        before["checkpoint"],
+        state,
+        verification["checkpoint"],
         lora_alpha=lora_alpha,
     )
-    after = verify_quantity_checkpoint_manifest(
-        before["checkpoint"],
-        before["manifest"],
-    )
-    stable_fields = (
-        "checkpoint",
-        "manifest",
-        "checkpoint_size",
-        "checkpoint_sha256",
-        "checkpoint_identity",
-    )
-    changed = {
-        field: {"before": before.get(field), "after": after.get(field)}
-        for field in stable_fields
-        if before.get(field) != after.get(field)
-    }
-    if changed:
-        raise RuntimeError(
-            "quantity checkpoint changed across the actual load boundary: "
-            f"{changed}"
-        )
     return {
         **loaded,
-        "checkpoint_verification": after,
+        "checkpoint_verification": verification,
         "load_boundary_verified": True,
+        "checkpoint_load_mode": "manifest_hash_and_safetensors_same_bytes",
     }
 
 
@@ -719,10 +773,29 @@ def load_combined_quantity_checkpoint(
 
     from safetensors.torch import load_file
 
+    state = load_file(str(path), device="cpu")
+    return _load_combined_quantity_checkpoint_state(
+        pipe,
+        encoder,
+        state,
+        str(path),
+        lora_alpha=lora_alpha,
+    )
+
+
+def _load_combined_quantity_checkpoint_state(
+    pipe,
+    encoder: QuantityEncoder,
+    state: dict[str, torch.Tensor],
+    source: str,
+    *,
+    lora_alpha: float,
+) -> dict[str, Any]:
+    """Validate and fuse an already materialized combined checkpoint."""
+
     alpha = float(lora_alpha)
     if not math.isfinite(alpha):
         raise ValueError(f"LoRA alpha must be finite, got {lora_alpha!r}")
-    state = load_file(str(path), device="cpu")
     quantity_keys = {
         key
         for key in state
@@ -731,7 +804,7 @@ def load_combined_quantity_checkpoint(
     }
     if not quantity_keys:
         raise ValueError(
-            f"checkpoint has no quantity encoder tensors: {path}"
+            f"checkpoint has no quantity encoder tensors: {source}"
         )
     if len(quantity_keys) != QUANTITY_ENCODER_TENSOR_COUNT:
         raise ValueError(
@@ -759,7 +832,7 @@ def load_combined_quantity_checkpoint(
         if key not in quantity_keys
     }
     if not lora:
-        raise ValueError(f"checkpoint has no DiT LoRA tensors: {path}")
+        raise ValueError(f"checkpoint has no DiT LoRA tensors: {source}")
     validated_lora_targets = _validate_dit_lora_state_dict(
         pipe.dit,
         lora,

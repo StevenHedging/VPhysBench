@@ -749,6 +749,15 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
                     "single-job quantity audit did not verify the actual "
                     "checkpoint load boundary"
                 )
+            checkpoint_load_mode = audit.get("checkpoint_load_mode")
+            if (
+                checkpoint_load_mode
+                != "manifest_hash_and_safetensors_same_bytes"
+            ):
+                raise ValueError(
+                    "single-job quantity audit did not bind manifest hashing "
+                    "and safetensors parsing to the same bytes"
+                )
             result.update({
                 "quantity_token_audit": str(audit_path),
                 "quantity_count": len(
@@ -760,6 +769,7 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
                 "checkpoint_size": verification["checkpoint_size"],
                 "checkpoint_manifest": verification["manifest"],
                 "load_boundary_verified": True,
+                "checkpoint_load_mode": checkpoint_load_mode,
                 "pipeline_shared_config_fingerprint": (
                     expected_fingerprint
                 ),

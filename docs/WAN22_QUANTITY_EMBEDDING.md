@@ -4,6 +4,7 @@
 
 ```text
 Baseline ID: wan22_ti2v_5b_lora_r32_quantity_embedding_v1
+Bundle:      1.0.1
 Base model:  WAN2.2-TI2V-5B
 Task:        five_scene_finetune_eval_v4
 Dataset:     physics_video_five_scene_v4 / View A
@@ -125,12 +126,22 @@ permutation 的位置，也没有自动 resume 入口，这些文件仅是 diagn
 
 每个推理 worker 在加载模型前必须读取 schema-2 `checkpoint.json`，核对 job 中的
 checkpoint 路径、文件 size 与 SHA-256；manifest 缺失、字段缺失或字节不一致均
-fail closed。为了消除模型加载期间的长 TOCTOU 窗口，真正读取 safetensors 时使用
-第一次校验得到的 resolved path，并在实际 load 的前后再次核对 path、inode、size、
-mtime 与 SHA-256。persistent batch worker 还会逐 job 比较所有只加载一次的配置：
+fail closed。真正加载时会拒绝 checkpoint 叶节点 symlink，在平台支持时以
+`O_NOFOLLOW` 打开文件，只从同一个 file descriptor 完整读取一次，然后对这份 bytes
+计算 SHA-256，并把同一个 bytes 对象交给 `safetensors.torch.load`。校验后不会再按
+路径重新打开文件，因此瞬时 swap-and-restore 不能让解析器消费另一份权重。
+persistent batch worker 还会逐 job 比较所有只加载一次的配置：
 checkpoint、manifest、runtime/model-base、QuantityEncoder 配置、LoRA alpha 及未知的
 load-time generation 选项；任一不一致都会在加载模型前拒绝整个 batch，不会静默复用
 首个 job 的配置。
+
+同一 bytes 信任边界会分配一份完整的已认证 checkpoint buffer。当前正式 rank-32
+checkpoint 为 175,649,752 bytes（167.5 MiB）。由于
+`safetensors.torch.load(bytes)` 返回独立的 tensor backing，解析瞬间二者会短暂共存；
+一次实际无 GPU 解析测得每 worker 增量峰值 RSS 约 304 MiB，8 个 worker 若同时达到
+峰值约 2.38 GiB，而不是只有 167.5 MiB 的输入 buffer。解析返回后会立即显式释放输入
+buffer，校验及 LoRA fusion 完成后释放其余临时 CPU state，不增加逐视频生成的常驻
+内存。
 
 这里的 SHA-256 是 AtomicRun 内部一致性检查，不是外部真实性锚或数字签名。若某个
 主体能同时重写 checkpoint 与同目录的 `checkpoint.json`，它可以生成新的自洽文件

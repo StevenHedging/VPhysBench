@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import math
+import os
 import re
 import struct
 import sys
@@ -15,7 +16,6 @@ from unittest.mock import patch
 import torch
 from torch import nn
 
-import physbench.baselines.wan22_quantity_model as quantity_model
 from _paths import ROOT
 from physbench.baseline_api import (
     load_baseline_bundle,
@@ -139,6 +139,8 @@ def _small_encoder_config() -> dict:
 
 def _fake_safetensors_modules(
     state: dict[str, torch.Tensor],
+    *,
+    load_bytes=None,
 ) -> dict[str, ModuleType]:
     package = ModuleType("safetensors")
     torch_module = ModuleType("safetensors.torch")
@@ -146,6 +148,14 @@ def _fake_safetensors_modules(
         key: value.to(device)
         for key, value in state.items()
     }
+    torch_module.load = (  # type: ignore[attr-defined]
+        load_bytes
+        if load_bytes is not None
+        else lambda _data: {
+            key: value.detach().clone()
+            for key, value in state.items()
+        }
+    )
     package.torch = torch_module  # type: ignore[attr-defined]
     return {
         "safetensors": package,
@@ -353,6 +363,7 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
         cls.finetune_task = load_task(FINETUNE_TASK)
 
     def test_all_214_cases_adapt_without_task_compilation(self) -> None:
+        self.assertEqual("1.0.1", self.bundle.value["baseline_version"])
         self.assertEqual(214, len(self.dataset.cases))
         adaptations = [
             self.adapter.adapt_case(case, role="eval")
@@ -1109,6 +1120,10 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
             )
             self.assertTrue(audit["verified"])
             self.assertEqual(
+                "single_fd_single_bytes",
+                audit["checkpoint_read_mode"],
+            )
+            self.assertEqual(
                 value["checkpoint_sha256"],
                 audit["checkpoint_sha256"],
             )
@@ -1160,15 +1175,35 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
                     checkpoint,
                     root / "missing.json",
                 )
+            write_json(manifest, value)
+            symlink = root / "checkpoint-link.safetensors"
+            symlink.symlink_to(checkpoint)
+            with self.assertRaisesRegex(ValueError, "symbolic link"):
+                verify_quantity_checkpoint_manifest(
+                    symlink,
+                    manifest,
+                )
 
-    def test_verified_checkpoint_loader_rechecks_actual_load_boundary(
+    def test_verified_checkpoint_loader_binds_hash_and_parser_to_same_bytes(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             checkpoint = root / "checkpoint.safetensors"
-            checkpoint.write_bytes(b"original checkpoint bytes")
+            replacement = root / "replacement.safetensors"
+            backup = root / "sealed.backup"
             manifest = root / "checkpoint.json"
+            source = QuantityEncoder(_small_encoder_config())
+            pipe = _FakeLoraPipe()
+            _write_safetensors_header(
+                checkpoint,
+                _full_checkpoint_header(pipe, source),
+            )
+            original_bytes = checkpoint.read_bytes()
+            replacement.write_bytes(
+                original_bytes[:-1]
+                + bytes([original_bytes[-1] ^ 1])
+            )
             write_json(manifest, {
                 "schema_version": "2.0",
                 "status": "complete",
@@ -1176,65 +1211,89 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
                 "checkpoint_size": checkpoint.stat().st_size,
                 "checkpoint_sha256": sha256_file(checkpoint),
             })
+            original_state = {
+                **{
+                    f"{QUANTITY_CHECKPOINT_PREFIX}{name}": (
+                        tensor.detach().clone()
+                    )
+                    for name, tensor in source.state_dict().items()
+                },
+                **_full_lora_state(pipe),
+            }
+            malicious_state = {
+                key: tensor.detach().clone()
+                for key, tensor in original_state.items()
+            }
+            quantity_key = next(
+                key
+                for key in malicious_state
+                if key.startswith(QUANTITY_CHECKPOINT_PREFIX)
+            )
+            malicious_state[quantity_key].flatten()[0].add_(123.0)
             observed = {}
 
-            def stable_load(_pipe, _encoder, path, *, lora_alpha):
-                observed["stable_path"] = str(path)
-                observed["alpha"] = lora_alpha
-                return {
-                    "quantity_encoder_tensor_count": 19,
-                    "dit_lora_tensor_count": 600,
-                }
+            def load_same_bytes(data):
+                os.rename(checkpoint, backup)
+                os.rename(replacement, checkpoint)
+                try:
+                    observed["path_bytes_during_parse"] = (
+                        checkpoint.read_bytes()
+                    )
+                    observed["parser_bytes"] = data
+                    selected = (
+                        original_state
+                        if data == original_bytes
+                        else malicious_state
+                    )
+                    return {
+                        key: tensor.detach().clone()
+                        for key, tensor in selected.items()
+                    }
+                finally:
+                    os.rename(checkpoint, replacement)
+                    os.rename(backup, checkpoint)
 
-            with patch.object(
-                quantity_model,
-                "load_combined_quantity_checkpoint",
-                side_effect=stable_load,
-            ):
+            target = QuantityEncoder(_small_encoder_config())
+            modules = _fake_safetensors_modules(
+                original_state,
+                load_bytes=load_same_bytes,
+            )
+            with patch.dict(sys.modules, modules):
                 loaded = load_verified_combined_quantity_checkpoint(
-                    object(),
-                    QuantityEncoder(_small_encoder_config()),
+                    pipe,
+                    target,
                     checkpoint,
                     manifest,
                     lora_alpha=1.0,
                 )
             self.assertTrue(loaded["load_boundary_verified"])
+            self.assertEqual(
+                "manifest_hash_and_safetensors_same_bytes",
+                loaded["checkpoint_load_mode"],
+            )
             self.assertTrue(
                 loaded["checkpoint_verification"]["verified"]
             )
             self.assertEqual(
-                str(checkpoint.resolve()),
-                observed["stable_path"],
+                original_bytes,
+                observed["parser_bytes"],
             )
-
-            def mutate_at_load(_pipe, _encoder, path, *, lora_alpha):
-                del lora_alpha
-                observed["path"] = str(path)
-                checkpoint.write_bytes(b"replacement checkpoint bytes")
-                return {
-                    "quantity_encoder_tensor_count": 19,
-                    "dit_lora_tensor_count": 600,
-                }
-
-            with patch.object(
-                quantity_model,
-                "load_combined_quantity_checkpoint",
-                side_effect=mutate_at_load,
-            ):
-                with self.assertRaises(
-                    (RuntimeError, ValueError),
-                ):
-                    load_verified_combined_quantity_checkpoint(
-                        object(),
-                        QuantityEncoder(_small_encoder_config()),
-                        checkpoint,
-                        manifest,
-                        lora_alpha=1.0,
-                    )
-            self.assertEqual(
-                str(checkpoint.resolve()),
-                observed["path"],
+            self.assertNotEqual(
+                original_bytes,
+                observed["path_bytes_during_parse"],
             )
+            self.assertEqual(original_bytes, checkpoint.read_bytes())
+            loaded_key = quantity_key.removeprefix(
+                QUANTITY_CHECKPOINT_PREFIX
+            )
+            self.assertTrue(torch.equal(
+                target.state_dict()[loaded_key],
+                original_state[quantity_key],
+            ))
+            self.assertFalse(torch.equal(
+                target.state_dict()[loaded_key],
+                malicious_state[quantity_key],
+            ))
 
     def test_pipeline_shared_config_catches_load_time_drift(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1534,6 +1593,7 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
             '"checkpoint_size"',
             '"checkpoint_manifest"',
             '"load_boundary_verified"',
+            '"checkpoint_load_mode"',
             '"pipeline_shared_config_fingerprint"',
         ):
             self.assertIn(field, batch_source)

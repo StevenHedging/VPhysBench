@@ -220,6 +220,9 @@ def main() -> int:
                     "load_boundary_verified": checkpoint_load[
                         "load_boundary_verified"
                     ],
+                    "checkpoint_load_mode": checkpoint_load[
+                        "checkpoint_load_mode"
+                    ],
                     "pipeline_shared_config_fingerprint": (
                         shared_config_fingerprint
                     ),
@@ -253,6 +256,9 @@ def main() -> int:
                     ],
                     "load_boundary_verified": checkpoint_load[
                         "load_boundary_verified"
+                    ],
+                    "checkpoint_load_mode": checkpoint_load[
+                        "checkpoint_load_mode"
                     ],
                     "pipeline_shared_config_fingerprint": (
                         shared_config_fingerprint
