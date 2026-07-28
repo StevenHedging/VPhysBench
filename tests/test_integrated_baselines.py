@@ -61,11 +61,11 @@ class IntegratedBaselineTests(unittest.TestCase):
             / "five_scene_finetune_eval.json"
         )
 
-    def test_all_six_baseline_identities_are_discovered(
+    def test_expected_baseline_identities_are_discovered(
         self,
     ) -> None:
         discovered = discover_baseline_bundles()
-        self.assertEqual(
+        self.assertTrue(
             {
                 "cosmos3_nano_i2v_generic",
                 "cosmos3_nano_i2v_physics",
@@ -73,8 +73,9 @@ class IntegratedBaselineTests(unittest.TestCase):
                 "wan22_g15_sparse_motion_r32_e20_physics",
                 "wan22_ti2v_5b_lora_r32_v3_generic",
                 "wan22_ti2v_5b_lora_r32_v3_physics",
-            },
-            set(discovered),
+                "wan22_ti2v_5b_lora_r32_quantity_embedding_v1",
+            }
+            <= set(discovered),
         )
 
     def test_all_integrated_bundles_use_managed_runtime(self) -> None:

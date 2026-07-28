@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import re
 import subprocess
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -151,14 +152,14 @@ class Wan22LoraAdapter(BaselineAdapter):
         return environment
 
     def _balance_training_rows(
-        self, rows: list[dict[str, str]], artifact_root: Path
-    ) -> list[dict[str, str]]:
+        self, rows: list[dict[str, Any]], artifact_root: Path
+    ) -> list[dict[str, Any]]:
         policy = self.config.get("lora", {}).get("scene_balancing", "none")
         input_counts = Counter(row["scene_id"] for row in rows)
         if policy == "none":
             balanced = list(rows)
         elif policy == "oversample_each_scene_to_largest":
-            by_scene: dict[str, list[dict[str, str]]] = defaultdict(list)
+            by_scene: dict[str, list[dict[str, Any]]] = defaultdict(list)
             for row in rows:
                 by_scene[row["scene_id"]].append(row)
             target = max((len(items) for items in by_scene.values()), default=0)
@@ -190,6 +191,60 @@ class Wan22LoraAdapter(BaselineAdapter):
             ),
         })
         return balanced
+
+    def _training_metadata_path(self, dataset_dir: Path) -> Path:
+        return dataset_dir / "metadata.csv"
+
+    def _training_metadata_row(
+        self,
+        *,
+        case: dict[str, Any],
+        adaptation: dict[str, Any],
+        video: str,
+    ) -> dict[str, Any]:
+        return {
+            "video": video,
+            "prompt": self._prompt(case, adaptation),
+            "case_id": case["case_id"],
+            "scene_id": case["scene_id"],
+            "text_transform_id": adaptation["text_transform_id"],
+        }
+
+    def _write_training_metadata(
+        self,
+        path: Path,
+        rows: list[dict[str, Any]],
+    ) -> None:
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=[
+                    "video",
+                    "prompt",
+                    "case_id",
+                    "scene_id",
+                    "text_transform_id",
+                ],
+            )
+            writer.writeheader()
+            writer.writerows(rows)
+
+    def _training_command(self, runtime_root: Path) -> list[str]:
+        return [
+            "bash",
+            str(runtime_root / "scripts" / "training" / "train_lora.sh"),
+        ]
+
+    def _generation_script(self) -> Path:
+        return self.project_root / "scripts" / "wan22_generate.py"
+
+    @staticmethod
+    def _checkpoint_order(path: Path) -> tuple[int, int, str]:
+        match = re.fullmatch(r"(step|epoch)-([0-9]+)", path.stem)
+        if match is None:
+            return (0, -1, path.name)
+        kind, index = match.groups()
+        return (2 if kind == "step" else 1, int(index), path.name)
 
     def train(self, prepared_training: dict[str, Any], job_path: Path) -> dict[str, Any]:
         run_dir = job_path.parent
@@ -226,7 +281,7 @@ class Wan22LoraAdapter(BaselineAdapter):
                 f"{missing_adaptations}"
             )
         dataset_dir = artifact_root / "dataset"
-        metadata_path = dataset_dir / "metadata.csv"
+        metadata_path = self._training_metadata_path(dataset_dir)
         audit_records = []
         metadata_rows = []
         for case_id in train_ids:
@@ -248,38 +303,22 @@ class Wan22LoraAdapter(BaselineAdapter):
             )
             record.update(case_id=case_id, role="train")
             audit_records.append(record)
-            metadata_rows.append({
-                "video": (
+            metadata_rows.append(self._training_metadata_row(
+                case=case,
+                adaptation=adaptations[case_id],
+                video=(
                     output.relative_to(dataset_dir).as_posix()
                     if output.is_relative_to(dataset_dir)
                     else str(output)
                 ),
-                "prompt": self._prompt(case, adaptations[case_id]),
-                "case_id": case_id,
-                "scene_id": case["scene_id"],
-                "text_transform_id": adaptations[case_id][
-                    "text_transform_id"
-                ],
-            })
+            ))
         metadata_rows = self._balance_training_rows(metadata_rows, artifact_root)
         dataset_dir.mkdir(parents=True, exist_ok=True)
-        with metadata_path.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(
-                handle,
-                fieldnames=[
-                    "video",
-                    "prompt",
-                    "case_id",
-                    "scene_id",
-                    "text_transform_id",
-                ],
-            )
-            writer.writeheader()
-            writer.writerows(metadata_rows)
+        self._write_training_metadata(metadata_path, metadata_rows)
         write_jsonl(artifact_root / "training_media_audit.jsonl", audit_records)
 
         runtime_root = Path(self.runtime["project_root"])
-        command = ["bash", str(runtime_root / "scripts" / "training" / "train_lora.sh")]
+        command = self._training_command(runtime_root)
         environment = self._training_environment(run_dir, dataset_dir, metadata_path)
         spec = {
             **prepared_training,
@@ -307,7 +346,7 @@ class Wan22LoraAdapter(BaselineAdapter):
             return {**spec, "status": "failed", "return_code": completed.returncode}
         checkpoints = sorted(
             (run_dir / "artifacts" / "wan22" / "checkpoints").glob("*.safetensors"),
-            key=lambda path: path.stat().st_mtime_ns,
+            key=self._checkpoint_order,
         )
         if not checkpoints:
             return {**spec, "status": "failed", "return_code": 0, "error": "trainer produced no LoRA checkpoint"}
@@ -432,7 +471,7 @@ class Wan22LoraAdapter(BaselineAdapter):
         }
 
     def generate(self, prepared_job: dict[str, Any], job_path: Path) -> dict[str, Any]:
-        script = self.project_root / "scripts" / "wan22_generate.py"
+        script = self._generation_script()
         python = str(self.runtime.get("python", "python"))
         command = [python, str(script), "--job", str(job_path)]
         common = {

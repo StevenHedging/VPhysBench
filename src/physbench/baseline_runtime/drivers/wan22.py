@@ -87,8 +87,14 @@ class Wan22ManagedDriver(ManagedDriver):
             )
         return paths
 
+    def _execution_engine_class(self):
+        return Wan22ExecutionEngine
+
+    def _adapter_recipe(self) -> dict[str, Any]:
+        return self.bundle.value["adapter"]
+
     def _media_config(self) -> dict[str, Any]:
-        adapter = self.bundle.value["adapter"]
+        adapter = self._adapter_recipe()
         spatial = adapter["spatial"]
         temporal = adapter["temporal"]
         profiles = spatial["scene_profiles"]
@@ -157,7 +163,10 @@ class Wan22ManagedDriver(ManagedDriver):
             ],
             data_adapter=runtime_adapter,
         )
-        engine = Wan22ExecutionEngine(self.bundle, task_builder)
+        engine = self._execution_engine_class()(
+            self.bundle,
+            task_builder,
+        )
         training, predictions = engine.run_task(
             instance=instance,
             run_dir=run_dir,

@@ -132,6 +132,8 @@ Baseline schema 5.0 通过 `capabilities.task_families` 声明支持的 Task fam
 - `cosmos3_nano_i2v_*`：只支持 `direct_eval`；
 - `wan22_g15_sparse_motion_r32_e20_*`：只支持 `direct_eval`；
 - `wan22_ti2v_5b_lora_r32_v3_*`：支持 `finetune_eval` 和 `direct_eval`。
+- `wan22_ti2v_5b_lora_r32_quantity_embedding_v1`：只支持
+  `finetune_eval`，联合训练 DiT LoRA 与物理量编码器。
 
 `finetune_eval` 还要求 Bundle 提供 `trainer` recipe。Submission 只支持
 `direct_eval`。能力不匹配会在 run 目录创建前失败。

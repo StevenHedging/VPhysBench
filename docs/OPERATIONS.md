@@ -98,7 +98,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   baseline list
 ```
 
-当前应发现六个 Baseline ID。检查解析结果：
+当前应发现七个 Baseline ID。检查解析结果：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
@@ -114,6 +114,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 for baseline_id in \
   wan22_ti2v_5b_lora_r32_v3_generic \
   wan22_ti2v_5b_lora_r32_v3_physics \
+  wan22_ti2v_5b_lora_r32_quantity_embedding_v1 \
   cosmos3_nano_i2v_generic \
   cosmos3_nano_i2v_physics \
   wan22_g15_sparse_motion_r32_e20_generic \
@@ -353,7 +354,8 @@ driver，不要绕过 loader。
 ### `baseline does not support task family finetune_eval`
 
 Cosmos3 与 G15 是 direct-only。使用 `five_scene_direct_eval.json`；当前只有
-`wan22_ti2v_5b_lora_r32_v3_*` 声明 finetune-eval trainer。
+`wan22_ti2v_5b_lora_r32_v3_*` 和
+`wan22_ti2v_5b_lora_r32_quantity_embedding_v1` 声明 finetune-eval trainer。
 
 ### `managed finetune_eval baseline requires trainer recipe`
 
@@ -420,7 +422,7 @@ Prediction 标记 complete 但文件缺失或路径错误。修复模型输出�
 ## 15. 发布检查单
 
 1. Dataset 完整哈希验收通过。
-2. 六个当前 manifest 均可 discovery/validate。
+2. 七个当前 manifest 均可 discovery/validate。
 3. 同一 Task 的 generic/physics canonical plan 完全相同。
 4. ignored/required input policy audit 通过。
 5. TaskInstance deterministic，bundle/deployment/adapter 指纹齐全。

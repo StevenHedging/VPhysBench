@@ -16,6 +16,37 @@ def file_sha256(path: Path) -> str:
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg/ffprobe required")
 class Wan22MediaTests(unittest.TestCase):
+    def test_i2v_profiles_require_a_shared_vae_grid(self) -> None:
+        with self.assertRaisesRegex(ValueError, "divisible by 32"):
+            Wan22MediaAdapter({
+                "width": 80,
+                "height": 160,
+                "fps": 24,
+                "max_frames": 21,
+                "min_frames": 5,
+                "pad_color": "black",
+            })
+
+        with self.assertRaisesRegex(ValueError, "divisible by 32"):
+            Wan22MediaAdapter({
+                "width": 96,
+                "height": 160,
+                "fps": 24,
+                "max_frames": 21,
+                "min_frames": 5,
+                "pad_color": "black",
+                "aspect_ratio_buckets": {
+                    "enabled": True,
+                    "buckets": {
+                        "invalid": {
+                            "width": 80,
+                            "height": 160,
+                            "scene_ids": ["pendulum"],
+                        },
+                    },
+                },
+            })
+
     def test_scene_buckets_preserve_portrait_and_landscape_layouts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

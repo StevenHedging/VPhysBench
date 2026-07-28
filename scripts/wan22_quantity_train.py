@@ -1,0 +1,485 @@
+#!/usr/bin/env python3
+"""Train WAN2.2 DiT LoRA jointly with the SI-aware quantity encoder."""
+
+from __future__ import annotations
+
+import json
+import math
+import os
+import random
+from pathlib import Path
+
+import accelerate
+import numpy as np
+import torch
+from torch.utils.data import DataLoader
+
+from diffsynth.core import UnifiedDataset
+from diffsynth.core.data.operators import (
+    ImageCropAndResize,
+    LoadAudio,
+    LoadVideo,
+    ToAbsolutePath,
+)
+from diffsynth.diffusion import ModelLogger
+from diffsynth.diffusion.runner import (
+    get_optimizer_class,
+    initialize_deepspeed_gradient_checkpointing,
+    save_training_args,
+)
+from examples.wanvideo.model_training.train import (
+    WanTrainingModule,
+    wan_parser,
+)
+from physbench.baselines.wan22_quantity_model import (
+    NUMERIC_FEATURE_NAMES,
+    QuantityEncoder,
+    install_quantity_prompt_unit,
+    load_quantity_encoder_checkpoint,
+    locate_sentinel_tokens,
+)
+from physbench.io import write_json, write_jsonl
+
+
+def seed_process() -> int:
+    seed = int(os.environ.get("TRAIN_SEED", "42"))
+    rank = int(os.environ.get("RANK", "0"))
+    worker_seed = seed + rank
+    random.seed(worker_seed)
+    np.random.seed(worker_seed)
+    torch.manual_seed(worker_seed)
+    torch.cuda.manual_seed_all(worker_seed)
+    return worker_seed
+
+
+class QuantityWanTrainingModule(WanTrainingModule):
+    def __init__(
+        self,
+        *args,
+        quantity_encoder_config: dict,
+        quantity_checkpoint: str | None = None,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        encoder = QuantityEncoder(quantity_encoder_config).to(
+            device=self.pipe.device,
+            dtype=torch.float32,
+        )
+        install_quantity_prompt_unit(self.pipe, encoder)
+        if quantity_checkpoint:
+            load_quantity_encoder_checkpoint(
+                self.pipe.quantity_encoder,
+                quantity_checkpoint,
+                required=False,
+            )
+        self.pipe.quantity_encoder.train()
+        self.pipe.quantity_encoder.requires_grad_(True)
+
+    def get_pipeline_inputs(self, data):
+        inputs_shared, inputs_posi, inputs_nega = (
+            super().get_pipeline_inputs(data)
+        )
+        quantities = data.get("quantities")
+        if not isinstance(quantities, list) or not quantities:
+            raise ValueError("training row requires non-empty quantities")
+        inputs_posi["quantities"] = quantities
+        inputs_nega["negative_quantities"] = None
+        return inputs_shared, inputs_posi, inputs_nega
+
+
+class RecoverableQuantityModelLogger(ModelLogger):
+    """Weight checkpoints plus one rolling optimizer/scheduler/RNG state."""
+
+    def __init__(self, *args, save_optimizer_state: bool, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.save_optimizer_state = save_optimizer_state
+        self.optimizer = None
+        self.scheduler = None
+        self.args = None
+        self.epoch_id = -1
+        self.gradient_samples: list[dict] = []
+
+    def bind_state(self, optimizer, scheduler, args) -> None:
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.args = args
+
+    def record_gradients(
+        self,
+        accelerator: accelerate.Accelerator,
+        model: torch.nn.Module,
+    ) -> None:
+        unwrapped = accelerator.unwrap_model(model)
+        quantity_squared = 0.0
+        quantity_tensors = 0
+        for parameter in unwrapped.pipe.quantity_encoder.parameters():
+            if parameter.grad is not None:
+                quantity_squared += float(
+                    parameter.grad.detach().float().pow(2).sum().item()
+                )
+                quantity_tensors += 1
+        text_gradients = sum(
+            parameter.grad is not None
+            for parameter in unwrapped.pipe.text_encoder.parameters()
+        )
+        self.gradient_samples.append({
+            "step": self.num_steps + 1,
+            "quantity_gradient_l2": math.sqrt(quantity_squared),
+            "quantity_gradient_tensor_count": quantity_tensors,
+            "text_encoder_gradient_tensor_count": text_gradients,
+        })
+
+    @staticmethod
+    def _atomic_torch_save(value, path: Path) -> None:
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        torch.save(value, temporary)
+        os.replace(temporary, path)
+
+    def _save_recovery_state(
+        self,
+        accelerator: accelerate.Accelerator,
+        model_checkpoint_name: str,
+    ) -> None:
+        if not self.save_optimizer_state:
+            return
+        if self.optimizer is None or self.scheduler is None:
+            raise RuntimeError("training state logger is not bound")
+        state_root = Path(self.output_path) / "training_state_latest"
+        state_root.mkdir(parents=True, exist_ok=True)
+        rng_path = state_root / (
+            f"rng_rank_{accelerator.process_index:02d}.pt"
+        )
+        self._atomic_torch_save({
+            "python": random.getstate(),
+            "numpy": np.random.get_state(),
+            "torch_cpu": torch.get_rng_state(),
+            "torch_cuda": (
+                torch.cuda.get_rng_state()
+                if torch.cuda.is_available()
+                else None
+            ),
+            "process_index": accelerator.process_index,
+            "global_step": self.num_steps,
+            "epoch_id": self.epoch_id,
+        }, rng_path)
+        accelerator.wait_for_everyone()
+        if accelerator.is_main_process:
+            state_path = state_root / "optimizer_scheduler.pt"
+            self._atomic_torch_save({
+                "optimizer": self.optimizer.state_dict(),
+                "scheduler": self.scheduler.state_dict(),
+                "global_step": self.num_steps,
+                "epoch_id": self.epoch_id,
+                "model_checkpoint": model_checkpoint_name,
+                "world_size": accelerator.num_processes,
+                "gradient_accumulation_steps": (
+                    accelerator.gradient_accumulation_steps
+                ),
+            }, state_path)
+            write_json(state_root / "state.json", {
+                "schema_version": "1.0",
+                "status": "complete",
+                "global_step": self.num_steps,
+                "epoch_id": self.epoch_id,
+                "model_checkpoint": model_checkpoint_name,
+                "optimizer_scheduler": str(state_path),
+                "rng_state_pattern": "rng_rank_XX.pt",
+                "world_size": accelerator.num_processes,
+                "resume_semantics": (
+                    "state-complete sidecar; automatic CLI resume is not "
+                    "enabled in this Baseline version"
+                ),
+            })
+        accelerator.wait_for_everyone()
+
+    def save_model(self, accelerator, model, file_name):
+        super().save_model(accelerator, model, file_name)
+        self._save_recovery_state(accelerator, file_name)
+
+    def on_epoch_end(self, accelerator, model, epoch_id):
+        self.epoch_id = int(epoch_id)
+        super().on_epoch_end(accelerator, model, epoch_id)
+
+    def on_training_end(self, accelerator, model, save_steps=None):
+        super().on_training_end(accelerator, model, save_steps)
+        if accelerator.is_main_process:
+            positive = [
+                item["quantity_gradient_l2"]
+                for item in self.gradient_samples
+                if item["quantity_gradient_l2"] > 0
+            ]
+            write_json(
+                Path(self.output_path) / "gradient_audit.json",
+                {
+                    "schema_version": "1.0",
+                    "sample_count": len(self.gradient_samples),
+                    "positive_quantity_gradient_count": len(positive),
+                    "min_positive_quantity_gradient_l2": (
+                        min(positive) if positive else None
+                    ),
+                    "max_quantity_gradient_l2": (
+                        max(
+                            (
+                                item["quantity_gradient_l2"]
+                                for item in self.gradient_samples
+                            ),
+                            default=None,
+                        )
+                    ),
+                    "text_encoder_gradient_tensor_count_max": max(
+                        (
+                            item["text_encoder_gradient_tensor_count"]
+                            for item in self.gradient_samples
+                        ),
+                        default=0,
+                    ),
+                    "samples": self.gradient_samples,
+                },
+            )
+
+
+def audit_training_tokens(
+    model: QuantityWanTrainingModule,
+    dataset: UnifiedDataset,
+    output: Path,
+) -> None:
+    by_case = {}
+    for row in dataset.data:
+        by_case.setdefault(row["case_id"], row)
+    records = []
+    for case_id in sorted(by_case):
+        row = by_case[case_id]
+        _, _, tokens = locate_sentinel_tokens(
+            model.pipe,
+            row["prompt"],
+            row["quantities"],
+        )
+        records.append({
+            "schema_version": "1.0",
+            "case_id": case_id,
+            "scene_id": row["scene_id"],
+            "prompt": row["prompt"],
+            "audited_prompt": row["audited_prompt"],
+            "quantity_registry_id": row["quantity_registry_id"],
+            "quantity_registry_fingerprint": row[
+                "quantity_registry_fingerprint"
+            ],
+            "quantities": tokens,
+        })
+    write_jsonl(output, records)
+
+
+def launch_quantity_training(
+    accelerator: accelerate.Accelerator,
+    dataset: UnifiedDataset,
+    model: QuantityWanTrainingModule,
+    model_logger: RecoverableQuantityModelLogger,
+    args,
+) -> None:
+    if accelerator.is_main_process:
+        save_training_args(args)
+    optimizer_class = get_optimizer_class(args.customized_optimizer)
+    optimizer = optimizer_class(
+        model.trainable_modules(),
+        lr=args.learning_rate,
+        weight_decay=args.weight_decay,
+    )
+    scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer)
+    dataloader = DataLoader(
+        dataset,
+        shuffle=True,
+        collate_fn=lambda rows: rows[0],
+        num_workers=args.dataset_num_workers,
+    )
+    model.to(device=accelerator.device)
+    model, optimizer, dataloader, scheduler = accelerator.prepare(
+        model,
+        optimizer,
+        dataloader,
+        scheduler,
+    )
+    model_logger.bind_state(optimizer, scheduler, args)
+    initialize_deepspeed_gradient_checkpointing(accelerator)
+    for epoch_id in range(args.num_epochs):
+        model_logger.epoch_id = epoch_id
+        for data in dataloader:
+            with accelerator.accumulate(model):
+                loss = model(data)
+                accelerator.backward(loss)
+                if accelerator.sync_gradients:
+                    model_logger.record_gradients(accelerator, model)
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+                model_logger.on_step_end(
+                    accelerator,
+                    model,
+                    args.save_steps,
+                    loss=loss,
+                )
+        if args.save_steps is None:
+            model_logger.on_epoch_end(
+                accelerator,
+                model,
+                epoch_id,
+            )
+    model_logger.on_training_end(
+        accelerator,
+        model,
+        args.save_steps,
+    )
+
+
+def main() -> int:
+    worker_seed = seed_process()
+    parser = wan_parser()
+    parser.add_argument(
+        "--quantity_encoder_config_json",
+        required=True,
+    )
+    parser.add_argument(
+        "--quantity_token_audit_path",
+        type=Path,
+        required=True,
+    )
+    parser.add_argument(
+        "--save_optimizer_state",
+        action="store_true",
+    )
+    args = parser.parse_args()
+    if args.task != "sft":
+        raise ValueError("quantity Baseline currently supports task=sft only")
+    accelerator = accelerate.Accelerator(
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        kwargs_handlers=[
+            accelerate.DistributedDataParallelKwargs(
+                find_unused_parameters=args.find_unused_parameters
+            )
+        ],
+    )
+    dataset = UnifiedDataset(
+        base_path=args.dataset_base_path,
+        metadata_path=args.dataset_metadata_path,
+        repeat=args.dataset_repeat,
+        data_file_keys=args.data_file_keys.split(","),
+        main_data_operator=UnifiedDataset.default_video_operator(
+            base_path=args.dataset_base_path,
+            max_pixels=args.max_pixels,
+            height=args.height,
+            width=args.width,
+            # WAN's I2V first-frame path rounds spatial inputs to multiples
+            # of 32.  Keeping the video path on the same grid prevents the
+            # video and first-frame VAE latents from differing by one cell
+            # when dynamic resolution is used.
+            height_division_factor=32,
+            width_division_factor=32,
+            num_frames=args.num_frames,
+            time_division_factor=4,
+            time_division_remainder=1,
+        ),
+        special_operator_map={
+            "animate_face_video": (
+                ToAbsolutePath(args.dataset_base_path)
+                >> LoadVideo(
+                    args.num_frames,
+                    4,
+                    1,
+                    frame_processor=ImageCropAndResize(
+                        512,
+                        512,
+                        None,
+                        16,
+                        16,
+                    ),
+                )
+            ),
+            "input_audio": (
+                ToAbsolutePath(args.dataset_base_path)
+                >> LoadAudio(sr=16000)
+            ),
+            "wantodance_music_path": ToAbsolutePath(
+                args.dataset_base_path
+            ),
+        },
+    )
+    encoder_config = json.loads(args.quantity_encoder_config_json)
+    model = QuantityWanTrainingModule(
+        model_paths=args.model_paths,
+        model_id_with_origin_paths=args.model_id_with_origin_paths,
+        tokenizer_path=args.tokenizer_path,
+        audio_processor_path=args.audio_processor_path,
+        trainable_models=args.trainable_models,
+        lora_base_model=args.lora_base_model,
+        lora_target_modules=args.lora_target_modules,
+        lora_rank=args.lora_rank,
+        lora_checkpoint=args.lora_checkpoint,
+        preset_lora_path=args.preset_lora_path,
+        preset_lora_model=args.preset_lora_model,
+        use_gradient_checkpointing=args.use_gradient_checkpointing,
+        use_gradient_checkpointing_offload=(
+            args.use_gradient_checkpointing_offload
+        ),
+        extra_inputs=args.extra_inputs,
+        fp8_models=args.fp8_models,
+        offload_models=args.offload_models,
+        resume_from_checkpoint=args.resume_from_checkpoint,
+        remove_prefix_in_ckpt=args.remove_prefix_in_ckpt,
+        task=args.task,
+        device=(
+            "cpu"
+            if (
+                args.initialize_model_on_cpu
+                or args.enable_model_cpu_offload
+            )
+            else accelerator.device
+        ),
+        max_timestep_boundary=args.max_timestep_boundary,
+        min_timestep_boundary=args.min_timestep_boundary,
+        quantity_encoder_config=encoder_config,
+        quantity_checkpoint=args.lora_checkpoint,
+    )
+    if accelerator.is_main_process:
+        args.quantity_token_audit_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+        audit_training_tokens(
+            model,
+            dataset,
+            args.quantity_token_audit_path,
+        )
+        write_json(
+            Path(args.output_path) / "quantity_encoder_spec.json",
+            {
+                "schema_version": "1.0",
+                "worker_seed_rank_0": worker_seed,
+                "numeric_features": list(NUMERIC_FEATURE_NAMES),
+                "config": encoder_config,
+                "injection_stage": (
+                    "post_frozen_umt5_pre_dit_cross_attention"
+                ),
+            },
+        )
+    accelerator.wait_for_everyone()
+    model_logger = RecoverableQuantityModelLogger(
+        args.output_path,
+        remove_prefix_in_ckpt=args.remove_prefix_in_ckpt,
+        enable_tensorboard_log=args.enable_tensorboard_log,
+        enable_swanlab_log=args.enable_swanlab_log,
+        swanlab_project=args.swanlab_project,
+        enable_wandb_log=args.enable_wandb_log,
+        wandb_project=args.wandb_project,
+        save_optimizer_state=args.save_optimizer_state,
+    )
+    launch_quantity_training(
+        accelerator,
+        dataset,
+        model,
+        model_logger,
+        args,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

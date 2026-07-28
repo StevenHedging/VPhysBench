@@ -31,6 +31,25 @@ class Wan22ExecutionEngine:
             components["trainer"] = value["trainer"]
         return components
 
+    def _adapter_class(self):
+        return Wan22LoraAdapter
+
+    def _worker_script(self) -> Path:
+        return (
+            Path(__file__).resolve().parents[3]
+            / "scripts"
+            / "wan22_generate_batch.py"
+        )
+
+    def _finalize_prepared_job(
+        self,
+        prepared: dict[str, Any],
+        raw_job: dict[str, Any],
+    ) -> None:
+        # Standard WAN Baselines consume physics only through rendered text.
+        # No parallel structured side channel reaches their model boundary.
+        prepared["model_input"].pop("physical_parameters", None)
+
     def _legacy_config(
         self, instance_value: dict[str, Any]
     ) -> dict[str, Any]:
@@ -121,9 +140,7 @@ class Wan22ExecutionEngine:
         gpus = available_gpus[: max(1, min(len(available_gpus), planned_jobs))]
         worker_root = run_dir / "artifacts" / "wan22" / "inference_workers"
         worker_root.mkdir(parents=True, exist_ok=True)
-        worker_script = (
-            Path(__file__).resolve().parents[3] / "scripts" / "wan22_generate_batch.py"
-        )
+        worker_script = self._worker_script()
         processes = []
         for index, gpu in enumerate(gpus):
             result = worker_root / f"worker_{index:02d}.jsonl"
@@ -234,7 +251,7 @@ class Wan22ExecutionEngine:
             "rebuildable": True,
             "source_assets_mutated": False,
         })
-        legacy_adapter = Wan22LoraAdapter(
+        legacy_adapter = self._adapter_class()(
             legacy_config,
             execute=execute,
             media_adapter=self.task_builder.data_adapter.media,
@@ -285,9 +302,7 @@ class Wan22ExecutionEngine:
                     f"WAN compatibility renderer changed native input for "
                     f"{raw_job['job_id']}"
                 )
-            # ModelInput is the exact consumable boundary. Structured physics stays
-            # in the frozen Dataset and condition audit, never as a side channel.
-            prepared["model_input"].pop("physical_parameters", None)
+            self._finalize_prepared_job(prepared, raw_job)
             job_path = run_dir / "jobs" / f"{raw_job['job_id']}.json"
             write_json(job_path, prepared)
             if stop_after_training:

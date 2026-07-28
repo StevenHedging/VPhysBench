@@ -28,8 +28,10 @@ class Wan22MediaAdapter:
         self.max_frames = int(policy["max_frames"])
         self.min_frames = int(policy.get("min_frames", 5))
         self.pad_color = str(policy.get("pad_color", "black"))
-        if self.width % 16 or self.height % 16:
-            raise ValueError("WAN target width and height must be divisible by 16")
+        if self.width % 32 or self.height % 32:
+            raise ValueError(
+                "WAN I2V target width and height must be divisible by 32"
+            )
         bucket_config = policy.get("aspect_ratio_buckets", {})
         self.bucket_enabled = bool(bucket_config.get("enabled", False))
         self.buckets: dict[str, dict[str, Any]] = {}
@@ -37,8 +39,11 @@ class Wan22MediaAdapter:
         if self.bucket_enabled:
             for name, value in bucket_config.get("buckets", {}).items():
                 width, height = int(value["width"]), int(value["height"])
-                if width % 16 or height % 16:
-                    raise ValueError(f"WAN bucket {name} dimensions must be divisible by 16")
+                if width % 32 or height % 32:
+                    raise ValueError(
+                        f"WAN I2V bucket {name} dimensions must be "
+                        "divisible by 32"
+                    )
                 self.buckets[name] = {"name": name, "width": width, "height": height}
                 for scene_id in value.get("scene_ids", []):
                     if scene_id in self.scene_buckets:

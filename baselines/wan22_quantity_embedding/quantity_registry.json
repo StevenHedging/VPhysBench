@@ -1,0 +1,119 @@
+{
+  "schema_version": "1.0",
+  "registry_id": "five_scene_quantity_embedding_v1",
+  "description": "Audited quantities encoded by the WAN2.2 quantity-token Baseline. The selected fields match the structured-text WAN physics baseline so paired comparisons differ only in the model-side representation.",
+  "dimension_basis": ["L", "M", "T", "I", "Theta", "N_amount", "J_luminous"],
+  "quantity_types": {
+    "unknown": 0,
+    "length": 1,
+    "radius": 2,
+    "angle": 3,
+    "mass": 4,
+    "velocity": 5,
+    "acceleration": 6,
+    "coefficient": 7,
+    "force": 8,
+    "angular_velocity": 9
+  },
+  "units": {
+    "1": {
+      "canonical_si_unit": "1",
+      "si_scale": 1.0,
+      "dimension": [0, 0, 0, 0, 0, 0, 0]
+    },
+    "m": {
+      "canonical_si_unit": "m",
+      "si_scale": 1.0,
+      "dimension": [1, 0, 0, 0, 0, 0, 0]
+    },
+    "kg": {
+      "canonical_si_unit": "kg",
+      "si_scale": 1.0,
+      "dimension": [0, 1, 0, 0, 0, 0, 0]
+    },
+    "m/s": {
+      "canonical_si_unit": "m/s",
+      "si_scale": 1.0,
+      "dimension": [1, 0, -1, 0, 0, 0, 0]
+    },
+    "m/s^2": {
+      "canonical_si_unit": "m/s^2",
+      "si_scale": 1.0,
+      "dimension": [1, 0, -2, 0, 0, 0, 0]
+    },
+    "N": {
+      "canonical_si_unit": "kg*m/s^2",
+      "si_scale": 1.0,
+      "dimension": [1, 1, -2, 0, 0, 0, 0]
+    },
+    "deg": {
+      "canonical_si_unit": "rad",
+      "si_scale": 0.017453292519943295,
+      "dimension": [0, 0, 0, 0, 0, 0, 0]
+    },
+    "deg/s": {
+      "canonical_si_unit": "rad/s",
+      "si_scale": 0.017453292519943295,
+      "dimension": [0, 0, -1, 0, 0, 0, 0]
+    }
+  },
+  "scenes": {
+    "pendulum": {
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameters": [
+        {"name": "string_length", "source_role": "primary", "required": true, "unit": "m", "precision": 3, "quantity_type": "length", "template": "the string length is {quantity}"},
+        {"name": "bob_radius", "source_role": "primary", "required": true, "unit": "m", "precision": 3, "quantity_type": "radius", "template": "the spherical bob radius is {quantity}"},
+        {"name": "pendulum_length", "source_role": "derived_geometry", "required": false, "unit": "m", "precision": 3, "quantity_type": "length", "template": "the pivot-to-bob-center pendulum length is {quantity}"},
+        {"name": "initial_angle", "source_role": "primary", "required": true, "unit": "deg", "precision": 1, "quantity_type": "angle", "template": "the initial release angle is {quantity}"}
+      ]
+    },
+    "free_fall": {
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameters": [
+        {"name": "initial_height", "source_role": "primary", "required": true, "unit": "m", "precision": 2, "quantity_type": "length", "template": "the initial vertical drop height is {quantity}"},
+        {"name": "ball_radius", "source_role": "primary", "required": true, "unit": "m", "precision": 4, "quantity_type": "radius", "template": "the ball radius is {quantity}"},
+        {"name": "ball_mass", "source_role": "primary", "required": false, "unit": "kg", "precision": 5, "quantity_type": "mass", "template": "the ball mass is {quantity}"},
+        {"name": "initial_velocity", "source_role": "primary", "required": false, "unit": "m/s", "precision": 3, "quantity_type": "velocity", "template": "the initial vertical velocity is {quantity}"}
+      ]
+    },
+    "collision_1d": {
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameters": [
+        {"name": "striker_initial_velocity", "source_role": "primary", "required": true, "unit": "m/s", "precision": 4, "quantity_type": "velocity", "template": "the striker initial velocity is {quantity}"},
+        {"name": "ball_1_mass", "source_role": "primary", "required": false, "unit": "kg", "precision": 5, "quantity_type": "mass", "template": "ball 1 mass is {quantity}"},
+        {"name": "ball_1_radius", "source_role": "primary", "required": false, "unit": "m", "precision": 5, "quantity_type": "radius", "template": "ball 1 radius is {quantity}"},
+        {"name": "ball_2_mass", "source_role": "primary", "required": false, "unit": "kg", "precision": 5, "quantity_type": "mass", "template": "ball 2 mass is {quantity}"},
+        {"name": "ball_2_radius", "source_role": "primary", "required": false, "unit": "m", "precision": 5, "quantity_type": "radius", "template": "ball 2 radius is {quantity}"},
+        {"name": "ball_3_mass", "source_role": "primary", "required": false, "unit": "kg", "precision": 5, "quantity_type": "mass", "template": "ball 3 mass is {quantity}"},
+        {"name": "ball_3_radius", "source_role": "primary", "required": false, "unit": "m", "precision": 5, "quantity_type": "radius", "template": "ball 3 radius is {quantity}"}
+      ]
+    },
+    "inclined_plane_slide": {
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameters": [
+        {"name": "incline_angle", "source_role": "primary", "required": true, "unit": "deg", "precision": 1, "quantity_type": "angle", "template": "the incline angle is {quantity}"},
+        {"name": "block_mass", "source_role": "primary", "required": true, "unit": "kg", "precision": 5, "quantity_type": "mass", "template": "the block mass is {quantity}"},
+        {"name": "kinetic_friction_coefficient", "source_role": "primary", "required": true, "unit": "1", "precision": 3, "quantity_type": "coefficient", "template": "the kinetic friction coefficient is {quantity}"},
+        {"name": "theoretical_acceleration", "source_role": "derived", "required": true, "unit": "m/s^2", "precision": 4, "quantity_type": "acceleration", "template": "the theoretical acceleration down the incline is {quantity}"}
+      ]
+    },
+    "uniform_circular_motion": {
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameters": [
+        {"name": "angular_velocity", "source_role": "primary", "required": true, "unit": "deg/s", "precision": 2, "quantity_type": "angular_velocity", "template": "the angular velocity is {quantity}"},
+        {"name": "object_1_orbit_radius", "source_role": "primary", "required": true, "unit": "m", "precision": 2, "quantity_type": "radius", "template": "object 1 orbit radius is {quantity}"},
+        {"name": "object_2_orbit_radius", "source_role": "primary", "required": false, "unit": "m", "precision": 2, "quantity_type": "radius", "template": "object 2 orbit radius is {quantity}"}
+      ]
+    }
+  }
+}

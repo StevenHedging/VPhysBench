@@ -2,7 +2,7 @@
 
 ## 1. Bundle 与 Baseline identity
 
-WAN 有两个 Bundle 目录、四个 Baseline identity：
+WAN 有三个 Bundle 目录、五个 Baseline identity：
 
 ```text
 baselines/wan22_lora/
@@ -19,16 +19,25 @@ baselines/wan22_g15_sparse_motion/
 ├── baseline.local.json           # 本机部署，Git ignored
 ├── driver.py
 └── provenance/benchmark_overlap_v3.json
+
+baselines/wan22_quantity_embedding/
+├── baseline.json                 # ..._quantity_embedding_v1
+├── baseline.local.example.json
+├── baseline.local.json           # 本机部署，Git ignored
+├── adapter.py
+├── driver.py
+└── quantity_registry.json
 ```
 
 | Baseline ID | Task family | 物理策略 | 用途 |
 | --- | --- | --- | --- |
 | `wan22_ti2v_5b_lora_r32_v3_generic` | `finetune_eval`, `direct_eval` | `ignored` | 正式 WAN LoRA |
 | `wan22_ti2v_5b_lora_r32_v3_physics` | `finetune_eval`, `direct_eval` | `required/structured_text` | 同模型，物理文本追加 |
+| `wan22_ti2v_5b_lora_r32_quantity_embedding_v1` | `finetune_eval` | `required/quantity_token_embedding_v1` | SI 数值/量纲编码 |
 | `wan22_g15_sparse_motion_r32_e20_generic` | `direct_eval` | `ignored` | 冻结 G15，诊断型 |
 | `wan22_g15_sparse_motion_r32_e20_physics` | `direct_eval` | `required/structured_text` | 冻结 G15，诊断型 |
 
-四者都使用 schema 5.0 managed runtime。同目录两份 manifest 共享 driver、模型部署与
+五者都使用 schema 5.0 managed runtime。同目录两份 manifest 共享 driver、模型部署与
 `baseline.local.json`，但拥有不同 Baseline ID、Bundle digest、adapter fingerprint
 和 TaskInstance。它们运行相同的官方 Task，不再用 Task 文件区分物理信息注入。
 
@@ -41,6 +50,11 @@ baselines/*/driver.py
         ├── Wan22LoraAdapter
         └── Wan22MediaAdapter
 ```
+
+Quantity Baseline 使用专有 Python adapter 和 managed execution engine，从结构化标注
+中读取 registry 明确筛选的物理量子集，并在冻结 UMT5 输出与 DiT
+cross-attention 之间注入编码。算法、命令、审计产物与结果模板见
+[WAN2.2 物理量编码 Baseline](WAN22_QUANTITY_EMBEDDING.md)。
 
 模型专有兼容层仍复用既有 WAN 训练/推理代码，但 canonical plan、Case projection、
 input policy、adapter audit、TaskInstance seal 和 run identity 由当前公共 runtime
@@ -238,6 +252,9 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   baseline validate wan22_ti2v_5b_lora_r32_v3_physics
+
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  baseline validate wan22_ti2v_5b_lora_r32_quantity_embedding_v1
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   baseline validate wan22_g15_sparse_motion_r32_e20_generic
