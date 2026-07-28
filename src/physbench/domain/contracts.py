@@ -96,6 +96,11 @@ class BaselineTaskInstance:
         )
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
         document["instance_digest"] = digest
+        from ..baseline_runtime.task_instance_validation import (
+            validate_task_instance_document,
+        )
+
+        validate_task_instance_document(document)
         canonical = json.dumps(
             document,
             ensure_ascii=False,
@@ -134,6 +139,11 @@ class BaselineTaskInstance:
 
     def verify(self) -> None:
         value = self.value
+        from ..baseline_runtime.task_instance_validation import (
+            validate_task_instance_document,
+        )
+
+        validate_task_instance_document(value)
         recorded = value.pop("instance_digest", None)
         payload = json.dumps(
             value,

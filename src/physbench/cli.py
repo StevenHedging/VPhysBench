@@ -467,7 +467,7 @@ def build_parser() -> argparse.ArgumentParser:
     baseline_init.add_argument("name")
     baseline_init.add_argument(
         "--backend",
-        choices=["managed-i2v", "submission"],
+        choices=["managed-i2v", "managed-v2v", "submission"],
         default="managed-i2v",
     )
     baseline_init.add_argument("--root")

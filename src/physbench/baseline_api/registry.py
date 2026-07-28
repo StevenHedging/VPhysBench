@@ -50,6 +50,8 @@ V4_IMPLEMENTATION_KEYS = {
 ALLOWED_CAPABILITY_KEYS = {
     "task_families",
     "conditioning",
+    "generation_modes",
+    "physics_representations",
     "train",
     "finetune",
     "generate",
@@ -236,8 +238,17 @@ def _validate_manifest(value: dict[str, Any], descriptor_path: Path) -> None:
         raise ValueError(
             f"baseline capabilities contains unknown fields: {unknown}"
         )
-    for key in ("task_families", "conditioning"):
+    for key in (
+        "task_families",
+        "conditioning",
+        "generation_modes",
+        "physics_representations",
+    ):
         items = capabilities.get(key)
+        if key in {"generation_modes", "physics_representations"} and (
+            items is None
+        ):
+            continue
         if (
             not isinstance(items, list)
             or not items
@@ -246,6 +257,16 @@ def _validate_manifest(value: dict[str, Any], descriptor_path: Path) -> None:
             raise ValueError(f"capabilities.{key} must be a non-empty string list")
         if len(items) != len(set(items)):
             raise ValueError(f"capabilities.{key} contains duplicates")
+    generation_modes = capabilities.get("generation_modes")
+    if generation_modes is not None:
+        unknown_modes = sorted(
+            set(generation_modes) - {"t2v", "i2v", "v2v", "hybrid"}
+        )
+        if unknown_modes:
+            raise ValueError(
+                "capabilities.generation_modes contains unsupported modes: "
+                f"{unknown_modes}"
+            )
     for key in ("train", "finetune", "generate"):
         if key in capabilities and not isinstance(capabilities[key], bool):
             raise ValueError(f"capabilities.{key} must be a boolean")
@@ -285,6 +306,72 @@ def _validate_manifest(value: dict[str, Any], descriptor_path: Path) -> None:
             raise ValueError(
                 "schema v4 baseline requires an adapter object"
             )
+        adapter_kind = adapter.get("kind", "standard")
+        if (
+            not isinstance(adapter_kind, str)
+            or adapter_kind not in {"standard", "python"}
+        ):
+            raise ValueError(
+                "adapter.kind must be 'standard' or 'python'"
+            )
+        if adapter_kind == "python":
+            unknown_adapter_fields = sorted(
+                set(adapter)
+                - {"kind", "entrypoint", "config", "cache_policy"}
+            )
+            if unknown_adapter_fields:
+                raise ValueError(
+                    "Python adapter contains unknown fields: "
+                    f"{unknown_adapter_fields}"
+                )
+            entrypoint = adapter.get("entrypoint")
+            if not isinstance(entrypoint, str) or not entrypoint:
+                raise ValueError(
+                    "Python adapter requires adapter.entrypoint"
+                )
+            path = _validate_relative_path(
+                descriptor_path.parent,
+                entrypoint,
+                label="adapter.entrypoint",
+            )
+            if not path.is_file():
+                raise FileNotFoundError(
+                    f"Baseline adapter entrypoint not found: {path}"
+                )
+            if "config" in adapter and not isinstance(
+                adapter["config"], dict
+            ):
+                raise ValueError("adapter.config must be an object")
+            if capabilities.get("generation_modes") is None:
+                raise ValueError(
+                    "Python adapter requires "
+                    "capabilities.generation_modes"
+                )
+            if (
+                "physics" in capabilities["conditioning"]
+                and capabilities.get("physics_representations") is None
+            ):
+                raise ValueError(
+                    "physics-capable Python adapter requires "
+                    "capabilities.physics_representations"
+                )
+        else:
+            if "entrypoint" in adapter:
+                raise ValueError(
+                    "standard adapter must not declare entrypoint"
+                )
+            preset_modes = {
+                "standard_t2v_v1": "t2v",
+                "standard_i2v_v1": "i2v",
+                "standard_v2v_v1": "v2v",
+            }
+            preset = adapter.get("preset")
+            if preset in preset_modes and generation_modes is not None:
+                if preset_modes[preset] not in generation_modes:
+                    raise ValueError(
+                        f"adapter preset {preset!r} is not declared in "
+                        "capabilities.generation_modes"
+                    )
         if kind == "managed" and not isinstance(value.get("runner"), dict):
             raise ValueError(
                 "managed baseline requires a runner object"
@@ -410,6 +497,14 @@ def load_baseline_bundle(
     driver = implementation.get("driver")
     if driver and driver not in patterns:
         patterns.append(driver)
+    adapter = portable_value.get("adapter", {})
+    adapter_path = (
+        adapter.get("entrypoint")
+        if adapter.get("kind", "standard") == "python"
+        else None
+    )
+    if adapter_path and adapter_path not in patterns:
+        patterns.append(adapter_path)
     files = _fingerprinted_files(root, patterns)
     bundle_digest = canonical_sha256({
         "manifest": portable_value,

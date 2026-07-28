@@ -73,6 +73,24 @@ def dispatch(request):
         dataset = payload["dataset"]
         task = payload["task"]
         plan = payload["canonical_plan"]
+        adaptations = [
+            {
+                "adaptation_id": f"fixture::{job['job_id']}",
+                "case_id": job["case_id"],
+                "used_parameters": {},
+                "native_inputs": {"fixture": True},
+            }
+            for job in plan["jobs"]
+        ]
+        jobs = [
+            {
+                **job,
+                "adaptation_id": f"fixture::{job['job_id']}",
+                "native_inputs": {"fixture": True},
+            }
+            for job in plan["jobs"]
+        ]
+        job_ids = [job["job_id"] for job in jobs]
         return seal({
             "schema_version": "2.1",
             "instance_id": "fixture-instance",
@@ -101,7 +119,40 @@ def dispatch(request):
                 },
                 "canonical_plan_digest": canonical_sha256(plan),
             },
+            "semantics": {
+                "family": task["value"]["family"],
+                "conditioning": task["value"]["conditioning"],
+                "scene_ids": plan["scene_ids"],
+            },
             "canonical_plan": plan,
+            "source": {
+                "asset_root": dataset["asset_root"],
+                "cases": dataset["cases"],
+            },
+            "adaptations": adaptations,
+            "training": None,
+            "inference": {
+                "predictor": {"type": "fixture"},
+                "jobs": jobs,
+            },
+            "execution_graph": {
+                "operations": [
+                    {
+                        "operation_id": "infer",
+                        "kind": "infer",
+                        "depends_on": [],
+                        "job_ids": job_ids,
+                    },
+                    {
+                        "operation_id": "evaluate",
+                        "kind": "evaluate",
+                        "depends_on": ["infer"],
+                        "job_ids": job_ids,
+                    },
+                ]
+            },
+            "cache_bindings": [],
+            "baseline_payload": {"type": "fixture"},
         })
     if operation == "run_task":
         return {

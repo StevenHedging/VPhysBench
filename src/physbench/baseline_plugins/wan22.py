@@ -640,7 +640,9 @@ class Wan22ExecutionEngine:
             "case_id": case["case_id"],
             "scene_id": case["scene_id"],
             "view_a_split": split,
-            "physical_parameters": case["physics"],
+            # Managed direct-eval TaskInstances intentionally omit raw
+            # physics; their adapter-produced prompt/control is authoritative.
+            "physical_parameters": case.get("physics", {}),
             "appearance": case["appearance"],
             "temporal": case["temporal"],
             "alignment": case.get("alignment"),

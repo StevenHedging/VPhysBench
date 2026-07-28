@@ -36,6 +36,15 @@ class DataAdapter(ABC):
         """Fingerprint of stages that create reusable media derivatives."""
         raise NotImplementedError
 
+    def dependency_paths(self) -> dict[str, Path]:
+        """Return output-affecting shared files outside the Baseline Bundle.
+
+        Bundle-local adapter code is automatically covered by the portable
+        Bundle digest. Adapters only need to report shared implementation,
+        profile, solver, or encoder files that live elsewhere.
+        """
+        return {}
+
     @abstractmethod
     def describe(self) -> dict[str, Any]:
         raise NotImplementedError

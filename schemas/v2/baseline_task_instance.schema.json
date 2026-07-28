@@ -35,6 +35,22 @@
         "canonical_plan_digest"
       ],
       "properties": {
+        "dataset": {
+          "type": "object",
+          "required": ["dataset_id", "digest"],
+          "properties": {
+            "dataset_id": {"type": "string", "minLength": 1},
+            "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        "task": {
+          "type": "object",
+          "required": ["task_id", "digest"],
+          "properties": {
+            "task_id": {"type": "string", "minLength": 1},
+            "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
         "baseline": {
           "type": "object",
           "required": [
@@ -52,6 +68,38 @@
               "pattern": "^[0-9a-f]{64}$"
             }
           }
+        },
+        "task_builder": {
+          "type": "object",
+          "required": ["type", "fingerprint"],
+          "properties": {
+            "type": {"type": "string", "minLength": 1},
+            "fingerprint": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "data_adapter": {
+          "type": "object",
+          "required": [
+            "fingerprint",
+            "materialization_fingerprint"
+          ],
+          "properties": {
+            "fingerprint": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "materialization_fingerprint": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "canonical_plan_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
         }
       }
     },

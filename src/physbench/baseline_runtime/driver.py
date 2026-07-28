@@ -81,13 +81,32 @@ class DirectManagedDriver(ManagedDriver):
         return results
 
     @staticmethod
-    def _asset_path(
-        source_root: Path,
+    def _case_input_view(
         case: dict[str, Any],
-        key: str,
-    ) -> str | None:
-        value = case["assets"].get(key)
-        return str((source_root / value).resolve()) if value else None
+        adaptation: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Expose only contract-declared assets and non-physics metadata."""
+        allowed = set(
+            adaptation["input_contract"]["asset_access"]
+        )
+        return {
+            key: case[key]
+            for key in (
+                "schema_version",
+                "case_id",
+                "scene_id",
+                "appearance",
+                "temporal",
+                "ood",
+            )
+            if key in case
+        } | {
+            "assets": {
+                key: value
+                for key, value in case.get("assets", {}).items()
+                if key in allowed
+            }
+        }
 
     def run_task(
         self,
@@ -122,7 +141,7 @@ class DirectManagedDriver(ManagedDriver):
             adaptation = adaptations[job["adaptation_id"]]
             spec = self.prepare_job(
                 job=job,
-                case=case,
+                case=self._case_input_view(case, adaptation),
                 adaptation=adaptation,
                 source_root=source_root,
                 run_dir=run_dir,
@@ -130,6 +149,18 @@ class DirectManagedDriver(ManagedDriver):
             if spec.get("job_id") != job["job_id"]:
                 raise ValueError(
                     "managed driver changed or omitted canonical job_id"
+                )
+            forbidden_spec_fields = {
+                "evaluation_reference_video",
+                "visual_reference_video",
+                "reference_video",
+                "physics_reference_video",
+            }
+            leaked = sorted(forbidden_spec_fields & set(spec))
+            if leaked:
+                raise ValueError(
+                    "managed job spec contains evaluator-only reference "
+                    f"fields: {leaked}"
                 )
             output = Path(spec["output_video"]).resolve()
             try:
@@ -141,29 +172,12 @@ class DirectManagedDriver(ManagedDriver):
             spec_path = run_dir / "jobs" / f"{job['job_id']}.json"
             write_json(spec_path, spec)
             specs.append(spec)
-            visual_reference = (
-                self._asset_path(
-                    source_root, case, "reference_video"
-                )
-                if case["has_real_reference_video"]
-                else None
-            )
             common_by_job[job["job_id"]] = {
                 "job_id": job["job_id"],
                 "case_id": job["case_id"],
                 "baseline_id": self.bundle.baseline_id,
                 "conditioning": conditioning,
-                "prompt_profile_id": conditioning,
                 "evaluation_partition": job["evaluation_partition"],
-                "evaluation_reference_video": spec.get(
-                    "evaluation_reference_video",
-                    self._asset_path(
-                        source_root, case, "physics_reference_video"
-                    ),
-                ),
-                "visual_reference_video": spec.get(
-                    "visual_reference_video", visual_reference
-                ),
                 "manual_scores": {},
                 "job_spec": str(spec_path),
                 "seed": int(job["seed"]),
@@ -205,11 +219,13 @@ class DirectManagedDriver(ManagedDriver):
                 "case_id",
                 "baseline_id",
                 "conditioning",
-                "prompt_profile_id",
                 "evaluation_partition",
                 "status",
                 "video_path",
                 "seed",
+                "prompt_profile_id",
+                "evaluation_reference_video",
+                "visual_reference_video",
             }
             collision = sorted(protected & set(result))
             if collision:

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Baseline Adaptation Input Contract",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generation_mode",
+    "text",
+    "media_channels",
+    "physics_channels",
+    "asset_access"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "generation_mode": {
+      "enum": ["t2v", "i2v", "v2v", "hybrid"]
+    },
+    "text": {
+      "type": "object",
+      "required": ["required", "binding"],
+      "properties": {
+        "required": {"const": true},
+        "binding": {
+          "type": "string",
+          "pattern": "^native_inputs\\."
+        }
+      },
+      "additionalProperties": false
+    },
+    "media_channels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "asset_key", "binding"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "kind": {"enum": ["image", "video"]},
+          "asset_key": {"type": "string", "minLength": 1},
+          "binding": {
+            "type": "string",
+            "pattern": "^native_inputs\\."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "physics_channels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "representation",
+          "binding",
+          "transport",
+          "used_parameters"
+        ],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "representation": {"type": "string", "minLength": 1},
+          "binding": {
+            "type": "string",
+            "pattern": "^native_inputs\\."
+          },
+          "transport": {"type": "string", "minLength": 1},
+          "used_parameters": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "asset_access": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": false
+}

@@ -17,9 +17,13 @@ RESOURCE_ROOT = (
 
 
 class StandardDataAdapter(DataAdapter):
-    """Declarative T2V/I2V adaptation owned by a managed Baseline."""
+    """Declarative text-conditioned T2V/I2V/V2V managed adaptation."""
 
-    PRESETS = {"standard_i2v_v1", "standard_t2v_v1"}
+    PRESETS = {
+        "standard_i2v_v1",
+        "standard_t2v_v1",
+        "standard_v2v_v1",
+    }
 
     def __init__(self, config: dict[str, Any]):
         self.config = copy.deepcopy(config)
@@ -91,6 +95,33 @@ class StandardDataAdapter(DataAdapter):
                     "managed I2V first_frame_policy must be require_asset or "
                     "asset_or_reference_frame0"
                 )
+        if preset == "standard_v2v_v1":
+            asset_key = self.config.get("video_asset_key")
+            if not isinstance(asset_key, str) or not asset_key:
+                raise ValueError(
+                    "managed V2V adapter requires video_asset_key"
+                )
+            if asset_key in {
+                "reference_video",
+                "physics_reference_video",
+                "source_video",
+            }:
+                raise ValueError(
+                    "managed V2V video_asset_key must name an explicit "
+                    "conditioning asset, not GT/reference/source video"
+                )
+
+    def dependency_paths(self) -> dict[str, Path]:
+        return {
+            (
+                "src/physbench/baseline_plugins/resources/"
+                f"{self.config['profile_set']}/generic.json"
+            ): self.profile_dir / "generic.json",
+            (
+                "src/physbench/baseline_plugins/resources/"
+                f"{self.config['profile_set']}/physics.json"
+            ): self.profile_dir / "physics.json",
+        }
 
     @property
     def dependency_fingerprints(self) -> dict[str, str]:
@@ -98,14 +129,10 @@ class StandardDataAdapter(DataAdapter):
             "src/physbench/baseline_runtime/adapter.py": sha256_file(
                 Path(__file__)
             ),
-            (
-                "src/physbench/baseline_plugins/resources/"
-                f"{self.config['profile_set']}/generic.json"
-            ): sha256_file(self.profile_dir / "generic.json"),
-            (
-                "src/physbench/baseline_plugins/resources/"
-                f"{self.config['profile_set']}/physics.json"
-            ): sha256_file(self.profile_dir / "physics.json"),
+            **{
+                name: sha256_file(path)
+                for name, path in self.dependency_paths().items()
+            },
         }
 
     @property
@@ -124,6 +151,7 @@ class StandardDataAdapter(DataAdapter):
             "paradigm": canonical_sha256({
                 "preset": self.config["preset"],
                 "first_frame_policy": self.config.get("first_frame_policy"),
+                "video_asset_key": self.config.get("video_asset_key"),
                 "implementation": implementation,
             }),
             "text": canonical_sha256({
@@ -165,9 +193,17 @@ class StandardDataAdapter(DataAdapter):
             ) from exc
 
     def describe(self) -> dict[str, Any]:
+        generation_mode = {
+            "standard_t2v_v1": "t2v",
+            "standard_i2v_v1": "i2v",
+            "standard_v2v_v1": "v2v",
+        }[self.config["preset"]]
         return {
             "type": "managed_standard_data_adapter_v1",
             "preset": self.config["preset"],
+            "generation_mode": generation_mode,
+            "physics_representations": ["structured_text"],
+            "text_conditioning_required": True,
             "fingerprint": self.fingerprint,
             "materialization_fingerprint": (
                 self.materialization_fingerprint
@@ -222,43 +258,64 @@ class StandardDataAdapter(DataAdapter):
         profile = self._spatial_profile(case["scene_id"])
         temporal = copy.deepcopy(self.config["temporal"])
         preset = self.config["preset"]
+        generation_mode = {
+            "standard_t2v_v1": "t2v",
+            "standard_i2v_v1": "i2v",
+            "standard_v2v_v1": "v2v",
+        }[preset]
         vision: dict[str, Any] = {
-            "paradigm": (
-                "image2video"
-                if preset == "standard_i2v_v1"
-                else "text2video"
-            )
+            "paradigm": {
+                "t2v": "text2video",
+                "i2v": "image2video",
+                "v2v": "video2video",
+            }[generation_mode]
         }
-        first_frame_source = None
+        media_channels: list[dict[str, Any]] = []
+        asset_access: list[str] = []
+        paradigm_source = None
         if preset == "standard_i2v_v1":
             first_frame = case["assets"].get("first_frame")
-            reference = case["assets"].get(
-                "physics_reference_video"
-            )
-            policy = self.config["first_frame_policy"]
-            if not first_frame and policy == "require_asset":
+            if not first_frame:
                 raise ValueError(
                     f"managed I2V case has no first-frame asset: "
                     f"{case['case_id']}"
                 )
-            if not first_frame and not reference:
-                raise ValueError(
-                    f"managed I2V case has neither first-frame nor physics "
-                    f"reference asset: {case['case_id']}"
-                )
-            first_frame_source = (
-                "assets.first_frame"
-                if first_frame
-                else "assets.physics_reference_video:frame0"
-            )
+            paradigm_source = "assets.first_frame"
             vision.update({
                 "first_frame_asset": first_frame,
-                "first_frame_reference_asset": (
-                    reference if not first_frame else None
-                ),
-                "first_frame_source": first_frame_source,
-                "first_frame_policy": policy,
+                "first_frame_source": paradigm_source,
+                # The legacy name remains accepted in manifests, but managed
+                # evaluation never derives an input frame from GT/reference.
+                "first_frame_policy": "require_asset",
             })
+            media_channels.append({
+                "id": "initial_frame",
+                "kind": "image",
+                "asset_key": "first_frame",
+                "binding": "native_inputs.vision.first_frame_asset",
+            })
+            asset_access.append("first_frame")
+        elif preset == "standard_v2v_v1":
+            asset_key = self.config["video_asset_key"]
+            video = case["assets"].get(asset_key)
+            if not video:
+                raise ValueError(
+                    f"managed V2V case has no assets.{asset_key}: "
+                    f"{case['case_id']}"
+                )
+            paradigm_source = f"assets.{asset_key}"
+            vision.update({
+                "input_video_asset": video,
+                "input_video_source": paradigm_source,
+                "video_asset_key": asset_key,
+            })
+            media_channels.append({
+                "id": "conditioning_video",
+                "kind": "video",
+                "asset_key": asset_key,
+                "binding": "native_inputs.vision.input_video_asset",
+            })
+            asset_access.append(asset_key)
         generation_shape = {
             **profile,
             **{
@@ -278,6 +335,33 @@ class StandardDataAdapter(DataAdapter):
             generation_shape["resolution"] = str(
                 generation_shape["resolution"]
             )
+        native_inputs = {
+            "vision": vision,
+            "text": {"prompt": record["prompt"]},
+            "generation_shape": generation_shape,
+        }
+        physics_channels = (
+            [{
+                "id": "structured_physics_text",
+                "representation": "structured_text",
+                "binding": "native_inputs.text.prompt",
+                "transport": "inline_text",
+                "used_parameters": sorted(record["used_parameters"]),
+            }]
+            if conditioning == "physics"
+            else []
+        )
+        input_contract = {
+            "schema_version": "1.0",
+            "generation_mode": generation_mode,
+            "text": {
+                "required": True,
+                "binding": "native_inputs.text.prompt",
+            },
+            "media_channels": media_channels,
+            "physics_channels": physics_channels,
+            "asset_access": asset_access,
+        }
         record.update({
             "schema_version": "2.0",
             "conditioning": conditioning,
@@ -299,29 +383,28 @@ class StandardDataAdapter(DataAdapter):
                 "paradigm": {
                     "type": preset,
                     "mode": vision["paradigm"],
-                    "source": first_frame_source,
+                    "source": paradigm_source,
                 },
                 "text": {
                     "type": "managed_prompt_profile_v1",
                     "generic_description": generic["prompt"],
-                    "contains_detailed_physics": False,
+                    "contains_detailed_physics": (
+                        conditioning == "physics"
+                    ),
                 },
                 "physics": {
                     "type": "managed_physics_profile_v1",
                     "enabled": conditioning == "physics",
                     "strategy": (
-                        "append_structured_values_to_prompt"
+                        "append_structured_values_to_text"
                         if conditioning == "physics"
                         else "disabled"
                     ),
                     "used_parameters": record["used_parameters"],
                 },
             },
-            "native_inputs": {
-                "vision": vision,
-                "text": {"prompt": record["prompt"]},
-                "generation_shape": generation_shape,
-            },
+            "input_contract": input_contract,
+            "native_inputs": native_inputs,
         })
         if conditioning == "generic" and record["used_parameters"]:
             raise AssertionError(

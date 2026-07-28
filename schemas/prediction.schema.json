@@ -2,11 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Prediction record",
   "type": "object",
-  "required": ["job_id", "case_id", "baseline_id", "prompt_profile_id", "evaluation_partition", "status", "video_path", "manual_scores"],
+  "required": ["job_id", "case_id", "baseline_id", "evaluation_partition", "status", "video_path", "manual_scores"],
+  "anyOf": [
+    {"required": ["conditioning"]},
+    {"required": ["prompt_profile_id"]}
+  ],
   "properties": {
     "job_id": {"type": "string"},
     "case_id": {"type": "string"},
     "baseline_id": {"type": "string"},
+    "conditioning": {"enum": ["generic", "physics"]},
     "prompt_profile_id": {"enum": ["generic", "physics_natural"]},
     "evaluation_partition": {"type": "string"},
     "status": {"enum": ["planned", "staged", "complete", "failed", "placeholder"]},

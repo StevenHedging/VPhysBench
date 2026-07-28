@@ -16,11 +16,11 @@ SCENES = [
 ]
 
 
-def _adapter() -> dict[str, Any]:
-    return {
-        "preset": "standard_i2v_v1",
+def _adapter(generation_mode: str) -> dict[str, Any]:
+    adapter = {
+        "kind": "standard",
+        "preset": f"standard_{generation_mode}_v1",
         "profile_set": "five_scene_i2v_v1",
-        "first_frame_policy": "require_asset",
         "spatial": {
             "scene_profiles": {
                 scene_id: {"width": 832, "height": 480}
@@ -33,9 +33,14 @@ def _adapter() -> dict[str, Any]:
             "valid_frame_rule": "4n+1",
         },
     }
+    if generation_mode == "i2v":
+        adapter["first_frame_policy"] = "require_asset"
+    elif generation_mode == "v2v":
+        adapter["video_asset_key"] = "input_video"
+    return adapter
 
 
-def _common(name: str) -> dict[str, Any]:
+def _common(name: str, generation_mode: str) -> dict[str, Any]:
     return {
         "schema_version": "4.0",
         "baseline_id": name,
@@ -45,13 +50,15 @@ def _common(name: str) -> dict[str, Any]:
         "capabilities": {
             "task_families": ["direct_eval"],
             "conditioning": ["generic", "physics"],
+            "generation_modes": [generation_mode],
+            "physics_representations": ["structured_text"],
             "train": False,
             "finetune": False,
             "generate": True,
         },
         "model": {"model_id": name, "checkpoint": None},
         "runtime": {},
-        "adapter": _adapter(),
+        "adapter": _adapter(generation_mode),
     }
 
 
@@ -65,9 +72,9 @@ def create_baseline_scaffold(
         raise ValueError(
             "baseline name may only contain letters, digits, '.', '_' and '-'"
         )
-    if backend not in {"managed-i2v", "submission"}:
+    if backend not in {"managed-i2v", "managed-v2v", "submission"}:
         raise ValueError(
-            "baseline backend must be managed-i2v or submission"
+            "baseline backend must be managed-i2v, managed-v2v or submission"
         )
     target = (Path(root).resolve() / name).resolve()
     if target.exists():
@@ -75,23 +82,34 @@ def create_baseline_scaffold(
             f"baseline scaffold target already exists: {target}"
         )
     target.mkdir(parents=True)
-    value = _common(name)
-    if backend == "managed-i2v":
+    generation_mode = "v2v" if backend == "managed-v2v" else "i2v"
+    value = _common(name, generation_mode)
+    if backend in {"managed-i2v", "managed-v2v"}:
+        driver_module = (
+            "subprocess_v2v"
+            if backend == "managed-v2v"
+            else "subprocess_i2v"
+        )
+        driver_type = (
+            "StandardV2VCLIDriver"
+            if backend == "managed-v2v"
+            else "StandardI2VCLIDriver"
+        )
         value["implementation"] = {
             "kind": "managed",
             "driver": "driver.py",
             "fingerprint_paths": ["*.py"],
         }
         value["runner"] = {
-            "type": "standard_i2v_cli_v1",
+            "type": f"standard_{generation_mode}_cli_v1",
             "config": {
                 "command": ["python", "inference.py"],
                 "extra_args": [],
             },
         }
         (target / "driver.py").write_text(
-            "from physbench.baseline_runtime.drivers.subprocess_i2v import "
-            "StandardI2VCLIDriver as Driver\n",
+            "from physbench.baseline_runtime.drivers."
+            f"{driver_module} import {driver_type} as Driver\n",
             encoding="utf-8",
         )
     else:
@@ -104,7 +122,7 @@ def create_baseline_scaffold(
         "model": {"checkpoint": "/absolute/path/to/checkpoint"},
         "runtime": (
             {}
-            if backend == "managed-i2v"
+            if backend in {"managed-i2v", "managed-v2v"}
             else {
                 "submission_manifest": (
                     "/absolute/path/to/submission.jsonl"

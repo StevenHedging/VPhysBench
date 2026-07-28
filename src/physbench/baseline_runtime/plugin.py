@@ -6,6 +6,7 @@ from typing import Any
 from ..baseline_api.interfaces import BaselinePlugin
 from ..domain import BaselineBundle, BaselineTaskInstance
 from ..io import sha256_file
+from .adapter_loader import load_data_adapter
 from .compiler import ManagedTaskBuilder
 from .driver import load_managed_driver
 
@@ -18,9 +19,18 @@ def _runtime_dependencies(
     root = Path(__file__).resolve().parent
     paths: dict[str, Path] = {
         "src/physbench/baseline_runtime/adapter.py": root / "adapter.py",
+        "src/physbench/baseline_runtime/adapter_loader.py": (
+            root / "adapter_loader.py"
+        ),
         "src/physbench/baseline_runtime/compiler.py": root / "compiler.py",
         "src/physbench/baseline_runtime/driver.py": root / "driver.py",
+        "src/physbench/baseline_runtime/input_contract.py": (
+            root / "input_contract.py"
+        ),
         "src/physbench/baseline_runtime/plugin.py": root / "plugin.py",
+        "src/physbench/baseline_runtime/task_instance_validation.py": (
+            root / "task_instance_validation.py"
+        ),
     }
     if submission:
         paths[
@@ -86,11 +96,24 @@ def verify_managed_instance(
 class ManagedBaselinePlugin(BaselinePlugin):
     def __init__(self, bundle: BaselineBundle):
         self.bundle = bundle
+        self.data_adapter = load_data_adapter(bundle)
         self.driver = load_managed_driver(bundle)
+        driver_paths = self.driver.dependency_paths()
+        adapter_paths = self.data_adapter.dependency_paths()
+        overlap = sorted(set(driver_paths) & set(adapter_paths))
+        if overlap:
+            raise ValueError(
+                "managed driver and DataAdapter dependencies collide: "
+                f"{overlap}"
+            )
         dependencies = _runtime_dependencies(
-            self.driver.dependency_paths()
+            {**driver_paths, **adapter_paths}
         )
-        self.task_builder = ManagedTaskBuilder(bundle, dependencies)
+        self.task_builder = ManagedTaskBuilder(
+            bundle,
+            dependencies,
+            self.data_adapter,
+        )
 
     def run_task(
         self,

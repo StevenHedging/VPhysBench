@@ -261,16 +261,18 @@ class IntegratedBaselineTests(unittest.TestCase):
                     self.assertEqual(42, payload["seed"])
                 else:
                     job = load_json(jobs[0])
-                    reference_frames = job["media_adaptation"][
-                        "physics_reference"
-                    ]["target_frames"]
+                    self.assertIsNone(
+                        job["media_adaptation"]["physics_reference"]
+                    )
                     generation_frames = job["wan22"]["generation"][
                         "num_frames"
                     ]
-                    self.assertGreaterEqual(
-                        generation_frames, reference_frames
-                    )
+                    self.assertEqual(121, generation_frames)
                     self.assertEqual(0, (generation_frames - 1) % 4)
+                    self.assertIsNone(
+                        job["evaluation_reference_video"]
+                    )
+                    self.assertIsNone(job["visual_reference_video"])
                     self.assertTrue(
                         Path(job["output_video"]).is_relative_to(run_dir)
                     )

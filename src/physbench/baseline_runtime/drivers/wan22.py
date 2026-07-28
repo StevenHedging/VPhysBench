@@ -154,9 +154,14 @@ class Wan22ManagedDriver(ManagedDriver):
             data_adapter=runtime_adapter,
         )
         engine = Wan22ExecutionEngine(self.bundle, task_builder)
-        return engine.run_task(
+        training, predictions = engine.run_task(
             instance=instance,
             run_dir=run_dir,
             execute=execute,
             stop_after_training=stop_after_training,
         )
+        for prediction in predictions:
+            prediction.pop("prompt_profile_id", None)
+            prediction.pop("evaluation_reference_video", None)
+            prediction.pop("visual_reference_video", None)
+        return training, predictions

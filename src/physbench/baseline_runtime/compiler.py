@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import Any
 
-from ..baseline_api.interfaces import TaskBuilder
+from ..baseline_api.interfaces import DataAdapter, TaskBuilder
 from ..domain import (
     AtomicPlan,
     BaselineBundle,
@@ -12,7 +13,18 @@ from ..domain import (
     TaskSpec,
 )
 from ..io import canonical_sha256
-from .adapter import StandardDataAdapter
+from .input_contract import (
+    ARTIFACT_REFERENCE_PREFIXES,
+    FORBIDDEN_ASSET_KEYS,
+    resolve_binding,
+    validate_adaptation_record,
+)
+
+
+_NON_RUNTIME_ASSET_KEYS = {
+    *FORBIDDEN_ASSET_KEYS,
+    "source_archive",
+}
 
 
 class ManagedTaskBuilder(TaskBuilder):
@@ -24,14 +36,12 @@ class ManagedTaskBuilder(TaskBuilder):
         self,
         bundle: BaselineBundle,
         dependency_fingerprints: dict[str, str],
+        data_adapter: DataAdapter,
     ):
         self.bundle = bundle
-        self.data_adapter = StandardDataAdapter(bundle.value["adapter"])
+        self.data_adapter = data_adapter
         self._dependency_fingerprints = dict(
-            sorted({
-                **dependency_fingerprints,
-                **self.data_adapter.dependency_fingerprints,
-            }.items())
+            sorted(dependency_fingerprints.items())
         )
 
     @property
@@ -102,6 +112,93 @@ class ManagedTaskBuilder(TaskBuilder):
         ):
             raise ValueError("submission Baselines only support direct_eval")
 
+    @staticmethod
+    def _adapter_case(
+        case: dict[str, Any],
+        conditioning: str,
+    ) -> dict[str, Any]:
+        """Project a Case onto assets and facts available to an adapter."""
+        projected = copy.deepcopy(case)
+        projected["assets"] = {
+            key: value
+            for key, value in case["assets"].items()
+            if key not in _NON_RUNTIME_ASSET_KEYS
+        }
+        if conditioning == "generic":
+            # Deliberate absence makes accidental access fail at the source.
+            projected.pop("physics", None)
+        return projected
+
+    @staticmethod
+    def _runtime_case(
+        case: dict[str, Any],
+        *,
+        training_target: bool,
+    ) -> dict[str, Any]:
+        """Project source data embedded in the runnable TaskInstance."""
+        if training_target:
+            return copy.deepcopy(case)
+        projected = copy.deepcopy(case)
+        projected["assets"] = {
+            key: value
+            for key, value in case["assets"].items()
+            if key not in _NON_RUNTIME_ASSET_KEYS
+        }
+        projected.pop("physics", None)
+        projected["has_real_reference_video"] = False
+        return projected
+
+    @staticmethod
+    def _validate_asset_access(
+        adaptation: dict[str, Any],
+        case: dict[str, Any],
+    ) -> None:
+        requested = adaptation["input_contract"]["asset_access"]
+        missing = [
+            key for key in requested if not case["assets"].get(key)
+        ]
+        if missing:
+            raise ValueError(
+                f"adaptation for {case['case_id']} requests unavailable "
+                f"assets: {sorted(missing)}"
+            )
+        for channel in adaptation["input_contract"]["media_channels"]:
+            expected = case["assets"][channel["asset_key"]]
+            actual = resolve_binding(adaptation, channel["binding"])
+            is_artifact = any(
+                actual.startswith(prefix)
+                for prefix in ARTIFACT_REFERENCE_PREFIXES
+            )
+            if actual != expected and not is_artifact:
+                raise ValueError(
+                    f"adaptation for {case['case_id']} binds "
+                    f"assets.{channel['asset_key']} to an unrelated media "
+                    f"value: {actual!r}"
+                )
+
+    @staticmethod
+    def _validate_physics_access(
+        adaptation: dict[str, Any],
+        case: dict[str, Any],
+        conditioning: str,
+    ) -> None:
+        if conditioning == "generic":
+            return
+        physics = case.get("physics", {})
+        invalid = [
+            name
+            for name in adaptation["used_parameters"]
+            if (
+                name not in physics
+                or physics[name].get("annotated") is not True
+            )
+        ]
+        if invalid:
+            raise ValueError(
+                f"adaptation for {case['case_id']} uses missing or "
+                f"non-annotated physics fields: {sorted(invalid)}"
+            )
+
     def compile(
         self,
         dataset: DatasetSnapshot,
@@ -111,14 +208,58 @@ class ManagedTaskBuilder(TaskBuilder):
         self._validate_compatibility(task, canonical_plan)
         by_id = {case["case_id"]: case for case in dataset.cases}
         train_ids = list(canonical_plan.train_case_ids)
+        train_id_set = set(train_ids)
         eval_ids = sorted({job["case_id"] for job in canonical_plan.jobs})
         selected_ids = sorted(set(train_ids) | set(eval_ids))
         adaptations: list[dict[str, Any]] = []
         adaptation_by_key: dict[tuple[str, str], dict[str, Any]] = {}
         for role, case_ids in (("train", train_ids), ("eval", eval_ids)):
             for case_id in case_ids:
+                case = self._adapter_case(
+                    by_id[case_id], task.conditioning
+                )
                 adaptation = self.data_adapter.adapt_case(
-                    by_id[case_id], task.conditioning, role=role
+                    case, task.conditioning, role=role
+                )
+                expected_identity = {
+                    "case_id": case_id,
+                    "conditioning": task.conditioning,
+                    "role": role,
+                }
+                actual_identity = {
+                    key: adaptation.get(key)
+                    for key in expected_identity
+                }
+                if actual_identity != expected_identity:
+                    raise ValueError(
+                        "DataAdapter changed or omitted adaptation identity: "
+                        f"expected={expected_identity}, "
+                        f"actual={actual_identity}"
+                    )
+                validate_adaptation_record(
+                    adaptation,
+                    conditioning=task.conditioning,
+                    capabilities=self.bundle.value["capabilities"],
+                )
+                declared_modes = self.bundle.value[
+                    "capabilities"
+                ].get("generation_modes")
+                actual_mode = adaptation["input_contract"][
+                    "generation_mode"
+                ]
+                if (
+                    declared_modes is not None
+                    and actual_mode not in declared_modes
+                ):
+                    raise ValueError(
+                        f"adapter generated mode {actual_mode!r}, which is "
+                        "not declared in capabilities.generation_modes"
+                    )
+                self._validate_asset_access(adaptation, case)
+                self._validate_physics_access(
+                    adaptation,
+                    case,
+                    task.conditioning,
                 )
                 adaptation_id = (
                     f"{case_id}::{role}::{task.conditioning}"
@@ -235,7 +376,13 @@ class ManagedTaskBuilder(TaskBuilder):
             "canonical_plan": canonical_plan.value,
             "source": {
                 "asset_root": str(dataset.asset_root),
-                "cases": [by_id[case_id] for case_id in selected_ids],
+                "cases": [
+                    self._runtime_case(
+                        by_id[case_id],
+                        training_target=case_id in train_id_set,
+                    )
+                    for case_id in selected_ids
+                ],
             },
             "adaptations": adaptations,
             "training": training,

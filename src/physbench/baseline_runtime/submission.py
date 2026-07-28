@@ -7,6 +7,7 @@ from ..artifacts import import_prediction_video
 from ..baseline_api.interfaces import BaselinePlugin
 from ..domain import BaselineBundle, BaselineTaskInstance
 from ..io import load_jsonl, sha256_file
+from .adapter_loader import load_data_adapter
 from .compiler import ManagedTaskBuilder
 from .plugin import _runtime_dependencies, verify_managed_instance
 
@@ -37,9 +38,21 @@ class SubmissionBaselinePlugin(BaselinePlugin):
             if self.submission_manifest is not None
             else None
         )
+        self.data_adapter = load_data_adapter(bundle)
+        adapter_paths = self.data_adapter.dependency_paths()
+        overlap = sorted(set(extra) & set(adapter_paths))
+        if overlap:
+            raise ValueError(
+                "submission and DataAdapter dependencies collide: "
+                f"{overlap}"
+            )
         self.task_builder = ManagedTaskBuilder(
             bundle,
-            _runtime_dependencies(extra, submission=True),
+            _runtime_dependencies(
+                {**extra, **adapter_paths},
+                submission=True,
+            ),
+            self.data_adapter,
         )
 
     def _submission_records(self) -> dict[str, dict[str, Any]]:
@@ -98,7 +111,6 @@ class SubmissionBaselinePlugin(BaselinePlugin):
                     "case_id": job["case_id"],
                     "baseline_id": self.bundle.baseline_id,
                     "conditioning": conditioning,
-                    "prompt_profile_id": conditioning,
                     "evaluation_partition": job["evaluation_partition"],
                     "status": status,
                     "video_path": None,
@@ -119,10 +131,6 @@ class SubmissionBaselinePlugin(BaselinePlugin):
                 "submission coverage mismatch: "
                 f"missing={missing}, extra={extra}"
             )
-        cases = {
-            case["case_id"]: case for case in value["source"]["cases"]
-        }
-        source_root = Path(value["source"]["asset_root"])
         predictions = []
         for job in value["inference"]["jobs"]:
             record = submitted[job["job_id"]]
@@ -154,31 +162,12 @@ class SubmissionBaselinePlugin(BaselinePlugin):
                 job_id=job["job_id"],
                 seed=int(job["seed"]),
             )
-            case = cases[job["case_id"]]
-            physics_reference = case["assets"].get(
-                "physics_reference_video"
-            )
-            visual_reference = case["assets"].get("reference_video")
             predictions.append({
                 "job_id": job["job_id"],
                 "case_id": job["case_id"],
                 "baseline_id": self.bundle.baseline_id,
                 "conditioning": conditioning,
-                "prompt_profile_id": conditioning,
                 "evaluation_partition": job["evaluation_partition"],
-                "evaluation_reference_video": (
-                    str((source_root / physics_reference).resolve())
-                    if physics_reference
-                    else None
-                ),
-                "visual_reference_video": (
-                    str((source_root / visual_reference).resolve())
-                    if (
-                        visual_reference
-                        and case["has_real_reference_video"]
-                    )
-                    else None
-                ),
                 "status": "complete",
                 "video_path": imported["destination_path"],
                 "video_sha256": imported["sha256"],
