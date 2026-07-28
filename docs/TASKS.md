@@ -1,5 +1,9 @@
 # Task、TaskBuilder 与 Baseline 接入
 
+本文说明 Task、TaskBuilder 与 Baseline 接口的架构和契约。需要实际接入新模型时，请从
+[自定义 Baseline 集成指南](BASELINE_INTEGRATION.md) 开始，按其中的脚手架、配置、
+dry-run 和验收流程操作。
+
 ## 1. Task 与 canonical plan
 
 正式任务位于 `tasks/official/five_scene_*.json`。TaskSpec schema 是 `2.0`，
@@ -275,6 +279,9 @@ task_instance
 使 `instance_digest` 失效。执行前还会验证实例对应当前部署。
 
 ## 5. 新增和移除
+
+完整的逐字段配置、driver 示例、目录树和验收清单见
+[自定义 Baseline 集成指南](BASELINE_INTEGRATION.md)。
 
 创建 managed I2V 模板：
 

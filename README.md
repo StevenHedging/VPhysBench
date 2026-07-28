@@ -158,6 +158,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 - [系统架构](docs/ARCHITECTURE.md)
 - [数据集与划分](docs/DATASET.md)
+- [自定义 Baseline 集成指南](docs/BASELINE_INTEGRATION.md)
 - [TaskBuilder 与 Baseline 接入](docs/TASKS.md)
 - [DataAdapter 与条件隔离](docs/DATA_ADAPTER.md)
 - [五场景评估协议](docs/EVALUATION.md)

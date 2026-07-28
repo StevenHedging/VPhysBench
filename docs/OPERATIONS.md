@@ -90,6 +90,9 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 ## 5. Baseline 发现与部署验收
 
+首次接入模型前，先按[自定义 Baseline 集成指南](BASELINE_INTEGRATION.md)选择
+submission、managed 或 command 接口并完成 Bundle。
+
 只读取 manifests：
 
 ```bash
