@@ -8,39 +8,89 @@
 CanonicalTaskPlan + frozen cases + predictions.jsonl + evaluation protocol
 ```
 
-当前协议：
+当前官方协议：
 
 ```text
-configs/evaluation/protocols/scene_default_v2.json
+configs/evaluation/protocols/scene_default_v3.json
 ```
 
-官方 v5 Task 使用 `scene_default_v2`，五个 scene evaluator 都使用实现版本 `1.2`。
-`scene_default_v1` 作为可复现历史结果的 legacy 协议保留：文件字节、协议指纹、五个
-evaluator 的 `1.1` identity 和 random-seek 解码行为均被冻结；v1 仍使用固定 0–5 秒
-单摆时间轴。
+官方 v6 Task 使用 `scene_default_v3`，五个 scene evaluator 都使用实现版本 `1.3`。
+v3 是独立协议，不覆盖 v5 run 的 canonical v2 结果。历史协议继续冻结：
+
+- v2：v5 Task，evaluator `1.2`，reference-bounded 时间轴与顺序前向解码；
+- v1：v4 Task，evaluator `1.1`，random-seek；单摆使用固定 0–5 秒时间轴。
 
 v2 让单摆与其余 scene 一样采用 reference-bounded 时间轴，并为所有 scene 显式固定
 顺序前向解码。协议、evaluator 版本、解码策略和完整 config 都进入 identity，因此
-v1/v2 结果不能混合。
+v1/v2/v3 结果不能混合。v3 沿用 v2 的媒体规范，但增加主体评分与新的失败责任语义。
 
 `plan.jobs` 是主表。缺失 prediction、重复 prediction、失败生成或未知 case 都必须产生
 一个显式 case result。
 
 ## 2. Case 状态
 
+v3 的状态按故障责任划分：
+
 | 状态 | 含义 | score |
 | --- | --- | --- |
-| `evaluated` | 成功得到可信物理状态相似度 | `[0,1]` |
-| `unavailable` | prediction、时长或可信 reference 不可用 | `null` |
+| `evaluated` | 得到正常分数，或 prediction 侧失败的保守退化分数 | `[0,1]` |
+| `unavailable` | GT/reference 资产、时长或 reference 观测不可用 | `null` |
 | `unsupported` | 协议未实现该 scene | `null` |
-| `error` | 解码、分割、跟踪或质量校验失败 | `null` |
+| `error` | 数据契约冲突、重复记录或真正的 evaluator 内部异常 | `null` |
 
-错误和不可用不能转换为零分。
+prediction 缺记录、生成失败、视频缺失/损坏/过短、分割或跟踪失败均返回：
+
+```text
+status = evaluated
+score = 0
+quality.degraded = true
+reason_code = 稳定原因码
+```
+
+这类 Case 进入 coverage，不能靠评估失败逃避难例。reference 侧问题则为
+`unavailable`，不惩罚 Baseline；未知内部异常保留为 `error`，不会被低分掩盖。v1/v2
+仍保持原先的历史状态语义。
 
 ## 3. 评分契约
 
+v3 主 metric 为：
+
+```text
+scene_subject_state_similarity
+```
+
+有同 Case GT 时：
+
+```text
+subject = 0.50 × position + 0.20 × shape + 0.30 × appearance
+case    = 0.60 × subject + 0.40 × scene_physics_state
+```
+
+其中：
+
+- `position`：0.60 × 质心距离相似度 + 0.40 × 原画布 mask IoU；
+- `shape`：0.60 × canonical crop mask IoU + 0.40 × boundary F；
+- `appearance`：0.45 × mask 内 Lab 颜色直方图交集
+  + 0.35 × canonical crop SSIM + 0.20 × 梯度方向纹理相似度。
+
+质心距离按画布对角线归一化并使用指数核；canonical crop 保持主体宽高比、居中并缩放
+到固定画布，因此形状项不会被绝对位置和尺度重复主导。所有逐帧值写入
+`subject_components.csv`。
+
+没有同 Case GT、只能使用 parent physics reference 时：
+
+```text
+case = 0.70 × parent-relative physics state
+     + 0.30 × generated-subject appearance vs Case conditioned first frame
+```
+
+parent 视频只提供动力学 GT，不参与 OOD 外貌或像素位置评分。条件首帧从 Case 的
+`assets.first_frame` 读取；prediction 第 0 帧 mask 仅作为不可变条件图上的主体 ROI，
+mask 缺失或错误会得到保守低分。由于不存在真实 continuation，后续绝对位置和形状没有
+可识别 GT，不会伪造这两项。
+
 Scene score 是 reference 与 prediction 的相似度，不是 prediction 的绝对质量分。
-所有 evaluator 必须满足：
+所有正常 comparison 必须满足：
 
 ```text
 identity:     S(x, x) = 1
@@ -58,7 +108,8 @@ similarity   = exp(-scaled_error)
 相对误差组件使用 reference 值和稳定的最小分母。`[0,1]` 比率使用
 `1 - |prediction-reference|`。
 
-以下量不能再单边扣 prediction：
+scene physics state 仍使用 v2 的 reference-relative 组件。以下量不能单边扣
+prediction：
 
 - reference 自身的支点漂移或摆长波动；
 - reference 自身的横向漂移；
@@ -74,7 +125,7 @@ similarity   = exp(-scaled_error)
 
 Reference 与 prediction 可以有不同分辨率、FPS 和帧数，但必须覆盖相同物理区间。
 
-两版共有的步骤：
+各版共有的步骤：
 
 1. probe source metadata；
 2. 建立物理时间戳；
@@ -88,7 +139,7 @@ Reference 与 prediction 可以有不同分辨率、FPS 和帧数，但必须覆
 
 - v1 `legacy_random_seek`：按请求顺序对每个 index 执行一次
   `CAP_PROP_POS_FRAMES` seek，保留历史 decoder 行为。
-- v2 `sequential_forward`：从帧 0 解到最大目标 index，再按原时间戳顺序重组，避免
+- v2/v3 `sequential_forward`：从帧 0 解到最大目标 index，再按原时间戳顺序重组，避免
   对长视频重复 seek。
 
 两种策略使用相同的 `np.rint` source index，也都保留非单调请求和重复 index；但不能
@@ -96,7 +147,7 @@ Reference 与 prediction 可以有不同分辨率、FPS 和帧数，但必须覆
 可能得到不同像素，未请求中间帧损坏也只会阻断顺序解码。正因如此，两种策略属于不同
 evaluator identity。
 
-| scene | v2 timeline | decode | 最小时长 | 最大时长 | canvas |
+| scene | v2/v3 timeline | decode | 最小时长 | 最大时长 | canvas |
 | --- | --- | --- | ---: | ---: | --- |
 | pendulum | reference-bounded，16 Hz | sequential | 4.8 s | 5 s | 480 × 832 |
 | free_fall | reference-bounded，32 Hz | sequential | 0.2 s | 1 s | 480 × 832 |
@@ -106,10 +157,10 @@ evaluator identity。
 
 所有源视频最低要求为 8 FPS。时间轴由 reference 的实际末帧时间决定，但不会超过
 协议的最大时长。采样点保持协议 FPS，因此最后一个采样点是不晚于 reference 边界的
-最大网格点。prediction 必须覆盖同一个时间区间；时长不足会返回
-`unavailable/insufficient_duration`，不会补帧或重复末帧。
+最大网格点。prediction 必须覆盖同一个时间区间；时长不足不会补帧或重复末帧：v3
+返回 `evaluated/0/degraded`，v1/v2 保持历史 `unavailable`。
 
-单摆 v2 的 4.8 秒下限覆盖当前冻结数据集中最短的可信 reference，同时仍提供足够的
+单摆 v2/v3 的 4.8 秒下限覆盖当前冻结数据集中最短的可信 reference，同时仍提供足够的
 周期观测区间。需要复现旧运行时必须显式使用 `scene_default_v1`，其固定 5 秒要求
 不会被 v2 行为静默改写。
 
@@ -130,16 +181,25 @@ same_case_reference
 - structured physics 完全一致；
 - parent reference 存在。
 
-它是动力学 reference，不是同外观视觉 GT。协议保留 `physics_model` 和
-`reference_free` 模式，但当前五场景正式分数都使用可信视频 reference。
+它是动力学 reference，不是同外观视觉 GT。v3 的外貌项使用 OOD Case 自己的条件首帧，
+不使用 parent 像素。协议保留 `physics_model` 和 `reference_free` 模式，但当前五场景
+正式动力学分数都使用可信视频 reference。
 
 因此，没有同外观 GT 的 OOD1 case 仍可评估动力学：只要它与 parent 的 structured
 physics 完全一致，就使用 parent 的真实运动作为物理 reference。背景、底座、颜色或
-物体外观差异可能使原图 IoU 偏低，所以 IoU 不进入正式物理状态分数。
+物体外观差异可能使 parent/生成原图 IoU 偏低，所以这条 IoU 只保留为诊断，不进入
+正式分数。
 
 ## 6. Mask 与 IoU 语义
 
-Mask 是状态观测和诊断层，不是正式 case score。
+v3 中 Mask 同时承担两类职责：
+
+1. 为各 scene 的物理状态轨迹提供观测；
+2. 在同 Case GT 模式中形成 position/shape/appearance 的主体 ROI。
+
+原始 `physical_subject_mask_iou` 曲线继续保留，既是 position 的一个子项，也是便于
+人工审计的 Jensen 风格对照图；在 parent 模式中它只是跨外观诊断，不计分。v1/v2 中
+Mask IoU 仍然只是诊断。
 
 逐帧 IoU：
 
@@ -255,7 +315,8 @@ structural_consistency =
 - 至少有 3 个有效观测点；
 - 必须能估计有效支点、摆球和摆长。
 
-不满足门控时返回 `error`，不会基于不可信轨迹给出分数。
+不满足门控时不会基于不可信轨迹伪造正常分数：v3 prediction 侧返回
+`evaluated/0/degraded`，reference 侧返回 `unavailable`；v1/v2 保持历史 `error`。
 
 ### 7.4 诊断和产物
 
@@ -878,7 +939,9 @@ runs_v2/<run_id>/evaluation/
 └── cases/<job_id>/
     ├── result.json
     ├── per_frame.csv
+    ├── subject_components.csv       # v3
     ├── physical_subject_iou_curve.png
+    ├── subject_similarity_curve.png # v3
     └── <scene_state_curve>.png
 ```
 
@@ -907,7 +970,8 @@ runs_v2/<run_id>/evaluation/
 - CSV 和曲线 artifact 路径。
 
 `task_result.json` 记录 coverage、状态计数、partition/scene breakdown、严格 Task score
-和部分观察分数。
+和部分观察分数。v3 还记录 `robustness`：退化零分数目与比例、reference unavailable
+数、真正 evaluator error 数以及退化原因码分布。
 
 ## 13. Task 聚合
 
@@ -916,7 +980,7 @@ runs_v2/<run_id>/evaluation/
 TaskEvaluator 以 frozen canonical plan 的 `jobs` 为唯一主表，而不是以
 `predictions.jsonl` 中实际出现的记录为主表。因此：
 
-- 缺失 prediction 会产生显式 `unavailable` case result；
+- 缺失 prediction 会产生显式 case result；v3 为退化零分，v1/v2 为 `unavailable`；
 - 重复 prediction 会产生显式 `error`；
 - 未知 job 的 prediction 会写入 `integrity_issues`；
 - 失败 job 不会从分母中静默消失。
@@ -980,13 +1044,18 @@ status = partial
 
 ### 14.1 正式 scene metrics
 
-| scene | 主 metric | components |
+v3 五个 scene 的主 metric 都是 `scene_subject_state_similarity`。它组合共同的
+`physical_subject_similarity` 与下表的 scene state 子 metric：
+
+| scene | scene state 子 metric | components |
 | --- | --- | --- |
 | pendulum | `pendulum_state_similarity` | angle trajectory、period、amplitude、structural consistency |
 | free_fall | `free_fall_state_similarity` | vertical trajectory、normalized acceleration、impact time、motion constraints |
 | inclined_plane_slide | `inclined_plane_state_similarity` | along-plane trajectory、normalized acceleration、descent time、contact and pose constraints |
 | uniform_circular_motion | `uniform_circular_motion_state_similarity` | angular trajectory、angular velocity、orbit geometry、uniform motion |
 | collision_1d | `collision_1d_state_similarity` | instance trajectories、contact event time、pre/post velocities、collision physics、one-dimensional constraint |
+
+v1/v2 仍以下表 scene state metric 作为各自历史主 metric。
 
 ### 14.2 共同诊断 metric
 
@@ -1003,7 +1072,9 @@ mean
 minimum
 maximum
 observed_frame_ratio
-role = diagnostic_not_primary_score
+role = position_component_and_required_diagnostic  # v3 same-case
+     | parent_reference_visual_diagnostic_not_scored
+     | diagnostic_not_primary_score                # v1/v2
 ```
 
 ### 14.3 Scene-specific diagnostics
@@ -1038,8 +1109,36 @@ visual_judgment
 ```
 
 其默认配置位于 `configs/metrics/default.json`，目前都是 disabled placeholder。当前
-AtomicRun 的正式五场景分数来自 `scene_default_v2` 下的 scene-specific evaluator，
+当前官方 AtomicRun 的正式五场景分数来自 `scene_default_v3` 下的 scene-specific evaluator，
 不是这三个旧 placeholder metric。
+
+### 14.5 论文依据与工程取舍
+
+v3 的主体层采用可审计、无额外训练的组合指标：
+
+- DAVIS 的 region similarity \(J\) 与 contour accuracy \(F\) 说明区域重合和边界质量
+  应分开观察；v3 的 shape 因此组合 canonical mask IoU 与 tolerance-aware boundary F。
+- SSIM 提供亮度、对比度和结构联合比较的经典构造；v3 在主体 canonical crop 的共同
+  mask 上使用稳定的 SSIM-style 项，并与 Lab 颜色和梯度纹理互补。
+- LPIPS 说明深特征距离通常比单纯像素距离更符合感知判断，但它依赖固定 backbone、
+  权重和预处理，并可能给小型实验物体带来域偏差。v3 暂不把 LPIPS 作为硬依赖，避免
+  模型下载或设备问题使 Case 失败；以后只能作为版本化协议中的新增组件。
+- SAM 2 为当前视频 mask 传播提供主体层；CoTracker 与 TAP-Vid 提供点跟踪和遮挡
+  benchmark 的相关思路。后续若增加 fallback tracker，必须记录 backend identity，
+  并发布新 evaluator 版本，不能静默改变 v3。
+
+参考：
+
+1. Perazzi et al., *A Benchmark Dataset and Evaluation Methodology for Video
+   Object Segmentation*, CVPR 2016 (DAVIS).
+2. Wang et al., *Image Quality Assessment: From Error Visibility to Structural
+   Similarity*, IEEE TIP 2004.
+3. Zhang et al., *The Unreasonable Effectiveness of Deep Features as a
+   Perceptual Metric*, CVPR 2018 (LPIPS).
+4. Ravi et al., *SAM 2: Segment Anything in Images and Videos*, 2024.
+5. Karaev et al., *CoTracker: It is Better to Track Together*, ECCV 2024.
+6. Doersch et al., *TAP-Vid: A Benchmark for Tracking Any Point in a Video*,
+   NeurIPS 2022.
 
 ## 15. 回归验证
 
@@ -1061,6 +1160,7 @@ AtomicRun 的正式五场景分数来自 `scene_default_v2` 下的 scene-specifi
 ```text
 tests/test_scene_evaluation.py
 tests/test_metrics.py
+tests/test_evaluation_protocol_v3.py
 ```
 
 实现或修改 evaluator 后至少执行：
@@ -1082,17 +1182,17 @@ PYTHONPATH=src:tests /root/miniconda3/envs/phybench/bin/python \
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   evaluate \
   --run-dir runs_v2/RUN_ID \
-  --protocol-id scene_default_v2 \
-  --evaluation-id protocol-v2-audit-001
+  --protocol-id scene_default_v3 \
+  --evaluation-id protocol-v3-audit-001
 ```
 
 输出目录由协议内容指纹确定：
 
 ```text
 runs_v2/RUN_ID/reevaluations/
-└── scene_default_v2/
+└── scene_default_v3/
     └── <protocol_sha256>/
-        └── protocol-v2-audit-001/
+        └── protocol-v3-audit-001/
             ├── reevaluation.json
             ├── protocol.json
             ├── source_integrity.json
@@ -1130,10 +1230,10 @@ canonical source tree 和 reevaluation 目标路径不允许 symlink、路径穿
    asset lock 一致。
 
 Native evaluation 可以是严格意义上的 `partial`，例如 prediction 都是 `planned`；但它
-不能缺 prediction 或 case-result 记录。`planned`、`failed` 等非 complete prediction
-会得到显式 `unavailable`，不会伪造分数。非 complete prediction 或目标协议标为
-unsupported 的 job 不会提前读取其 reference，避免把不会被 evaluator 消费的资产变成
-额外 blocker。
+不能缺 prediction 或 case-result 记录。目标 v3 对 `planned`、`failed` 等非-complete
+prediction 给显式退化零分；v1/v2 保持 `unavailable`。非-complete prediction 或目标
+协议标为 unsupported 的 job 不会提前读取其 reference，避免把不会被 evaluator 消费的
+资产变成额外 blocker。
 
 ### 16.2 Provenance 与失败审计
 
@@ -1167,7 +1267,7 @@ state.json
 component_fingerprints.json
 ```
 
-因此同一 AtomicRun 的 v1、v2 或未来协议结果可以并存审计，但不得跨 fingerprint
+因此同一 AtomicRun 的 v1、v2、v3 或未来协议结果可以并存审计，但不得跨 fingerprint
 混合聚合。
 
 旧的 Python 符号 `physbench.orchestration.reevaluate_atomic` 仅作为 fail-closed
@@ -1181,7 +1281,8 @@ component_fingerprints.json
 正式协议与 Task 聚合：
 
 ```text
-configs/evaluation/protocols/scene_default_v2.json
+configs/evaluation/protocols/scene_default_v3.json
+configs/evaluation/protocols/scene_default_v2.json  # frozen v5
 configs/evaluation/protocols/scene_default_v1.json  # frozen legacy
 src/physbench/evaluation/task_evaluator.py
 src/physbench/evaluation/common/

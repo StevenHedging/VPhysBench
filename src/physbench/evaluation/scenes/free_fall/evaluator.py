@@ -14,6 +14,13 @@ from ...common.errors import SceneAnalysisError
 from ...common.masks.motion import build_motion_prompt
 from ...common.masks.quality import observed_mask_iou, summarize_mask_ious
 from ...common.masks.sam2 import Sam2VideoSegmenter
+from ...common.robustness import (
+    add_subject_comparison,
+    degraded_prediction_analysis,
+    prediction_failure_code,
+    reference_failure,
+    robust_subject_enabled,
+)
 from ...common.tracking import extract_centroid_trace
 from ...contracts import CaseEvaluationRequest
 from .scoring import extract_free_fall_trace, score_free_fall
@@ -73,40 +80,65 @@ class FreeFallCaseEvaluator(ReferenceCaseEvaluator):
         reference_video,
         prediction_video,
     ) -> SceneAnalysis:
-        reference_masks, reference_segmentation, reference_prompt = self._segment(
-            reference_video.frames
-        )
-        prediction_masks, prediction_segmentation, _ = self._segment(
-            prediction_video.frames, fallback_prompt=reference_prompt
-        )
+        robust = robust_subject_enabled(self.config)
         quality = self.config["quality"]
         trace_arguments = {
             "minimum_area": int(quality["minimum_mask_pixels"]),
             "maximum_area_ratio": float(quality["maximum_mask_area_ratio"]),
             "minimum_valid_ratio": float(quality["minimum_valid_frame_ratio"]),
         }
-        reference_centroid = extract_centroid_trace(
-            reference_masks, **trace_arguments
-        )
-        prediction_centroid = extract_centroid_trace(
-            prediction_masks, **trace_arguments
-        )
         minimum_span = float(quality["minimum_vertical_span_px"])
-        reference_trace = extract_free_fall_trace(
-            reference_centroid,
-            times_s,
-            minimum_vertical_span_px=minimum_span,
-        )
-        prediction_trace = extract_free_fall_trace(
-            prediction_centroid,
-            times_s,
-            minimum_vertical_span_px=minimum_span,
-        )
-        state_score = score_free_fall(
-            reference_trace,
-            prediction_trace,
-            config=self.config["scoring"],
-        )
+        try:
+            (
+                reference_masks,
+                reference_segmentation,
+                reference_prompt,
+            ) = self._segment(reference_video.frames)
+            reference_centroid = extract_centroid_trace(
+                reference_masks, **trace_arguments
+            )
+            reference_trace = extract_free_fall_trace(
+                reference_centroid,
+                times_s,
+                minimum_vertical_span_px=minimum_span,
+            )
+        except SceneAnalysisError as exc:
+            if robust:
+                raise reference_failure(
+                    exc, stage="free-fall observation"
+                ) from exc
+            raise
+        try:
+            prediction_masks, prediction_segmentation, _ = self._segment(
+                prediction_video.frames, fallback_prompt=reference_prompt
+            )
+            prediction_centroid = extract_centroid_trace(
+                prediction_masks, **trace_arguments
+            )
+            prediction_trace = extract_free_fall_trace(
+                prediction_centroid,
+                times_s,
+                minimum_vertical_span_px=minimum_span,
+            )
+            state_score = score_free_fall(
+                reference_trace,
+                prediction_trace,
+                config=self.config["scoring"],
+            )
+        except SceneAnalysisError as exc:
+            if robust:
+                code, reason = prediction_failure_code(
+                    exc, stage="free_fall_observation"
+                )
+                return degraded_prediction_analysis(
+                    request,
+                    times_s=times_s,
+                    reference_masks=reference_masks,
+                    code=code,
+                    reason=reason,
+                    scene_name="Free fall",
+                )
+            raise
         ious = [
             observed_mask_iou(
                 reference_masks[index], prediction_masks[index]
@@ -166,7 +198,7 @@ class FreeFallCaseEvaluator(ReferenceCaseEvaluator):
             reference_acceleration_m_s2 = (
                 reference_trace.acceleration_px_s2 / pixels_per_meter
             )
-        return SceneAnalysis(
+        analysis = SceneAnalysis(
             score=state_score["score"],
             metrics={
                 "free_fall_state_similarity": state_score,
@@ -196,3 +228,15 @@ class FreeFallCaseEvaluator(ReferenceCaseEvaluator):
                 }
             },
         )
+        if robust:
+            return add_subject_comparison(
+                analysis,
+                request,
+                times_s=times_s,
+                reference_frames=reference_video.frames,
+                prediction_frames=prediction_video.frames,
+                reference_masks=reference_masks,
+                prediction_masks=prediction_masks,
+                scene_name="Free fall",
+            )
+        return analysis

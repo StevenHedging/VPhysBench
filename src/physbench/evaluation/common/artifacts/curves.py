@@ -28,6 +28,11 @@ def save_iou_curve(
     ious: list[float | None],
     case_id: str,
     scene_name: str,
+    series_label: str = (
+        "Physical-subject mask IoU (reference vs generation)"
+    ),
+    y_label: str = "IoU",
+    metric_name: str = "physical-subject IoU",
 ) -> None:
     plt = _pyplot()
     x = np.arange(len(ious))
@@ -42,7 +47,7 @@ def save_iou_curve(
         marker="o",
         markersize=3,
         linewidth=1.5,
-        label="Physical-subject mask IoU (reference vs generation)",
+        label=series_label,
     )
     axis.set_xlim(0, max(1, len(ious) - 1))
     axis.set_ylim(0, 1)
@@ -54,8 +59,8 @@ def save_iou_curve(
     )
     axis.set_yticks(np.linspace(0, 1, 11))
     axis.set_xlabel("Physical time (s)")
-    axis.set_ylabel("IoU")
-    axis.set_title(f"{scene_name} physical-subject IoU over time\n{case_id}")
+    axis.set_ylabel(y_label)
+    axis.set_title(f"{scene_name} {metric_name} over time\n{case_id}")
     axis.grid(True, alpha=0.25)
     axis.legend()
     fig.tight_layout()

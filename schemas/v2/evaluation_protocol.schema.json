@@ -8,6 +8,7 @@
     "schema_version": {"const": "1.0"},
     "protocol_id": {"type": "string", "minLength": 1},
     "description": {"type": "string"},
+    "robustness": {"$ref": "#/$defs/robustness"},
     "scenes": {
       "type": "object",
       "required": [
@@ -47,6 +48,67 @@
     }
   },
   "$defs": {
+    "robustness": {
+      "type": "object",
+      "required": [
+        "prediction_record_failure_policy",
+        "prediction_media_failure_policy",
+        "prediction_observation_failure_policy",
+        "reference_failure_policy",
+        "internal_failure_policy"
+      ],
+      "properties": {
+        "prediction_record_failure_policy": {"const": "evaluated_zero"},
+        "prediction_media_failure_policy": {"const": "evaluated_zero"},
+        "prediction_observation_failure_policy": {"const": "evaluated_zero"},
+        "reference_failure_policy": {"const": "unavailable"},
+        "internal_failure_policy": {"const": "error"}
+      },
+      "additionalProperties": false
+    },
+    "subjectScoring": {
+      "type": "object",
+      "required": [
+        "minimum_observed_pixels",
+        "position_distance_scale",
+        "canonical_crop_size",
+        "boundary_tolerance_px",
+        "weights",
+        "case_weights",
+        "parent_weights"
+      ],
+      "properties": {
+        "minimum_observed_pixels": {"type": "integer", "minimum": 1},
+        "position_distance_scale": {"type": "number", "exclusiveMinimum": 0},
+        "canonical_crop_size": {"type": "integer", "minimum": 8},
+        "boundary_tolerance_px": {"type": "integer", "minimum": 1},
+        "weights": {
+          "type": "object",
+          "required": ["position", "shape", "appearance"],
+          "properties": {
+            "position": {"type": "number", "minimum": 0},
+            "shape": {"type": "number", "minimum": 0},
+            "appearance": {"type": "number", "minimum": 0}
+          }
+        },
+        "case_weights": {
+          "type": "object",
+          "required": ["physics_state", "subject"],
+          "properties": {
+            "physics_state": {"type": "number", "minimum": 0},
+            "subject": {"type": "number", "minimum": 0}
+          }
+        },
+        "parent_weights": {
+          "type": "object",
+          "required": ["physics_state", "conditioned_appearance"],
+          "properties": {
+            "physics_state": {"type": "number", "minimum": 0},
+            "conditioned_appearance": {"type": "number", "minimum": 0}
+          }
+        }
+      }
+    },
     "spatial": {
       "type": "object",
       "required": ["width", "height", "policy"],
@@ -96,30 +158,61 @@
         "type": {
           "enum": [
             "free_fall_state_v1",
+            "free_fall_state_v2",
             "inclined_plane_state_v1",
+            "inclined_plane_state_v2",
             "uniform_circular_motion_state_v1",
-            "collision_1d_state_v1"
+            "uniform_circular_motion_state_v2",
+            "collision_1d_state_v1",
+            "collision_1d_state_v2"
           ]
         },
         "timeline": {"$ref": "#/$defs/referenceTimeline"},
         "spatial": {"$ref": "#/$defs/spatial"},
+        "evaluator_contract": {"const": "robust_subject_v3"},
+        "subject_scoring": {"$ref": "#/$defs/subjectScoring"},
         "quality": {"type": "object"},
         "scoring": {
           "type": "object",
           "required": ["weights"],
           "properties": {"weights": {"type": "object"}}
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "free_fall_state_v2",
+                  "inclined_plane_state_v2",
+                  "uniform_circular_motion_state_v2",
+                  "collision_1d_state_v2"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": ["evaluator_contract", "subject_scoring"]
+          }
+        }
+      ]
     },
     "pendulum": {
       "type": "object",
       "required": ["type", "timeline", "spatial", "quality", "scoring"],
       "properties": {
         "type": {
-          "enum": ["pendulum_state_v1", "pendulum_state_v2"]
+          "enum": [
+            "pendulum_state_v1",
+            "pendulum_state_v2",
+            "pendulum_state_v3"
+          ]
         },
         "timeline": {"type": "object"},
         "spatial": {"$ref": "#/$defs/spatial"},
+        "evaluator_contract": {"const": "robust_subject_v3"},
+        "subject_scoring": {"$ref": "#/$defs/subjectScoring"},
         "quality": {"type": "object"},
         "scoring": {
           "type": "object",
@@ -137,6 +230,13 @@
         {
           "properties": {
             "type": {"const": "pendulum_state_v2"},
+            "timeline": {"$ref": "#/$defs/referenceTimeline"}
+          }
+        },
+        {
+          "required": ["evaluator_contract", "subject_scoring"],
+          "properties": {
+            "type": {"const": "pendulum_state_v3"},
             "timeline": {"$ref": "#/$defs/referenceTimeline"}
           }
         }

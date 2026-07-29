@@ -79,7 +79,7 @@ class EvaluationProtocolV2Tests(unittest.TestCase):
             pendulum["timeline"],
         )
 
-    def test_protocol_schema_accepts_both_pendulum_versions(self) -> None:
+    def test_protocol_schema_preserves_v1_v2_and_accepts_v3(self) -> None:
         schema = json.loads(
             (
                 ROOT
@@ -89,22 +89,30 @@ class EvaluationProtocolV2Tests(unittest.TestCase):
             ).read_text(encoding="utf-8")
         )
         self.assertEqual(
-            ["pendulum_state_v1", "pendulum_state_v2"],
+            [
+                "pendulum_state_v1",
+                "pendulum_state_v2",
+                "pendulum_state_v3",
+            ],
             schema["$defs"]["pendulum"]["properties"]["type"]["enum"],
         )
         branches = schema["$defs"]["pendulum"]["oneOf"]
         self.assertEqual(
-            {"pendulum_state_v1", "pendulum_state_v2"},
+            {
+                "pendulum_state_v1",
+                "pendulum_state_v2",
+                "pendulum_state_v3",
+            },
             {
                 branch["properties"]["type"]["const"]
                 for branch in branches
             },
         )
 
-    def test_official_tasks_pin_v2(self) -> None:
+    def test_official_tasks_pin_v3_with_new_identity(self) -> None:
         expected_ids = {
-            "five_scene_finetune_eval.json": "five_scene_finetune_eval_v5",
-            "five_scene_direct_eval.json": "five_scene_direct_eval_v5",
+            "five_scene_finetune_eval.json": "five_scene_finetune_eval_v6",
+            "five_scene_direct_eval.json": "five_scene_direct_eval_v6",
         }
         for name, expected_id in expected_ids.items():
             task = json.loads(
@@ -113,7 +121,7 @@ class EvaluationProtocolV2Tests(unittest.TestCase):
                 ).read_text(encoding="utf-8")
             )
             self.assertEqual(
-                "scene_default_v2",
+                "scene_default_v3",
                 task["evaluation"]["protocol"],
             )
             self.assertEqual(expected_id, task["task_id"])

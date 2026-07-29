@@ -35,7 +35,7 @@ Direct-eval 示例：
 ```json
 {
   "schema_version": "3.0",
-  "task_id": "five_scene_direct_eval_v5",
+  "task_id": "five_scene_direct_eval_v6",
   "family": "direct_eval",
   "dataset_id": "physics_video_five_scene_v4",
   "dataset_view": "view_b",
@@ -55,7 +55,7 @@ Direct-eval 示例：
     "training": [],
     "inference": [42]
   },
-  "evaluation": {"protocol": "scene_default_v2"}
+  "evaluation": {"protocol": "scene_default_v3"}
 }
 ```
 
@@ -63,9 +63,10 @@ Direct-eval 示例：
 `direct_eval` 必须使用 View B，且没有 training seed。多个 seed 应展开成多个独立
 AtomicRun，不能在同一模型产物中混合。
 
-两份官方 Task 均使用 v5 identity 并显式固定 `scene_default_v2`。从 v4 的
-`scene_default_v1` 切换到 v2 会改变时间轴和解码语义，因此不能沿用同一个 task ID；
-历史 v4 run 的 frozen Task 保持不变。两个协议的结果和 evaluator 指纹不能混合聚合。
+两份官方 Task 均使用 v6 identity 并显式固定 `scene_default_v3`。v3 在 v2 的时间轴和
+顺序解码基础上加入主体位置、形状、外貌评分及 prediction-side 退化零分语义，因此不能
+沿用 v5 Task ID。历史 v4/v5 run 的 frozen Task 和 canonical evaluation 保持不变；
+不同协议的结果和 evaluator 指纹不能混合聚合。
 
 ## 3. CanonicalTaskPlan
 

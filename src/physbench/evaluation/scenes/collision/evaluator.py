@@ -14,6 +14,13 @@ from ...common.base import ReferenceCaseEvaluator, SceneAnalysis
 from ...common.errors import SceneAnalysisError
 from ...common.masks.quality import observed_mask_iou, summarize_mask_ious
 from ...common.masks.sam2 import Sam2VideoSegmenter
+from ...common.robustness import (
+    add_subject_comparison,
+    degraded_prediction_analysis,
+    prediction_failure_code,
+    reference_failure,
+    robust_subject_enabled,
+)
 from ...common.tracking import extract_centroid_trace
 from ...contracts import CaseEvaluationRequest
 from .observation import build_collision_prompts
@@ -86,20 +93,7 @@ class CollisionCaseEvaluator(ReferenceCaseEvaluator):
         reference_video,
         prediction_video,
     ) -> SceneAnalysis:
-        (
-            reference_xy,
-            reference_valid,
-            reference_instances,
-            reference_union,
-            reference_observation,
-        ) = self._observe(reference_video.frames)
-        (
-            prediction_xy,
-            prediction_valid,
-            prediction_instances,
-            prediction_union,
-            prediction_observation,
-        ) = self._observe(prediction_video.frames)
+        robust = robust_subject_enabled(self.config)
         physics = request.case.get("physics", {})
         masses = np.asarray(
             [
@@ -117,17 +111,53 @@ class CollisionCaseEvaluator(ReferenceCaseEvaluator):
                 quality["velocity_window_fraction"]
             ),
         }
-        reference_trace = extract_collision_trace(
-            reference_xy, reference_valid, **trace_arguments
-        )
-        prediction_trace = extract_collision_trace(
-            prediction_xy, prediction_valid, **trace_arguments
-        )
-        state_score = score_collision(
-            reference_trace,
-            prediction_trace,
-            config=self.config["scoring"],
-        )
+        try:
+            (
+                reference_xy,
+                reference_valid,
+                reference_instances,
+                reference_union,
+                reference_observation,
+            ) = self._observe(reference_video.frames)
+            reference_trace = extract_collision_trace(
+                reference_xy, reference_valid, **trace_arguments
+            )
+        except SceneAnalysisError as exc:
+            if robust:
+                raise reference_failure(
+                    exc, stage="collision observation"
+                ) from exc
+            raise
+        try:
+            (
+                prediction_xy,
+                prediction_valid,
+                prediction_instances,
+                prediction_union,
+                prediction_observation,
+            ) = self._observe(prediction_video.frames)
+            prediction_trace = extract_collision_trace(
+                prediction_xy, prediction_valid, **trace_arguments
+            )
+            state_score = score_collision(
+                reference_trace,
+                prediction_trace,
+                config=self.config["scoring"],
+            )
+        except SceneAnalysisError as exc:
+            if robust:
+                code, reason = prediction_failure_code(
+                    exc, stage="collision_observation"
+                )
+                return degraded_prediction_analysis(
+                    request,
+                    times_s=times_s,
+                    reference_masks=reference_union,
+                    code=code,
+                    reason=reason,
+                    scene_name="One-dimensional collision",
+                )
+            raise
         union_ious = [
             observed_mask_iou(
                 reference_union[index], prediction_union[index]
@@ -217,7 +247,7 @@ class CollisionCaseEvaluator(ReferenceCaseEvaluator):
             ylabel="Normalized striker track position",
             title=f"Collision striker trajectory — {request.case['case_id']}",
         )
-        return SceneAnalysis(
+        analysis = SceneAnalysis(
             score=state_score["score"],
             metrics={
                 "collision_1d_state_similarity": state_score,
@@ -271,3 +301,15 @@ class CollisionCaseEvaluator(ReferenceCaseEvaluator):
                 }
             },
         )
+        if robust:
+            return add_subject_comparison(
+                analysis,
+                request,
+                times_s=times_s,
+                reference_frames=reference_video.frames,
+                prediction_frames=prediction_video.frames,
+                reference_masks=reference_union,
+                prediction_masks=prediction_union,
+                scene_name="One-dimensional collision",
+            )
+        return analysis

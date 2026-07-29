@@ -10,8 +10,16 @@ from ...common.artifacts import (
     write_rows_csv,
 )
 from ...common.base import ReferenceCaseEvaluator, SceneAnalysis
+from ...common.errors import SceneAnalysisError
 from ...common.geometry import rectify_circle_masks
 from ...common.masks.quality import observed_mask_iou, summarize_mask_ious
+from ...common.robustness import (
+    add_subject_comparison,
+    degraded_prediction_analysis,
+    prediction_failure_code,
+    reference_failure,
+    robust_subject_enabled,
+)
 from ...common.tracking import extract_instance_tracks
 from ...contracts import CaseEvaluationRequest
 from .observation import green_disk_object_masks
@@ -72,19 +80,46 @@ class CircularMotionCaseEvaluator(ReferenceCaseEvaluator):
         expected_count = int(
             request.case.get("appearance", {}).get("object_count", 1)
         )
-        reference_tracks, reference_observation = self._observe(
-            reference_video.frames, expected_count=expected_count
-        )
-        prediction_tracks, prediction_observation = self._observe(
-            prediction_video.frames, expected_count=expected_count
-        )
-        reference_orbits = extract_orbit_traces(reference_tracks, times_s)
-        prediction_orbits = extract_orbit_traces(prediction_tracks, times_s)
-        state_score = score_orbits(
-            reference_orbits,
-            prediction_orbits,
-            config=self.config["scoring"],
-        )
+        robust = robust_subject_enabled(self.config)
+        try:
+            reference_tracks, reference_observation = self._observe(
+                reference_video.frames, expected_count=expected_count
+            )
+            reference_orbits = extract_orbit_traces(
+                reference_tracks, times_s
+            )
+        except SceneAnalysisError as exc:
+            if robust:
+                raise reference_failure(
+                    exc, stage="circular-motion observation"
+                ) from exc
+            raise
+        try:
+            prediction_tracks, prediction_observation = self._observe(
+                prediction_video.frames, expected_count=expected_count
+            )
+            prediction_orbits = extract_orbit_traces(
+                prediction_tracks, times_s
+            )
+            state_score = score_orbits(
+                reference_orbits,
+                prediction_orbits,
+                config=self.config["scoring"],
+            )
+        except SceneAnalysisError as exc:
+            if robust:
+                code, reason = prediction_failure_code(
+                    exc, stage="circular_motion_observation"
+                )
+                return degraded_prediction_analysis(
+                    request,
+                    times_s=times_s,
+                    reference_masks=reference_tracks.union_masks,
+                    code=code,
+                    reason=reason,
+                    scene_name="Uniform circular motion",
+                )
+            raise
         original_ious = [
             observed_mask_iou(
                 reference_tracks.union_masks[index],
@@ -158,7 +193,7 @@ class CircularMotionCaseEvaluator(ReferenceCaseEvaluator):
             .get("angular_velocity_rad_s", {})
             .get("value")
         )
-        return SceneAnalysis(
+        analysis = SceneAnalysis(
             score=state_score["score"],
             metrics={
                 "uniform_circular_motion_state_similarity": state_score,
@@ -199,3 +234,15 @@ class CircularMotionCaseEvaluator(ReferenceCaseEvaluator):
                 },
             },
         )
+        if robust:
+            return add_subject_comparison(
+                analysis,
+                request,
+                times_s=times_s,
+                reference_frames=reference_video.frames,
+                prediction_frames=prediction_video.frames,
+                reference_masks=reference_tracks.union_masks,
+                prediction_masks=prediction_tracks.union_masks,
+                scene_name="Uniform circular motion",
+            )
+        return analysis

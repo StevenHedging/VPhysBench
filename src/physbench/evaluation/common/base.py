@@ -7,7 +7,7 @@ from typing import Any
 
 from ...io import canonical_sha256, sha256_file
 from ..contracts import CaseEvaluationRequest, CaseEvaluationResult
-from .errors import SceneAnalysisError
+from .errors import ReferenceAnalysisError, SceneAnalysisError
 from .media import (
     SampledVideo,
     VideoProtocolError,
@@ -32,11 +32,15 @@ class ReferenceCaseEvaluator(ABC):
     evaluator_id: str
     evaluator_version: str
     sequential_evaluator_version = "1.2"
+    robust_evaluator_version = "1.3"
     scene_id: str
     primary_score: str
 
     def __init__(self, config: dict[str, Any]):
         self.config = config
+        self.robust_subject = (
+            config.get("evaluator_contract") == "robust_subject_v3"
+        )
         decode_policy = config.get("timeline", {}).get(
             "decode_policy",
             "legacy_random_seek",
@@ -47,6 +51,8 @@ class ReferenceCaseEvaluator(ABC):
             raise ValueError(
                 f"unsupported evaluator decode policy: {decode_policy!r}"
             )
+        if self.robust_subject:
+            self.evaluator_version = self.robust_evaluator_version
         self.fingerprint = canonical_sha256(
             {
                 "id": self.evaluator_id,
@@ -62,7 +68,11 @@ class ReferenceCaseEvaluator(ABC):
             "scene_id": self.scene_id,
             "implemented": True,
             "fingerprint": self.fingerprint,
-            "primary_score": self.primary_score,
+            "primary_score": (
+                "scene_subject_state_similarity"
+                if self.robust_subject
+                else self.primary_score
+            ),
             "diagnostic": "physical_subject_mask_iou_curve",
         }
         observation = self.describe_observation()
@@ -93,6 +103,85 @@ class ReferenceCaseEvaluator(ABC):
             reason=reason,
         )
 
+    def _degraded_output(
+        self,
+        request: CaseEvaluationRequest,
+        evaluator: dict[str, Any],
+        *,
+        code: str,
+        reason: str,
+        times_s: list[float] | None = None,
+        reference_path: Path | None = None,
+        prediction_path: Path | None = None,
+    ) -> CaseEvaluationResult:
+        from .artifacts import save_iou_curve
+        from .subject import degraded_subject_metric, infer_reference_mode
+
+        reference_mode = infer_reference_mode(request.case)
+        artifacts: dict[str, Any] = {}
+        if times_s:
+            request.artifact_dir.mkdir(parents=True, exist_ok=True)
+            curve_path = (
+                request.artifact_dir / "physical_subject_iou_curve.png"
+            )
+            save_iou_curve(
+                curve_path,
+                times_s=times_s,
+                ious=[0.0] * len(times_s),
+                case_id=request.case["case_id"],
+                scene_name=self.scene_id,
+            )
+            artifacts["physical_subject_iou_curve"] = str(curve_path)
+        provenance: dict[str, Any] = {
+            "degradation": {
+                "origin": "prediction",
+                "code": code,
+                "reason": reason,
+                "policy": "conservative_zero_not_evaluator_failure",
+            }
+        }
+        if reference_path is not None and reference_path.is_file():
+            provenance.update(
+                {
+                    "reference_video": str(reference_path),
+                    "reference_video_sha256": sha256_file(reference_path),
+                }
+            )
+        if prediction_path is not None and prediction_path.is_file():
+            provenance.update(
+                {
+                    "prediction_video": str(prediction_path),
+                    "prediction_video_sha256": sha256_file(prediction_path),
+                }
+            )
+        return CaseEvaluationResult(
+            job_id=request.job["job_id"],
+            case_id=request.case["case_id"],
+            scene_id=request.case["scene_id"],
+            evaluator=evaluator,
+            status="evaluated",
+            score=0.0,
+            reason_code=code,
+            reason=reason,
+            metrics={
+                "scene_subject_state_similarity": (
+                    degraded_subject_metric(
+                        reference_mode=reference_mode,
+                        code=code,
+                        reason=reason,
+                    )
+                )
+            },
+            quality={
+                "degraded": True,
+                "degradation_codes": [code],
+                "temporal_coverage": 0.0,
+                "reference_mode": reference_mode,
+            },
+            artifacts=artifacts,
+            provenance=provenance,
+        )
+
     @abstractmethod
     def analyze(
         self,
@@ -119,6 +208,13 @@ class ReferenceCaseEvaluator(ABC):
             )
         prediction = request.prediction
         if prediction is None:
+            if self.robust_subject:
+                return self._degraded_output(
+                    request,
+                    evaluator,
+                    code="prediction_record_missing",
+                    reason="planned job has no prediction record",
+                )
             return self._outcome(
                 request,
                 evaluator,
@@ -127,6 +223,13 @@ class ReferenceCaseEvaluator(ABC):
                 reason="planned job has no prediction record",
             )
         if prediction.get("status") != "complete":
+            if self.robust_subject:
+                return self._degraded_output(
+                    request,
+                    evaluator,
+                    code="prediction_incomplete",
+                    reason=f"prediction status is {prediction.get('status')!r}",
+                )
             return self._outcome(
                 request,
                 evaluator,
@@ -136,6 +239,13 @@ class ReferenceCaseEvaluator(ABC):
             )
         video_value = prediction.get("video_path")
         if not video_value:
+            if self.robust_subject:
+                return self._degraded_output(
+                    request,
+                    evaluator,
+                    code="prediction_video_missing",
+                    reason="complete prediction has no video_path",
+                )
             return self._outcome(
                 request,
                 evaluator,
@@ -145,6 +255,14 @@ class ReferenceCaseEvaluator(ABC):
             )
         prediction_path = Path(video_value).resolve()
         if not prediction_path.is_file():
+            if self.robust_subject:
+                return self._degraded_output(
+                    request,
+                    evaluator,
+                    code="prediction_video_missing",
+                    reason=f"prediction video not found: {prediction_path}",
+                    prediction_path=prediction_path,
+                )
             return self._outcome(
                 request,
                 evaluator,
@@ -152,6 +270,9 @@ class ReferenceCaseEvaluator(ABC):
                 code="prediction_video_missing",
                 reason=f"prediction video not found: {prediction_path}",
             )
+        reference_video: SampledVideo | None = None
+        reference_path: Path | None = None
+        times_s: list[float] = []
         try:
             reference_path, reference_mode, parent_id = (
                 resolve_physics_reference(request)
@@ -178,14 +299,6 @@ class ReferenceCaseEvaluator(ABC):
                 ),
             }
             reference_video = sample_video(reference_path, **sampling)
-            prediction_video = sample_video(prediction_path, **sampling)
-            request.artifact_dir.mkdir(parents=True, exist_ok=True)
-            analysis = self.analyze(
-                request,
-                times_s=times_s,
-                reference_video=reference_video,
-                prediction_video=prediction_video,
-            )
         except VideoProtocolError as exc:
             return self._outcome(
                 request,
@@ -194,7 +307,56 @@ class ReferenceCaseEvaluator(ABC):
                 code=exc.code,
                 reason=str(exc),
             )
+
+        try:
+            prediction_video = sample_video(prediction_path, **sampling)
+        except VideoProtocolError as exc:
+            if self.robust_subject:
+                return self._degraded_output(
+                    request,
+                    evaluator,
+                    code=exc.code,
+                    reason=str(exc),
+                    times_s=times_s,
+                    reference_path=reference_path,
+                    prediction_path=prediction_path,
+                )
+            return self._outcome(
+                request,
+                evaluator,
+                status="unavailable",
+                code=exc.code,
+                reason=str(exc),
+            )
+
+        try:
+            request.artifact_dir.mkdir(parents=True, exist_ok=True)
+            assert reference_video is not None
+            analysis = self.analyze(
+                request,
+                times_s=times_s,
+                reference_video=reference_video,
+                prediction_video=prediction_video,
+            )
+        except ReferenceAnalysisError as exc:
+            return self._outcome(
+                request,
+                evaluator,
+                status="unavailable",
+                code=exc.code,
+                reason=str(exc),
+            )
         except SceneAnalysisError as exc:
+            if self.robust_subject:
+                return self._degraded_output(
+                    request,
+                    evaluator,
+                    code=exc.code,
+                    reason=str(exc),
+                    times_s=times_s,
+                    reference_path=reference_path,
+                    prediction_path=prediction_path,
+                )
             return self._outcome(
                 request,
                 evaluator,
@@ -240,6 +402,16 @@ class ReferenceCaseEvaluator(ABC):
             evaluator=self.describe(),
             status="evaluated",
             score=float(analysis.score),
+            reason_code=(
+                analysis.quality.get("degradation_codes", [None])[0]
+                if analysis.quality.get("degraded") is True
+                else None
+            ),
+            reason=(
+                analysis.quality.get("degradation_reason")
+                if analysis.quality.get("degraded") is True
+                else None
+            ),
             metrics=analysis.metrics,
             quality=analysis.quality,
             artifacts=analysis.artifacts,

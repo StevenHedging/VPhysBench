@@ -20,27 +20,40 @@ class SceneEvaluatorRegistry:
             scene_id, {"type": "unsupported"}
         )
         evaluator_type = config.get("type", "unsupported")
-        if evaluator_type in {"pendulum_state_v1", "pendulum_state_v2"}:
+        if evaluator_type in {
+            "pendulum_state_v1",
+            "pendulum_state_v2",
+            "pendulum_state_v3",
+        }:
             from .scenes.pendulum.evaluator import PendulumCaseEvaluator
 
             evaluator: SceneCaseEvaluator = PendulumCaseEvaluator(config)
-        elif evaluator_type == "free_fall_state_v1":
+        elif evaluator_type in {"free_fall_state_v1", "free_fall_state_v2"}:
             from .scenes.free_fall.evaluator import FreeFallCaseEvaluator
 
             evaluator = FreeFallCaseEvaluator(config)
-        elif evaluator_type == "inclined_plane_state_v1":
+        elif evaluator_type in {
+            "inclined_plane_state_v1",
+            "inclined_plane_state_v2",
+        }:
             from .scenes.inclined_plane.evaluator import (
                 InclinedPlaneCaseEvaluator,
             )
 
             evaluator = InclinedPlaneCaseEvaluator(config)
-        elif evaluator_type == "uniform_circular_motion_state_v1":
+        elif evaluator_type in {
+            "uniform_circular_motion_state_v1",
+            "uniform_circular_motion_state_v2",
+        }:
             from .scenes.circular_motion.evaluator import (
                 CircularMotionCaseEvaluator,
             )
 
             evaluator = CircularMotionCaseEvaluator(config)
-        elif evaluator_type == "collision_1d_state_v1":
+        elif evaluator_type in {
+            "collision_1d_state_v1",
+            "collision_1d_state_v2",
+        }:
             from .scenes.collision.evaluator import CollisionCaseEvaluator
 
             evaluator = CollisionCaseEvaluator(config)

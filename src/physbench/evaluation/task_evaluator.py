@@ -36,10 +36,57 @@ def _failure_result(
     )
 
 
+def _prediction_zero_result(
+    job: dict[str, Any],
+    *,
+    code: str,
+    reason: str,
+) -> CaseEvaluationResult:
+    return CaseEvaluationResult(
+        job_id=job["job_id"],
+        case_id=job["case_id"],
+        scene_id=job["scene_id"],
+        evaluator={
+            "id": "task_evaluator_prediction_output",
+            "version": "1.1",
+            "scene_id": job["scene_id"],
+            "primary_score": "scene_subject_state_similarity",
+        },
+        status="evaluated",
+        score=0.0,
+        reason_code=code,
+        reason=reason,
+        metrics={
+            "scene_subject_state_similarity": {
+                "score": 0.0,
+                "components": {
+                    "physics_state": 0.0,
+                    "subject": 0.0,
+                },
+                "degraded": True,
+                "degradation_code": code,
+                "degradation_reason": reason,
+            }
+        },
+        quality={
+            "degraded": True,
+            "degradation_codes": [code],
+            "temporal_coverage": 0.0,
+        },
+        provenance={
+            "degradation": {
+                "origin": "prediction",
+                "policy": "conservative_zero_not_evaluator_failure",
+            }
+        },
+    )
+
+
 def aggregate_task_results(
     *,
     plan: dict[str, Any],
     case_results: list[dict[str, Any]],
+    include_degraded_diagnostics: bool = False,
 ) -> dict[str, Any]:
     official = [
         item
@@ -146,7 +193,7 @@ def aggregate_task_results(
         if scene_scores and all(score is not None for score in scene_scores)
         else None
     )
-    return {
+    result = {
         "status": "complete" if coverage == 1.0 else "partial",
         "expected_jobs": len(official),
         "evaluated_jobs": len(evaluated),
@@ -164,6 +211,32 @@ def aggregate_task_results(
         "by_scene": by_scene,
         "breakdown": breakdown,
     }
+    if include_degraded_diagnostics:
+        degraded = [
+            item
+            for item in official
+            if item["status"] == "evaluated"
+            and item.get("quality", {}).get("degraded") is True
+        ]
+        result["robustness"] = {
+            "degraded_evaluated_jobs": len(degraded),
+            "degraded_evaluated_ratio": (
+                len(degraded) / len(official) if official else 0.0
+            ),
+            "reference_or_media_unavailable_jobs": statuses.get(
+                "unavailable", 0
+            ),
+            "evaluator_error_jobs": statuses.get("error", 0),
+            "degradation_reason_counts": dict(
+                sorted(
+                    Counter(
+                        item.get("reason_code") or "unspecified_degradation"
+                        for item in degraded
+                    ).items()
+                )
+            ),
+        }
+    return result
 
 
 def evaluate_task(
@@ -198,6 +271,12 @@ def evaluate_task(
         if job_id not in planned_ids
     ]
     active_registry = registry or SceneEvaluatorRegistry(protocol)
+    robust_prediction_zeros = (
+        protocol.get("robustness", {}).get(
+            "prediction_record_failure_policy"
+        )
+        == "evaluated_zero"
+    )
     results: list[dict[str, Any]] = []
     for job in plan["jobs"]:
         artifact_dir = case_root / job["job_id"]
@@ -225,11 +304,19 @@ def evaluate_task(
             != "unsupported"
             and not records
         ):
-            outcome = _failure_result(
-                job,
-                status="unavailable",
-                code="prediction_record_missing",
-                reason="planned job has no prediction record",
+            outcome = (
+                _prediction_zero_result(
+                    job,
+                    code="prediction_record_missing",
+                    reason="planned job has no prediction record",
+                )
+                if robust_prediction_zeros
+                else _failure_result(
+                    job,
+                    status="unavailable",
+                    code="prediction_record_missing",
+                    reason="planned job has no prediction record",
+                )
             )
         elif (
             protocol["scenes"]
@@ -238,11 +325,20 @@ def evaluate_task(
             != "unsupported"
             and records[0].get("status") != "complete"
         ):
-            outcome = _failure_result(
-                job,
-                status="unavailable",
-                code="prediction_incomplete",
-                reason=f"prediction status is {records[0].get('status')!r}",
+            reason = f"prediction status is {records[0].get('status')!r}"
+            outcome = (
+                _prediction_zero_result(
+                    job,
+                    code="prediction_incomplete",
+                    reason=reason,
+                )
+                if robust_prediction_zeros
+                else _failure_result(
+                    job,
+                    status="unavailable",
+                    code="prediction_incomplete",
+                    reason=reason,
+                )
             )
         else:
             request = CaseEvaluationRequest(
@@ -272,7 +368,11 @@ def evaluate_task(
         results.append(record)
         write_json(artifact_dir / "result.json", record)
 
-    aggregation = aggregate_task_results(plan=plan, case_results=results)
+    aggregation = aggregate_task_results(
+        plan=plan,
+        case_results=results,
+        include_degraded_diagnostics=bool(protocol.get("robustness")),
+    )
     task_result = {
         "schema_version": "1.0",
         "task_id": plan["task_id"],

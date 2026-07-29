@@ -15,6 +15,13 @@ from ...common.geometry import rectify_axis_masks
 from ...common.masks.motion import build_motion_prompt
 from ...common.masks.quality import observed_mask_iou, summarize_mask_ious
 from ...common.masks.sam2 import Sam2VideoSegmenter
+from ...common.robustness import (
+    add_subject_comparison,
+    degraded_prediction_analysis,
+    prediction_failure_code,
+    reference_failure,
+    robust_subject_enabled,
+)
 from ...common.tracking import extract_centroid_trace
 from ...contracts import CaseEvaluationRequest
 from .scoring import extract_incline_trace, score_incline
@@ -76,39 +83,64 @@ class InclinedPlaneCaseEvaluator(ReferenceCaseEvaluator):
         reference_video,
         prediction_video,
     ) -> SceneAnalysis:
-        reference_masks, reference_segmentation, reference_prompt = self._segment(
-            reference_video.frames
-        )
-        prediction_masks, prediction_segmentation, _ = self._segment(
-            prediction_video.frames, fallback_prompt=reference_prompt
-        )
+        robust = robust_subject_enabled(self.config)
         quality = self.config["quality"]
         centroid_arguments = {
             "minimum_area": int(quality["minimum_mask_pixels"]),
             "maximum_area_ratio": float(quality["maximum_mask_area_ratio"]),
             "minimum_valid_ratio": float(quality["minimum_valid_frame_ratio"]),
         }
-        reference_centroid = extract_centroid_trace(
-            reference_masks, **centroid_arguments
-        )
-        prediction_centroid = extract_centroid_trace(
-            prediction_masks, **centroid_arguments
-        )
         trace_arguments = {
             "times_s": times_s,
             "minimum_span_px": float(quality["minimum_motion_span_px"]),
         }
-        reference_trace = extract_incline_trace(
-            reference_centroid, reference_masks, **trace_arguments
-        )
-        prediction_trace = extract_incline_trace(
-            prediction_centroid, prediction_masks, **trace_arguments
-        )
-        state_score = score_incline(
-            reference_trace,
-            prediction_trace,
-            config=self.config["scoring"],
-        )
+        try:
+            (
+                reference_masks,
+                reference_segmentation,
+                reference_prompt,
+            ) = self._segment(reference_video.frames)
+            reference_centroid = extract_centroid_trace(
+                reference_masks, **centroid_arguments
+            )
+            reference_trace = extract_incline_trace(
+                reference_centroid, reference_masks, **trace_arguments
+            )
+        except SceneAnalysisError as exc:
+            if robust:
+                raise reference_failure(
+                    exc, stage="inclined-plane observation"
+                ) from exc
+            raise
+        try:
+            prediction_masks, prediction_segmentation, _ = self._segment(
+                prediction_video.frames, fallback_prompt=reference_prompt
+            )
+            prediction_centroid = extract_centroid_trace(
+                prediction_masks, **centroid_arguments
+            )
+            prediction_trace = extract_incline_trace(
+                prediction_centroid, prediction_masks, **trace_arguments
+            )
+            state_score = score_incline(
+                reference_trace,
+                prediction_trace,
+                config=self.config["scoring"],
+            )
+        except SceneAnalysisError as exc:
+            if robust:
+                code, reason = prediction_failure_code(
+                    exc, stage="inclined_plane_observation"
+                )
+                return degraded_prediction_analysis(
+                    request,
+                    times_s=times_s,
+                    reference_masks=reference_masks,
+                    code=code,
+                    reason=reason,
+                    scene_name="Inclined-plane slide",
+                )
+            raise
         original_ious = [
             observed_mask_iou(
                 reference_masks[index], prediction_masks[index]
@@ -184,7 +216,7 @@ class InclinedPlaneCaseEvaluator(ReferenceCaseEvaluator):
                 reference_trace.acceleration_px_s2
                 / (reference_trace.span_px / float(calibration))
             )
-        return SceneAnalysis(
+        analysis = SceneAnalysis(
             score=state_score["score"],
             metrics={
                 "inclined_plane_state_similarity": state_score,
@@ -233,3 +265,15 @@ class InclinedPlaneCaseEvaluator(ReferenceCaseEvaluator):
                 },
             },
         )
+        if robust:
+            return add_subject_comparison(
+                analysis,
+                request,
+                times_s=times_s,
+                reference_frames=reference_video.frames,
+                prediction_frames=prediction_video.frames,
+                reference_masks=reference_masks,
+                prediction_masks=prediction_masks,
+                scene_name="Inclined-plane slide",
+            )
+        return analysis
