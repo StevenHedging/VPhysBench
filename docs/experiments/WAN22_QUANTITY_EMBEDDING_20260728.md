@@ -1,5 +1,10 @@
 # WAN2.2 Quantity-Embedding 多场景实验报告（2026-07-28）
 
+> 本文冻结记录 quantity-embedding 原始 v1/v2 结果。相同 66 个预测在
+> `scene_default_v3` 下的鲁棒主体重评见
+> [EVALUATION_V3_20260729.md](EVALUATION_V3_20260729.md)。协议之间的 observed mean
+> 不可直接解释为模型性能变化。
+
 ## 1. 结论与发布状态
 
 `wan22_ti2v_5b_lora_r32_quantity_embedding_v1` 已完成一次五场景联合训练、66 个

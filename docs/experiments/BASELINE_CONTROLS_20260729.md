@@ -1,5 +1,10 @@
 # 五场景 Baseline 对照评测（2026-07-29）
 
+> 本文冻结记录 `scene_default_v2` 结果。相同预测在鲁棒主体协议
+> `scene_default_v3` 下的重评、逐 scene/partition 结果和完整性审计见
+> [EVALUATION_V3_20260729.md](EVALUATION_V3_20260729.md)。两版主 metric 与失败语义
+> 不同，observed mean 不可直接比较。
+
 ## 1. 结论与结果边界
 
 本轮完成了 quantity-embedding 实验所缺少的 generic、structured-text physics 和

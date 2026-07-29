@@ -1276,6 +1276,12 @@ component_fingerprints.json
 可以继续通过 `physbench.runner.reevaluate_run` 或 CLI legacy 分支原地重建其旧评估
 产物。
 
+2026-07-29 的七组冻结预测批量审计、逐 scene/partition 结果和完整性核验见：
+
+```text
+docs/experiments/EVALUATION_V3_20260729.md
+```
+
 ## 17. 实现位置
 
 正式协议与 Task 聚合：
