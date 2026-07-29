@@ -136,16 +136,18 @@ Driver 为每个 job 写：
 ```text
 jobs/<job_id>.payload.json
 jobs/<job_id>.json
-logs/<baseline_id>/<job_id>.log
-predictions/<job_id>/vision.mp4
+logs/<baseline_id>/worker_<NN>.log
+predictions/_workers/worker_<NN>/<job_id>/vision.mp4
 ```
 
 实际预测、payload 和日志都在当前 AtomicRun。Cosmos checkpoint、HF cache 与 uv cache
 可以位于 run 外并只读。
 
 `execute=false` 会生成 job/payload 与 planned prediction，不启动 torchrun；
-`execute=true` 才按 `cuda_visible_devices` 启动多进程推理。当前默认配置通常一次 job
-使用四张 GPU，运行前应检查空闲设备。
+`execute=true` 才按 `cuda_visible_devices` 启动多进程推理。同一 worker 只加载一次
+模型并顺序消费分配给它的全部 payload；`gpus_per_worker=4` 时，4 卡部署创建一个
+worker，8 卡部署创建两个并行 worker。各 worker 使用互不相交的 GPU 与输出目录，
+运行前应检查全部配置设备空闲。
 
 ## 6. 验证与运行
 

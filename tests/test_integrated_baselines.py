@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import copy
+import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from _paths import ROOT
 from physbench.baseline_api import (
@@ -288,6 +290,50 @@ class IntegratedBaselineTests(unittest.TestCase):
             {"config.json", "model.safetensors.index.json"},
             set(manifest["model"]["identity_files"]),
         )
+
+    def test_cosmos_runtime_preserves_virtual_environment_boundary(
+        self,
+    ) -> None:
+        driver_path = COSMOS_ROOT / "driver.py"
+        spec = importlib.util.spec_from_file_location(
+            "physbench_test_cosmos_driver",
+            driver_path,
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            venv = root / ".venv"
+            managed = root / "managed-python" / "bin" / "python"
+            managed.parent.mkdir(parents=True)
+            managed.touch()
+            (venv / "bin").mkdir(parents=True)
+            python = venv / "bin" / "python"
+            python.symlink_to(managed)
+            self.assertEqual(
+                venv,
+                module.Driver._environment_root(python),
+            )
+            self.assertNotEqual(
+                venv,
+                python.resolve().parents[1],
+            )
+        driver = module.Driver.__new__(module.Driver)
+        driver.bundle = SimpleNamespace(value={
+            "runtime": {
+                "cuda_visible_devices": "0,1,2,3,4,5,6,7",
+                "gpus_per_worker": 4,
+            }
+        })
+        self.assertEqual(
+            [["0", "1", "2", "3"], ["4", "5", "6", "7"]],
+            driver._gpu_groups(),
+        )
+        first = driver._worker_index("case-a")
+        self.assertEqual(first, driver._worker_index("case-a"))
+        self.assertIn(first, (0, 1))
 
     @unittest.skipUnless(
         (COSMOS_ROOT / "baseline.local.json").is_file()

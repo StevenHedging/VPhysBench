@@ -52,6 +52,7 @@
     "hf_home": "cache/huggingface",
     "uv_cache_dir": "cache/uv",
     "cuda_visible_devices": "0,1,2,3",
+    "gpus_per_worker": 4,
     "parallelism_preset": "throughput",
     "offline": true,
     "guardrails": false,

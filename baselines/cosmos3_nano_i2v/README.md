@@ -15,7 +15,11 @@ recipes.
 
 The compiler and standard I2V DataAdapter build and seal canonical inputs.
 `driver.py` only validates the Cosmos deployment, renders its inference
-payload and invokes `torchrun`. Generation uses Cosmos-native
+payload and invokes `torchrun`. All payloads assigned to one worker are passed
+to a single Cosmos process, so the model is loaded once and reused
+sequentially. Multiple disjoint GPU groups run concurrently when
+`cuda_visible_devices` exposes more than `gpus_per_worker` devices. Generation
+uses Cosmos-native
 resolution/aspect-ratio tokens, 480p, 24 FPS and 121 frames. The evaluator
 owns video resampling and physical-time alignment.
 
@@ -30,6 +34,9 @@ Copy `baseline.local.example.json` to the Git-ignored
 Python/torchrun and cache paths. The single local override is intentionally
 shared by both manifests in this directory. The lightweight checkpoint
 identity files are SHA-256 verified before task compilation.
+`gpus_per_worker=4` preserves the native four-GPU throughput preset; exposing
+eight devices creates two persistent workers without changing per-case model
+semantics.
 
 ```bash
 /root/miniconda3/envs/phybench/bin/physbench baseline validate \
