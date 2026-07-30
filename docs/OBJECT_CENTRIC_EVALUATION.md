@@ -12,8 +12,9 @@
 4. 是否凭空新增、复制、删除或交换对象；
 5. 在实体完整的前提下，scene-specific 物理状态是否正确。
 
-因此对象中心 evaluator 使用以下流程。`scene_default_v5` 已在
-`collision_1d` 接入这条链路；其余 scene 目前仍保留为设计目标：
+因此对象中心 evaluator 使用以下流程。`scene_default_v5` 首先在
+`collision_1d` 接入这条链路；`scene_default_v6` 在冻结该碰撞实现的前提下，又把
+单摆、自由落体、斜面下滑和圆周运动迁移到公共 `open_world_v2` 内核：
 
 ```text
 Case + conditioned first frame
@@ -39,11 +40,17 @@ prediction video
   weighted geometric case score
 ```
 
-当前碰撞实现为 `CollisionOpenWorldCaseEvaluator 2.2`，协议内部标记为
-`open_world_v1.2` 和 `nbody_v1.2`。它由 opt-in 的 `scene_default_v5` 承载，不修改
-已经冻结的 `scene_default_v3` 或 `scene_default_v4`，也不改变 Baseline、Task 或
-Dataset 契约。v5 仍是 shadow 协议；它可以真实运行和产出分数，但不能与旧协议结果
-混入同一 leaderboard。
+当前碰撞实现仍为 `CollisionOpenWorldCaseEvaluator 2.2`，协议内部标记为
+`open_world_v1.2` 和 `nbody_v1.2`。`scene_default_v6` 对它逐配置复用，不修改其
+fingerprint 或 r7/r8 数值。其余四个场景使用 `open_world_v2/2.0`：公共层负责
+capability-aware timeline、按秒 exposure、condition-frozen identity、带 null 的
+Hungarian、一对一守恒、missing/extra/ID switch/overflow 和 fail-closed；场景层只
+负责对象发现、坐标系、合法 lifecycle 与物理内容。
+
+v6 仍是 opt-in shadow 协议，不改变 Baseline、Task 或 Dataset 契约，也不覆盖冻结的
+v3/v4/v5 结果。Task 继续读取稳定主指标
+`scene_subject_state_similarity`，但不同协议 fingerprint 下的数值不能混入同一
+leaderboard。
 
 ## 2. 对象契约
 
@@ -229,7 +236,7 @@ P = all prediction-track exposure, including residual tracks
 PresenceDetA = M / (R + P - M)
 ```
 
-碰撞 `open_world_v1.2` 将候选的正式 exposure 权重冻结为：
+碰撞 `open_world_v1.2` 与公共 `open_world_v2` 都使用下列正式 exposure 权重：
 
 | evidence tier | exposure 权重 | 语义 |
 | --- | ---: | --- |
@@ -268,7 +275,7 @@ A_ij = M_ij / (E_i + E_j - M_ij)
 AssA = 按 matched exposure 加权的 A_ij
 
 S_entity_diagnostic = sqrt(SoftDetA × AssA_observable)
-integrity_gate      = PresenceDetA × AssA_observable
+raw_integrity_gate  = PresenceDetA × AssA_observable
 ```
 
 中途 ID switch、碎裂、消失后用新 ID 重生都会降低 `AssA`。另行输出 GOSPA
@@ -287,23 +294,38 @@ GOSPA 用于审计错误来源，不重复叠加到正式分数，避免对同�
 association-eligible exposure；若两侧 eligible exposure 都为 0，
 `AssA_observable=1`（neutral），但该时段的 group cardinality 仍进入 PresenceDetA。
 
-碰撞 v2.2 对“模型通过不生成难帧来逃避物理评分”采用 anti-abstention 语义：
+冻结的碰撞 evaluator 2.2 直接使用 `raw_integrity_gate`。新增的
+`open_world_v2` 还应用 deletion-resistant ceiling：
+
+```text
+exposure_recall = M / R
+integrity_gate  = min(raw_integrity_gate, exposure_recall^3)
+```
+
+该 ceiling 防止 prediction 通过删除远处 replacement、身份错误或其他困难帧来移除
+false exposure 后反而涨分。它只修改 v6 四个新 adapter 的有效 gate，不回写碰撞
+`open_world_v1.2`，也不改变 v3/v4/v5 fingerprint。
+
+碰撞 v2.2 以及 v6 的四个场景 adapter 都对“模型通过不生成难帧来逃避物理评分”
+采用 anti-abstention 语义：
 
 - shape/appearance 仍只比较成功匹配的主体 mask，extra 由完整性 gate 处理；
-- N-body 的 position、velocity、momentum、nonpenetration 使用完整 GT 的真实秒
-  reference exposure 作分母，未观测的预期实体时段贡献 0，而不是从分母删除；
+- scene-specific physics 使用完整 reference 授权的真实秒 exposure；未观测的预期
+  实体时段贡献 0 或降低 evidence coverage，而不是从分母删除。碰撞具体覆盖
+  position、velocity、momentum 与 nonpenetration；
 - GT contact graph 不按 prediction coverage 裁剪；预测 residual participant 的接触
   事件也保留为可能的 false event；
 - “GT 无接触且 prediction 无接触”只有在全部预期 pair exposure 完整时才能认证为
   正确，否则 contact 分保守置 0。
 
 因此 missing 会同时降低“实体集合是否完整”的 gate 和“缺失时段是否提供物理证据”
-的 N-body content，这是有意的 anti-abstention，不是把同一个位置距离重复算两次。
+的 scene content，这是有意的 anti-abstention，不是把同一个位置距离重复算两次。
 每个 participant detection 在 expected slot 或 residual N-body channel 中严格守恒，
 partially matched track 的未匹配时段也不能从物理输入中消失。只有 supervisor 本身
-不可用时才允许 omit；directed observation 失败仍继续 residual discovery，而
-residual discovery 或 open-world comparison 失败则 fail-closed 为等价空 prediction，
-返回 `evaluated/degraded_prediction` 的有限保守低分，不能退回 directed-only 满分。
+不可用时才允许 omit。自由落体/斜面在 directed SAM2 失败后仍尝试 residual
+discovery；任何无法形成可信完整开放世界 observation 的 prediction 侧失败都
+fail-closed 为等价空 prediction，返回 `evaluated/degraded_prediction` 的有限保守
+低分，不能退回 directed-only 满分。
 
 统一时间格使用真实秒 cell 权重。短视频或损坏样本只保留实际可用前缀；尾段填充中性
 画布并标记 `available=false`，不复制末帧，预期实体在该尾段继续形成 missing
@@ -410,28 +432,32 @@ shape/appearance 也继续比较 matched mask，但 IoU 不混入 `track_positio
 
 ### 7.2 `free_fall`
 
-实体是 `falling_body`，静态锚点包括释放位置和地面/画面出口。位置拆成竖直位移与
-横漂；坐标系来自 GT 或条件场景，不能完全从 prediction 自拟合。
+v6 的 manifest 实体是一个 `ball`。Reference 冻结竖直重力轴，prediction 永远不能
+重拟合坐标系。Condition-anchored SAM2 是 expected channel；条件帧差、双向时间差和
+独立圆形 proposal 是 residual channel，因而运动第二球和静止复制球都能进入正式
+exposure。颜色锚点不兼容的 SAM2 接管体被标为 replacement，不能填补原 ID 的
+missing。
 
-位置分比较 `y(t)`；物理分只比较速度、加速度、启动时刻、落地/退出事件、向下单调性
-和异常反弹，避免把绝对轨迹重复计分。
-到达 prediction 自身最大行程的固定比例不能作为唯一 impact 定义，否则错误的短距离
-下落也会得到合理事件时间。稳定第二球是 residual FP；GT 落地前消失是 FN；GT 已经
-退出画面后不再按普通消失惩罚。
+Scene state 在完整 expected exposure 上比较竖直轨迹、归一化加速度、impact time、
+横漂与向下单调性；缺失样本记 0 并再乘 physical evidence coverage。只有 reference
+显示“充分终端行程/接近画面边界 + 持续尾段缺失”时才声明合法 `may_exit`；短暂
+detector gap 不会被误认成退出，退出后重新出现作为 extra。
 
 ### 7.3 `inclined_plane_slide`
 
-实体是 `sliding_block`；斜面、端点和 track axis 是静态 apparatus/anchor，不计为
-额外动态对象。斜面轴优先从条件图或 apparatus 得到，不能分别从 reference/prediction
-的滑块轨迹拟合，否则水平运动也可能被规范化成“正确沿面运动”。
+v6 的 manifest 实体是一个 `block`；斜面、端点与 track axis 是 apparatus，不计为
+动态对象。Same-case 使用 reference 滑块轨迹冻结斜面轴；physics-parent OOD 优先从
+当前 condition 的 apparatus Hough line 冻结轴，失败时只回退 reference 方向，始终
+禁止 prediction 自拟合。
 
-位置拆成沿面位移、法向间隙和相对斜面的姿态。物理分比较启动、速度、加速度、
-下降时间、接触、穿透、翻滚和离轨。额外滑块是 residual FP；到达底端前消失是 FN；
-从真实末端退出则按生命周期事件处理。
+观察器与自由落体共用 rigid-body directed/residual adapter，但 residual 受斜面
+走廊、尺寸和矩形紧致度约束。Scene state 在冻结轴上比较沿面轨迹、归一化加速度、
+descent time、法向接触、单调性与姿态。第二滑块、replacement、overflow 和合法退出
+后的再次出现按开放世界规则惩罚；reference 证据不足的消失不被声明为合法末端退出。
 
 ### 7.4 `pendulum`
 
-单摆需要真正的复合实体图，不能只用 `parts: tuple[str]`：
+v6 使用版本化 `PendulumStructureSpec/1.0` 表达复合结构：
 
 ```text
 static node: pivot/support
@@ -440,24 +466,27 @@ structural edge: string/rod
 relation: attached(pivot, string), attached(string, bob)
 ```
 
-`bob` 是主要动态 ID，`string/rod` 是结构边，`pivot/support` 是静态锚点。Bob 位置
-使用角向弧长和径向长度误差；string 使用 skeleton/端点连接与覆盖率，不能让支架大
-mask 淹没 bob 的位置误差。
+`bob` 是唯一计数的动态 ID，`string/rod` 是结构边，`pivot/support` 是 apparatus。
+当前 condition 冻结 pivot、bob、半径、摆长和 identity，并产生 SAM2 prompt；Hough
+circle、string evidence 与 condition-change 共同发现第二个 bob，支架走廊被显式
+排除。Bob 缺失不会靠轨迹插值免费通过：它同时降低 integrity 和物理 evidence
+coverage。
 
-位置分比较 bob 的角轨迹与径向摆长；物理分比较角速度/加速度、周期、振幅、阻尼和
-能量趋势；anchor/topology 分比较 pivot drift、string tautness 与连接关系。第二个
-bob、分叉 string 或复制摆是 FP；bob/string 脱离是拓扑错误。
-细线短时不可见只能由 reference/condition detectability 判为遮挡，不能由 prediction
-低置信度自行跳过。OOD 背景、底座或 bob 材质只与
-当前条件首帧比较外貌；parent 只监督 canonical angular dynamics。
+Scene content 比较角轨迹、周期、振幅与结构一致性；topology 沿 pivot–bob 中段测量
+string occupancy，断绳帧记低分。主绳 corridor 之外、仍与主绳或 pivot 相连的细长
+分叉即使没有第二 bob 也按真实秒 exposure 平滑扣分；支架、pivot 横杆、matched bob
+和零散纹理由几何排除。额外 bob exposure 另形成 branch penalty。完整主体 IoU
+使用 bob+string 与所有正式 prediction residual 的 union。Physics-parent OOD 的对象
+数量、外貌、pivot 和结构只来自当前 condition；parent 只监督规范化动力学，未来
+parent pixel localization 明确禁用。
 
 ### 7.5 `uniform_circular_motion`
 
-实体是一个或多个 `orbiter`，green disk、rotation center 和 disk radius 是静态锚点。
-初始 ID 由条件首帧外貌、半径、相位和结构化 `object_i_orbit_radius` 锁定。不能在看完
-完整轨迹后按拟合半径重新排序；那会掩盖内外轨交换和 silver/wood 身份交换。
-Rotation center 与 disk radius 也必须由 condition 或 reference 冻结，禁止从
-prediction 完整轨迹重新拟合；否则错误偏心圆会通过自选中心获得高分。
+实体是一个或多个 `orbiter`，green disk、rotation center 和 disk radius 是 apparatus。
+v6 先移除并腐蚀绿色圆盘，再保留盘内所有满足面积约束的连通组件，不再把候选裁成
+manifest 的预期 N；安全上限之外的组件转成 overflow exposure。初始 ID 由 condition
+或最早可靠窗口的外貌、半径和相位冻结，轨迹中的大 Lab 外观跳变会拆成可审计 ID
+断点，禁止看完整轨迹后重新排序。
 
 逐 ID 位置距离为：
 
@@ -466,10 +495,11 @@ d² = (delta_radius / sigma_radius)²
    + (reference_radius × wrapped_delta_angle / sigma_tangent)²
 ```
 
-位置分比较逐 ID 半径/角轨迹和对象间相位；物理分比较角速度方向、大小、均匀性与
-周期性；anchor/topology 分比较共同旋转中心和 disk 约束。额外 orbiter 是 residual
-FP；任一预期对象消失是 FN；多圈 angle unwrap、短时互相遮挡和中心附近对象需要明确
-corner-case 测试。`r≈0` 时极角不可识别，必须回退到 Cartesian distance。
+位置分在逐视频 disk-normalized 坐标上比较径向误差与相对相位，物理分比较角轨迹、
+角速度、轨道几何和匀速性。额外第三 orbiter 是正式 FP，任一预期对象消失是 FN；
+短遮挡由因果 track gap bridge 处理。`r≈0` 时极角不可识别，实际实现回退 Cartesian
+distance。Prediction union 保留所有候选，因此额外对象也会出现在完整主体 IoU
+诊断中。
 
 ### 7.6 指标所有权
 
@@ -515,6 +545,19 @@ content = weighted_geometric_mean(
 )
 ```
 
+`scene_default_v6` 的另外四个场景使用同一 gate，不同的内容权重为：
+
+| scene | content（weighted geometric mean） |
+| --- | --- |
+| pendulum | physics `0.45`、shape `0.15`、appearance `0.20`、topology `0.20` |
+| free fall | physics `0.55`、shape `0.20`、appearance `0.25` |
+| inclined plane | physics `0.55`、shape `0.20`、appearance `0.25` |
+| circular motion | orbit physics `0.55`、shape `0.15`、appearance `0.30` |
+
+Physics-parent profile 会移除没有合法 supervisor 的未来 shape/pixel-position 项，并
+只在当前 condition 上比较外貌；移除后的可用权重按协议重新归一化。不同 capability
+profile 仍须分层报告。
+
 例如 N 个球都完全正确但全程多出一个同权 participant 时：
 
 ```text
@@ -544,70 +587,70 @@ diagnostic 必须有限。可视化至少包含逐 ID overlay、匹配表、birt
 
 ## 9. 落地状态与验证门
 
-公共实体内核已经实现：
+公共实现分为冻结的 v1.2 碰撞链路和新增的 v2 内核：
 
 ```text
 src/physbench/evaluation/common/entities/
-  contracts.py   EntitySpec、ObjectTrack、visibility、分通道真实秒 exposure
-  manifest.py    Case Entity Manifest v1 的显式解析与确定性 legacy materializer
-  timeline.py    公共物理时间格与 cell 权重
-  matching.py    通用 initial-anchor rectangular assignment
-  observer.py    证据分层、因果 track、null assignment、overflow、开放世界比较
-  scoring.py     continuous distance、PresenceDetA、SoftDetA、observable AssA、
-                 GOSPA、gated geometric score
+  contracts.py   EntitySpec、ObjectTrack、visibility、真实秒 exposure
+  manifest.py    Case Entity Manifest v1
+  observer.py    证据分层与因果 open-world tracks
+  scoring.py     PresenceDetA、SoftDetA、AssA、GOSPA、gated content
+  v2.py          capability timeline、condition-frozen ID、null assignment、
+                 lifecycle、missing/extra/switch/overflow、fail-closed
 
-src/physbench/evaluation/scenes/collision/
-  open_world.py       directed SAM2 + motion/Hough residual discovery
-  nbody.py            role-free arbitrary-N kinematics/contact scoring
-  v5_evaluator.py     collision evaluator 2.2 integration
-  v5_visualization.py open-world/N-body 过程可视化
+src/physbench/evaluation/common/artifacts/open_world_v2.py
+                 逐 ID overlay、cardinality/lifecycle dashboard 和无损 audit
+
+src/physbench/evaluation/scenes/
+  collision/                  冻结 evaluator 2.2
+  pendulum/open_world.py      bob residual + PendulumStructureSpec/1.0
+  pendulum/v6_evaluator.py
+  rigid_body_open_world.py    free-fall/incline 共享 adapter
+  circular_motion/open_world.py
+  circular_motion/v6_evaluator.py
 ```
 
-`scene_default_v5` 已实际把上述内核接入 `collision_1d`，其运行身份是：
+`scene_default_v6` 的路由是：
+
+| scene | evaluator type | 开放世界实现 |
+| --- | --- | --- |
+| pendulum | `pendulum_state_v6` | `open_world_v2/2.0` |
+| free_fall | `free_fall_state_v6` | `open_world_v2/2.0` |
+| inclined_plane_slide | `inclined_plane_state_v6` | `open_world_v2/2.0` |
+| uniform_circular_motion | `uniform_circular_motion_state_v6` | `open_world_v2/2.0` |
+| collision_1d | `collision_1d_state_v5` | 冻结 `open_world_v1.2 + nbody_v1.2` |
+
+自动化反例覆盖 missing/extra/duplicate、10%/25%/50% 缺失单调性、far replacement、
+ID switch/外观接力、overflow、短视频、observer failure、合法 exit/reappearance、
+圆周第三 orbiter 与中心回退、单摆第二 bob/断绳/无 bob 分叉绳、画布边界 apparatus
+拒绝，以及 prediction 不得自拟合坐标轴。对应测试为：
 
 ```text
-evaluator: collision_1d_open_world_nbody 2.2
-observer:  open_world_v1.2
-physics:   nbody_v1.2
+tests/test_open_world_v2.py
+tests/test_open_world_v2_artifacts.py
+tests/test_pendulum_open_world_v6.py
+tests/test_rigid_open_world_v6.py
+tests/test_circular_open_world_v6.py
+tests/test_evaluation_protocol_v6.py
 ```
 
-单元测试覆盖 2/4/N manifest、任意 N pair、近/远距离单调性、null assignment、
-missing、短/长 extra、duplicate、ID switch、身份不可观察窗口、候选 overflow、
-逐 ID/逐 track exposure 守恒、partially matched participant 守恒、短视频尾段、
-contact anti-abstention、fail-closed residual、零分门控和有限输出。专项测试为
-52/52，全仓测试为 346/346。
+回归测试固定 v3/v4/v5 protocol fingerprint，并断言 v6 的碰撞配置、evaluator 2.2 与
+fingerprint 完全等于 v5。v6 仍需在形成 leaderboard 前对所有 baseline 使用同一
+protocol 重评，并扩大真实视频的 extra/missing、遮挡与 OOD 审计；合成反例通过不等于
+真实 observer 已完全校准。
 
-最终真实视频审计没有触发回滚：
+每个非碰撞 v6 Case 本地保存 `per_frame.csv`、完整主体 IoU 曲线、实体位置曲线、
+对象基数时间线和 JSON audit。大型并列 overlay 与逐 ID/lifecycle 审计外置到
+`/mnt/nvme1/physics_video_benchmark/evaluation_visualizations/scene_default_v6/...`，
+仓库 `visualizations` 链接可直接访问；本地
+`open_world_v2_artifact_manifest.json` 保存路径、SHA-256 和失败状态。渲染失败永远
+不改变已经计算的 Case 分数。
 
-| 样本 | Case score | evaluator error |
-| --- | ---: | ---: |
-| `v04374` GT-self | 0.9880578251 | 0 |
-| `v06332` GT-self | 0.9693811074 | 0 |
-| `v04374` WAN | 0.0250737646 | 0 |
-| `v06332` WAN | 0.1203513978 | 0 |
-| `v04374` quantity，多球反例 | 0.0039100888 | 0 |
-| `v06332` quantity，少球反例 | 0.0690306009 | 0 |
-
-GT-self 的 N-body 均为 1，低于满分来自保守 tentative false exposure；已知多球/少球
-反例在 null assignment、完整 GT exposure 和 fail-closed 语义下进一步降分。r7/r8
-审计分别为 4/4、2/2 `evaluated`，均为 0 error、0 unavailable。
-
-每个碰撞 Case 会写出 `per_frame.csv`、主体 IoU 曲线、实体位置曲线和对象基数时间线；
-大型 overlay、匹配/拒绝日志、contact graph 和 N-body dashboard 外置到
-`/mnt/nvme1/physics_video_benchmark/evaluation_visualizations`，仓库
-`visualizations` 链接可直接访问。
-
-当前成熟度仍定义为 **可运行、已真实审计的 shadow collision protocol**，不等同于
-正式 leaderboard 协议。正式发布前仍需：
-
-1. 扩大真实 2/4/N 球、复制、遮挡、交换、无接触、穿透和时间截断审计；目前真实审计
-   的 GT Case 仍是三球；
-2. 继续校准 motion/Hough 对静态额外球、反光、轨道圆形结构和 motion ghost 的误报/
-   漏报；
-3. 完成接触期 identity observability/contact-group 的可靠监督；
-4. 把 Case Entity Manifest 与双通道 open-world observer 逐 scene 迁移到其余四个
-   evaluator；第 7.2–7.5 节目前仍是设计，不应误报为已实现；
-5. 冻结新 fingerprint 并用同一协议重评所有 baseline 后再形成 leaderboard。
+四个新 scene 的定向真实/反例审计统一使用
+`scripts/audit_open_world_evaluator_v6.py`；collision 2.2 继续使用冻结的
+`scripts/audit_collision_evaluator_v5.py`。前者支持重复传入
+`--prediction CASE_ID=/absolute/video.mp4` 与 `--self-check`，并把 runtime device
+override、协议 fingerprint 和各 scene evaluator fingerprint 一并写入 report。
 
 ## 10. 方法来源
 
