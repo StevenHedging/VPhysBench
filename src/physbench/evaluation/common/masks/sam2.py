@@ -181,17 +181,31 @@ class Sam2VideoSegmenter:
         *,
         prompts: list[MaskPrompt],
         temporary_prefix: str = "physbench_sam2_instances_",
+        exclusive_masks: bool = False,
     ) -> tuple[list[list[np.ndarray]], dict[str, Any]]:
-        """Propagate several frame-zero subjects in one predictor state."""
+        """Propagate several subjects from one shared seed frame.
+
+        A non-zero seed is propagated both forward and backward.  New
+        evaluators may request joint logit competition with
+        ``exclusive_masks``; the default retains the historical independent
+        thresholding used by frozen v1-v3 protocols.
+        """
         if not frames or not prompts:
             raise SceneAnalysisError(
                 "empty_instance_prompts",
                 "multi-instance segmentation requires frames and prompts",
             )
-        if any(prompt.frame_index != 0 for prompt in prompts):
+        seed_frames = {int(prompt.frame_index) for prompt in prompts}
+        if len(seed_frames) != 1:
             raise SceneAnalysisError(
                 "unsupported_instance_prompt_timeline",
-                "multi-instance prompts must currently use frame zero",
+                "multi-instance prompts must share one seed frame",
+            )
+        seed_frame = next(iter(seed_frames))
+        if seed_frame < 0 or seed_frame >= len(frames):
+            raise SceneAnalysisError(
+                "invalid_instance_prompt_frame",
+                f"multi-instance seed frame {seed_frame} is outside the video",
             )
         self._load()
         assert self._predictor is not None
@@ -230,27 +244,83 @@ class Sam2VideoSegmenter:
                     for object_index, prompt in enumerate(prompts, start=1):
                         self._predictor.add_new_points_or_box(
                             inference_state=state,
-                            frame_idx=0,
+                            frame_idx=seed_frame,
                             obj_id=object_index,
                             box=prompt.box_xyxy,
                             points=prompt.points_xy,
                             labels=prompt.point_labels,
                         )
-                    forward_count = 0
-                    for frame_index, object_ids, logits in (
-                        self._predictor.propagate_in_video(state)
-                    ):
-                        for logit_index, object_id in enumerate(object_ids):
-                            object_number = int(object_id) - 1
-                            if 0 <= object_number < len(instance_masks):
-                                instance_masks[object_number][int(frame_index)] = (
-                                    self._logit_mask(
-                                        logits[logit_index],
-                                        width=width,
-                                        height=height,
+
+                    def consume(
+                        frame_index: int,
+                        object_ids: Any,
+                        logits: Any,
+                    ) -> None:
+                        ids = [int(value) for value in object_ids]
+                        raw = logits.detach().float().cpu().numpy()
+                        if raw.ndim == 4:
+                            raw = raw[:, 0]
+                        elif raw.ndim != 3:
+                            raise SceneAnalysisError(
+                                "sam2_invalid_logits",
+                                f"unexpected SAM2 logits shape {raw.shape}",
+                            )
+                        if raw.shape[1:] != (height, width):
+                            raw = np.stack(
+                                [
+                                    cv2.resize(
+                                        value,
+                                        (width, height),
+                                        interpolation=cv2.INTER_LINEAR,
                                     )
-                                )
+                                    for value in raw
+                                ]
+                            )
+                        if exclusive_masks:
+                            # The old independent thresholding allowed the
+                            # same touching pixels to be counted by several
+                            # roles. V4 opts into SAM2 instance competition.
+                            winner = np.argmax(raw, axis=0)
+                            positive = np.max(raw, axis=0) > 0.0
+                            binary_masks = [
+                                (winner == logit_index) & positive
+                                for logit_index in range(len(ids))
+                            ]
+                        else:
+                            # Preserve the v1-v3 evaluator behavior exactly.
+                            binary_masks = [
+                                raw[logit_index] > 0.0
+                                for logit_index in range(len(ids))
+                            ]
+                        for binary, object_id in zip(binary_masks, ids):
+                            object_number = object_id - 1
+                            if 0 <= object_number < len(instance_masks):
+                                instance_masks[object_number][
+                                    int(frame_index)
+                                ] = binary.astype(np.uint8) * 255
+
+                    forward_count = 0
+                    forward = (
+                        self._predictor.propagate_in_video(state)
+                        if seed_frame == 0
+                        else self._predictor.propagate_in_video(
+                            state, start_frame_idx=seed_frame
+                        )
+                    )
+                    for frame_index, object_ids, logits in forward:
+                        consume(int(frame_index), object_ids, logits)
                         forward_count += 1
+                    reverse_count = 0
+                    if seed_frame > 0:
+                        for frame_index, object_ids, logits in (
+                            self._predictor.propagate_in_video(
+                                state,
+                                start_frame_idx=seed_frame,
+                                reverse=True,
+                            )
+                        ):
+                            consume(int(frame_index), object_ids, logits)
+                            reverse_count += 1
             except SceneAnalysisError:
                 raise
             except Exception as exc:
@@ -258,8 +328,8 @@ class Sam2VideoSegmenter:
                     "sam2_propagation_failed",
                     f"SAM2 multi-instance propagation failed: {exc}",
                 ) from exc
-        return instance_masks, {
-            "prompt_frames": [prompt.frame_index for prompt in prompts],
+        metadata = {
+            "prompt_frames": [seed_frame for _ in prompts],
             "prompt_boxes_xyxy": [
                 prompt.box_xyxy.tolist() for prompt in prompts
             ],
@@ -271,3 +341,16 @@ class Sam2VideoSegmenter:
             "forward_frames": forward_count,
             **self.describe(),
         }
+        if seed_frame > 0 or exclusive_masks:
+            metadata.update(
+                {
+                    "seed_frame": seed_frame,
+                    "reverse_frames": reverse_count,
+                    "overlap_policy": (
+                        "highest_positive_logit_wins"
+                        if exclusive_masks
+                        else "independent_positive_logits"
+                    ),
+                }
+            )
+        return instance_masks, metadata

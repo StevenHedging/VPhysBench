@@ -164,7 +164,8 @@
             "uniform_circular_motion_state_v1",
             "uniform_circular_motion_state_v2",
             "collision_1d_state_v1",
-            "collision_1d_state_v2"
+            "collision_1d_state_v2",
+            "collision_1d_state_v3"
           ]
         },
         "timeline": {"$ref": "#/$defs/referenceTimeline"},
@@ -187,7 +188,8 @@
                   "free_fall_state_v2",
                   "inclined_plane_state_v2",
                   "uniform_circular_motion_state_v2",
-                  "collision_1d_state_v2"
+                  "collision_1d_state_v2",
+                  "collision_1d_state_v3"
                 ]
               }
             }

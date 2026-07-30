@@ -24,6 +24,17 @@ v2 让单摆与其余 scene 一样采用 reference-bounded 时间轴，并为所
 顺序前向解码。协议、evaluator 版本、解码策略和完整 config 都进入 identity，因此
 v1/v2/v3 结果不能混合。v3 沿用 v2 的媒体规范，但增加主体评分与新的失败责任语义。
 
+碰撞评估器的下一版审计协议是：
+
+```text
+configs/evaluation/protocols/scene_default_v4.json
+```
+
+v4 只把 `collision_1d` 升级到 evaluator `1.4`，其余四个 scene 仍为 `1.3`。它增加
+多帧角色发现、双向且互斥的 SAM2 实例传播、观测可靠性惩罚和外置过程可视化。v4
+目前不替换官方 v6 Task 所固定的 v3；使用 v4 必须创建新的 reevaluation variant，
+不能覆盖或混用已有 v3 分数。
+
 `plan.jobs` 是主表。缺失 prediction、重复 prediction、失败生成或未知 case 都必须产生
 一个显式 case result。
 
@@ -159,6 +170,9 @@ evaluator identity。
 协议的最大时长。采样点保持协议 FPS，因此最后一个采样点是不晚于 reference 边界的
 最大网格点。prediction 必须覆盖同一个时间区间；时长不足不会补帧或重复末帧：v3
 返回 `evaluated/0/degraded`，v1/v2 保持历史 `unavailable`。
+
+`scene_default_v4` 仅把碰撞画布提高到 `960 × 540`，以稳定小球边缘和接触阶段的实例
+分割；时间轴、顺序解码、最小时长和最大时长保持不变。
 
 单摆 v2/v3 的 4.8 秒下限覆盖当前冻结数据集中最短的可信 reference，同时仍提供足够的
 周期观测区间。需要复现旧运行时必须显式使用 `scene_default_v1`，其固定 5 秒要求
@@ -745,6 +759,9 @@ result.json
 
 ## 11. 一维碰撞
 
+11.1–11.6 记录 v1–v3 的冻结逻辑。v4 不修改这些历史协议，而是在 11.7–11.9 所述的
+独立 evaluator `1.4` 中替换碰撞主体观测并增加可靠性与可视化。
+
 ### 11.1 主体观测
 
 当前场景固定跟踪三个角色：
@@ -927,6 +944,81 @@ striker_trajectory_curve.png
 result.json
 ```
 
+### 11.7 v4 多帧角色观测
+
+v4 不再假设三个球能在 frame 0 通过高饱和度颜色组件被发现。reference 与 prediction
+各自执行：
+
+```text
+在视频前 60% 的最多 12 个候选帧中搜索
+→ 在 960 × 540 轨道带内做多阈值 Hough 圆检测
+→ 按“左侧 striker + 相邻 target_1/target_2 + 共线轨道”选择三元组
+→ Hough 全部失败时使用 temporal-median motion proposal
+→ 在共同 seed frame 建立三个带固定语义角色的 SAM2 prompt
+→ 从 seed 向前和向后传播
+→ 每个像素只分配给最高正 SAM2 logit 的一个实例
+→ 以角色 seed 和质心连续性保留每帧单一连通分量
+```
+
+seed 可以晚于 frame 0，所以入镜较晚、首帧部分遮挡或首帧颜色不显著不再直接使
+evaluator 失败。三个角色始终是 `striker/target_1/target_2`；不会通过自由 Hungarian
+重排把身份交换误判为高分。接触阶段的实例重叠以最高正 logit 决定唯一归属，避免同一
+像素同时进入多个球 mask。
+
+共享 SAM2 适配器的 `exclusive_masks` 默认仍为 `false`。只有 v4 碰撞显式启用互斥
+分配；v1–v3 的 frame-0、独立二值阈值和单向传播行为保持冻结。
+
+### 11.8 v4 质量与可靠性
+
+v4 的 reference 每个角色最少需要 20% 的有效观测帧，每个 mask 至少 12 像素、不得
+超过画布的 2%，整体运动跨度至少 30 像素。20% 是对冻结 View B 全部 32 个真实
+reference 完整运行后设置的 hard gate；该批次最低角色有效率为 `0.2567567568`。
+
+prediction 观测失败仍按 v3 责任语义得到有限零分，不转化为 evaluator error。对于能
+形成轨迹但比 reference 丢失更多观测的 prediction，定义：
+
+```text
+coverage_role =
+    clip(prediction_valid_ratio_role / reference_valid_ratio_role, 0, 1)
+
+observation_reliability = min(coverage_striker, coverage_target_1,
+                              coverage_target_2)
+
+collision_state_score =
+    raw_collision_state_score × observation_reliability
+```
+
+这样避免旧式单一阈值 cliff，同时不允许低覆盖 prediction 仅凭少数幸运帧取得高物理
+分。正常主体位置、形状、外貌评分与 v3 相同；可靠性只作用于碰撞 state 子分。
+
+### 11.9 v4 过程可视化
+
+每个成功或可保守退化的 v4 碰撞 Case 都会 best-effort 生成：
+
+```text
+collision_observation.mp4
+collision_instance_similarity.png
+collision_event_timeline.png
+collision_tracks.csv
+collision_observation.json
+```
+
+视频为 2×2 面板：reference 角色 mask/质心/轨迹、prediction 对应视图、union mask
+重合图，以及逐帧 IoU、seed、接触帧和角色状态 dashboard。两张图分别展示三角色及
+union IoU 曲线、三角色归一化轨迹和 reference/prediction 接触时刻。
+
+大文件写入 `PHYSBENCH_VISUALIZATION_ROOT`，默认是：
+
+```text
+/mnt/nvme1/physics_video_benchmark/evaluation_visualizations
+```
+
+仓库顶层 `visualizations` 是该目录的本机链接。正式 Case artifact 目录只保存
+`collision_visualization_manifest.json`，其中记录外部绝对路径、仓库链接路径、
+文件大小、SHA-256 和 evaluator config digest。外置可视化属于未封印诊断，不进入
+AtomicRun/reevaluation 的 sealed artifact manifest；生成失败也不会改变 Case 分数或
+状态。
+
 ## 12. 产物
 
 ```text
@@ -942,8 +1034,12 @@ runs_v2/<run_id>/evaluation/
     ├── subject_components.csv       # v3
     ├── physical_subject_iou_curve.png
     ├── subject_similarity_curve.png # v3
+    ├── collision_visualization_manifest.json # v4 collision
     └── <scene_state_curve>.png
 ```
+
+v4 碰撞的大型过程视频、图和轨迹表不放入上述 run 目录；本地 manifest 通过 SHA-256
+把它们关联到 `visualizations/scene_default_v4/...`。
 
 不是每个 scene 都有额外 state curve。当前精确映射为：
 
@@ -1161,6 +1257,7 @@ v3 的主体层采用可审计、无额外训练的组合指标：
 tests/test_scene_evaluation.py
 tests/test_metrics.py
 tests/test_evaluation_protocol_v3.py
+tests/test_evaluation_protocol_v4.py
 ```
 
 实现或修改 evaluator 后至少执行：
@@ -1172,6 +1269,21 @@ PYTHONPATH=src:tests /root/miniconda3/envs/phybench/bin/python \
 PYTHONPATH=src:tests /root/miniconda3/envs/phybench/bin/python \
   -m unittest discover -s tests -v
 ```
+
+v4 还提供真实 reference 可观测性审计：
+
+```bash
+CUDA_VISIBLE_DEVICES=1 HF_HUB_OFFLINE=1 PYTHONPATH=src \
+  /root/miniconda3/envs/phybench/bin/python \
+  scripts/audit_collision_evaluator_v4.py \
+  --device cuda \
+  --output visualizations/scene_default_v4/\
+collision_reference_observability_audit.json
+```
+
+该脚本只观测冻结 reference，不生成或修改 prediction。当前 View B 结果为 32/32
+observable；完整验证记录见
+[`docs/experiments/COLLISION_EVALUATOR_V4_20260730.md`](experiments/COLLISION_EVALUATOR_V4_20260730.md)。
 
 ## 16. AtomicRun 并存式重评
 

@@ -53,6 +53,7 @@ class SceneEvaluatorRegistry:
         elif evaluator_type in {
             "collision_1d_state_v1",
             "collision_1d_state_v2",
+            "collision_1d_state_v3",
         }:
             from .scenes.collision.evaluator import CollisionCaseEvaluator
 

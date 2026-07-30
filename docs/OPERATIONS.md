@@ -383,6 +383,50 @@ evaluation/cases/<job_id>/physical_subject_iou_curve.png
 正式 Task score 只在严格 coverage 为 1 时存在。不要把部分运行的
 `observed_mean_score` 当作正式结果。
 
+### 12.1 v4 碰撞过程可视化
+
+碰撞 v4 会把大型诊断写到 NVMe，并在仓库顶层提供统一入口。首次配置：
+
+```bash
+mkdir -p /mnt/nvme1/physics_video_benchmark/evaluation_visualizations
+
+ln -s /mnt/nvme1/physics_video_benchmark/evaluation_visualizations \
+  visualizations
+```
+
+执行 `ln -s` 前应确认仓库中不存在同名普通目录；当前工作区已经完成该配置。
+`visualizations` 被 `.gitignore` 忽略。若机器没有该挂载点，可以覆盖外置根：
+
+```bash
+PHYSBENCH_VISUALIZATION_ROOT=/path/with/enough/space \
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  evaluate \
+  --run-dir runs_v2/RUN_ID \
+  --protocol-id scene_default_v4 \
+  --evaluation-id collision-v4-audit-001
+```
+
+外置根必须位于 AtomicRun 之外。不要在 `runs_v2/<run>/evaluation` 或
+`reevaluations/...` 内创建逃逸 symlink；这两类 sealed 目录会拒绝包含 symlink 的
+目标路径。每个 Case 的正式目录只保留带 size/SHA-256/config digest 的
+`collision_visualization_manifest.json`，外部文件是可重建、非 sealed 的人工审计
+材料。
+
+单独审计冻结 View B 的 32 个碰撞 reference：
+
+```bash
+CUDA_VISIBLE_DEVICES=1 HF_HUB_OFFLINE=1 PYTHONPATH=src \
+  /root/miniconda3/envs/phybench/bin/python \
+  scripts/audit_collision_evaluator_v4.py \
+  --device cuda \
+  --output visualizations/scene_default_v4/\
+collision_reference_observability_audit.json
+```
+
+报告的 `summary.coverage` 应为 `1.0`。若某 Case 失败，查看 `cases[].error`、
+`prompt_builder.candidate_attempts`、三角色有效率和 mask stabilization 统计，而不是
+直接放宽所有质量门。
+
 ## 13. 常见错误
 
 ### `unknown baseline ID`
