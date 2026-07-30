@@ -109,6 +109,129 @@
         }
       }
     },
+    "objectCentricScoring": {
+      "type": "object",
+      "required": ["content_weights"],
+      "properties": {
+        "content_weights": {
+          "type": "object",
+          "required": ["nbody_physics", "shape", "appearance"],
+          "properties": {
+            "nbody_physics": {"type": "number", "minimum": 0},
+            "shape": {"type": "number", "minimum": 0},
+            "appearance": {"type": "number", "minimum": 0}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "nbodyExtraction": {
+      "type": "object",
+      "required": [
+        "contact_tolerance_radius_fraction",
+        "contact_hysteresis_radius_fraction",
+        "minimum_contact_speed_px_s",
+        "minimum_event_confidence",
+        "velocity_window_frames"
+      ],
+      "properties": {
+        "contact_tolerance_radius_fraction": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "contact_hysteresis_radius_fraction": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "minimum_contact_speed_px_s": {"type": "number", "minimum": 0},
+        "minimum_event_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "velocity_window_frames": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "nbodyScoring": {
+      "type": "object",
+      "required": [
+        "along_scale_radius_fraction",
+        "along_scale_diagonal_fraction",
+        "normal_scale_radius_fraction",
+        "normal_scale_diagonal_fraction",
+        "position_jitter_radius_fraction",
+        "event_time_duration_fraction",
+        "event_gap_radius_fraction",
+        "velocity_error_scale_fraction",
+        "minimum_velocity_scale_px_s",
+        "momentum_error_scale_fraction",
+        "minimum_momentum_scale_kg_px_s",
+        "excess_penetration_scale",
+        "position_weight",
+        "contact_weight",
+        "velocity_weight",
+        "momentum_weight",
+        "nonpenetration_weight"
+      ],
+      "properties": {
+        "along_scale_radius_fraction": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "along_scale_diagonal_fraction": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "normal_scale_radius_fraction": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "normal_scale_diagonal_fraction": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "position_jitter_radius_fraction": {
+          "type": "number",
+          "minimum": 0
+        },
+        "event_time_duration_fraction": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "event_gap_radius_fraction": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "velocity_error_scale_fraction": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "minimum_velocity_scale_px_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "momentum_error_scale_fraction": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "minimum_momentum_scale_kg_px_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "excess_penetration_scale": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "position_weight": {"type": "number", "minimum": 0},
+        "contact_weight": {"type": "number", "minimum": 0},
+        "velocity_weight": {"type": "number", "minimum": 0},
+        "momentum_weight": {"type": "number", "minimum": 0},
+        "nonpenetration_weight": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
     "spatial": {
       "type": "object",
       "required": ["width", "height", "policy"],
@@ -165,13 +288,21 @@
             "uniform_circular_motion_state_v2",
             "collision_1d_state_v1",
             "collision_1d_state_v2",
-            "collision_1d_state_v3"
+            "collision_1d_state_v3",
+            "collision_1d_state_v5"
           ]
         },
         "timeline": {"$ref": "#/$defs/referenceTimeline"},
         "spatial": {"$ref": "#/$defs/spatial"},
         "evaluator_contract": {"const": "robust_subject_v3"},
         "subject_scoring": {"$ref": "#/$defs/subjectScoring"},
+        "sam2": {"type": "object"},
+        "multi_frame_observation": {"type": "object"},
+        "nbody_extraction": {"$ref": "#/$defs/nbodyExtraction"},
+        "nbody_scoring": {"$ref": "#/$defs/nbodyScoring"},
+        "object_centric_scoring": {
+          "$ref": "#/$defs/objectCentricScoring"
+        },
         "quality": {"type": "object"},
         "scoring": {
           "type": "object",
@@ -189,13 +320,31 @@
                   "inclined_plane_state_v2",
                   "uniform_circular_motion_state_v2",
                   "collision_1d_state_v2",
-                  "collision_1d_state_v3"
+                  "collision_1d_state_v3",
+                  "collision_1d_state_v5"
                 ]
               }
             }
           },
           "then": {
             "required": ["evaluator_contract", "subject_scoring"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {"const": "collision_1d_state_v5"}
+            }
+          },
+          "then": {
+            "required": [
+              "sam2",
+              "multi_frame_observation",
+              "quality",
+              "nbody_extraction",
+              "nbody_scoring",
+              "object_centric_scoring"
+            ]
           }
         }
       ]

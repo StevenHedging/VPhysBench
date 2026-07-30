@@ -58,6 +58,12 @@ class SceneEvaluatorRegistry:
             from .scenes.collision.evaluator import CollisionCaseEvaluator
 
             evaluator = CollisionCaseEvaluator(config)
+        elif evaluator_type == "collision_1d_state_v5":
+            from .scenes.collision.v5_evaluator import (
+                CollisionOpenWorldCaseEvaluator,
+            )
+
+            evaluator = CollisionOpenWorldCaseEvaluator(config)
         elif evaluator_type == "unsupported":
             evaluator = UnsupportedSceneEvaluator(scene_id, config)
         else:
