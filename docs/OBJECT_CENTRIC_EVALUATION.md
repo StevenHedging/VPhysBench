@@ -12,32 +12,38 @@
 4. 是否凭空新增、复制、删除或交换对象；
 5. 在实体完整的前提下，scene-specific 物理状态是否正确。
 
-因此下一代 evaluator 使用以下流程：
+因此对象中心 evaluator 使用以下流程。`scene_default_v5` 已在
+`collision_1d` 接入这条链路；其余 scene 目前仍保留为设计目标：
 
 ```text
 Case + conditioned first frame
-  └─ expected entity graph + immutable identity anchors
+  └─ Case Entity Manifest + immutable identity/physics anchors
 
-reference / prediction video
-  ├─ expected-ID directed tracking
-  └─ open-world residual discovery
+reference video
+  └─ manifest-directed expected-ID segmentation/tracking
+
+prediction video
+  ├─ manifest-directed expected-object proposals
+  └─ open-world motion/Hough residual discovery
        ↓
-  persistent object tracks + visibility states
+  deduplicated detections + causal persistent track IDs
        ↓
-  initial-window rectangular assignment + dustbins
-       ↓  identity is frozen; no future-trajectory rematching
+  evidence-tiered per-frame Hungarian + explicit null assignment
+       ↓  track ID is frozen; no future-trajectory renaming
   per-entity position / shape / appearance comparison
        ├─ entity-set integrity: PresenceDetA + observable AssA
        ├─ localization audit: SoftDetA
        ├─ GOSPA audit: localization / missed / false
-       └─ scene adapter: physical state and topology
+       └─ arbitrary-N collision adapter: state and contact graph
        ↓
   weighted geometric case score
 ```
 
-这个架构是新协议的 shadow 基础，不修改已经冻结的
-`scene_default_v3` 或 `scene_default_v4`，也不改变 Baseline、Task 或 Dataset
-契约。只有在扰动测试和真实 prediction 人工排序审计通过后，才能发布新的正式协议。
+当前碰撞实现为 `CollisionOpenWorldCaseEvaluator 2.2`，协议内部标记为
+`open_world_v1.2` 和 `nbody_v1.2`。它由 opt-in 的 `scene_default_v5` 承载，不修改
+已经冻结的 `scene_default_v3` 或 `scene_default_v4`，也不改变 Baseline、Task 或
+Dataset 契约。v5 仍是 shadow 协议；它可以真实运行和产出分数，但不能与旧协议结果
+混入同一 leaderboard。
 
 ## 2. 对象契约
 
@@ -77,15 +83,19 @@ ObjectTrack
 
 插值点只能用于稳健动力学拟合，不能伪装成实际视觉观测，也不能增加实体曝光。
 
-当前 Dataset 4.0.0 的 Case schema 尚未显式保存 entity graph、生命周期或可见性，
-`assets.subject_mask` 也没有冻结标注。Shadow 阶段由 scene adapter 根据现有
-`physics`、`appearance` 和条件首帧生成 `EntitySpec`；不能把在线推断结果静默写回
-冻结 release。若后续增加人工校验的 ID/anchor cache，应作为带独立 digest 的版本化
-evaluation asset 发布。
+Dataset 4.0.0 的 Case schema 尚未逐条显式保存完整 entity graph、生命周期或可见性，
+`assets.subject_mask` 也没有冻结标注。当前 `Entity Manifest v1` materializer 优先
+读取显式 `case.entities`；没有显式声明时，从结构化 `physics`、`appearance` 和
+condition anchor 按 scene 的确定性规则物化。Dataset 4.0.0 的 214/214 条 Case 均可
+物化；碰撞 v2.2 会实际消费 manifest 的实体数量、ID、初始顺序、质量、半径和初速度，
+并把 materializer ID、manifest 内容和 digest 写入结果。任何基数、单位、必需标注或
+初始顺序冲突都按 reference invalid 处理，不猜测也不静默写回冻结 release。若后续
+增加人工校验的 ID/anchor cache，应作为带独立 digest 的版本化 evaluation asset
+发布。
 
 ## 3. 身份匹配
 
-跨视频匹配只能使用 Case 条件首帧和最早可靠观察窗口：
+语义身份只能由 Case 条件首帧和最早可靠观察窗口建立：
 
 ```text
 C_ij =
@@ -95,12 +105,12 @@ C_ij =
   + w_relation   × initial topology distance
 ```
 
-角色不兼容的匹配成本为无穷。匹配是带 dustbin 的矩形指派：
+角色不兼容的匹配成本为无穷。通用设计中的初始语义匹配是带 dustbin 的矩形指派：
 
 - 未匹配 expected entity 是初始 missing；
 - 未匹配 candidate track 是 residual/extra 候选；
 - prediction 中对象数量不必等于 GT；
-- 匹配完成后在整段视频冻结。
+- 语义 anchor 和物理 ID 在整段视频冻结。
 
 禁止用完整未来 GT 轨迹选择最优 permutation。那会让错误动力学、角色交换和轨迹
 穿越通过事后改名获得高分。真正不可区分的实体可以显式声明
@@ -116,6 +126,19 @@ C_ij =
 第二步不能改写任何 track ID，也不能用整段未来轨迹选择 permutation。它的作用只是
 记录某一帧哪两个固定 ID 在空间上对应；因此追踪器在接触后换了物理对象时，AssA 会
 看到 pair 变化。
+
+碰撞 v2.2 已实现第二层：reference 的 expected ID 来自 manifest-directed SAM2
+通道，prediction 候选经过去重后只按当前及历史观测建立因果 track ID；每帧按证据
+等级从强到弱执行矩形 Hungarian。指派显式包含 null hypothesis，配置
+`minimum_match_position_similarity = 0.1`。若一个候选与 GT 的 reference-scaled
+Cauchy 位置相似度低于该阈值，就不再为了凑齐基数而强制配对，而是同时保留：
+
+- GT entity 的 missing exposure；
+- prediction track 的 extra exposure；
+- 含实际距离、相似度、证据等级和拒绝原因的 `rejected_candidate_matches` 审计行。
+
+高等级候选的被拒边不会阻止剩余 GT 与低等级候选形成合法匹配。只有在所有等级完成
+后仍两端未匹配的拒绝边才作为正式 null-assignment 诊断输出。
 
 身份并非每帧都可观察。两个外貌不可区分的球在接触合并期、完全遮挡期或低分辨率
 重叠期，追踪器的任意选择不能被当作生成模型的 ID switch。Scene adapter 必须由
@@ -137,8 +160,7 @@ scene-specific、版本化的 detectability policy，仍不得读取 prediction 
 1. expected-ID 定向追踪；
 2. open-world residual discovery。
 
-只传播预先选中的 N 个 mask 无法发现第 N+1 个对象。Residual discovery 采用两条
-通道：
+只传播预先选中的 N 个 mask 无法发现第 N+1 个对象。通用设计把 residual 分为三类：
 
 - participant-class extra：与场景物理主体同类，稳定出现后强惩罚；
 - independently-moving salient residual：类别不同但明显成为独立运动主体，先以较低
@@ -146,11 +168,14 @@ scene-specific、版本化的 detectability policy，仍不得读取 prediction 
 - condition-novel static residual：背景配准后新出现、虽静止但显著的对象，仅作审计，
   待误报率校准后再决定是否计分。
 
-两者都必须做 merge/split/fragment 去重，并满足以秒为单位的最短持续时间、面积、
+三类候选都必须做 merge/split/fragment 去重，并满足以秒为单位的最短持续时间、面积、
 运动独立性和置信度约束，避免把反光、手、阴影、细线断片或单帧噪声误判成新实体。
-精确身份指派的复杂度应只对 expected entity 数量指数、对候选轨迹数量线性；因此
-候选再多也全部参与最优指派，未匹配者全部保留为 residual exposure，不能因幻觉对象
-过多让 evaluator 抛错或通过 Top-K 预筛改变最优角色匹配。
+所有 observer 保留的候选都应参与正式指派，未匹配者保留为 residual exposure，不能
+因幻觉对象过多让 evaluator 抛错或通过 Top-K 预筛静默消失。
+
+碰撞 v2.2 的实例化是 directed SAM2 加逐帧 motion/Hough residual discovery。候选
+超过 causal tracker 的冻结容量时，超出的检测不会被静默丢弃，也不会导致 evaluator
+error，而是累积为 `overflow` prediction exposure。
 
 ## 4. 连续位置与对象质量
 
@@ -186,9 +211,11 @@ boundary F、Lab 颜色、纹理和条件首帧外貌。不可比较的组件移
 S_visual = geometric_mean(shape, appearance, size)
 ```
 
-位置作为独立 `S_position` 进入 content；不再进入正式完整性门，也不在 scene
-physics 中重复比较绝对轨迹。形状/外貌参与初始身份 assignment 和 visual content，
-但不再同时伪装成“检测是否成功”。Localization-aware SoftDetA 保留为诊断。
+位置进入 content，不再进入正式完整性门。碰撞 v2.2 将它封装在
+`nbody_physics.track_position` 内，并保证位置只在该处正式评分；速度、动量、接触和
+非穿透是不同物理量，不再另做一份绝对轨迹分。形状/外貌参与身份 anchor 和 visual
+content，但不再同时伪装成“检测是否成功”。Localization-aware SoftDetA 保留为
+诊断。
 
 ## 5. 新增、消失、复制与 ID 连续性
 
@@ -202,20 +229,19 @@ P = all prediction-track exposure, including residual tracks
 PresenceDetA = M / (R + P - M)
 ```
 
-Residual 的 exposure 权重必须冻结在协议里：
+碰撞 `open_world_v1.2` 将候选的正式 exposure 权重冻结为：
 
-```text
-P =
-    P_expected_tracks
-  + 1.0 × P_participant_class_extra
-  + lambda_salient × P_independently_moving_salient
+| evidence tier | exposure 权重 | 语义 |
+| --- | ---: | --- |
+| `PARTICIPANT` | 1.00 | 可靠物理参与体 |
+| `INDEPENDENT_SALIENT` | 0.50 | 独立显著但证据较弱的实体 |
+| `TENTATIVE` | 0.25 | 保守计入的弱候选 |
+| `AMBIGUOUS` | 0.00 | 只审计，不参与正式匹配或惩罚 |
 
-audit-only: lambda_salient = 0
-score-enabled: lambda_salient 经人工误报校准后冻结在 (0, 1]
-```
-
-静态 novel residual 在当前阶段只报告，不进入 `P`。不得在不同运行中按视频观感临时
-改变权重。
+确认后的 motion/tentative participant track 会追溯为完整 `PARTICIPANT` exposure，
+不存在免费的确认等待窗；仅靠静态圆的持续性则不能升级成 N-body participant。
+`overflow` 也按其检测证据计入 `P`，至少按 tentative 权重计费。不得在不同运行中按
+视频观感临时改变这些权重。
 
 该定义自然满足：
 
@@ -261,10 +287,27 @@ GOSPA 用于审计错误来源，不重复叠加到正式分数，避免对同�
 association-eligible exposure；若两侧 eligible exposure 都为 0，
 `AssA_observable=1`（neutral），但该时段的 group cardinality 仍进入 PresenceDetA。
 
-逐 ID position/shape/appearance 只在成功匹配曝光上条件聚合，missing/extra 只由 gate
-惩罚一次。只有 supervisor 本身不可用时才允许 omit；prediction 提取失败必须返回
-`degraded_prediction` 的有限低分，不能借 omit 抬高分数。只有全部核心曝光缺失或显式
-critical failure 才把整个 content 置 0，单个对象部分缺失不重复归零。
+碰撞 v2.2 对“模型通过不生成难帧来逃避物理评分”采用 anti-abstention 语义：
+
+- shape/appearance 仍只比较成功匹配的主体 mask，extra 由完整性 gate 处理；
+- N-body 的 position、velocity、momentum、nonpenetration 使用完整 GT 的真实秒
+  reference exposure 作分母，未观测的预期实体时段贡献 0，而不是从分母删除；
+- GT contact graph 不按 prediction coverage 裁剪；预测 residual participant 的接触
+  事件也保留为可能的 false event；
+- “GT 无接触且 prediction 无接触”只有在全部预期 pair exposure 完整时才能认证为
+  正确，否则 contact 分保守置 0。
+
+因此 missing 会同时降低“实体集合是否完整”的 gate 和“缺失时段是否提供物理证据”
+的 N-body content，这是有意的 anti-abstention，不是把同一个位置距离重复算两次。
+每个 participant detection 在 expected slot 或 residual N-body channel 中严格守恒，
+partially matched track 的未匹配时段也不能从物理输入中消失。只有 supervisor 本身
+不可用时才允许 omit；directed observation 失败仍继续 residual discovery，而
+residual discovery 或 open-world comparison 失败则 fail-closed 为等价空 prediction，
+返回 `evaluated/degraded_prediction` 的有限保守低分，不能退回 directed-only 满分。
+
+统一时间格使用真实秒 cell 权重。短视频或损坏样本只保留实际可用前缀；尾段填充中性
+画布并标记 `available=false`，不复制末帧，预期实体在该尾段继续形成 missing
+exposure。
 
 ## 6. Reference 能力
 
@@ -313,42 +356,57 @@ physics-parent shadow score 隔离，但保留数据质量诊断。冻结 releas
 
 ### 7.1 `collision_1d`
 
-实体：
+碰撞 v2.2 不再声明固定 `striker + target_1 + target_2`。Case Entity Manifest 给出
+`ball_1 ... ball_N` 和 `track_axis` apparatus，要求 `N >= 2`，但不设 N 的场景常量，
+也不假设只有一个主动球。legacy Case 的 N 由 `appearance.ball_sequence` 与全部
+`ball_i_{mass,radius,initial_velocity}` 的一致对应确定；显式 `case.entities` 则直接
+优先。初始顺序、外貌、半径、质量、材质和条件 anchor 用来固定身份契约，活动实体仅
+作为结果中的诊断推断，不改变计分对象集合。
 
-```text
-striker, target_1, target_2 + track_axis anchor
-```
-
-初始身份由左右顺序、`appearance.ball_sequence`、半径、质量、材质和条件首帧锁定。
-主位置分逐角色计算沿轨道/法向距离，不再使用三球 union 质心。接触基于球面间隙：
+Reference 的轨道轴被冻结；位置分逐 ID 计算沿轨道和法向的各向异性连续距离，不使用
+N 球 union 质心。接触在所有无序实体 pair 上基于球面间隙：
 
 ```text
 gap_ij = center_distance - (radius_i + radius_j)
 ```
 
-可信接触还需联合相对速度符号变化和持续窗口，不能总以最小中心距制造一个“碰撞帧”。
-位置分比较逐 ID 轨迹；物理分比较碰前后速度、动量、reference-relative 恢复系数、
-一维运动约束与非穿透；拓扑/事件分比较
-`striker→target_1→target_2` 接触图和顺序。Open-world discovery 寻找第四球、复制球
-和持续 residual。短时接触 mask 合并按遮挡处理，不立即判定对象死亡。
+可信事件还结合闭合/分离速度、hysteresis、持续窗口与置信度，不能总以最小中心距
+制造一个“碰撞帧”。`nbody_v1.2` 比较五个分量：
+
+| component | 权重 | 内容 |
+| --- | ---: | --- |
+| `track_position` | 0.30 | 全部预期 ID 的沿轨/法向轨迹 |
+| `contact_graph` | 0.25 | 全部无序 pair 的接触事件、时间与间隙 |
+| `velocity` | 0.20 | 全部预期 ID 的沿轨速度 |
+| `momentum` | 0.15 | 多物体系统相对 reference 的动量变化 |
+| `nonpenetration` | 0.10 | 全部预期 pair 的过度穿透 |
+
+完整 GT contact graph 不再写死 `striker→target_1→target_2`，也不按 prediction
+coverage 删除。Open-world participant residual 的未匹配检测形成独立 N-body
+channel，其接触事件保留为潜在 false event；弱于 participant 的候选只进入加权
+presence exposure，避免用不可靠静态圆制造物理事件。Residual 的质量暂用 reference
+质量中位数，是已记录的近似。短时接触 mask 合并按遮挡问题处理，不立即判定对象
+死亡。
+
 若接触期的球在视觉上不可区分，应使用 `contact_group` observation 并暂停该时段的
 AssA；分离后只有在外貌或可证实几何连续性足以 re-ID 时才恢复材料身份，否则在
 exchangeability group 层评分。像素半径从 reference/condition mask 或标定得到，不能
 把米制物理半径直接当作像素 gap。
 
-Collision adapter 的 localization 可以保留少量 IoU 精细项，但主项必须是连续距离：
+Collision adapter 的正式 localization 使用连续距离：
 
 ```text
 delta² =
     (delta_parallel / sigma_parallel)²
   + (delta_normal   / sigma_normal)²
 
-q_location = 0.75 / (1 + delta²) + 0.25 × per-ID IoU
+q_location = 1 / (1 + delta²)
 ```
 
-IoU 不再决定“不相交即统一为 0”，同时仍能区分真正重合的实例边界。若 striker 在
-frame 0 尚未进入画面，应在“最早共同可观测且仍处于碰撞前”的窗口冻结 ID；不能强绑
-frame 0，也不能等到接触后再利用未来行为重命名。
+因此不相交但接近和相距很远不会同得 0。Full-set mask IoU 仍是必需可视化诊断，
+shape/appearance 也继续比较 matched mask，但 IoU 不混入 `track_position`。若任一
+实体在 frame 0 尚未进入画面，应在最早可靠的碰撞前观测窗口建立 directed prompt；
+不能强绑 frame 0，也不能等到接触后再利用未来行为重命名。
 
 ### 7.2 `free_fall`
 
@@ -419,14 +477,16 @@ corner-case 测试。`r≈0` 时极角不可识别，必须回退到 Cartesian d
 
 | scene | position | physics invariants/events | anchor/topology |
 | --- | --- | --- | --- |
-| collision | 每 ID 的沿轨/法向坐标轨迹 | 速度、动量、恢复、非穿透、一维性 | 固定轨道、两级接触图与顺序 |
+| collision | 每 ID 的沿轨/法向坐标轨迹 | 全 pair 接触图、速度、系统动量、非穿透 | 固定 reference 轨道轴 |
 | free fall | `x(t), y(t)` | 速度、加速度、启动、impact/exit、反弹 | ground/exit anchor |
 | inclined plane | 沿面/法向坐标与相对姿态 | 速度、加速度、启动、下降、接触/离轨 | 固定斜面轴、端点、透视标定 |
 | pendulum | bob 的角向/径向轨迹 | 角速度、周期、振幅、阻尼、能量趋势 | pivot—string—bob 连接与支撑稳定 |
 | circular | 每 ID 的半径、角度与相对相位 | 角速度、方向、均匀性、周期性 | 固定中心、disk、对象基数 |
 
-Position 不再进入 physics；physics 的导数可从轨迹估计，但其得分只比较表中不变量和
-事件。Topology 不重复比较 node 的绝对坐标，只比较锚点漂移、关系和事件结构。
+同一位置 primitive 不应同时出现在多个正式分量。碰撞 v2.2 在实现上把 position 与
+其余四个 scene-specific 量共同封装成 `nbody_physics`，但内部仍是互斥的五分量；
+physics 的导数可从轨迹估计，不能再复制一份绝对轨迹分。Topology 不重复比较 node
+的绝对坐标，只比较锚点漂移、关系和事件结构。
 
 ## 8. Case 分数与失败语义
 
@@ -445,19 +505,30 @@ content = geometric_mean(
 S_case = integrity_gate × content
 ```
 
-例如三球都完全正确但全程多出第四球时：
+碰撞 v2.2 的具体内容组合为：
 
 ```text
-PresenceDetA = 3 / 4
+content = weighted_geometric_mean(
+    nbody_physics: 0.60,
+    matched_subject_shape: 0.20,
+    matched_subject_appearance: 0.20
+)
+```
+
+例如 N 个球都完全正确但全程多出一个同权 participant 时：
+
+```text
+PresenceDetA = N / (N + 1)
 AssA_observable = 1
-S_case <= 0.75
+S_case <= N / (N + 1)
 ```
 
 该上限不会因为其余内容组件为 1 而被抬到接近满分。不可比较的 content 组件移除并
 重归一化；但不同 reference capability 必须分层，不能靠任意 omission 制造更高分。
-全部核心曝光缺失或显式 critical failure 可以得到有限 0 分；单个对象部分缺失只由
-gate 惩罚。`sqrt(SoftDetA×AssA_observable)` 仍可作为
-HOTA-style 可读诊断，但不用于稀释式的最终组合。
+全部核心曝光缺失或显式 critical failure 可以得到有限 0 分；部分缺失按第 5 节同时
+影响完整性和相应 N-body evidence coverage，不能通过删分母获益。
+`sqrt(SoftDetA×AssA_observable)` 仍可作为 HOTA-style 可读诊断，但不用于稀释式的
+最终组合。
 
 状态继续沿用现有责任边界：
 
@@ -473,38 +544,70 @@ diagnostic 必须有限。可视化至少包含逐 ID overlay、匹配表、birt
 
 ## 9. 落地状态与验证门
 
-已实现但尚未接入正式 scene evaluator 的 shadow 内核：
+公共实体内核已经实现：
 
 ```text
 src/physbench/evaluation/common/entities/
-  contracts.py   EntitySpec、ObjectTrack、visibility、reference capability
-  matching.py    initial-window rectangular assignment + dustbins
+  contracts.py   EntitySpec、ObjectTrack、visibility、分通道真实秒 exposure
+  manifest.py    Case Entity Manifest v1 的显式解析与确定性 legacy materializer
+  timeline.py    公共物理时间格与 cell 权重
+  matching.py    通用 initial-anchor rectangular assignment
+  observer.py    证据分层、因果 track、null assignment、overflow、开放世界比较
   scoring.py     continuous distance、PresenceDetA、SoftDetA、observable AssA、
-                 GOSPA、geometric score
+                 GOSPA、gated geometric score
+
+src/physbench/evaluation/scenes/collision/
+  open_world.py       directed SAM2 + motion/Hough residual discovery
+  nbody.py            role-free arbitrary-N kinematics/contact scoring
+  v5_evaluator.py     collision evaluator 2.2 integration
+  v5_visualization.py open-world/N-body 过程可视化
 ```
 
-单元测试覆盖 identity、近/远距离单调性、missing、短/长 extra、duplicate、ID switch、
-身份不可观察窗口、矩形匹配、dustbin、候选 overflow、逐 ID 曝光守恒、零分门控和
-有限输出。
+`scene_default_v5` 已实际把上述内核接入 `collision_1d`，其运行身份是：
 
-正式发布前还必须完成：
+```text
+evaluator: collision_1d_open_world_nbody 2.2
+observer:  open_world_v1.2
+physics:   nbody_v1.2
+```
 
-1. 为每个 scene 实现可靠的双通道 open-world residual discovery；
-2. 用 reference、真实 baseline prediction 与人工扰动集校准尺度；
-3. 验证平移、缩放、冻结、删除、复制、第四对象、ID swap、无接触、穿透和时间扭曲
-   都按预期单调降分；
-4. 对高分、低分和模型排序反例人工盲审；
-5. 以新 fingerprint 重评所有 baseline 后才能形成 leaderboard。
+单元测试覆盖 2/4/N manifest、任意 N pair、近/远距离单调性、null assignment、
+missing、短/长 extra、duplicate、ID switch、身份不可观察窗口、候选 overflow、
+逐 ID/逐 track exposure 守恒、partially matched participant 守恒、短视频尾段、
+contact anti-abstention、fail-closed residual、零分门控和有限输出。专项测试为
+52/52，全仓测试为 346/346。
 
-建议迁移顺序是 circular motion、collision、inclined plane、free fall、pendulum。
-圆周运动全部有同 Case GT，最适合作为对象层 control；碰撞是当前优先场景，但必须先
-完成第四球 residual detector 和接触 ambiguity group。复合单摆在实体图和上述 OOD
-冲突解决前只做 audit，不产出新的统一总分。
+最终真实视频审计没有触发回滚：
 
-因此当前成熟度定义为 **audit-only shadow core**：允许产出 tracks、matches、
-PresenceDetA/SoftDetA/AssA/GOSPA 和可视化，不进入正式 leaderboard。Circular 和
-collision adapter 可率先接入 audit instrumentation；只有通过反事实单调性和真实视频
-人工盲审，才启用 shadow score。Pendulum 暂时阻断。
+| 样本 | Case score | evaluator error |
+| --- | ---: | ---: |
+| `v04374` GT-self | 0.9880578251 | 0 |
+| `v06332` GT-self | 0.9693811074 | 0 |
+| `v04374` WAN | 0.0250737646 | 0 |
+| `v06332` WAN | 0.1203513978 | 0 |
+| `v04374` quantity，多球反例 | 0.0039100888 | 0 |
+| `v06332` quantity，少球反例 | 0.0690306009 | 0 |
+
+GT-self 的 N-body 均为 1，低于满分来自保守 tentative false exposure；已知多球/少球
+反例在 null assignment、完整 GT exposure 和 fail-closed 语义下进一步降分。r7/r8
+审计分别为 4/4、2/2 `evaluated`，均为 0 error、0 unavailable。
+
+每个碰撞 Case 会写出 `per_frame.csv`、主体 IoU 曲线、实体位置曲线和对象基数时间线；
+大型 overlay、匹配/拒绝日志、contact graph 和 N-body dashboard 外置到
+`/mnt/nvme1/physics_video_benchmark/evaluation_visualizations`，仓库
+`visualizations` 链接可直接访问。
+
+当前成熟度仍定义为 **可运行、已真实审计的 shadow collision protocol**，不等同于
+正式 leaderboard 协议。正式发布前仍需：
+
+1. 扩大真实 2/4/N 球、复制、遮挡、交换、无接触、穿透和时间截断审计；目前真实审计
+   的 GT Case 仍是三球；
+2. 继续校准 motion/Hough 对静态额外球、反光、轨道圆形结构和 motion ghost 的误报/
+   漏报；
+3. 完成接触期 identity observability/contact-group 的可靠监督；
+4. 把 Case Entity Manifest 与双通道 open-world observer 逐 scene 迁移到其余四个
+   evaluator；第 7.2–7.5 节目前仍是设计，不应误报为已实现；
+5. 冻结新 fingerprint 并用同一协议重评所有 baseline 后再形成 leaderboard。
 
 ## 10. 方法来源
 

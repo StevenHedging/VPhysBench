@@ -35,15 +35,43 @@ v4 只把 `collision_1d` 升级到 evaluator `1.4`，其余四个 scene 仍为 `
 目前不替换官方 v6 Task 所固定的 v3；使用 v4 必须创建新的 reevaluation variant，
 不能覆盖或混用已有 v3 分数。
 
-下一代“逐物理身份匹配—追踪—新增/消失惩罚—scene-specific physics”设计与当前
-shadow 内核见：
+开放世界实体评估的 shadow 协议是：
+
+```text
+configs/evaluation/protocols/scene_default_v5.json
+```
+
+v5 只把 `collision_1d` 升级到 evaluator
+`collision_1d_open_world_nbody/2.2`；其余四个 scene 沿用 v3 的 evaluator type。
+协议 fingerprint 为：
+
+```text
+93703d6afdf8bbdea86b69d8d8a427653c68030bd7660f3801341e3b2b6209f6
+```
+
+标准协议配置（`sam2.device=auto`）的碰撞 evaluator fingerprint 为：
+
+```text
+686b705e426f43d29acdc745a95b765fe249bd48628c86f5167f40f851caa156
+```
+
+本文最终真实审计显式使用 `--device cuda`，因此该运行配置的 evaluator fingerprint
+为 `f6959f4877dd3dce85bb05fe84c0240253a40ebe5aacf3486d66d8a80de7250b`。设备选择属于
+evaluator config identity；审计指纹不能写成标准 `auto` 配置的指纹。
+2.2 identity payload 同时冻结公共 observer marker `open_world_v1.2` 与碰撞 physics
+marker `nbody_v1.2`。
+
+v5 将“逐物理身份匹配—追踪—新增/消失惩罚—scene-specific physics”的公共实体层
+接入碰撞 scene：
 
 ```text
 docs/OBJECT_CENTRIC_EVALUATION.md
 src/physbench/evaluation/common/entities/
 ```
 
-该内核尚未接入正式协议；v3/v4 的分数与 fingerprint 均保持不变。
+另外四个 scene 尚未接入该实体层。v5 仍是实验性 shadow protocol，不替换官方 v3，
+也不覆盖 v4；三者的分数、协议 fingerprint 和 evaluator fingerprint 均不得混合。
+v3/v4 的实现和 identity 保持冻结。
 
 `plan.jobs` 是主表。缺失 prediction、重复 prediction、失败生成或未知 case 都必须产生
 一个显式 case result。
@@ -71,6 +99,12 @@ reason_code = 稳定原因码
 这类 Case 进入 coverage，不能靠评估失败逃避难例。reference 侧问题则为
 `unavailable`，不惩罚 Baseline；未知内部异常保留为 `error`，不会被低分掩盖。v1/v2
 仍保持原先的历史状态语义。
+
+v5 碰撞进一步区分“prediction 完全不可解码”和“只得到可解码前缀”。前者仍按
+prediction media failure 记 `evaluated/0/degraded`；后者保留已解码前缀的正常比较，
+把视频结束后或损坏后的共同时间格标为 `available=false`，按 missing exposure 计入
+有限低分，Case 仍为 `evaluated`。Reference 不满足最小时长或无法覆盖协议时间轴时仍为
+`unavailable`，不会把数据侧失败归责给 Baseline。
 
 ## 3. 评分契约
 
@@ -183,6 +217,17 @@ evaluator identity。
 
 `scene_default_v4` 仅把碰撞画布提高到 `960 × 540`，以稳定小球边缘和接触阶段的实例
 分割；时间轴、顺序解码、最小时长和最大时长保持不变。
+
+`scene_default_v5` 沿用 v4 的碰撞画布和 v3/v4 的 16 Hz reference-bounded 采样边界，
+但其开放世界实体层在共同的真实秒时间网格上计分。每个采样点代表相邻时间戳中点所
+界定的 Voronoi cell（规则采样时等价于 trapezoidal 权重）；存在、缺失、额外物体、
+身份关联和 overflow 都按秒积分，而不是按帧计数。这样不会因 prediction 的原始 FPS
+或采样密度不同而改变惩罚总量。
+
+v5 碰撞允许 prediction 短于 reference。已解码帧按原时间戳正常归一化；超出视频末尾
+或解码损坏后的时间格使用中性空帧并显式标记为 unavailable，不重复末帧、不插值，也
+不补 GT 首帧。中性帧本身不作为视觉证据，尾段通过预期实体的 missing exposure 进入
+完整性门控。越界 random seek 若被调用也只返回 unavailable cell，不读取越界帧。
 
 单摆 v2/v3 的 4.8 秒下限覆盖当前冻结数据集中最短的可信 reference，同时仍提供足够的
 周期观测区间。需要复现旧运行时必须显式使用 `scene_default_v1`，其固定 5 秒要求
@@ -770,7 +815,8 @@ result.json
 ## 11. 一维碰撞
 
 11.1–11.6 记录 v1–v3 的冻结逻辑。v4 不修改这些历史协议，而是在 11.7–11.9 所述的
-独立 evaluator `1.4` 中替换碰撞主体观测并增加可靠性与可视化。
+独立 evaluator `1.4` 中替换碰撞主体观测并增加可靠性与可视化。11.10–11.14 记录
+shadow v5 的开放世界 N-body evaluator `2.2`；它同样不回写 v1–v4。
 
 ### 11.1 主体观测
 
@@ -1029,6 +1075,193 @@ union IoU 曲线、三角色归一化轨迹和 reference/prediction 接触时刻
 AtomicRun/reevaluation 的 sealed artifact manifest；生成失败也不会改变 Case 分数或
 状态。
 
+### 11.10 v5 Case 实体清单与任意 N
+
+v5 不再把碰撞场景硬编码为三球。公共 manifest materializer 从每条 Case 的结构化
+physics 中生成实体清单；每个球包含：
+
+```text
+稳定 entity_id
+角色与 initial_order_index
+生命周期策略
+mass / radius / initial_velocity
+condition anchor
+```
+
+实体数量 `N` 由 Case manifest 决定，至少为 2；因此同一 evaluator 可处理 2、3、4
+或其他合法数量的球。Reference 与 prediction 的 directed SAM2 prompt 数量都与
+manifest 对齐，N-body 质量、半径和初始顺序也来自该清单。清单内容及 digest 写入
+Case result。数据标注不完整、单位冲突或初始顺序不构成 `0..N-1` 时属于 reference
+契约问题，返回 `unavailable`，不会猜测。
+
+### 11.11 v5 开放世界观测、证据等级与匹配
+
+Prediction 观测由两条互补通道构成：
+
+```text
+manifest-directed expected tracks
++ motion / Hough residual discovery
+→ 去重
+→ 因果 track IDs
+→ 每帧一对一 entity/track assignment
+```
+
+Residual discovery 用于发现复制体、额外球或 directed tracker 没有解释的主体。轨迹
+身份只使用当前及过去信息，不用未来轨迹重命名；达到 track 上限后的观测进入
+`overflow` exposure，而不是让 evaluator 失败。
+
+候选证据按协议固定为：
+
+| evidence tier | 正式 exposure 权重 | 用途 |
+| --- | ---: | --- |
+| `PARTICIPANT` | 1.00 | 可靠物理参与体 |
+| `INDEPENDENT_SALIENT` | 0.50 | 独立显著但证据略弱的实体 |
+| `TENTATIVE` | 0.25 | 保守计入的弱候选 |
+| `AMBIGUOUS` | 0.00 | 只做诊断，不进入正式匹配或惩罚 |
+
+匹配按 evidence 权重分层执行：先让高等级候选与仍未匹配的 GT entity 做 Hungarian
+一对一分配，再让低等级候选补剩余 GT。`AMBIGUOUS` 不进入正式 assignment，因此不会
+抢占 participant 的 GT 槽。每帧同时输出 formal residual、ambiguous candidates、
+formal cardinality、participant count 和 raw candidate count。
+
+Hungarian 不再强制接受任意有限距离的候选边。协议固定
+`minimum_match_position_similarity = 0.1`：低于该阈值的候选进入 null assignment，
+同一帧显式产生 missing reference 和 extra prediction，而不是把远处错误物体冒充为
+GT。被拒绝的边及其距离仍写入 `rejected_candidate_matches`，便于审计。
+
+碰撞 residual 的校准规则是：
+
+- Hough-only 候选少于 3 个支持帧时为 `AMBIGUOUS`，持续出现时最高仅为
+  `TENTATIVE`，静态持续本身不能把它升级成 N-body participant；
+- motion 候选至少需要 3 个真正 motion-supported frames，且累计位移至少为中位半径
+  的 2 倍，才可能成为 participant；否则只为 `TENTATIVE`；
+- 只有完整 participant residual 进入 N-body 状态；弱证据仍通过按权重计的 presence
+  exposure 提供有限、可审计的惩罚。
+
+Residual discovery 若在 prediction 侧内部失败，2.2 使用 fail-closed 空 prediction
+观测并记录 `prediction_residual_observation_failed`；该 Case 的正式评分不能退回
+directed-only 高分路径。Reference 侧契约与真正未知异常仍遵循既有
+`unavailable`/`error` 边界。
+
+### 11.12 v5 实体完整性门控
+
+Reference 和 prediction 的存在、定位、关联 exposure 都使用 11.11 的证据权重和 4 节
+的真实秒 cell 权重。每帧匹配位置使用连续距离核，不要求 mask 相交；所以两个相近但
+不重叠的球不会与相距很远的球同得 IoU=0。
+
+完整性层报告：
+
+```text
+presence detection accuracy
+soft localization-aware detection accuracy
+association accuracy
+exposure recall / precision
+missed / false exposure
+GOSPA decomposition
+```
+
+正式 gate 只包含不可稀释的基数与身份完整性：
+
+```text
+integrity_gate =
+    presence_detection_accuracy × association_accuracy
+```
+
+连续位置误差保留在 scene content 的 N-body `track_position` 中，不再次进入 gate；
+`soft localization-aware detection accuracy` 也只作为诊断，不乘入 gate。Missing、
+extra、复制体、主体消失、身份切换和 overflow 都产生有限分数，而不是 evaluator
+error。
+
+Missing 会同时影响两个语义不同的层：`integrity_gate` 负责开放世界基数与身份完整性；
+scene content 则必须按完整 reference exposure 评价物理状态，否则删除难帧或让主体
+消失会提高条件分。前者防止新增/消失/换 ID，后者防止仅凭少量幸存帧获得虚高的轨迹
+和物理分。
+
+### 11.13 v5 N-body 内容与 Case 分数
+
+对 manifest 实体以及被确认的 participant residual，v5 在 reference 冻结轨道轴上
+提取任意 N-body 状态：
+
+| component | N-body 内权重 | 含义 |
+| --- | ---: | --- |
+| `track_position` | 0.30 | 每一帧对应实体的连续位置距离 |
+| `contact_graph` | 0.25 | 全部 pair 的接触状态与事件 |
+| `velocity` | 0.20 | 逐实体速度 |
+| `momentum` | 0.15 | 系统动量变化相对 reference |
+| `nonpenetration` | 0.10 | 过度穿透惩罚 |
+
+这套逻辑不假设只有一个主动球，也不假设固定的相邻碰撞对。额外 participant 会进入
+pairwise contact graph；其质量当前以 reference 质量中位数近似。碰撞 Case 的内容分
+采用带权几何组合：
+
+- partially matched participant 的每个 detection 在 expected 或 residual N-body
+  channel 中恰好守恒一次，不会因局部匹配而从物理状态中消失；
+- `track_position`、`velocity`、`momentum` 和 `nonpenetration` 使用真实秒 reference
+  exposure 作分母，缺失区间贡献 0，而不是从分母删除；
+- GT contact graph 不按 prediction coverage 裁剪 reference events；空 contact 只有
+  在完整 pair exposure 下才能认证为正确。
+
+```text
+content = weighted_geometric_mean(
+    nbody_physics: 0.60,
+    matched_subject_shape: 0.20,
+    matched_subject_appearance: 0.20
+)
+
+case = integrity_gate × content
+```
+
+Task-facing 正式主 metric 仍为 `scene_subject_state_similarity`；碰撞 evaluator 同时
+输出 scene-specific alias `collision_1d_open_world_similarity`，其中记录上述
+`integrity_gate × content` 的分解。
+
+形状和外貌只使用逐帧已匹配实体的 union mask；完整 reference/prediction union IoU
+继续作为 Jensen 风格的必需诊断曲线，不充当内容 gate。这样既保留物理主体外貌差异，
+也不让未匹配的额外物体被同一 appearance 项重复惩罚。
+
+### 11.14 v5 可视化、审计与已知限制
+
+每个 Case 的本地产物包括：
+
+```text
+per_frame.csv
+physical_subject_iou_curve.png
+entity_position_curve.png
+object_cardinality_timeline.png
+collision_v5_visualization_manifest.json
+```
+
+大型过程可视化继续外置到 `PHYSBENCH_VISUALIZATION_ROOT`，默认：
+
+```text
+/mnt/nvme1/physics_video_benchmark/evaluation_visualizations
+```
+
+外置 Case bundle 包含 `open_world_nbody_audit.mp4` 和
+`open_world_nbody_audit.json`，仓库顶层 `visualizations` 链接可直接访问。外置写入是
+best-effort diagnostic；失败只记录在 hashed manifest 中，不改变评分或 Case 状态。
+
+最终 r7 真实审计中，GT-self 两条 Case 均为 `evaluated`，N-body 五个 component 均为
+1；最终分数分别为 `0.9880578251` 和 `0.9693811074`。未到 1 的部分来自
+`0.1484375 s` 与 `0.3671875 s` 的 tentative false exposure。相同两条 Case 的 WAN
+prediction 得分为 `0.0250737646` 和 `0.1203513978`。
+
+r8 quantity-embedding 多球/少球反例得分为 `0.0039100888` 和 `0.0690306009`。前者有
+`8.578125 s` missed 与 `14.03125 s` false exposure，后者有 `3.90625 s` missed 与
+`0.90625 s` false exposure。r7 的 4/4 和 r8 的 2/2 均为 `evaluated`，两份报告都为
+0 `error`、0 `unavailable`。完整记录见
+[`docs/experiments/COLLISION_EVALUATOR_V5_20260730.md`](experiments/COLLISION_EVALUATOR_V5_20260730.md)。
+
+当前限制：
+
+- residual discovery 仍是碰撞专用 motion/Hough，不是通用视觉基础模型；
+- 短暂或静止的真实额外球可能只获 tentative 权重，存在漏罚风险；
+- motion ghost、反光和轨道结构仍可能形成弱候选；
+- residual 未知质量使用 reference 质量中位数，是 N-body 近似；
+- 真实审计只覆盖两个三球 Case，不能替代 2/4/N-body 真实数据验证；
+- SAM2/Hough 的观测质量仍会影响最终分数；
+- 公共实体层尚未推广到其余四个 scene。
+
 ## 12. 产物
 
 ```text
@@ -1045,11 +1278,15 @@ runs_v2/<run_id>/evaluation/
     ├── physical_subject_iou_curve.png
     ├── subject_similarity_curve.png # v3
     ├── collision_visualization_manifest.json # v4 collision
+    ├── entity_position_curve.png     # v5 collision
+    ├── object_cardinality_timeline.png # v5 collision
+    ├── collision_v5_visualization_manifest.json # v5 collision
     └── <scene_state_curve>.png
 ```
 
-v4 碰撞的大型过程视频、图和轨迹表不放入上述 run 目录；本地 manifest 通过 SHA-256
-把它们关联到 `visualizations/scene_default_v4/...`。
+v4/v5 碰撞的大型过程视频、图和审计 JSON 不放入上述 run 目录；本地 manifest 通过
+SHA-256 分别把它们关联到 `visualizations/scene_default_v4/...` 和
+`visualizations/scene_default_v5/...`。
 
 不是每个 scene 都有额外 state curve。当前精确映射为：
 
@@ -1059,7 +1296,8 @@ v4 碰撞的大型过程视频、图和轨迹表不放入上述 run 目录；本
 | free_fall | `vertical_trajectory_curve.png` |
 | inclined_plane_slide | `along_plane_trajectory_curve.png` |
 | uniform_circular_motion | `angular_trajectory_curve.png` |
-| collision_1d | `striker_trajectory_curve.png` |
+| collision_1d v1–v4 | `striker_trajectory_curve.png` |
+| collision_1d v5 | `entity_position_curve.png`、`object_cardinality_timeline.png` |
 
 每个 case 的 `result.json` 和 `case_results.jsonl` 记录：
 
@@ -1161,6 +1399,12 @@ v3 五个 scene 的主 metric 都是 `scene_subject_state_similarity`。它组�
 | uniform_circular_motion | `uniform_circular_motion_state_similarity` | angular trajectory、angular velocity、orbit geometry、uniform motion |
 | collision_1d | `collision_1d_state_similarity` | instance trajectories、contact event time、pre/post velocities、collision physics、one-dimensional constraint |
 
+`scene_default_v5` 的 Task-facing 主 metric 仍是
+`scene_subject_state_similarity`。其碰撞 evaluator 另输出
+`collision_1d_open_world_similarity` alias，组件是 object integrity gate、N-body
+physics、matched shape 和 matched appearance；不能把该 alias 与 v3 的
+`collision_1d_state_similarity` 当作同一 metric。
+
 v1/v2 仍以下表 scene state metric 作为各自历史主 metric。
 
 ### 14.2 共同诊断 metric
@@ -1232,6 +1476,10 @@ v3 的主体层采用可审计、无额外训练的组合指标：
 - SAM 2 为当前视频 mask 传播提供主体层；CoTracker 与 TAP-Vid 提供点跟踪和遮挡
   benchmark 的相关思路。后续若增加 fallback tracker，必须记录 backend identity，
   并发布新 evaluator 版本，不能静默改变 v3。
+- v5 的完整性层借鉴 HOTA 将 detection 与 association 分开审计，避免 ID switch 被
+  逐帧自由匹配隐藏；GOSPA decomposition 用于分别报告 localization、missed 和 false
+  exposure。当前实现是面向连续秒 exposure 的协议适配，不应宣称与论文原始 metric
+  数值等价。
 
 参考：
 
@@ -1245,6 +1493,10 @@ v3 的主体层采用可审计、无额外训练的组合指标：
 5. Karaev et al., *CoTracker: It is Better to Track Together*, ECCV 2024.
 6. Doersch et al., *TAP-Vid: A Benchmark for Tracking Any Point in a Video*,
    NeurIPS 2022.
+7. Luiten et al., *HOTA: A Higher Order Metric for Evaluating Multi-Object
+   Tracking*, IJCV 2021.
+8. Rahmathullah et al., *Generalized Optimal Sub-Pattern Assignment Metric*,
+   FUSION 2017.
 
 ## 15. 回归验证
 
@@ -1268,6 +1520,15 @@ tests/test_scene_evaluation.py
 tests/test_metrics.py
 tests/test_evaluation_protocol_v3.py
 tests/test_evaluation_protocol_v4.py
+tests/test_evaluation_protocol_v5.py
+tests/test_entity_manifest.py
+tests/test_object_centric_timeline.py
+tests/test_open_world_observer.py
+tests/test_collision_nbody.py
+tests/test_collision_open_world.py
+tests/test_collision_v5_evaluator.py
+tests/test_evaluation_media_partial_v5.py
+tests/test_collision_v5_visualization.py
 ```
 
 实现或修改 evaluator 后至少执行：
@@ -1294,6 +1555,37 @@ collision_reference_observability_audit.json
 该脚本只观测冻结 reference，不生成或修改 prediction。当前 View B 结果为 32/32
 observable；完整验证记录见
 [`docs/experiments/COLLISION_EVALUATOR_V4_20260730.md`](experiments/COLLISION_EVALUATOR_V4_20260730.md)。
+
+v5 的审计脚本可同时运行 reference self-check 和指定 prediction：
+
+```bash
+CUDA_VISIBLE_DEVICES=1 HF_HUB_OFFLINE=1 PYTHONPATH=src \
+  /root/miniconda3/envs/phybench/bin/python \
+  scripts/audit_collision_evaluator_v5.py \
+  --device cuda \
+  --case-id CASE_ID \
+  --self-check \
+  --prediction CASE_ID=/absolute/path/to/prediction.mp4 \
+  --output /mnt/nvme1/physics_video_benchmark/evaluator_audits/AUDIT_ID
+```
+
+最终审计报告位于：
+
+```text
+/mnt/nvme1/physics_video_benchmark/evaluator_audits/
+├── collision_v5_null_assignment_r7_20260730/audit_report.json
+└── collision_v5_quantity_r8_20260730/audit_report.json
+```
+
+前者 4/4 `evaluated`、后者 2/2 `evaluated`，两者均为 0 `error`、0
+`unavailable`。审计使用协议 fingerprint
+`93703d6afdf8bbdea86b69d8d8a427653c68030bd7660f3801341e3b2b6209f6`。由于命令显式
+覆盖 `--device cuda`，报告中的 evaluator fingerprint 是
+`f6959f4877dd3dce85bb05fe84c0240253a40ebe5aacf3486d66d8a80de7250b`，不是标准
+`sam2.device=auto` 配置的
+`686b705e426f43d29acdc745a95b765fe249bd48628c86f5167f40f851caa156`。数值、
+prediction SHA-256 和限制见
+[`docs/experiments/COLLISION_EVALUATOR_V5_20260730.md`](experiments/COLLISION_EVALUATOR_V5_20260730.md)。
 
 ## 16. AtomicRun 并存式重评
 
@@ -1409,11 +1701,14 @@ docs/experiments/EVALUATION_V3_20260729.md
 正式协议与 Task 聚合：
 
 ```text
+configs/evaluation/protocols/scene_default_v5.json  # shadow collision
+configs/evaluation/protocols/scene_default_v4.json  # shadow collision
 configs/evaluation/protocols/scene_default_v3.json
-configs/evaluation/protocols/scene_default_v2.json  # frozen v5
+configs/evaluation/protocols/scene_default_v2.json  # frozen Task v5
 configs/evaluation/protocols/scene_default_v1.json  # frozen legacy
 src/physbench/evaluation/task_evaluator.py
 src/physbench/evaluation/common/
+src/physbench/evaluation/common/entities/
 src/physbench/orchestration/evaluation_variants.py
 ```
 
@@ -1425,4 +1720,14 @@ src/physbench/evaluation/scenes/free_fall/
 src/physbench/evaluation/scenes/inclined_plane/
 src/physbench/evaluation/scenes/circular_motion/
 src/physbench/evaluation/scenes/collision/
+```
+
+v5 碰撞的主要实现与审计入口：
+
+```text
+src/physbench/evaluation/scenes/collision/v5_evaluator.py
+src/physbench/evaluation/scenes/collision/open_world.py
+src/physbench/evaluation/scenes/collision/nbody.py
+src/physbench/evaluation/scenes/collision/v5_visualization.py
+scripts/audit_collision_evaluator_v5.py
 ```
