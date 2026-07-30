@@ -692,14 +692,21 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 prediction_available=prediction_available,
             )
         integrity = comparison.integrity.to_dict()
+        primary_metric = {
+            **composition.to_dict(),
+            "score": score,
+            "content_components": content_components,
+        }
         return SceneAnalysis(
             score=score,
             metrics={
-                "collision_1d_open_world_similarity": {
-                    **composition.to_dict(),
-                    "score": score,
-                    "content_components": content_components,
-                },
+                # ``robust_subject_v3`` advertises this stable Task-level
+                # metric name through ``ReferenceCaseEvaluator.describe``.
+                # Keep the collision-specific name as an exact diagnostic
+                # alias, but never publish a primary_score that is absent
+                # from a normal evaluated result.
+                "scene_subject_state_similarity": dict(primary_metric),
+                "collision_1d_open_world_similarity": primary_metric,
                 "object_centric_integrity": integrity,
                 "collision_nbody_state_similarity": nbody_score,
                 "physical_subject_similarity": subject.to_metric(

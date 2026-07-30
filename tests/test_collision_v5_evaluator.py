@@ -304,6 +304,27 @@ class CollisionV5EvaluatorTests(unittest.TestCase):
                 self.assertTrue(math.isfinite(analysis.score))
                 self.assertAlmostEqual(1.0, analysis.score, places=6)
 
+    def test_declared_primary_metric_exists_in_normal_result(self) -> None:
+        contract_evaluator = CollisionOpenWorldCaseEvaluator(
+            copy.deepcopy(self.config)
+        )
+        declared_primary = contract_evaluator.describe()["primary_score"]
+        masks = _instance_masks(2)
+        _, analysis = self._analyze(
+            count=2,
+            outcomes=[masks, masks],
+        )
+        self.assertIn(declared_primary, analysis.metrics)
+        self.assertAlmostEqual(
+            analysis.score,
+            analysis.metrics[declared_primary]["score"],
+            places=7,
+        )
+        self.assertEqual(
+            analysis.metrics[declared_primary],
+            analysis.metrics["collision_1d_open_world_similarity"],
+        )
+
     def test_direct_runtime_failure_continues_with_residual_tracks(self) -> None:
         masks = _instance_masks(2)
 
