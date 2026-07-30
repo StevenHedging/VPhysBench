@@ -28,10 +28,22 @@ class SceneEvaluatorRegistry:
             from .scenes.pendulum.evaluator import PendulumCaseEvaluator
 
             evaluator: SceneCaseEvaluator = PendulumCaseEvaluator(config)
+        elif evaluator_type == "pendulum_state_v6":
+            from .scenes.pendulum.v6_evaluator import (
+                PendulumOpenWorldCaseEvaluator,
+            )
+
+            evaluator = PendulumOpenWorldCaseEvaluator(config)
         elif evaluator_type in {"free_fall_state_v1", "free_fall_state_v2"}:
             from .scenes.free_fall.evaluator import FreeFallCaseEvaluator
 
             evaluator = FreeFallCaseEvaluator(config)
+        elif evaluator_type == "free_fall_state_v6":
+            from .scenes.free_fall.v6_evaluator import (
+                FreeFallOpenWorldCaseEvaluator,
+            )
+
+            evaluator = FreeFallOpenWorldCaseEvaluator(config)
         elif evaluator_type in {
             "inclined_plane_state_v1",
             "inclined_plane_state_v2",
@@ -41,6 +53,12 @@ class SceneEvaluatorRegistry:
             )
 
             evaluator = InclinedPlaneCaseEvaluator(config)
+        elif evaluator_type == "inclined_plane_state_v6":
+            from .scenes.inclined_plane.v6_evaluator import (
+                InclinedPlaneOpenWorldCaseEvaluator,
+            )
+
+            evaluator = InclinedPlaneOpenWorldCaseEvaluator(config)
         elif evaluator_type in {
             "uniform_circular_motion_state_v1",
             "uniform_circular_motion_state_v2",
@@ -50,6 +68,12 @@ class SceneEvaluatorRegistry:
             )
 
             evaluator = CircularMotionCaseEvaluator(config)
+        elif evaluator_type == "uniform_circular_motion_state_v6":
+            from .scenes.circular_motion.v6_evaluator import (
+                CircularMotionOpenWorldCaseEvaluator,
+            )
+
+            evaluator = CircularMotionOpenWorldCaseEvaluator(config)
         elif evaluator_type in {
             "collision_1d_state_v1",
             "collision_1d_state_v2",

@@ -20,16 +20,28 @@
       ],
       "properties": {
         "pendulum": {
-          "$ref": "#/$defs/pendulum"
+          "oneOf": [
+            {"$ref": "#/$defs/pendulum"},
+            {"$ref": "#/$defs/openWorldV2PendulumScene"}
+          ]
         },
         "free_fall": {
-          "$ref": "#/$defs/referenceScene"
+          "oneOf": [
+            {"$ref": "#/$defs/referenceScene"},
+            {"$ref": "#/$defs/openWorldV2FreeFallScene"}
+          ]
         },
         "inclined_plane_slide": {
-          "$ref": "#/$defs/referenceScene"
+          "oneOf": [
+            {"$ref": "#/$defs/referenceScene"},
+            {"$ref": "#/$defs/openWorldV2InclinedPlaneScene"}
+          ]
         },
         "uniform_circular_motion": {
-          "$ref": "#/$defs/referenceScene"
+          "oneOf": [
+            {"$ref": "#/$defs/referenceScene"},
+            {"$ref": "#/$defs/openWorldV2CircularMotionScene"}
+          ]
         },
         "collision_1d": {
           "$ref": "#/$defs/referenceScene"
@@ -137,6 +149,203 @@
         }
       },
       "additionalProperties": false
+    },
+    "openWorldV2Scoring": {
+      "type": "object",
+      "required": ["assignment", "content_weights"],
+      "properties": {
+        "assignment": {
+          "type": "object",
+          "required": ["minimum_match_position_similarity"],
+          "properties": {
+            "minimum_match_position_similarity": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "maximum_condition_identity_cost": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "initial_window_frames": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "content_weights": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "polar_distance": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "openWorldV2Visualization": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "external_root",
+        "repository_link",
+        "namespace",
+        "fps"
+      ],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "external_root": {"type": "string", "minLength": 1},
+        "external_root_env": {"type": "string", "minLength": 1},
+        "repository_link": {"type": "string", "minLength": 1},
+        "namespace": {"type": "string", "minLength": 1},
+        "fps": {"type": "number", "exclusiveMinimum": 0},
+        "panel_width": {"type": "integer", "minimum": 64},
+        "panel_height": {"type": "integer", "minimum": 64}
+      },
+      "additionalProperties": false
+    },
+    "openWorldV2Scene": {
+      "type": "object",
+      "required": [
+        "type",
+        "observer_protocol",
+        "evaluator_contract",
+        "timeline",
+        "spatial",
+        "scoring",
+        "subject_scoring",
+        "object_centric_scoring",
+        "visualization"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "pendulum_state_v6",
+            "free_fall_state_v6",
+            "inclined_plane_state_v6",
+            "uniform_circular_motion_state_v6"
+          ]
+        },
+        "observer_protocol": {"const": "open_world_v2"},
+        "evaluator_contract": {"const": "robust_subject_v3"},
+        "timeline": {"$ref": "#/$defs/referenceTimeline"},
+        "spatial": {"$ref": "#/$defs/spatial"},
+        "sam2": {"type": "object"},
+        "motion_proposal": {"type": "object"},
+        "color_observation": {"type": "object"},
+        "quality": {"type": "object"},
+        "period": {"type": "object"},
+        "open_world_observation": {"type": "object"},
+        "rigid_body_observation": {"type": "object"},
+        "topology": {"type": "object"},
+        "scoring": {
+          "type": "object",
+          "required": ["weights"],
+          "properties": {"weights": {"type": "object"}}
+        },
+        "subject_scoring": {"$ref": "#/$defs/subjectScoring"},
+        "object_centric_scoring": {
+          "$ref": "#/$defs/openWorldV2Scoring"
+        },
+        "visualization": {
+          "$ref": "#/$defs/openWorldV2Visualization"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"type": {"const": "pendulum_state_v6"}}
+          },
+          "then": {
+            "required": [
+              "sam2",
+              "motion_proposal",
+              "quality",
+              "period",
+              "open_world_observation",
+              "topology"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "free_fall_state_v6",
+                  "inclined_plane_state_v6"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "sam2",
+              "motion_proposal",
+              "quality",
+              "rigid_body_observation"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {"const": "uniform_circular_motion_state_v6"}
+            }
+          },
+          "then": {"required": ["color_observation"]}
+        }
+      ],
+      "additionalProperties": false
+    },
+    "openWorldV2PendulumScene": {
+      "allOf": [
+        {"$ref": "#/$defs/openWorldV2Scene"},
+        {
+          "properties": {
+            "type": {"const": "pendulum_state_v6"}
+          }
+        }
+      ]
+    },
+    "openWorldV2FreeFallScene": {
+      "allOf": [
+        {"$ref": "#/$defs/openWorldV2Scene"},
+        {
+          "properties": {
+            "type": {"const": "free_fall_state_v6"}
+          }
+        }
+      ]
+    },
+    "openWorldV2InclinedPlaneScene": {
+      "allOf": [
+        {"$ref": "#/$defs/openWorldV2Scene"},
+        {
+          "properties": {
+            "type": {"const": "inclined_plane_state_v6"}
+          }
+        }
+      ]
+    },
+    "openWorldV2CircularMotionScene": {
+      "allOf": [
+        {"$ref": "#/$defs/openWorldV2Scene"},
+        {
+          "properties": {
+            "type": {"const": "uniform_circular_motion_state_v6"}
+          }
+        }
+      ]
     },
     "nbodyExtraction": {
       "type": "object",
