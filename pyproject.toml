@@ -10,6 +10,7 @@ scene-evaluation = [
   "matplotlib>=3.8",
   "numpy>=1.26",
   "opencv-python-headless>=4.10",
+  "scipy>=1.11",
   "torch>=2.5",
 ]
 # Backward-compatible alias retained for existing pendulum-only environments.

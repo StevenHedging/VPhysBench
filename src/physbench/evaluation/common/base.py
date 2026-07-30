@@ -8,6 +8,7 @@ from typing import Any
 from ...io import canonical_sha256, sha256_file
 from ..contracts import CaseEvaluationRequest, CaseEvaluationResult
 from .errors import ReferenceAnalysisError, SceneAnalysisError
+from .entities.timeline import build_common_time_grid
 from .media import (
     SampledVideo,
     VideoProtocolError,
@@ -35,6 +36,7 @@ class ReferenceCaseEvaluator(ABC):
     robust_evaluator_version = "1.3"
     scene_id: str
     primary_score: str
+    allow_partial_prediction = False
 
     def __init__(self, config: dict[str, Any]):
         self.config = config
@@ -309,7 +311,11 @@ class ReferenceCaseEvaluator(ABC):
             )
 
         try:
-            prediction_video = sample_video(prediction_path, **sampling)
+            prediction_video = sample_video(
+                prediction_path,
+                **sampling,
+                allow_partial=self.allow_partial_prediction,
+            )
         except VideoProtocolError as exc:
             if self.robust_subject:
                 return self._degraded_output(
@@ -366,7 +372,26 @@ class ReferenceCaseEvaluator(ABC):
             )
 
         analysis.quality.setdefault("evaluated_frames", len(times_s))
-        analysis.quality.setdefault("temporal_coverage", 1.0)
+        if self.allow_partial_prediction:
+            availability = prediction_video.available or [
+                True
+            ] * len(times_s)
+            time_grid = build_common_time_grid(times_s)
+            temporal_coverage = (
+                time_grid.integrate(availability) / time_grid.duration_s
+                if time_grid.duration_s > 1e-12
+                else float(sum(availability) / len(availability))
+            )
+            analysis.quality.setdefault(
+                "temporal_coverage",
+                temporal_coverage,
+            )
+            analysis.quality.setdefault(
+                "available_prediction_frames",
+                int(sum(availability)),
+            )
+        else:
+            analysis.quality.setdefault("temporal_coverage", 1.0)
         analysis.quality["reference_mode"] = reference_mode
         provenance = {
             "reference_video": str(reference_path),
@@ -391,6 +416,11 @@ class ReferenceCaseEvaluator(ABC):
                     "source": prediction_video.info.to_dict(),
                     "source_indices": prediction_video.source_indices,
                     "spatial_transform": prediction_video.spatial_transform,
+                    **(
+                        {"available": prediction_video.available}
+                        if self.allow_partial_prediction
+                        else {}
+                    ),
                 },
             },
             **analysis.provenance,

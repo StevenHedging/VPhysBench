@@ -3,6 +3,7 @@
 from .contracts import (
     EntityMatch,
     EntitySpec,
+    ExposureType,
     LifecyclePolicy,
     ObjectTrack,
     ReferenceCapability,
@@ -10,6 +11,27 @@ from .contracts import (
     exposure_by_id,
 )
 from .matching import FrozenAssignment, freeze_initial_assignment
+from .manifest import (
+    ENTITY_MANIFEST_SCHEMA_VERSION,
+    ApparatusDeclaration,
+    EntityDeclaration,
+    EntityManifest,
+    PhysicalAttribute,
+    materialize_entity_manifest,
+    parse_entity_manifest,
+)
+from .observer import (
+    FORMAL_EXPOSURE_WEIGHTS,
+    EvidenceTier,
+    ObjectDetection,
+    OpenWorldComparison,
+    OpenWorldObservation,
+    OpenWorldTrack,
+    compare_open_world_tracks,
+    deduplicate_frame_detections,
+    detections_from_instance_masks,
+    track_open_world_detections,
+)
 from .scoring import (
     EntityIntegrityScore,
     GatedCaseComposition,
@@ -22,25 +44,46 @@ from .scoring import (
     distance_similarity,
     score_entity_integrity,
 )
+from .timeline import CommonTimeGrid, build_common_time_grid
 
 __all__ = [
+    "ENTITY_MANIFEST_SCHEMA_VERSION",
+    "FORMAL_EXPOSURE_WEIGHTS",
+    "ApparatusDeclaration",
+    "CommonTimeGrid",
+    "EvidenceTier",
     "EntityIntegrityScore",
+    "EntityDeclaration",
     "EntityMatch",
+    "EntityManifest",
     "EntitySpec",
+    "ExposureType",
     "FrozenAssignment",
     "GatedCaseComposition",
     "GOSPADecomposition",
     "GeometricComposition",
     "LifecyclePolicy",
+    "ObjectDetection",
     "ObjectTrack",
+    "OpenWorldComparison",
+    "OpenWorldObservation",
+    "OpenWorldTrack",
     "PositionComparison",
+    "PhysicalAttribute",
     "ReferenceCapability",
     "VisibilityState",
     "compare_positions",
+    "compare_open_world_tracks",
     "compose_gated_case_score",
     "compose_weighted_geometric",
     "distance_similarity",
+    "deduplicate_frame_detections",
+    "detections_from_instance_masks",
     "exposure_by_id",
     "freeze_initial_assignment",
+    "materialize_entity_manifest",
+    "parse_entity_manifest",
     "score_entity_integrity",
+    "track_open_world_detections",
+    "build_common_time_grid",
 ]

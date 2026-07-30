@@ -35,6 +35,14 @@ class LifecyclePolicy(str, Enum):
     MAY_ENTER_AND_EXIT = "may_enter_and_exit"
 
 
+class ExposureType(str, Enum):
+    """Independent evidence channels integrated over a common time grid."""
+
+    EXISTENCE = "existence"
+    LOCALIZATION = "localization"
+    ASSOCIATION = "association"
+
+
 @dataclass(frozen=True)
 class EntitySpec:
     """Persistent physical identity declared by a scene adapter."""
@@ -74,6 +82,10 @@ class ObjectTrack:
     areas_px2: np.ndarray | None = None
     confidence: np.ndarray | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    existence_observed: np.ndarray | None = None
+    localization_eligible: np.ndarray | None = None
+    association_eligible: np.ndarray | None = None
+    time_weights_s: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         if not self.track_id.strip():
@@ -107,6 +119,53 @@ class ObjectTrack:
             minimum=0.0,
             maximum=1.0,
         )
+        legacy_exposure_mask = observed & np.asarray(
+            [
+                state is VisibilityState.VISIBLE
+                for state in normalized_visibility
+            ],
+            dtype=bool,
+        )
+        existence_observed = self._optional_mask(
+            self.existence_observed,
+            expected_length=len(xy),
+            name="existence_observed",
+            default=legacy_exposure_mask,
+        )
+        localization_eligible = self._optional_mask(
+            self.localization_eligible,
+            expected_length=len(xy),
+            name="localization_eligible",
+            default=existence_observed,
+        )
+        association_eligible = self._optional_mask(
+            self.association_eligible,
+            expected_length=len(xy),
+            name="association_eligible",
+            default=localization_eligible,
+        )
+        if np.any(existence_observed & ~observed):
+            raise ValueError(
+                "existence_observed must be a subset of observed"
+            )
+        if np.any(localization_eligible & ~existence_observed):
+            raise ValueError(
+                "localization_eligible must be a subset of "
+                "existence_observed"
+            )
+        if np.any(association_eligible & ~localization_eligible):
+            raise ValueError(
+                "association_eligible must be a subset of "
+                "localization_eligible"
+            )
+        time_weights = self._optional_series(
+            self.time_weights_s,
+            expected_length=len(xy),
+            name="time_weights_s",
+            minimum=0.0,
+        )
+        if time_weights is not None and not np.isfinite(time_weights).all():
+            raise ValueError("time_weights_s values must be finite")
         if areas is not None and np.any(
             observed & ~np.isfinite(areas)
         ):
@@ -120,6 +179,35 @@ class ObjectTrack:
         object.__setattr__(self, "visibility", normalized_visibility)
         object.__setattr__(self, "areas_px2", areas)
         object.__setattr__(self, "confidence", confidence)
+        object.__setattr__(self, "existence_observed", existence_observed)
+        object.__setattr__(
+            self,
+            "localization_eligible",
+            localization_eligible,
+        )
+        object.__setattr__(
+            self,
+            "association_eligible",
+            association_eligible,
+        )
+        object.__setattr__(self, "time_weights_s", time_weights)
+
+    @staticmethod
+    def _optional_mask(
+        value: np.ndarray | None,
+        *,
+        expected_length: int,
+        name: str,
+        default: np.ndarray,
+    ) -> np.ndarray:
+        if value is None:
+            return np.asarray(default, dtype=bool)
+        array = np.asarray(value)
+        if array.shape != (expected_length,):
+            raise ValueError(f"{name} must have one value per frame")
+        if array.dtype.kind != "b":
+            raise ValueError(f"{name} must contain boolean values")
+        return np.asarray(array, dtype=bool)
 
     @staticmethod
     def _optional_series(
@@ -148,13 +236,45 @@ class ObjectTrack:
             raise ValueError(f"{name} values must be <= {maximum:g}")
         return array
 
-    def exposure(self) -> float:
-        """Visible, actually observed entity-time exposure."""
-        visible = np.asarray(
-            [state is VisibilityState.VISIBLE for state in self.visibility],
-            dtype=bool,
+    def exposure(
+        self,
+        exposure_type: ExposureType | str = ExposureType.EXISTENCE,
+        *,
+        time_weights_s: Sequence[float] | np.ndarray | None = None,
+    ) -> float:
+        """Integrate one evidence channel over frames or physical seconds.
+
+        With no weights this retains the legacy frame-counting behavior.
+        Explicit method weights override track-level ``time_weights_s``.
+        """
+        kind = (
+            exposure_type
+            if isinstance(exposure_type, ExposureType)
+            else ExposureType(exposure_type)
         )
-        return float(np.count_nonzero(self.observed & visible))
+        masks = {
+            ExposureType.EXISTENCE: self.existence_observed,
+            ExposureType.LOCALIZATION: self.localization_eligible,
+            ExposureType.ASSOCIATION: self.association_eligible,
+        }
+        mask = np.asarray(masks[kind], dtype=bool)
+        weights_source = (
+            time_weights_s
+            if time_weights_s is not None
+            else self.time_weights_s
+        )
+        if weights_source is None:
+            return float(np.count_nonzero(mask))
+        weights = np.asarray(weights_source, dtype=np.float64)
+        if weights.shape != mask.shape:
+            raise ValueError(
+                "time_weights_s must have one value per frame"
+            )
+        if not np.isfinite(weights).all() or np.any(weights < 0.0):
+            raise ValueError(
+                "time_weights_s must be finite and non-negative"
+            )
+        return float(weights[mask].sum())
 
 
 @dataclass(frozen=True)
@@ -192,6 +312,8 @@ def exposure_by_id(
     tracks: Sequence[ObjectTrack],
     *,
     use_entity_ids: bool,
+    exposure_type: ExposureType | str = ExposureType.EXISTENCE,
+    time_weights_s: Sequence[float] | np.ndarray | None = None,
 ) -> dict[str, float]:
     """Return observed exposure keyed by physical ID or track ID."""
     output: dict[str, float] = {}
@@ -201,5 +323,8 @@ def exposure_by_id(
             continue
         if key in output:
             raise ValueError(f"duplicate exposure key: {key}")
-        output[key] = track.exposure()
+        output[key] = track.exposure(
+            exposure_type,
+            time_weights_s=time_weights_s,
+        )
     return output
