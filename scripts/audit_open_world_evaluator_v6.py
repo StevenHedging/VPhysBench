@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run targeted scene-default-v6 prediction and reference audits.
+"""Run targeted open-world-v2 prediction and reference audits.
 
 This entry point covers the four non-collision ``open_world_v2`` evaluators.
 Collision remains frozen on evaluator 2.2 and has its own v5 audit script.
@@ -13,7 +13,11 @@ from __future__ import annotations
 import argparse
 import copy
 from datetime import datetime, timezone
+import hashlib
+import math
 from pathlib import Path
+from statistics import mean, median
+import subprocess
 from typing import Any
 
 from physbench.data_layout import LATEST_DATASET
@@ -31,18 +35,30 @@ SUPPORTED_SCENES = {
     "inclined_plane_slide",
     "uniform_circular_motion",
 }
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Evaluate selected non-collision cases with scene_default_v6. "
-            "Predictions use CASE_ID=VIDEO entries; --self-check also scores "
-            "the resolved immutable reference."
+            "Evaluate selected non-collision open-world cases. "
+            "Predictions use CASE_ID=VIDEO entries; --self-check scores a "
+            "same-case reference as GT-self, while OOD physics parents are "
+            "reported separately as capability probes."
         )
     )
     parser.add_argument("--dataset", type=Path, default=LATEST_DATASET)
     parser.add_argument("--protocol", default="scene_default_v6")
+    parser.add_argument(
+        "--scene",
+        action="append",
+        default=[],
+        choices=sorted(SUPPORTED_SCENES),
+        help=(
+            "select every frozen Dataset case in a non-collision scene; "
+            "repeat for multiple scenes"
+        ),
+    )
     parser.add_argument("--case-id", action="append", default=[])
     parser.add_argument(
         "--prediction",
@@ -95,25 +111,81 @@ def _selected_case_ids(
     return selected
 
 
-def _job_id(case_id: str, variant: str) -> str:
-    normalized = "".join(
+def _case_ids_for_scenes(
+    cases: list[dict[str, Any]],
+    scene_ids: list[str],
+) -> list[str]:
+    selected = set(scene_ids)
+    return [
+        case["case_id"]
+        for case in cases
+        if case["scene_id"] in selected
+    ]
+
+
+def _job_id(protocol_id: str, case_id: str, variant: str) -> str:
+    normalized_protocol = "".join(
+        character
+        if character.isalnum() or character in {"_", "-"}
+        else "_"
+        for character in protocol_id
+    )
+    normalized_case = "".join(
         character
         if character.isalnum() or character in {"_", "-"}
         else "_"
         for character in case_id
     )
-    return f"open_world_v6_audit__{normalized}__{variant}"
+    return (
+        f"open_world_v2_audit__{normalized_protocol}__"
+        f"{normalized_case}__{variant}"
+    )
+
+
+def _self_check_variant(
+    *,
+    reference_mode: str | None = None,
+    case: dict[str, Any] | None = None,
+) -> str:
+    """Name a reference-as-prediction probe without overstating its meaning.
+
+    A same-case immutable reference is a genuine GT-self check.  For an OOD
+    case, however, ``resolve_physics_reference`` returns a physics-identical
+    parent whose pixels, background, apparatus, and initial gauge may differ
+    from the child.  Scoring that parent as the child prediction is useful as
+    a capability/isolation probe, but it is not GT-self and must never be
+    pooled into GT-self calibration statistics.
+    """
+
+    if reference_mode == "same_case_reference":
+        return "gt_self"
+    if reference_mode == "parent_physics_reference":
+        return "physics_parent_as_prediction"
+    if case is not None:
+        if (
+            case.get("has_real_reference_video", False)
+            and case.get("assets", {}).get("physics_reference_video")
+        ):
+            return "gt_self"
+        if case.get("provenance", {}).get("parent_case_id"):
+            return "physics_parent_as_prediction"
+    return "reference_resolution_failure"
 
 
 def _reference_resolution(
     *,
+    protocol_id: str,
     case: dict[str, Any],
     catalog: dict[str, dict[str, Any]],
     asset_root: Path,
 ) -> tuple[Path, str, str | None]:
     request = CaseEvaluationRequest(
         job={
-            "job_id": _job_id(case["case_id"], "reference_resolution"),
+            "job_id": _job_id(
+                protocol_id,
+                case["case_id"],
+                "reference_resolution",
+            ),
             "case_id": case["case_id"],
             "scene_id": case["scene_id"],
         },
@@ -148,6 +220,123 @@ def _failure_record(
     }
 
 
+def _record_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
+    finite_scores = [
+        float(record["score"])
+        for record in records
+        if record.get("status") == "evaluated"
+        and isinstance(record.get("score"), (int, float))
+        and not isinstance(record.get("score"), bool)
+        and math.isfinite(float(record["score"]))
+    ]
+    return {
+        "records": len(records),
+        "evaluated": sum(
+            record.get("status") == "evaluated" for record in records
+        ),
+        "errors": sum(
+            record.get("status") == "error" for record in records
+        ),
+        "unavailable": sum(
+            record.get("status") == "unavailable" for record in records
+        ),
+        "finite_scores": len(finite_scores),
+        "score_min": min(finite_scores) if finite_scores else None,
+        "score_mean": mean(finite_scores) if finite_scores else None,
+        "score_median": median(finite_scores) if finite_scores else None,
+        "score_max": max(finite_scores) if finite_scores else None,
+    }
+
+
+def _digest_files(
+    root: Path,
+    paths: list[Path],
+) -> dict[str, Any]:
+    root = root.resolve()
+    unique = sorted({path.resolve() for path in paths})
+    digest = hashlib.sha256()
+    records: list[dict[str, Any]] = []
+    for path in unique:
+        try:
+            relative = path.relative_to(root)
+        except ValueError as exc:
+            raise ValueError(
+                f"source snapshot path escapes project root: {path}"
+            ) from exc
+        payload = path.read_bytes()
+        file_digest = hashlib.sha256(payload).hexdigest()
+        relative_text = relative.as_posix()
+        digest.update(relative_text.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(bytes.fromhex(file_digest))
+        digest.update(b"\0")
+        records.append(
+            {
+                "path": relative_text,
+                "sha256": file_digest,
+                "size_bytes": len(payload),
+            }
+        )
+    return {
+        "algorithm": "sha256(path_nul_file_sha256_nul)",
+        "digest": digest.hexdigest(),
+        "file_count": len(records),
+        "files": records,
+    }
+
+
+def _implementation_snapshot(protocol_path: Path) -> dict[str, Any]:
+    source_paths = sorted(
+        (PROJECT_ROOT / "src" / "physbench").rglob("*.py")
+    )
+    source_paths.extend(
+        [
+            Path(__file__).resolve(),
+            protocol_path.resolve(),
+            (
+                PROJECT_ROOT
+                / "schemas"
+                / "v2"
+                / "evaluation_protocol.schema.json"
+            ).resolve(),
+        ]
+    )
+    snapshot = _digest_files(PROJECT_ROOT, source_paths)
+    git: dict[str, Any] = {
+        "head": None,
+        "dirty": None,
+        "status_entries": None,
+    }
+    try:
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        status = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+        git = {
+            "head": head,
+            "dirty": bool(status),
+            "status_entries": len(status),
+        }
+    except (OSError, subprocess.CalledProcessError):
+        # The content digest above is authoritative even in an exported
+        # source tree without Git metadata.
+        pass
+    return {
+        "source_tree": snapshot,
+        "git": git,
+    }
+
+
 def _scene_config(
     protocol: dict[str, Any],
     *,
@@ -163,8 +352,10 @@ def _scene_config(
         raise ValueError(
             f"{scene_id} is not configured for open_world_v2"
         )
-    if not str(config.get("type", "")).endswith("_v6"):
-        raise ValueError(f"{scene_id} is not routed to a v6 evaluator")
+    if not str(config.get("type", "")).endswith(("_v6", "_v7")):
+        raise ValueError(
+            f"{scene_id} is not routed to a supported open-world evaluator"
+        )
     if isinstance(config.get("sam2"), dict):
         config["sam2"]["device"] = device
     return config
@@ -173,6 +364,7 @@ def _scene_config(
 def _evaluate(
     evaluator: Any,
     *,
+    protocol_id: str,
     case: dict[str, Any],
     catalog: dict[str, dict[str, Any]],
     asset_root: Path,
@@ -183,7 +375,7 @@ def _evaluate(
     reference_mode: str | None = None,
     reference_parent_id: str | None = None,
 ) -> dict[str, Any]:
-    job_id = _job_id(case["case_id"], variant)
+    job_id = _job_id(protocol_id, case["case_id"], variant)
     artifact_dir = output / "cases" / job_id
     request = CaseEvaluationRequest(
         job={
@@ -220,8 +412,9 @@ def main() -> None:
     predictions = _prediction_mapping(args.prediction)
     dataset = load_dataset(args.dataset)
     catalog = {case["case_id"]: case for case in dataset.cases}
+    scene_case_ids = _case_ids_for_scenes(dataset.cases, args.scene)
     selected = _selected_case_ids(
-        args.case_id,
+        [*args.case_id, *scene_case_ids],
         predictions,
         self_check=args.self_check,
     )
@@ -235,6 +428,7 @@ def main() -> None:
             )
 
     protocol = copy.deepcopy(load_evaluation_protocol(args.protocol))
+    implementation = _implementation_snapshot(Path(protocol["path"]))
     registry = SceneEvaluatorRegistry(protocol)
     output = args.output.expanduser().resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -255,31 +449,41 @@ def main() -> None:
             tuple[str, Path, str | None, str | None]
         ] = []
         if args.self_check:
+            self_check_variant = _self_check_variant(case=case)
             try:
                 reference, mode, parent_id = _reference_resolution(
+                    protocol_id=protocol["protocol_id"],
                     case=case,
                     catalog=catalog,
                     asset_root=dataset.asset_root,
                 )
+                self_check_variant = _self_check_variant(
+                    reference_mode=mode,
+                    case=case,
+                )
                 variants.append(
-                    ("gt_self", reference, mode, parent_id)
+                    (self_check_variant, reference, mode, parent_id)
                 )
             except Exception as exc:
                 result = _failure_record(
                     case=case,
-                    variant="gt_self",
+                    variant=self_check_variant,
                     exc=exc,
                 )
                 records.append(result)
                 write_json(
                     output
                     / "cases"
-                    / _job_id(case_id, "gt_self")
+                    / _job_id(
+                        protocol["protocol_id"],
+                        case_id,
+                        self_check_variant,
+                    )
                     / "result.json",
                     result,
                 )
                 print(
-                    f"[{len(records)}] {case_id}/gt_self: "
+                    f"[{len(records)}] {case_id}/{self_check_variant}: "
                     "error score=None",
                     flush=True,
                 )
@@ -291,6 +495,7 @@ def main() -> None:
             try:
                 result = _evaluate(
                     evaluator,
+                    protocol_id=protocol["protocol_id"],
                     case=case,
                     catalog=catalog,
                     asset_root=dataset.asset_root,
@@ -310,7 +515,9 @@ def main() -> None:
                 write_json(
                     output
                     / "cases"
-                    / _job_id(case_id, variant)
+                    / _job_id(
+                        protocol["protocol_id"], case_id, variant
+                    )
                     / "result.json",
                     result,
                 )
@@ -321,6 +528,56 @@ def main() -> None:
                 flush=True,
             )
 
+    variants = sorted(
+        {str(record["audit_variant"]) for record in records}
+    )
+    by_variant = {
+        variant: _record_summary(
+            [
+                record
+                for record in records
+                if record["audit_variant"] == variant
+            ]
+        )
+        for variant in variants
+    }
+    scenes = sorted({str(record["scene_id"]) for record in records})
+    by_scene = {
+        scene_id: _record_summary(
+            [
+                record
+                for record in records
+                if record["scene_id"] == scene_id
+            ]
+        )
+        for scene_id in scenes
+    }
+    by_scene_variant = {
+        f"{scene_id}/{variant}": _record_summary(
+            [
+                record
+                for record in records
+                if record["scene_id"] == scene_id
+                and record["audit_variant"] == variant
+            ]
+        )
+        for scene_id in scenes
+        for variant in variants
+        if any(
+            record["scene_id"] == scene_id
+            and record["audit_variant"] == variant
+            for record in records
+        )
+    }
+    implementation_end = _implementation_snapshot(Path(protocol["path"]))
+    implementation["stable_during_run"] = (
+        implementation["source_tree"]["digest"]
+        == implementation_end["source_tree"]["digest"]
+    )
+    implementation["end_source_tree_digest"] = implementation_end[
+        "source_tree"
+    ]["digest"]
+    implementation["git_at_end"] = implementation_end["git"]
     report = {
         "schema_version": "1.0",
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -336,16 +593,22 @@ def main() -> None:
                 "sam2.device": args.device,
             },
         },
+        "implementation": implementation,
         "evaluators": evaluators,
         "records": records,
         "summary": {
-            "records": len(records),
-            "evaluated": sum(
-                value["status"] == "evaluated" for value in records
+            **_record_summary(records),
+            "by_variant": by_variant,
+            "by_scene": by_scene,
+            "by_scene_variant": by_scene_variant,
+        },
+        "self_check_semantics": {
+            "gt_self": (
+                "same-case immutable reference scored as its own prediction"
             ),
-            "errors": sum(value["status"] == "error" for value in records),
-            "unavailable": sum(
-                value["status"] == "unavailable" for value in records
+            "physics_parent_as_prediction": (
+                "physics-identical parent pixels scored as an OOD child "
+                "prediction; capability/isolation probe, not GT-self"
             ),
         },
     }

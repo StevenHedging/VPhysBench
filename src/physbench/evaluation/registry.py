@@ -6,12 +6,46 @@ from .contracts import SceneCaseEvaluator
 from .scenes.unsupported import UnsupportedSceneEvaluator
 
 
+SUPPORTED_EVALUATOR_TYPES = frozenset(
+    {
+        "pendulum_state_v1",
+        "pendulum_state_v2",
+        "pendulum_state_v3",
+        "pendulum_state_v6",
+        "pendulum_state_v7",
+        "free_fall_state_v1",
+        "free_fall_state_v2",
+        "free_fall_state_v6",
+        "free_fall_state_v7",
+        "inclined_plane_state_v1",
+        "inclined_plane_state_v2",
+        "inclined_plane_state_v6",
+        "inclined_plane_state_v7",
+        "uniform_circular_motion_state_v1",
+        "uniform_circular_motion_state_v2",
+        "uniform_circular_motion_state_v6",
+        "uniform_circular_motion_state_v7",
+        "collision_1d_state_v1",
+        "collision_1d_state_v2",
+        "collision_1d_state_v3",
+        "collision_1d_state_v5",
+        "unsupported",
+    }
+)
+
+
 class SceneEvaluatorRegistry:
     """Resolve and reuse one evaluator instance per scene."""
 
     def __init__(self, protocol: dict[str, Any]):
         self.protocol = protocol
         self._instances: dict[str, SceneCaseEvaluator] = {}
+
+    @staticmethod
+    def supported_evaluator_types() -> frozenset[str]:
+        """Return the evaluator types that can be resolved by this build."""
+
+        return SUPPORTED_EVALUATOR_TYPES
 
     def resolve(self, scene_id: str) -> SceneCaseEvaluator:
         if scene_id in self._instances:
@@ -34,6 +68,12 @@ class SceneEvaluatorRegistry:
             )
 
             evaluator = PendulumOpenWorldCaseEvaluator(config)
+        elif evaluator_type == "pendulum_state_v7":
+            from .scenes.pendulum.v7_evaluator import (
+                PendulumOpenWorldCaseEvaluatorV7,
+            )
+
+            evaluator = PendulumOpenWorldCaseEvaluatorV7(config)
         elif evaluator_type in {"free_fall_state_v1", "free_fall_state_v2"}:
             from .scenes.free_fall.evaluator import FreeFallCaseEvaluator
 
@@ -44,6 +84,12 @@ class SceneEvaluatorRegistry:
             )
 
             evaluator = FreeFallOpenWorldCaseEvaluator(config)
+        elif evaluator_type == "free_fall_state_v7":
+            from .scenes.free_fall.v7_evaluator import (
+                FreeFallOpenWorldCaseEvaluatorV7,
+            )
+
+            evaluator = FreeFallOpenWorldCaseEvaluatorV7(config)
         elif evaluator_type in {
             "inclined_plane_state_v1",
             "inclined_plane_state_v2",
@@ -59,6 +105,12 @@ class SceneEvaluatorRegistry:
             )
 
             evaluator = InclinedPlaneOpenWorldCaseEvaluator(config)
+        elif evaluator_type == "inclined_plane_state_v7":
+            from .scenes.inclined_plane.v7_evaluator import (
+                InclinedPlaneOpenWorldCaseEvaluatorV7,
+            )
+
+            evaluator = InclinedPlaneOpenWorldCaseEvaluatorV7(config)
         elif evaluator_type in {
             "uniform_circular_motion_state_v1",
             "uniform_circular_motion_state_v2",
@@ -74,6 +126,12 @@ class SceneEvaluatorRegistry:
             )
 
             evaluator = CircularMotionOpenWorldCaseEvaluator(config)
+        elif evaluator_type == "uniform_circular_motion_state_v7":
+            from .scenes.circular_motion.v7_evaluator import (
+                CircularMotionOpenWorldCaseEvaluatorV7,
+            )
+
+            evaluator = CircularMotionOpenWorldCaseEvaluatorV7(config)
         elif evaluator_type in {
             "collision_1d_state_v1",
             "collision_1d_state_v2",

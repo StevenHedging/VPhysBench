@@ -42,6 +42,7 @@ from ...contracts import CaseEvaluationRequest
 from .open_world import (
     CircularOpenWorldObservation,
     empty_open_world_observation,
+    freeze_circular_apparatus,
     freeze_reference_identities,
     freeze_prediction_identity,
     identity_anchors_from_observation,
@@ -127,11 +128,37 @@ class CircularMotionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
             ) from exc
         time_grid = build_common_time_grid(times_s)
         observation_config = self.config["color_observation"]
+        frozen_apparatus_enabled = (
+            observation_config.get(
+                "apparatus_coordinate_policy",
+                "per_frame_prediction_geometry_v1",
+            )
+            == "condition_frozen_shared_frame_v1"
+        )
+        reference_apparatus = None
+        prediction_apparatus = None
         try:
+            if frozen_apparatus_enabled:
+                reference_apparatus = freeze_circular_apparatus(
+                    reference_video.frames[0],
+                    config=observation_config,
+                    source=(
+                        "same_case_condition_first_frame"
+                        if manifest.reference_capability
+                        is ReferenceCapability.SAME_CASE_GT
+                        else "physics_parent_first_frame"
+                    ),
+                )
+                if (
+                    manifest.reference_capability
+                    is ReferenceCapability.SAME_CASE_GT
+                ):
+                    prediction_apparatus = reference_apparatus
             reference_observation = observe_circular_objects(
                 reference_video.frames,
                 time_grid=time_grid,
                 config=observation_config,
+                apparatus_anchor=reference_apparatus,
             )
             minimum_disk_ratio = float(
                 observation_config.get(
@@ -187,11 +214,23 @@ class CircularMotionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                     )
                 )
                 condition_grid = build_common_time_grid([0.0])
+                current_case_apparatus = (
+                    freeze_circular_apparatus(
+                        condition_frame,
+                        config=observation_config,
+                        source="current_case_condition_first_frame",
+                    )
+                    if frozen_apparatus_enabled
+                    else None
+                )
                 condition_observation = observe_circular_objects(
                     [condition_frame],
                     time_grid=condition_grid,
                     config=observation_config,
+                    apparatus_anchor=current_case_apparatus,
                 )
+                if frozen_apparatus_enabled:
+                    prediction_apparatus = current_case_apparatus
                 condition_anchors = identity_anchors_from_observation(
                     condition_observation,
                     entities=entities,
@@ -245,6 +284,7 @@ class CircularMotionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 time_grid=time_grid,
                 config=observation_config,
                 available=prediction_available,
+                apparatus_anchor=prediction_apparatus,
             )
             prediction_objects = prediction_observation.objects
             prediction_union = list(prediction_observation.union_masks)
@@ -395,6 +435,11 @@ class CircularMotionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                     **self.config["scoring"],
                     **self.config.get("object_centric_scoring", {}).get(
                         "polar_distance", {}
+                    ),
+                    "reference_mode": reference_mode,
+                    "physics_parent_phase_policy": observation_config.get(
+                        "physics_parent_phase_policy",
+                        "legacy_per_track_relative_observation_v1",
                     ),
                 },
             )
@@ -664,9 +709,32 @@ class CircularMotionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                     "failure_reason": comparison.failure_reason,
                 },
                 "position_kernel": (
-                    "relative_polar_cauchy_with_cartesian_center_fallback"
+                    (
+                        "condition_frozen_absolute_polar_cauchy_with_"
+                        "cartesian_center_fallback"
+                    )
+                    if frozen_apparatus_enabled
+                    else (
+                        "relative_polar_cauchy_with_"
+                        "cartesian_center_fallback"
+                    )
                 ),
-                "apparatus_policy": "eroded_green_disk_excluded",
+                "apparatus_policy": (
+                    (
+                        "condition_frozen_center_radius_and_"
+                        "lab_value_temporal_apparatus_exclusion"
+                    )
+                    if frozen_apparatus_enabled
+                    else (
+                        "adaptive_dominant_hue_selected_apparatus_and_"
+                        "eroded_disk_excluded"
+                        if self.config["color_observation"].get(
+                            "disk_colour_policy", "legacy_green_hsv"
+                        )
+                        == "adaptive_dominant_hue"
+                        else "eroded_green_disk_excluded"
+                    )
+                ),
                 "subject_reference_mode": reference_mode,
                 **condition_provenance,
             },

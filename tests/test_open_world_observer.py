@@ -37,6 +37,7 @@ def _detection(
     y: float = 20.0,
     tier: EvidenceTier = EvidenceTier.PARTICIPANT,
     sources: tuple[str, ...] = ("circle", "motion"),
+    metadata: dict[str, object] | None = None,
 ) -> ObjectDetection:
     mask = _mask(int(round(x)), int(round(y)))
     return ObjectDetection(
@@ -49,6 +50,7 @@ def _detection(
         confidence=0.95,
         evidence_tier=tier,
         sources=sources,
+        metadata=metadata or {},
     )
 
 
@@ -101,6 +103,60 @@ class OpenWorldObserverTests(unittest.TestCase):
         )
         self.assertEqual(2, len(observed.tracks))
         self.assertTrue(all(track.confirmed for track in observed.tracks))
+
+    def test_tracking_partition_is_opt_in_and_blocks_identity_takeover(
+        self,
+    ) -> None:
+        unpartitioned = track_open_world_detections(
+            [
+                [_detection(0, "direct_0", 10)],
+                [_detection(1, "residual_1", 11)],
+                [_detection(2, "residual_2", 12)],
+            ],
+            time_grid=self.grid,
+        )
+        self.assertEqual(1, len(unpartitioned.tracks))
+
+        partitioned = track_open_world_detections(
+            [
+                [
+                    _detection(
+                        0,
+                        "direct_0",
+                        10,
+                        metadata={
+                            "exclusive_tracking_partition": "directed"
+                        },
+                    )
+                ],
+                [
+                    _detection(
+                        1,
+                        "residual_1",
+                        11,
+                        metadata={
+                            "exclusive_tracking_partition": "residual"
+                        },
+                    )
+                ],
+                [
+                    _detection(
+                        2,
+                        "residual_2",
+                        12,
+                        metadata={
+                            "exclusive_tracking_partition": "residual"
+                        },
+                    )
+                ],
+            ],
+            time_grid=self.grid,
+        )
+        self.assertEqual(2, len(partitioned.tracks))
+        self.assertEqual(
+            {1, 2},
+            {len(track.detections) for track in partitioned.tracks},
+        )
 
     def test_full_duration_extra_caps_presence_at_two_thirds(self) -> None:
         references = [
@@ -373,6 +429,32 @@ class OpenWorldObserverTests(unittest.TestCase):
             observed.tracks[0].evidence_tier,
         )
         self.assertEqual(0.25, observed.tracks[0].formal_exposure_weight)
+
+    def test_persistence_suppression_requires_an_explicit_marker(self) -> None:
+        frames = [
+            [
+                _detection(
+                    index,
+                    f"apparatus_{index}",
+                    60,
+                    tier=EvidenceTier.PARTICIPANT,
+                    metadata={
+                        "suppress_persistence_only_promotion": True
+                    },
+                )
+            ]
+            for index in range(3)
+        ]
+        observed = track_open_world_detections(
+            frames,
+            time_grid=self.grid,
+        )
+        self.assertTrue(observed.tracks[0].confirmed)
+        self.assertEqual(
+            EvidenceTier.AMBIGUOUS,
+            observed.tracks[0].evidence_tier,
+        )
+        self.assertEqual(0.0, observed.tracks[0].formal_exposure_weight)
 
     def test_motion_participant_remains_full_exposure(self) -> None:
         frames = [

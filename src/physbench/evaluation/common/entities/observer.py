@@ -314,6 +314,20 @@ def _track_cost(
     latest = track.detections[-1]
     if latest.entity_class != detection.entity_class:
         return float("inf")
+    latest_partition = latest.metadata.get(
+        "exclusive_tracking_partition"
+    )
+    detection_partition = detection.metadata.get(
+        "exclusive_tracking_partition"
+    )
+    if (
+        latest_partition is not None
+        or detection_partition is not None
+    ) and latest_partition != detection_partition:
+        # Scene adapters may reserve a condition-anchored directed stream so
+        # a nearby residual/shadow cannot take over its ID.  This is opt-in;
+        # historical detections without a partition retain frozen behavior.
+        return float("inf")
     radius = max(
         math.sqrt(latest.area_px2 / math.pi),
         math.sqrt(detection.area_px2 / math.pi),
@@ -357,6 +371,19 @@ def _formal_track_tier(
     *,
     confirmed: bool,
 ) -> EvidenceTier:
+    if detections and all(
+        bool(
+            item.metadata.get(
+                "suppress_persistence_only_promotion", False
+            )
+        )
+        for item in detections
+    ):
+        # Some scene adapters retain low-specificity proposals purely for
+        # audit. Repetition alone must not turn a stationary apparatus mark
+        # into a physical participant; independent evidence can still emit a
+        # separate, stronger detection and track.
+        return EvidenceTier.AMBIGUOUS
     if confirmed and any(
         item.evidence_tier is EvidenceTier.PARTICIPANT
         for item in detections

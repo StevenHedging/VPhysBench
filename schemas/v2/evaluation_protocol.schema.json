@@ -230,13 +230,23 @@
         "type": {
           "enum": [
             "pendulum_state_v6",
+            "pendulum_state_v7",
             "free_fall_state_v6",
+            "free_fall_state_v7",
             "inclined_plane_state_v6",
-            "uniform_circular_motion_state_v6"
+            "inclined_plane_state_v7",
+            "uniform_circular_motion_state_v6",
+            "uniform_circular_motion_state_v7"
           ]
         },
         "observer_protocol": {"const": "open_world_v2"},
         "evaluator_contract": {"const": "robust_subject_v3"},
+        "reference_observation_policy": {
+          "enum": [
+            "condition_causal_symmetric",
+            "apparatus_geometry_symmetric"
+          ]
+        },
         "timeline": {"$ref": "#/$defs/referenceTimeline"},
         "spatial": {"$ref": "#/$defs/spatial"},
         "sam2": {"type": "object"},
@@ -263,7 +273,11 @@
       "allOf": [
         {
           "if": {
-            "properties": {"type": {"const": "pendulum_state_v6"}}
+            "properties": {
+              "type": {
+                "enum": ["pendulum_state_v6", "pendulum_state_v7"]
+              }
+            }
           },
           "then": {
             "required": [
@@ -282,7 +296,9 @@
               "type": {
                 "enum": [
                   "free_fall_state_v6",
-                  "inclined_plane_state_v6"
+                  "free_fall_state_v7",
+                  "inclined_plane_state_v6",
+                  "inclined_plane_state_v7"
                 ]
               }
             }
@@ -299,10 +315,70 @@
         {
           "if": {
             "properties": {
-              "type": {"const": "uniform_circular_motion_state_v6"}
+              "type": {
+                "enum": [
+                  "uniform_circular_motion_state_v6",
+                  "uniform_circular_motion_state_v7"
+                ]
+              }
             }
           },
           "then": {"required": ["color_observation"]}
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "pendulum_state_v7",
+                  "free_fall_state_v7",
+                  "inclined_plane_state_v7"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": ["reference_observation_policy"],
+            "properties": {
+              "reference_observation_policy": {
+                "const": "condition_causal_symmetric"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "uniform_circular_motion_state_v7"
+              }
+            }
+          },
+          "then": {
+            "required": ["reference_observation_policy"],
+            "properties": {
+              "reference_observation_policy": {
+                "const": "apparatus_geometry_symmetric"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "pendulum_state_v6",
+                  "free_fall_state_v6",
+                  "inclined_plane_state_v6",
+                  "uniform_circular_motion_state_v6"
+                ]
+              }
+            }
+          },
+          "then": {
+            "not": {"required": ["reference_observation_policy"]}
+          }
         }
       ],
       "additionalProperties": false
@@ -312,7 +388,9 @@
         {"$ref": "#/$defs/openWorldV2Scene"},
         {
           "properties": {
-            "type": {"const": "pendulum_state_v6"}
+            "type": {
+              "enum": ["pendulum_state_v6", "pendulum_state_v7"]
+            }
           }
         }
       ]
@@ -322,7 +400,9 @@
         {"$ref": "#/$defs/openWorldV2Scene"},
         {
           "properties": {
-            "type": {"const": "free_fall_state_v6"}
+            "type": {
+              "enum": ["free_fall_state_v6", "free_fall_state_v7"]
+            }
           }
         }
       ]
@@ -332,7 +412,12 @@
         {"$ref": "#/$defs/openWorldV2Scene"},
         {
           "properties": {
-            "type": {"const": "inclined_plane_state_v6"}
+            "type": {
+              "enum": [
+                "inclined_plane_state_v6",
+                "inclined_plane_state_v7"
+              ]
+            }
           }
         }
       ]
@@ -342,7 +427,12 @@
         {"$ref": "#/$defs/openWorldV2Scene"},
         {
           "properties": {
-            "type": {"const": "uniform_circular_motion_state_v6"}
+            "type": {
+              "enum": [
+                "uniform_circular_motion_state_v6",
+                "uniform_circular_motion_state_v7"
+              ]
+            }
           }
         }
       ]

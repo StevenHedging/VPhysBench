@@ -12,18 +12,32 @@ import cv2
 import numpy as np
 
 from physbench.evaluation.common.entities import (
+    EvidenceTier,
+    ObjectDetection,
+    OpenWorldObservation,
+    OpenWorldTrack,
     ReferenceCapability,
     build_common_time_grid,
 )
 from physbench.evaluation.scenes.rigid_body_open_world import (
     RigidBodyOpenWorldCaseEvaluatorBase,
     build_expected_rigid_body_timeline,
+    build_condition_incline_apparatus_seed,
+    build_rigid_body_motion_prompts,
     build_rigid_body_reference,
+    classify_coupled_rigid_body_artifacts,
+    coalesce_condition_directed_identity,
     default_rigid_body_config,
     discover_rigid_body_objects,
     evaluate_rigid_body_open_world,
+    freeze_condition_incline_axis,
+    merge_disconnected_directed_fragments,
     observation_from_mask_channels,
+    reexpress_same_case_reference_on_condition_axis,
+    recover_rigid_body_mask_gaps,
     safe_compare_rigid_body_open_world,
+    select_rigid_body_reference_hypothesis,
+    score_rigid_body_reference_hypothesis,
     write_rigid_body_audit_json,
 )
 
@@ -203,6 +217,487 @@ def _visualization_inputs():
 
 
 class RigidBodyOpenWorldV6Tests(unittest.TestCase):
+    @staticmethod
+    def _strict_reference_config(scene_kind: str) -> dict:
+        config = default_rigid_body_config(scene_kind)
+        config.update(
+            {
+                "reference_hypothesis_minimum_raw_coverage": (
+                    0.65 if scene_kind == "free_fall" else 0.55
+                ),
+                "reference_hypothesis_minimum_adjacent_steps": 3,
+                "reference_hypothesis_minimum_direction_consistency": (
+                    0.75 if scene_kind == "free_fall" else 0.60
+                ),
+                "reference_hypothesis_maximum_internal_gap_frames": (
+                    1 if scene_kind == "free_fall" else 4
+                ),
+                "reference_hypothesis_minimum_area_stability": (
+                    0.30 if scene_kind == "free_fall" else 0.25
+                ),
+                "reference_hypothesis_minimum_score": (
+                    0.55 if scene_kind == "free_fall" else 0.50
+                ),
+                "reference_hypothesis_minimum_free_fall_downward_span_fraction": (
+                    0.12 if scene_kind == "free_fall" else 0.0
+                ),
+                "exit_terminal_geometry_policy": (
+                    "scene_terminal_geometry_v2"
+                ),
+                "exit_minimum_observed_tail_frames": 2,
+            }
+        )
+        return config
+
+    def test_v7_reference_candidates_reject_larger_noncompact_motion(
+        self,
+    ) -> None:
+        frames = []
+        for index in range(10):
+            frame = np.zeros((120, 120, 3), dtype=np.uint8)
+            # A large articulated distractor moves near the top.
+            cv2.rectangle(
+                frame,
+                (12 + index, 8),
+                (72 + index, 18),
+                (160, 160, 160),
+                -1,
+            )
+            # The physical ball is compact and moves down.
+            cv2.circle(
+                frame,
+                (82, 22 + 7 * index),
+                5,
+                (230, 230, 230),
+                -1,
+            )
+            frames.append(frame)
+        config = default_rigid_body_config("free_fall")
+        config.update(
+            {
+                "reference_candidate_minimum_compact_score": 0.12,
+                "reference_candidate_maximum_area_ratio": 0.1,
+            }
+        )
+        prompts = build_rigid_body_motion_prompts(
+            frames,
+            scene_kind="free_fall",
+            threshold=8.0,
+            minimum_area=8,
+            box_expand=1.2,
+            minimum_box_side=12,
+            config=config,
+            maximum_candidates=3,
+        )
+        self.assertTrue(prompts)
+        self.assertLess(
+            abs(float(prompts[0].points_xy[0, 0]) - 82.0),
+            6.0,
+        )
+
+    def test_v7_reference_scale_consensus_rejects_tiny_continuous_decoy(
+        self,
+    ) -> None:
+        candidates = [
+            {
+                "candidate_index": 0,
+                "status": "accepted",
+                "validation": {"score": 0.781},
+                "scale_observation": {
+                    "robust_log_area": math.log(3650.0),
+                    "internal_consistency": 0.94,
+                },
+            },
+            {
+                "candidate_index": 1,
+                "status": "accepted",
+                "validation": {"score": 0.782},
+                "scale_observation": {
+                    "robust_log_area": math.log(3600.0),
+                    "internal_consistency": 0.96,
+                },
+            },
+            {
+                "candidate_index": 2,
+                "status": "accepted",
+                "validation": {"score": 0.793},
+                "scale_observation": {
+                    "robust_log_area": math.log(425.0),
+                    "internal_consistency": 0.90,
+                },
+            },
+        ]
+        selected, diagnostics = (
+            select_rigid_body_reference_hypothesis(
+                candidates,
+                policy="validation_plus_consensus_scale_v2",
+                config={},
+            )
+        )
+        self.assertIn(selected, {0, 1})
+        self.assertEqual(3, diagnostics["consensus_candidate_count"])
+        rows = {
+            row["candidate_index"]: row
+            for row in diagnostics["candidate_selection"]
+        }
+        self.assertGreater(
+            rows[selected]["adjusted_score"],
+            rows[2]["adjusted_score"],
+        )
+
+    def test_v7_incline_condition_seed_and_axis_use_condition_pixels(
+        self,
+    ) -> None:
+        frame = np.full((240, 320, 3), 220, dtype=np.uint8)
+        cv2.line(frame, (35, 205), (300, 65), (55, 55, 55), 9)
+        cv2.rectangle(frame, (245, 37), (292, 70), (120, 160, 190), -1)
+        seed, diagnostics = build_condition_incline_apparatus_seed(
+            frame,
+            minimum_area=20,
+            maximum_area=12000,
+            config={},
+        )
+        self.assertIsNotNone(seed)
+        assert seed is not None
+        self.assertFalse(
+            diagnostics["condition_future_pixels_used"]
+        )
+        centroid = np.asarray(diagnostics["seed_center_xy"])
+        axis = freeze_condition_incline_axis(
+            frame,
+            condition_centroid_xy=centroid,
+            fallback=None,
+            allow_reference_fallback=False,
+        )
+        self.assertEqual(
+            "condition_apparatus_hough_axis",
+            axis.source,
+        )
+        self.assertGreater(axis.direction_xy[1], 0.0)
+        self.assertGreater(axis.span_px, 100.0)
+
+    def test_v7_reference_hypothesis_prefers_continuous_body(
+        self,
+    ) -> None:
+        masks = [_circle(30, 10 + 4 * index) for index in range(12)]
+        reference = _reference(
+            masks,
+            scene_kind="free_fall",
+            entity_class="ball",
+        )
+        score, diagnostics = score_rigid_body_reference_hypothesis(
+            reference,
+            frames=_frames(masks),
+            scene_kind="free_fall",
+            config=default_rigid_body_config("free_fall"),
+        )
+        self.assertTrue(diagnostics["accepted"])
+        self.assertGreater(score, 0.85)
+        self.assertEqual(1.0, diagnostics["continuity_score"])
+
+    def test_v7_sparse_reference_hypothesis_is_rejected(self) -> None:
+        masks = [
+            (
+                _circle(30, 10 + 3 * index)
+                if index in {0, 9, 19}
+                else np.zeros((80, 80), dtype=np.uint8)
+            )
+            for index in range(20)
+        ]
+        config = self._strict_reference_config("free_fall")
+        reference = build_rigid_body_reference(
+            masks,
+            entity_id="subject",
+            entity_class="ball",
+            scene_kind="free_fall",
+            frame_shape=masks[0].shape,
+            minimum_area=8,
+            maximum_area_ratio=0.1,
+            minimum_span_px=6.0,
+            config=config,
+        )
+        _, diagnostics = score_rigid_body_reference_hypothesis(
+            reference,
+            frames=_frames(masks),
+            scene_kind="free_fall",
+            config=config,
+        )
+        self.assertFalse(diagnostics["accepted"])
+        self.assertEqual(0, diagnostics["adjacent_observation_steps"])
+        self.assertLess(
+            diagnostics["observed_ratio"],
+            diagnostics["minimum_raw_coverage"],
+        )
+
+    def test_v7_reverse_free_fall_reference_is_rejected(self) -> None:
+        masks = [_circle(30, 70 - 3 * index) for index in range(20)]
+        config = self._strict_reference_config("free_fall")
+        reference = build_rigid_body_reference(
+            masks,
+            entity_id="subject",
+            entity_class="ball",
+            scene_kind="free_fall",
+            frame_shape=masks[0].shape,
+            minimum_area=8,
+            maximum_area_ratio=0.1,
+            minimum_span_px=6.0,
+            config=config,
+        )
+        _, diagnostics = score_rigid_body_reference_hypothesis(
+            reference,
+            frames=_frames(masks),
+            scene_kind="free_fall",
+            config=config,
+        )
+        self.assertFalse(diagnostics["accepted"])
+        self.assertLess(diagnostics["total_displacement_px"], 0.0)
+        self.assertGreater(
+            diagnostics["minimum_free_fall_displacement_px"],
+            0.0,
+        )
+
+    def test_v7_internal_reference_gap_is_rejected(self) -> None:
+        masks = [_circle(30, 10 + 2 * index) for index in range(20)]
+        for index in (7, 8, 9):
+            masks[index] = np.zeros_like(masks[index])
+        config = self._strict_reference_config("free_fall")
+        reference = build_rigid_body_reference(
+            masks,
+            entity_id="subject",
+            entity_class="ball",
+            scene_kind="free_fall",
+            frame_shape=masks[0].shape,
+            minimum_area=8,
+            maximum_area_ratio=0.1,
+            minimum_span_px=6.0,
+            config=config,
+        )
+        _, diagnostics = score_rigid_body_reference_hypothesis(
+            reference,
+            frames=_frames(masks),
+            scene_kind="free_fall",
+            config=config,
+        )
+        self.assertFalse(diagnostics["accepted"])
+        self.assertEqual(3, diagnostics["internal_gap_frames"])
+        self.assertEqual(1, diagnostics["maximum_internal_gap_frames"])
+
+    def test_v7_high_speed_directed_samples_keep_one_frozen_id(
+        self,
+    ) -> None:
+        tracks = []
+        for index in range(8):
+            mask = _circle(20, 8 + 9 * index)
+            tracks.append(
+                OpenWorldTrack(
+                    track_id=f"generic_birth_{index}",
+                    detections=(
+                        ObjectDetection(
+                            frame_index=index,
+                            detection_id=f"directed_{index}",
+                            xy=np.asarray([20.0, 8.0 + 9 * index]),
+                            area_px2=float(np.count_nonzero(mask)),
+                            entity_class="ball",
+                            confidence=1.0,
+                            evidence_tier=EvidenceTier.PARTICIPANT,
+                            sources=("directed_sam2",),
+                            mask=mask,
+                            metadata={
+                                "exclusive_tracking_partition": (
+                                    "rigid_condition_directed"
+                                ),
+                                "identity_anchor_valid": True,
+                            },
+                        ),
+                    ),
+                    confirmed=True,
+                    evidence_tier=EvidenceTier.PARTICIPANT,
+                )
+            )
+        coalesced = coalesce_condition_directed_identity(
+            OpenWorldObservation(
+                tracks=tuple(tracks),
+                overflow_counts=np.zeros(8, dtype=np.float64),
+            ),
+            config={
+                "condition_directed_track_policy": (
+                    "frozen_condition_identity_v2"
+                )
+            },
+        )
+        self.assertEqual(1, len(coalesced.tracks))
+        self.assertEqual("condition_identity", coalesced.tracks[0].track_id)
+        self.assertEqual(
+            list(range(8)),
+            [
+                detection.frame_index
+                for detection in coalesced.tracks[0].detections
+            ],
+        )
+
+    def test_v7_coupled_shadow_is_not_a_body_but_compact_copy_is(
+        self,
+    ) -> None:
+        primary_detections = []
+        shadow_detections = []
+        copy_detections = []
+        for frame in range(8):
+            primary_xy = np.asarray([30.0, 10.0 + 5.0 * frame])
+            primary_detections.append(
+                ObjectDetection(
+                    frame_index=frame,
+                    detection_id=f"primary_{frame}",
+                    xy=primary_xy,
+                    area_px2=50.0,
+                    entity_class="ball",
+                    confidence=1.0,
+                    evidence_tier=EvidenceTier.PARTICIPANT,
+                    sources=("directed_sam2",),
+                    metadata={"identity_anchor_valid": True},
+                )
+            )
+            if frame == 0:
+                continue
+            common = {
+                "frame_index": frame,
+                "area_px2": 45.0,
+                "entity_class": "ball",
+                "confidence": 0.9,
+                "evidence_tier": EvidenceTier.PARTICIPANT,
+            }
+            shadow_sources = (
+                ("condition_difference", "independent_compact_shape")
+                if frame == 2
+                else ("condition_difference", "temporal_motion")
+            )
+            shadow_detections.append(
+                ObjectDetection(
+                    detection_id=f"shadow_{frame}",
+                    xy=primary_xy + np.asarray([1.0, 12.0]),
+                    sources=shadow_sources,
+                    metadata={"residual": True},
+                    **common,
+                )
+            )
+            copy_detections.append(
+                ObjectDetection(
+                    detection_id=f"copy_{frame}",
+                    xy=primary_xy + np.asarray([18.0, 0.0]),
+                    sources=(
+                        "condition_difference",
+                        "independent_compact_shape",
+                    ),
+                    metadata={"residual": True},
+                    **common,
+                )
+            )
+        observation = OpenWorldObservation(
+            tracks=(
+                OpenWorldTrack(
+                    track_id="primary",
+                    detections=tuple(primary_detections),
+                    confirmed=True,
+                    evidence_tier=EvidenceTier.PARTICIPANT,
+                ),
+                OpenWorldTrack(
+                    track_id="shadow",
+                    detections=tuple(shadow_detections),
+                    confirmed=True,
+                    evidence_tier=EvidenceTier.PARTICIPANT,
+                ),
+                OpenWorldTrack(
+                    track_id="copy",
+                    detections=tuple(copy_detections),
+                    confirmed=True,
+                    evidence_tier=EvidenceTier.PARTICIPANT,
+                ),
+            ),
+            overflow_counts=np.zeros(8, dtype=np.float64),
+        )
+        config = {
+            "coupled_optical_artifact_policy": (
+                "motion_correlation_with_compact_veto_v1"
+            ),
+            "coupled_artifact_minimum_overlap_frames": 4,
+            "coupled_artifact_maximum_compact_support_ratio": 0.3,
+            "coupled_artifact_maximum_offset_std_radii": 0.8,
+            "coupled_artifact_maximum_velocity_error_radii": 0.75,
+            "coupled_artifact_minimum_offset_radii": 0.6,
+            "coupled_artifact_maximum_offset_radii": 6.0,
+        }
+        classified = classify_coupled_rigid_body_artifacts(
+            observation,
+            body_radius_px=4.0,
+            config=config,
+        )
+        tiers = {
+            track.track_id: track.evidence_tier
+            for track in classified.tracks
+        }
+        # Kinematic coupling alone cannot erase a real duplicate: the shadow
+        # hypothesis keeps a conservative tentative exposure.
+        self.assertIs(EvidenceTier.TENTATIVE, tiers["shadow"])
+        self.assertIs(EvidenceTier.PARTICIPANT, tiers["copy"])
+        self.assertEqual(
+            ["shadow"],
+            [
+                row["track_id"]
+                for row in classified.diagnostics[
+                    "coupled_optical_artifacts"
+                ]
+            ],
+        )
+
+    def test_v7_gap_recovery_requires_current_pixel_evidence(
+        self,
+    ) -> None:
+        visible = [_circle(30, 12 + 5 * index) for index in range(7)]
+        missing_mask = np.zeros_like(visible[0])
+        directed = [*visible[:-1], missing_mask]
+        frames_with_body = _frames(visible)
+        frames_without_body = _frames(
+            [*visible[:-1], missing_mask]
+        )
+        config = default_rigid_body_config("free_fall")
+        config.update(
+            {
+                "directed_recovery_policy": (
+                    "one_step_compact_or_change_v1"
+                ),
+                "directed_recovery_maximum_gap_frames": 1,
+                "directed_recovery_maximum_distance_radii": 2.5,
+                "directed_recovery_minimum_area_ratio": 0.35,
+                "directed_recovery_maximum_area_ratio": 3.0,
+                "directed_recovery_minimum_color_similarity": 0.1,
+            }
+        )
+        recovered, diagnostics = recover_rigid_body_mask_gaps(
+            directed,
+            frames=frames_with_body,
+            scene_kind="free_fall",
+            minimum_area=8,
+            maximum_area_ratio=0.1,
+            config=config,
+        )
+        self.assertGreater(np.count_nonzero(recovered[-1]), 0)
+        self.assertEqual(
+            [len(directed) - 1],
+            [
+                row["frame_index"]
+                for row in diagnostics["recovered_frames"]
+            ],
+        )
+        absent, absent_diagnostics = recover_rigid_body_mask_gaps(
+            directed,
+            frames=frames_without_body,
+            scene_kind="free_fall",
+            minimum_area=8,
+            maximum_area_ratio=0.1,
+            config=config,
+        )
+        self.assertEqual(0, np.count_nonzero(absent[-1]))
+        self.assertEqual([], absent_diagnostics["recovered_frames"])
+
     def test_local_audit_keeps_per_id_detection_tracks(self) -> None:
         values, result = _visualization_inputs()
         reference = _reference(
@@ -436,6 +931,106 @@ class RigidBodyOpenWorldV6Tests(unittest.TestCase):
             )
         )
 
+    def test_nearby_extra_without_mask_overlap_is_not_apparatus(
+        self,
+    ) -> None:
+        primary = OpenWorldTrack(
+            track_id="primary",
+            detections=tuple(
+                ObjectDetection(
+                    frame_index=index,
+                    detection_id=f"primary_{index}",
+                    xy=np.asarray([20.0, 12.0 + 3 * index]),
+                    area_px2=49.0,
+                    entity_class="ball",
+                    confidence=1.0,
+                    evidence_tier=EvidenceTier.PARTICIPANT,
+                    sources=("directed_sam2",),
+                    mask=_circle(20, 12 + 3 * index),
+                    metadata={"identity_anchor_valid": True},
+                )
+                for index in range(8)
+            ),
+            confirmed=True,
+            evidence_tier=EvidenceTier.PARTICIPANT,
+        )
+        apparatus_anchor = OpenWorldTrack(
+            track_id="condition_apparatus",
+            detections=(
+                ObjectDetection(
+                    frame_index=0,
+                    detection_id="condition_apparatus_0",
+                    xy=np.asarray([48.0, 40.0]),
+                    area_px2=49.0,
+                    entity_class="ball",
+                    confidence=0.85,
+                    evidence_tier=EvidenceTier.AMBIGUOUS,
+                    sources=("independent_compact_shape",),
+                    mask=_circle(48, 40),
+                    metadata={
+                        "suppress_persistence_only_promotion": True
+                    },
+                ),
+            ),
+            confirmed=False,
+            evidence_tier=EvidenceTier.AMBIGUOUS,
+        )
+        nearby_extra = OpenWorldTrack(
+            track_id="nearby_extra",
+            detections=tuple(
+                ObjectDetection(
+                    frame_index=index,
+                    detection_id=f"nearby_extra_{index}",
+                    xy=np.asarray([58.0, 40.0]),
+                    area_px2=49.0,
+                    entity_class="ball",
+                    confidence=0.85,
+                    evidence_tier=EvidenceTier.PARTICIPANT,
+                    sources=("independent_compact_shape",),
+                    mask=_circle(58, 40),
+                    metadata={},
+                )
+                for index in range(1, 8)
+            ),
+            confirmed=True,
+            evidence_tier=EvidenceTier.PARTICIPANT,
+        )
+        classified = classify_coupled_rigid_body_artifacts(
+            OpenWorldObservation(
+                tracks=(primary, apparatus_anchor, nearby_extra),
+                overflow_counts=np.zeros(8, dtype=np.float64),
+            ),
+            body_radius_px=4.0,
+            config={
+                "coupled_optical_artifact_policy": (
+                    "motion_correlation_with_compact_veto_v1"
+                ),
+                "coupled_artifact_minimum_overlap_frames": 4,
+                "coupled_artifact_maximum_compact_support_ratio": 0.3,
+                "coupled_artifact_maximum_offset_std_radii": 0.8,
+                "coupled_artifact_maximum_velocity_error_radii": 0.75,
+                "coupled_artifact_minimum_offset_radii": 0.6,
+                "coupled_artifact_maximum_offset_radii": 6.0,
+                "condition_present_apparatus_policy": (
+                    "frozen_condition_track_v2"
+                ),
+                "condition_apparatus_maximum_fragment_span_radii": 3.0,
+                "condition_apparatus_maximum_anchor_distance_radii": 3.0,
+                "condition_apparatus_minimum_compact_support_ratio": 0.5,
+                "condition_apparatus_minimum_mask_containment": 0.35,
+            },
+        )
+        tiers = {
+            track.track_id: track.evidence_tier
+            for track in classified.tracks
+        }
+        self.assertIs(EvidenceTier.AMBIGUOUS, tiers["condition_apparatus"])
+        self.assertIs(EvidenceTier.PARTICIPANT, tiers["nearby_extra"])
+        self.assertEqual(
+            [],
+            classified.diagnostics["condition_apparatus_fragments"],
+        )
+
     def test_edge_entering_extra_with_compact_support_is_penalized(
         self,
     ) -> None:
@@ -514,6 +1109,81 @@ class RigidBodyOpenWorldV6Tests(unittest.TestCase):
             0,
         )
 
+    def test_v7_near_extra_in_prediction_frame_zero_is_not_apparatus(
+        self,
+    ) -> None:
+        count = 12
+        direction = np.asarray([3.0, 2.0], dtype=np.float64)
+        normal = np.asarray([-direction[1], direction[0]])
+        normal /= np.linalg.norm(normal)
+        directed = []
+        extras = []
+        for index in range(count):
+            center = np.asarray([18.0, 15.0]) + index * direction
+            extra_center = center + 12.0 * normal
+            directed.append(_block(*center))
+            extras.append(_block(*extra_center))
+        reference = _reference(
+            directed,
+            scene_kind="inclined_plane",
+            entity_class="block",
+        )
+        config = default_rigid_body_config("inclined_plane")
+        config.update(
+            {
+                "exclusive_tracking_partition_policy": (
+                    "condition_directed_vs_residual_v1"
+                ),
+                "condition_directed_track_policy": (
+                    "frozen_condition_identity_v2"
+                ),
+                "compact_only_evidence_policy": (
+                    "condition_frame_apparatus_only_v1"
+                ),
+                "condition_frame_apparatus_maximum_change_fraction": 0.25,
+                "condition_present_apparatus_policy": (
+                    "frozen_condition_track_v2"
+                ),
+                "coupled_optical_artifact_policy": (
+                    "motion_correlation_with_compact_veto_v1"
+                ),
+                "residual_dilation_body_fraction": 2.0,
+            }
+        )
+        observation = discover_rigid_body_objects(
+            _frames(directed, extras=extras),
+            directed_masks=directed,
+            condition_frame=_frames([directed[0]])[0],
+            condition_mask=directed[0],
+            reference_axis=reference.axis,
+            entity_class="block",
+            scene_kind="inclined_plane",
+            time_grid=_grid(count),
+            available=None,
+            minimum_area=8,
+            maximum_area_ratio=0.1,
+            config=config,
+        )
+        formal = [
+            track
+            for track in observation.tracks
+            if track.formal_exposure_weight > 0.0
+        ]
+        self.assertEqual(2, len(formal))
+        self.assertEqual(
+            [],
+            observation.diagnostics[
+                "condition_present_apparatus_tracks"
+            ],
+        )
+        comparison, _ = _compare(
+            reference,
+            observation,
+            scene_kind="inclined_plane",
+        )
+        self.assertLess(comparison.integrity.integrity_gate, 1.0)
+        self.assertTrue(comparison.per_frame[0]["extra_track_ids"])
+
     def test_second_incline_block_is_formal_extra(self) -> None:
         count = 12
         expected = [
@@ -540,6 +1210,110 @@ class RigidBodyOpenWorldV6Tests(unittest.TestCase):
         )
         self.assertLess(comparison.integrity.integrity_gate, 1.0)
         self.assertTrue(comparison.per_frame[4]["extra_track_ids"])
+
+    def test_v7_small_directed_fragment_merges_but_second_block_does_not(
+        self,
+    ) -> None:
+        shape = (100, 140)
+        selected = _block(
+            40,
+            50,
+            shape=shape,
+            width=28,
+            height=18,
+        )
+        # Mimic a SAM mask split by a narrow internal/disconnected seam.
+        fragment = np.zeros(shape, dtype=np.uint8)
+        cv2.rectangle(fragment, (56, 45), (61, 55), 255, -1)
+        second = _block(
+            90,
+            50,
+            shape=shape,
+            width=28,
+            height=18,
+        )
+        components = [
+            (
+                np.asarray([58.5, 50.0]),
+                float(np.count_nonzero(fragment)),
+                fragment,
+            ),
+            (
+                np.asarray([90.0, 50.0]),
+                float(np.count_nonzero(second)),
+                second,
+            ),
+        ]
+        merged, retained, diagnostics = (
+            merge_disconnected_directed_fragments(
+                selected,
+                components,
+                anchor_area_px2=float(np.count_nonzero(selected)),
+                config={
+                    "disconnected_directed_component_policy": (
+                        "merge_same_body_fragments_v2"
+                    ),
+                    "directed_fragment_maximum_anchor_area_fraction": 0.30,
+                    "directed_fragment_maximum_gap_body_radii": 0.30,
+                    "directed_fragment_maximum_union_span_body_radii": 4.8,
+                    "directed_fragment_maximum_union_anchor_area_ratio": 1.55,
+                },
+            )
+        )
+        self.assertEqual(1, len(diagnostics))
+        self.assertEqual(1, len(retained))
+        self.assertTrue(np.array_equal(retained[0][2], second))
+        self.assertGreater(
+            np.count_nonzero(merged),
+            np.count_nonzero(selected),
+        )
+
+    def test_v7_same_case_state_keeps_real_cross_track_on_causal_axis(
+        self,
+    ) -> None:
+        masks = [
+            _block(15 + 4 * index, 18 + 3 * index)
+            for index in range(10)
+        ]
+        reference = _reference(
+            masks,
+            scene_kind="inclined_plane",
+            entity_class="block",
+        )
+        direction = np.asarray([1.0, 0.5], dtype=np.float64)
+        direction /= np.linalg.norm(direction)
+        causal_axis = type(reference.axis)(
+            origin_xy=reference.xy[0],
+            direction_xy=direction,
+            normal_xy=np.asarray([-direction[1], direction[0]]),
+            span_px=55.0,
+            source="condition_apparatus_hough_axis",
+            explained_ratio=1.0,
+        )
+        expressed = reexpress_same_case_reference_on_condition_axis(
+            reference,
+            condition_axis=causal_axis,
+        )
+        self.assertIs(causal_axis, expressed.axis)
+        self.assertTrue(np.array_equal(reference.xy, expressed.xy))
+        self.assertTrue(
+            all(
+                np.array_equal(first, second)
+                for first, second in zip(
+                    reference.masks,
+                    expressed.masks,
+                )
+            )
+        )
+        _, cross = causal_axis.project(expressed.xy[expressed.expected])
+        self.assertGreater(float(np.ptp(cross)), 0.0)
+        along, _ = causal_axis.project(
+            expressed.xy[expressed.expected]
+        )
+        np.testing.assert_allclose(
+            expressed.normalized_progress[expressed.expected],
+            (along - along[0]) / causal_axis.span_px,
+        )
 
     def test_far_off_axis_incline_duplicate_cannot_hide_outside_scene_roi(
         self,
@@ -737,6 +1511,32 @@ class RigidBodyOpenWorldV6Tests(unittest.TestCase):
         np.testing.assert_array_equal(
             reference.expected, np.ones(count, dtype=bool)
         )
+
+    def test_mid_sequence_reference_gap_cannot_become_legal_exit(
+        self,
+    ) -> None:
+        count = 16
+        masks = [_circle(30, 10 + 3 * index) for index in range(count)]
+        for index in range(6, 10):
+            masks[index] = np.zeros_like(masks[index])
+        config = self._strict_reference_config("free_fall")
+        reference = build_rigid_body_reference(
+            masks,
+            entity_id="subject",
+            entity_class="ball",
+            scene_kind="free_fall",
+            frame_shape=masks[0].shape,
+            minimum_area=8,
+            maximum_area_ratio=0.1,
+            minimum_span_px=6.0,
+            config=config,
+        )
+        self.assertIsNone(reference.legal_exit_frame)
+        np.testing.assert_array_equal(
+            reference.expected,
+            np.ones(count, dtype=bool),
+        )
+        self.assertTrue(np.all(reference.expected[6:10]))
 
     def test_wrong_prediction_axis_is_penalized(self) -> None:
         count = 14

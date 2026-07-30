@@ -48,9 +48,30 @@ Hungarian、一对一守恒、missing/extra/ID switch/overflow 和 fail-closed�
 负责对象发现、坐标系、合法 lifecycle 与物理内容。
 
 v6 仍是 opt-in shadow 协议，不改变 Baseline、Task 或 Dataset 契约，也不覆盖冻结的
-v3/v4/v5 结果。Task 继续读取稳定主指标
-`scene_subject_state_similarity`，但不同协议 fingerprint 下的数值不能混入同一
-leaderboard。
+v3/v4/v5 结果。`scene_default_v7` 在相同公共计分内核上把四个非碰撞 observer
+升级为 `2.1`：identity/axis 从 condition 冻结，reference 与 prediction 走对称的
+因果观察路径，directed 与 residual 使用互斥 tracking partition，并增加
+apparatus、motion artifact、合法退出和 prediction failure 的显式审计。碰撞 2.2
+在 v7 中仍逐配置冻结。
+
+Task 继续读取稳定主指标 `scene_subject_state_similarity`，但不同协议 fingerprint
+下的数值不能混入同一 leaderboard。
+
+公共层与场景层的边界保持不变：
+
+```text
+open_world_v2:
+  expected timeline + null assignment + PresenceDetA/AssA/GOSPA
+  + missing/extra/switch/overflow + integrity gate
+
+scene adapter:
+  condition identity/apparatus + object proposals + legal lifecycle
+  + scene-specific coordinates and physics content
+```
+
+因此 observation 的召回优化不能修改完整性公式，scene physics 的调参也不能删掉
+未匹配实体。v7 的定向反例、真实 GT-self 校准和外置 overlay 记录见
+[`experiments/OPEN_WORLD_V7_20260730.md`](experiments/OPEN_WORLD_V7_20260730.md)。
 
 ## 2. 对象契约
 
@@ -488,6 +509,18 @@ manifest 的预期 N；安全上限之外的组件转成 overflow exposure。初
 或最早可靠窗口的外貌、半径和相位冻结，轨迹中的大 Lab 外观跳变会拆成可审计 ID
 断点，禁止看完整轨迹后重新排序。
 
+v7 不再允许 prediction 逐帧重估圆盘后把整体平移、缩放或相位差归一化掉。同 Case
+使用 reference 首帧 condition 冻结的 center、radius、ROI、apparatus palette 和绝对
+phase frame；reference 与 prediction 共用该坐标。Physics-parent OOD 分别从 parent
+首帧和当前 Case condition 冻结环境坐标，parent 仅提供各自 condition-relative 的
+规范化动力学，不能提供未来 raw-pixel localization。prediction 中出现的另一个圆盘
+也不能重定义坐标或搜索 ROI。
+
+apparatus 排除由 condition Lab/value palette、同坐标外观和保守 temporal residual
+共同决定，而不是把所有同 hue 像素直接擦除。因此相同 hue 但亮度/外观不同的静止或
+运动复制体仍进入 residual tracking；真实 condition 圆盘阴影和纹理则由冻结 palette
+与同坐标支持排除。所有保留组件继续进入 cardinality/overflow 审计。
+
 逐 ID 位置距离为：
 
 ```text
@@ -500,6 +533,12 @@ d² = (delta_radius / sigma_radius)²
 短遮挡由因果 track gap bridge 处理。`r≈0` 时极角不可识别，实际实现回退 Cartesian
 distance。Prediction union 保留所有候选，因此额外对象也会出现在完整主体 IoU
 诊断中。
+
+v7 的正式位置证据只在 circular orbit content 中计一次：condition-frozen
+absolute polar/Cartesian position 既用于 replacement 的最低匹配门限，也进入
+`orbit_physics` 的连续 polar score；`physical_subject_mask_iou` 与 SoftDetA/GOSPA
+保留为诊断，不再额外叠加一个 raw subject-position 权重。这样既能惩罚整盘平移与
+错误相位，也不把同一个轨迹误差重复计入 integrity gate。
 
 ### 7.6 指标所有权
 
@@ -545,7 +584,8 @@ content = weighted_geometric_mean(
 )
 ```
 
-`scene_default_v6` 的另外四个场景使用同一 gate，不同的内容权重为：
+`scene_default_v6` 与 `scene_default_v7` 的另外四个场景使用同一 gate，不同的内容
+权重为：
 
 | scene | content（weighted geometric mean） |
 | --- | --- |
@@ -620,6 +660,16 @@ src/physbench/evaluation/scenes/
 | uniform_circular_motion | `uniform_circular_motion_state_v6` | `open_world_v2/2.0` |
 | collision_1d | `collision_1d_state_v5` | 冻结 `open_world_v1.2 + nbody_v1.2` |
 
+`scene_default_v7` 只替换四个非碰撞 type 的版本后缀，并显式保留碰撞行：
+
+| scene | evaluator type | 开放世界实现 |
+| --- | --- | --- |
+| pendulum | `pendulum_state_v7` | `open_world_v2/2.1` |
+| free_fall | `free_fall_state_v7` | `open_world_v2/2.1` |
+| inclined_plane_slide | `inclined_plane_state_v7` | `open_world_v2/2.1` |
+| uniform_circular_motion | `uniform_circular_motion_state_v7` | `open_world_v2/2.1` |
+| collision_1d | `collision_1d_state_v5` | 冻结 `open_world_v1.2 + nbody_v1.2` |
+
 自动化反例覆盖 missing/extra/duplicate、10%/25%/50% 缺失单调性、far replacement、
 ID switch/外观接力、overflow、短视频、observer failure、合法 exit/reappearance、
 圆周第三 orbiter 与中心回退、单摆第二 bob/断绳/无 bob 分叉绳、画布边界 apparatus
@@ -629,6 +679,7 @@ ID switch/外观接力、overflow、短视频、observer failure、合法 exit/r
 tests/test_open_world_v2.py
 tests/test_open_world_v2_artifacts.py
 tests/test_pendulum_open_world_v6.py
+tests/test_pendulum_open_world_v7.py
 tests/test_rigid_open_world_v6.py
 tests/test_circular_open_world_v6.py
 tests/test_evaluation_protocol_v6.py
