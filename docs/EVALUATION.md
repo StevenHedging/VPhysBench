@@ -35,6 +35,16 @@ v4 只把 `collision_1d` 升级到 evaluator `1.4`，其余四个 scene 仍为 `
 目前不替换官方 v6 Task 所固定的 v3；使用 v4 必须创建新的 reevaluation variant，
 不能覆盖或混用已有 v3 分数。
 
+下一代“逐物理身份匹配—追踪—新增/消失惩罚—scene-specific physics”设计与当前
+shadow 内核见：
+
+```text
+docs/OBJECT_CENTRIC_EVALUATION.md
+src/physbench/evaluation/common/entities/
+```
+
+该内核尚未接入正式协议；v3/v4 的分数与 fingerprint 均保持不变。
+
 `plan.jobs` 是主表。缺失 prediction、重复 prediction、失败生成或未知 case 都必须产生
 一个显式 case result。
 
