@@ -1,0 +1,13 @@
+{
+  "case_count": 298,
+  "requirements": [
+    "frame zero is immediately after the moving ball clears the photogate crop",
+    "all participating balls are fully visible in frame zero",
+    "no photogate body or cable is visible",
+    "the final frame retains the complete supervised physical event"
+  ],
+  "review_date": "2026-07-30",
+  "review_status": "visually_verified",
+  "reviewed_by": "codex_visual_review",
+  "schema_version": "photogate-cleaning-review-v1"
+}

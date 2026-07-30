@@ -327,9 +327,12 @@ def load_dataset(
         else {}
     )
     if check_assets or check_asset_hashes:
+        checked_asset_paths: set[str] = set()
         for case in cases:
             for key, value in case["assets"].items():
                 if not value:
+                    continue
+                if value in checked_asset_paths:
                     continue
                 path = (asset_root / value).resolve()
                 try:
@@ -351,6 +354,7 @@ def load_dataset(
                         raise ValueError(
                             f"dataset asset SHA-256 mismatch: {value}"
                         )
+                checked_asset_paths.add(value)
     digest = canonical_sha256({
         "descriptor": descriptor,
         "cases": cases,

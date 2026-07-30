@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "scene_id": "inclined_plane_slide",
+  "display_name": "斜面下滑",
+  "id_parameters": [
+    "incline_angle",
+    "block_mass",
+    "kinetic_friction_coefficient",
+    "theoretical_acceleration"
+  ],
+  "unannotated_parameters": ["initial_velocity"],
+  "ood1_factors": [
+    "background",
+    "block_appearance",
+    "track_material",
+    "viewpoint"
+  ],
+  "constraints": [
+    "ID evaluation changes a held-out numerical incline angle while using environments observed in training",
+    "OOD1 evaluation changes an unseen environment while using incline angles observed in training",
+    "Cases combining an unseen angle and unseen environment are excluded from View A and reserved for OOD2",
+    "Canonical frame zero is the visually reviewed frame immediately before or at the onset of sliding"
+  ],
+  "metric_spec": {
+    "common_sense_checks": [
+      "motion remains along the incline",
+      "speed increases monotonically after release",
+      "continuous contact with the track",
+      "no spontaneous uphill reversal"
+    ],
+    "prediction_subjects": ["sliding_block"],
+    "prediction_quantities": [
+      "trajectory",
+      "acceleration",
+      "time to descend"
+    ],
+    "visual_attributes": [
+      "background",
+      "block identity",
+      "track contact",
+      "fixed camera"
+    ]
+  }
+}

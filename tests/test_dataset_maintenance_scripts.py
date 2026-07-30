@@ -3,12 +3,14 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
 from physbench.io import (
     canonical_sha256,
     load_json,
+    sha256_file,
     write_json,
     write_jsonl,
 )
@@ -118,7 +120,10 @@ class AssetLockBuilderSafetyTests(unittest.TestCase):
             "schema_version": "3.0",
             "case_id": "pendulum_case_1",
             "scene_id": "pendulum",
-            "assets": {"first_frame": "frame.bin"},
+            "assets": {
+                "first_frame": "frame.bin",
+                "reference_video": "frame.bin",
+            },
             "text": {
                 "schema_version": "1.0",
                 "prompt": "A pendulum swings.",
@@ -230,6 +235,23 @@ class AssetLockBuilderSafetyTests(unittest.TestCase):
             self.assertEqual(
                 snapshot.digest,
                 release_manifest["dataset_digest"],
+            )
+
+    def test_hash_validation_checks_each_unique_asset_path_once(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "9.9.9"
+            root.mkdir()
+            descriptor = self._write_dataset(root, valid_case=True)
+            build_dataset_asset_lock.rebuild_asset_lock(descriptor)
+
+            with mock.patch(
+                "physbench.datasets.loader.sha256_file",
+                wraps=sha256_file,
+            ) as hash_file:
+                load_dataset(descriptor, check_asset_hashes=True)
+
+            hash_file.assert_called_once_with(
+                (root / "assets" / "frame.bin").resolve()
             )
 
 

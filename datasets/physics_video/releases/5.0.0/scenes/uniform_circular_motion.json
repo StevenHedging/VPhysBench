@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "scene_id": "uniform_circular_motion",
+  "display_name": "匀速圆周运动",
+  "id_parameters": ["angular_velocity", "object_1_orbit_radius"],
+  "unannotated_parameters": ["initial_position"],
+  "ood1_factors": [
+    "background",
+    "disk_color",
+    "moving_object",
+    "moving_object_composition",
+    "viewpoint"
+  ],
+  "constraints": [
+    "Initial angular position is intentionally not annotated",
+    "ID evaluation holds out a numerical orbit radius while preserving moving-object environments seen in training",
+    "OOD1 evaluation uses an unseen two-object composition with radii already observed in training"
+  ],
+  "metric_spec": {
+    "common_sense_checks": ["closed circular path", "stable rotation direction", "approximately uniform angular speed"],
+    "prediction_subjects": ["moving_object", "rotation_center"],
+    "prediction_quantities": [
+      "angular trajectory",
+      "angular velocity",
+      "orbit radius stability"
+    ],
+    "visual_attributes": [
+      "disk color",
+      "object identity and composition",
+      "center stability",
+      "fixed overhead camera"
+    ]
+  }
+}

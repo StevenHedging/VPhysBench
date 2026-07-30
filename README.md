@@ -1,8 +1,8 @@
 # Physics Video Benchmark
 
-Physics Video Benchmark 是一个面向物理视频生成模型的五场景、训推一体评测框架。当前
+Physics Video Benchmark 是一个面向物理视频生成模型的六场景、训推一体评测框架。当前
 Dataset release 是
-`datasets/physics_video/releases/4.0.0/dataset.json`，包含 214 个 case 和 468 个
+`datasets/physics_video/releases/5.0.0/dataset.json`，包含 609 个 case 和 1,655 个
 锁定资产：
 
 - 单摆 `pendulum`
@@ -10,6 +10,10 @@ Dataset release 是
 - 一维对心碰撞 `collision_1d`
 - 斜面下滑 `inclined_plane_slide`
 - 匀速圆周运动 `uniform_circular_motion`
+- 平抛运动 `parabolic_motion`
+
+现有 `five_scene_*` 官方 Task 与既有结果仍冻结在 `4.0.0`；在六场景 Task 正式发布前，
+相关运行示例继续显式使用 `4.0.0`，避免把历史协议误标为已覆盖平抛。
 
 ## 设计原则
 
@@ -83,7 +87,7 @@ PYTHONPATH=src:tests /root/miniconda3/envs/phybench/bin/python \
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --dataset datasets/physics_video/releases/5.0.0/dataset.json \
   --check-asset-hashes
 ```
 
@@ -163,7 +167,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 ```text
 physics_video_benchmark/
-├── datasets/                 # 唯一权威数据根；4.0.0 是当前 release
+├── datasets/                 # 唯一权威数据根；5.0.0 是当前 release
 ├── tasks/official/           # direct_eval 与 finetune_eval 两份模型无关 Task
 ├── baselines/                # schema v5 Bundle、adapter/driver 与本机配置模板
 ├── configs/evaluation/       # scene evaluator 协议

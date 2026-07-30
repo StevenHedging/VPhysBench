@@ -905,19 +905,30 @@ def _collision_entities(
             source_parameter="striker_initial_velocity",
             label="case.physics.striker_initial_velocity",
         )
-        ball_one_velocity = next(
+        striker_index = appearance.get("striker_ball_index", 1)
+        if (
+            not isinstance(striker_index, int)
+            or isinstance(striker_index, bool)
+            or striker_index < 1
+            or striker_index > len(entities)
+        ):
+            raise ValueError(
+                "case.appearance.striker_ball_index must identify one "
+                "ball_sequence entry"
+            )
+        striker_velocity = next(
             attribute
-            for attribute in entities[0].physical_attributes
+            for attribute in entities[striker_index - 1].physical_attributes
             if attribute.name == "initial_velocity"
         )
         if (
-            alias.value != ball_one_velocity.value
-            or alias.unit != ball_one_velocity.unit
-            or alias.annotated != ball_one_velocity.annotated
+            alias.value != striker_velocity.value
+            or alias.unit != striker_velocity.unit
+            or alias.annotated != striker_velocity.annotated
         ):
             raise ValueError(
                 "case.physics.striker_initial_velocity disagrees with "
-                "case.physics.ball_1_initial_velocity"
+                f"case.physics.ball_{striker_index}_initial_velocity"
             )
     return tuple(entities)
 
@@ -934,6 +945,29 @@ def _default_apparatus(
                 condition_anchor={
                     "source": "condition_frame",
                     "selector": "longitudinal_track_axis",
+                },
+            ),
+        )
+    if scene_id == "parabolic_motion":
+        return (
+            ApparatusDeclaration(
+                apparatus_id="launch_frame",
+                apparatus_class="horizontal_projectile_launch_frame",
+                physical_attributes=_attributes_from_case(
+                    physics,
+                    (
+                        ("launch_height", "launch_height"),
+                        (
+                            "photogate_distance_before_launch",
+                            "photogate_distance_before_launch",
+                        ),
+                    ),
+                    label="parabolic launch apparatus",
+                    required=False,
+                ),
+                condition_anchor={
+                    "source": "condition_or_reference",
+                    "selector": "horizontal_launch_axis_and_gravity_frame",
                 },
             ),
         )
@@ -1198,6 +1232,27 @@ def _legacy_scene_entities(
         )
     if scene_id == "uniform_circular_motion":
         return _circular_entities(case)
+    if scene_id == "parabolic_motion":
+        return _single_entity_defaults(
+            case,
+            entity_id="projectile_ball",
+            role_id="projectile_ball",
+            entity_class="ball",
+            bindings=(
+                ("mass", "ball_mass"),
+                ("radius", "ball_radius"),
+                ("initial_height", "launch_height"),
+                (
+                    "initial_horizontal_velocity",
+                    "initial_horizontal_velocity",
+                ),
+            ),
+            lifecycle=LifecyclePolicy.MAY_EXIT,
+            appearance_bindings=(
+                ("material", "ball_material"),
+                ("size_class", "ball_size_class"),
+            ),
+        )
     if scene_id == "decelerated_slide":
         physics = _case_physics(case)
         bindings = tuple(

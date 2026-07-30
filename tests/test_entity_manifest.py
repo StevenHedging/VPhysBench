@@ -165,6 +165,43 @@ class EntityManifestTests(unittest.TestCase):
         ):
             materialize_entity_manifest(inconsistent_alias)
 
+    def test_collision_striker_alias_can_identify_right_hand_ball(
+        self,
+    ) -> None:
+        case = _collision_case(2)
+        case["appearance"]["striker_ball_index"] = 2  # type: ignore[index]
+        case["physics"]["striker_initial_velocity"] = copy.deepcopy(  # type: ignore[index]
+            case["physics"]["ball_2_initial_velocity"]  # type: ignore[index]
+        )
+        manifest = materialize_entity_manifest(case)
+        self.assertEqual(2, len(manifest.entities))
+
+        case["appearance"]["striker_ball_index"] = 3  # type: ignore[index]
+        with self.assertRaisesRegex(ValueError, "striker_ball_index"):
+            materialize_entity_manifest(case)
+
+    def test_parabolic_motion_has_projectile_and_launch_frame(self) -> None:
+        case = {
+            "case_id": "parabolic_case",
+            "scene_id": "parabolic_motion",
+            "appearance": {
+                "ball_material": "steel",
+                "ball_size_class": "medium",
+            },
+            "physics": {
+                "ball_mass": _quantity(0.014, "kg"),
+                "ball_radius": _quantity(0.00685, "m"),
+                "launch_height": _quantity(0.77, "m"),
+                "initial_horizontal_velocity": _quantity(0.82, "m/s"),
+                "photogate_distance_before_launch": _quantity(0.012, "m"),
+            },
+            "has_real_reference_video": True,
+            "provenance": {"parent_case_id": None},
+        }
+        manifest = materialize_entity_manifest(case)
+        self.assertEqual("projectile_ball", manifest.entities[0].entity_id)
+        self.assertEqual("launch_frame", manifest.apparatus[0].apparatus_id)
+
     def test_explicit_entities_resolve_physics_references_and_apparatus(
         self,
     ) -> None:

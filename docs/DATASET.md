@@ -5,12 +5,12 @@
 当前 DatasetSnapshot：
 
 ```text
-dataset_id:     physics_video_five_scene_v4
-release:        4.0.0
-descriptor:     datasets/physics_video/releases/4.0.0/dataset.json
-cases:          214
-locked assets:  468
-dataset digest: be5ea8880be3cf8e0d0d316ee025cf02905ef5aeb544f3df5f4b966e5e14782d
+dataset_id:     physics_video_six_scene_v5
+release:        5.0.0
+descriptor:     datasets/physics_video/releases/5.0.0/dataset.json
+cases:          609
+locked assets:  1655
+dataset digest: 8a34015ef6ee6949b91d048c9f327f4553e5fe86b5ed8d7883539e5c5377d863
 ```
 
 `datasets/` 是唯一权威数据根。Baseline、cache 和 run 不能回写或覆盖这里的资产。
@@ -26,18 +26,20 @@ datasets/
     │   ├── collision_1d/
     │   ├── inclined_plane_slide/
     │   ├── uniform_circular_motion/
+    │   ├── parabolic_motion/
     │   └── source_archives/
     ├── provenance/
     │   ├── imports/
     │   └── source_docs/
     └── releases/
         ├── 3.0.0/                    # 冻结旧 release
-        └── 4.0.0/
+        ├── 4.0.0/                    # 冻结五场景 release
+        └── 5.0.0/
             ├── dataset.json          # 唯一加载入口
             ├── release.json          # Dataset 与资产集合 digest
             ├── cases.jsonl           # Case schema 3.0
             ├── assets.lock.json      # 引用资产的大小和 SHA-256
-            ├── migration_audit.json
+            ├── expansion_audit.json
             ├── scenes/
             └── views/
 ```
@@ -53,7 +55,7 @@ datasets/
 | 字段 | 语义 |
 | --- | --- |
 | `case_id` | 全 Dataset 唯一稳定 ID |
-| `scene_id` | 五个正式 scene 之一 |
+| `scene_id` | 六个正式 scene 之一 |
 | `text` | 原始 prompt、语言与标注来源 |
 | `assets` | 首帧、reference、source archive、可选 mask 等 |
 | `physics` | 结构化物理量及其可信状态 |
@@ -118,7 +120,8 @@ conditionable Case 中。数据导入时无法建立可靠标注对应关系的�
 - 自由落体：初始高度、球半径、质量、初速度；
 - 一维碰撞：球质量、半径、初速度；
 - 斜面下滑：斜面角度、质量、摩擦系数、理论加速度；
-- 匀速圆周运动：角速度、一个或两个物体的轨道半径。
+- 匀速圆周运动：角速度、一个或两个物体的轨道半径；
+- 平抛运动：出门初速度、竖直落差、球质量与半径。
 
 ## 6. 资产角色
 
@@ -140,13 +143,15 @@ assets/<scene_id>/<case_id>/
 - reference/source/provenance 属于 evaluator 或数据审计，不交给生成 driver；
 - 尺寸、FPS、帧数、抽帧和特征派生物只能进入 immutable cache 或 run。
 
-斜面下滑的 canonical 视频已经过启动时刻清洗：首帧位于物体“几乎开始下滑”的时刻，
-对应审核信息随 Dataset provenance 冻结。生成阶段不再重复裁剪。
+斜面下滑的 canonical 视频已经过启动时刻清洗。新增平抛和碰撞视频均从球刚穿过
+光电门且所有球完整可见的首帧开始，画面已经裁去光电门与线缆；平抛另裁为合适的竖屏
+画幅。首尾帧视觉复核结论、裁剪框和源帧范围均随 Dataset provenance 冻结。生成阶段
+不再重复裁剪。
 
 V2V 必须另外登记独立输入视频资产，例如 `assets.input_video`。其中
 `conditioning_video` 只是 adapter 对该输入媒体 channel 的角色名，不表示 Task
 层的物理信息分组；reference、physics reference 和 source video 均禁止充当 V2V 输入。
-当前 4.0.0 release 没有正式 `assets.input_video`，因此 V2V Bundle 只是接口能力，
+当前 5.0.0 release 没有正式 `assets.input_video`，因此 V2V Bundle 只是接口能力，
 不能直接运行官方数据。
 
 ## 7. View A：finetune_eval
@@ -164,39 +169,50 @@ View A 把物理数值与环境变化分开：
 | --- | ---: | ---: | ---: | ---: | ---: |
 | pendulum | 40 | 27 | 8 | 5 | 40 |
 | free_fall | 11 | 7 | 4 | 0 | 11 |
-| collision_1d | 32 | 11 | 3 | 18 | 32 |
+| collision_1d | 330 | 95 | 32 | 63 | 190 |
 | inclined_plane_slide | 95 | 58 | 6 | 16 | 80 |
 | uniform_circular_motion | 36 | 18 | 2 | 4 | 24 |
+| parabolic_motion | 97 | 70 | 27 | 0 | 97 |
 
 View A 是有约束的 subset；未进入 View A 的有效 case 仍属于 Dataset，并由 View B 覆盖。
+碰撞补充数据中，同质球且来源 curation 为 train/test 的样本分别进入 train/test_id；
+异质球的来源 test 样本进入 test_ood1。异质球来源 train 与 9 个来源侧 near-replicate
+样本不进入 View A，以保持 collision-pair OOD 纯度，但仍保留在 Dataset 和 View B。
 
 ## 8. View B：direct_eval
 
 View B：
 
-- 完整覆盖 214 个 case；
+- 完整覆盖 609 个 case；
 - scene 内按冻结 seed 确定性分组；
 - group 尽量均衡；
 - group 是报告/抽样维度，不表达模型的物理使用方式，也不等同于 ID/OOD 层级。
 
-## 9. Release 4.0.0 的迁移语义
+## 9. Release 5.0.0 的扩展语义
 
-4.0.0 相对 3.0.0：
+5.0.0 从不可变的 4.0.0 派生：
 
-- Case 从 schema 2.0 升级到 3.0；
-- 将 canonical base prompt 固化为 `case.text.prompt`；
-- 保留原结构化 physics、appearance、assets、provenance 与 OOD；
-- 不改变 case 集合、View、scene catalog 或资产字节；
-- 创建独立 release，未修改 3.0.0。
+- 保留 4.0.0 的 214 个 case，不修改其媒体字节；
+- 新增 97 个有独立物理标注的平抛 case；
+- 新增 298 个有唯一标注、且与旧 32 个碰撞源视频不重复的碰撞 case；
+- 平抛 ZIP 中 31 个无独立标注的视频未导入；
+- 碰撞工作簿中 107 行无对应视频的标注未导入；
+- 新增来源 ZIP、逐 case 原始 MOV、canonical MP4、首帧和完整 provenance；
+- 以独立 release 发布，4.0.0 继续冻结。
 
 可复现脚本：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
-  scripts/migrate_dataset_v4.py --force
+  scripts/prepare_20260730_parabolic_collision.py
+
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
+  scripts/import_20260730_parabolic_collision.py
 ```
 
-执行前应确认目标确实是重建 4.0.0；正式 release 一旦发布应视为不可变。
+准备脚本生成的 staging 必须完成视觉复核并封存为 `visually_verified` 后，导入脚本才会
+接受。正式 release 一旦发布应视为不可变。4.0.0 从 3.0.0 固化 Case schema 3.0 与
+canonical prompt 的历史迁移语义保持不变。
 
 ## 10. 验收
 
@@ -205,7 +221,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --dataset datasets/physics_video/releases/5.0.0/dataset.json \
   --check-assets
 ```
 
@@ -214,7 +230,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --dataset datasets/physics_video/releases/5.0.0/dataset.json \
   --check-asset-hashes
 ```
 

@@ -1,0 +1,14 @@
+{
+  "asset_lock": "assets.lock.json",
+  "asset_root": "../..",
+  "cases": "cases.jsonl",
+  "dataset_id": "physics_video_six_scene_v5",
+  "release": "5.0.0",
+  "release_manifest": "release.json",
+  "scene_catalog": "scenes",
+  "schema_version": "3.0",
+  "views": {
+    "view_a": "views/view_a.json",
+    "view_b": "views/view_b.json"
+  }
+}
