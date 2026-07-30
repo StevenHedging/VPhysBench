@@ -202,6 +202,9 @@
         }
       },
       "object_centric_scoring": {
+        "assignment": {
+          "minimum_match_position_similarity": 0.1
+        },
         "content_weights": {
           "nbody_physics": 0.6,
           "shape": 0.2,

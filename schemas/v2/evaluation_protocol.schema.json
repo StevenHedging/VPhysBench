@@ -111,8 +111,20 @@
     },
     "objectCentricScoring": {
       "type": "object",
-      "required": ["content_weights"],
+      "required": ["assignment", "content_weights"],
       "properties": {
+        "assignment": {
+          "type": "object",
+          "required": ["minimum_match_position_similarity"],
+          "properties": {
+            "minimum_match_position_similarity": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 1
+            }
+          },
+          "additionalProperties": false
+        },
         "content_weights": {
           "type": "object",
           "required": ["nbody_physics", "shape", "appearance"],

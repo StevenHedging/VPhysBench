@@ -37,6 +37,12 @@ V4_PROTOCOL_FINGERPRINT = (
 V4_COLLISION_FINGERPRINT = (
     "34032a1b50b10a4ca8948ef43f8bb6900122b4863d15ec2adc4bf4187e96fc4d"
 )
+V5_PROTOCOL_FINGERPRINT = (
+    "93703d6afdf8bbdea86b69d8d8a427653c68030bd7660f3801341e3b2b6209f6"
+)
+V5_COLLISION_FINGERPRINT = (
+    "686b705e426f43d29acdc745a95b765fe249bd48628c86f5167f40f851caa156"
+)
 
 
 class EvaluationProtocolV5Tests(unittest.TestCase):
@@ -79,13 +85,24 @@ class EvaluationProtocolV5Tests(unittest.TestCase):
         )
         self.assertEqual("1.4", v4_collision.describe()["version"])
 
+    def test_v5_protocol_and_collision_identity_are_frozen(self) -> None:
+        self.assertEqual(V5_PROTOCOL_FINGERPRINT, self.v5["fingerprint"])
+        collision = SceneEvaluatorRegistry(self.v5).resolve(
+            "collision_1d"
+        )
+        self.assertEqual(
+            V5_COLLISION_FINGERPRINT,
+            collision.describe()["fingerprint"],
+        )
+        self.assertEqual("2.2", collision.describe()["version"])
+
     def test_registry_routes_v5_to_the_open_world_evaluator(self) -> None:
         registry = SceneEvaluatorRegistry(self.v5)
         evaluator = registry.resolve("collision_1d")
         self.assertIsInstance(evaluator, CollisionOpenWorldCaseEvaluator)
         self.assertIs(evaluator, registry.resolve("collision_1d"))
         description = evaluator.describe()
-        self.assertEqual("2.1", description["version"])
+        self.assertEqual("2.2", description["version"])
         self.assertEqual(
             "collision_1d_open_world_nbody",
             description["id"],
@@ -93,6 +110,18 @@ class EvaluationProtocolV5Tests(unittest.TestCase):
         self.assertEqual(
             "case_entity_manifest_not_scene_constant",
             description["observation"]["cardinality"],
+        )
+        self.assertEqual(
+            0.1,
+            description["observation"]["assignment"][
+                "minimum_match_position_similarity"
+            ],
+        )
+        self.assertEqual(
+            "missing_reference_plus_extra_prediction",
+            description["observation"]["assignment"][
+                "rejected_edge_policy"
+            ],
         )
         self.assertNotEqual(
             V4_COLLISION_FINGERPRINT,
@@ -118,6 +147,11 @@ class EvaluationProtocolV5Tests(unittest.TestCase):
             set(content_weights),
         )
         self.assertAlmostEqual(1.0, sum(content_weights.values()))
+        assignment = collision["object_centric_scoring"]["assignment"]
+        self.assertEqual(
+            0.1,
+            assignment["minimum_match_position_similarity"],
+        )
         observation = collision["multi_frame_observation"]
         self.assertEqual(32, observation["maximum_residual_tracks"])
         self.assertEqual(32.0, observation["maximum_entity_y_spread_px"])
@@ -202,6 +236,17 @@ class EvaluationProtocolV5Tests(unittest.TestCase):
                 schema["$defs"]["objectCentricScoring"]["properties"][
                     "content_weights"
                 ]["required"]
+            ),
+        )
+        object_centric = schema["$defs"]["objectCentricScoring"]
+        self.assertEqual(
+            {"assignment", "content_weights"},
+            set(object_centric["required"]),
+        )
+        self.assertEqual(
+            {"minimum_match_position_similarity"},
+            set(
+                object_centric["properties"]["assignment"]["required"]
             ),
         )
 

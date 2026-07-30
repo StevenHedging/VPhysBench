@@ -528,11 +528,17 @@ def _frame_assignment(
     *,
     frame_index: int,
     frame_diagonal_px: float,
-) -> tuple[list[EntityMatch], list[dict[str, object]]]:
+    minimum_match_position_similarity: float,
+) -> tuple[
+    list[EntityMatch],
+    list[dict[str, object]],
+    list[dict[str, object]],
+]:
     if not reference or not prediction:
-        return [], []
+        return [], [], []
     matches: list[EntityMatch] = []
     rows_out: list[dict[str, object]] = []
+    rejected_rows: list[dict[str, object]] = []
     weighted_prediction = [
         (
             track,
@@ -594,6 +600,31 @@ def _frame_assignment(
                     reference_area_px2=reference_area,
                     frame_diagonal_px=frame_diagonal_px,
                 )
+                if (
+                    comparison.score
+                    < minimum_match_position_similarity
+                ):
+                    rejected_rows.append(
+                        {
+                            "entity_id": remaining_reference[ref_index][0],
+                            "prediction_track_id": pred_track.track_id,
+                            "normalized_distance": (
+                                comparison.normalized_distance
+                            ),
+                            "position_score": comparison.score,
+                            "formal_exposure_weight": tier_weight,
+                            "evidence_tier": pred_track.metadata.get(
+                                "evidence_tier"
+                            ),
+                            "rejection_reason": (
+                                "position_similarity_below_minimum"
+                            ),
+                            "minimum_match_position_similarity": (
+                                minimum_match_position_similarity
+                            ),
+                        }
+                    )
+                    continue
                 comparisons[ref_index, pred_index] = comparison
                 costs[ref_index, pred_index] = (
                     comparison.normalized_distance
@@ -651,7 +682,26 @@ def _frame_assignment(
             for index, value in enumerate(remaining_reference)
             if index not in matched_reference_indices
         ]
-    return matches, rows_out
+    matched_entity_ids = {match.entity_id for match in matches}
+    matched_track_ids = {match.track_id for match in matches}
+    # A rejected edge is a formal null-assignment diagnostic only when both
+    # endpoints remain unmatched after all evidence tiers. Edges rejected
+    # from a high tier must not hide a valid lower-tier correspondence.
+    rejected_rows = [
+        row
+        for row in rejected_rows
+        if row["entity_id"] not in matched_entity_ids
+        and row["prediction_track_id"] not in matched_track_ids
+    ]
+    rejected_rows.sort(
+        key=lambda row: (
+            str(row["entity_id"]),
+            -float(row["formal_exposure_weight"]),
+            float(row["normalized_distance"]),
+            str(row["prediction_track_id"]),
+        )
+    )
+    return matches, rows_out, rejected_rows
 
 
 def compare_open_world_tracks(
@@ -660,8 +710,15 @@ def compare_open_world_tracks(
     prediction_observation: OpenWorldObservation,
     time_grid: CommonTimeGrid,
     frame_diagonal_px: float,
+    minimum_match_position_similarity: float = 0.0,
 ) -> OpenWorldComparison:
-    """Compare fixed GT identities with every prediction track and residual."""
+    """Compare fixed GT identities with every prediction track and residual.
+
+    A positive ``minimum_match_position_similarity`` adds a null hypothesis
+    to each evidence-tiered Hungarian assignment. A candidate below the
+    reference-scaled continuous position threshold is reported as a rejected
+    edge, leaving the reference entity missing and the prediction track extra.
+    """
 
     frame_count = len(time_grid.times_s)
     if frame_count < 1:
@@ -669,6 +726,14 @@ def compare_open_world_tracks(
     diagonal = float(frame_diagonal_px)
     if not math.isfinite(diagonal) or diagonal <= 0.0:
         raise ValueError("frame_diagonal_px must be finite and positive")
+    minimum_similarity = float(minimum_match_position_similarity)
+    if (
+        not math.isfinite(minimum_similarity)
+        or not 0.0 <= minimum_similarity <= 1.0
+    ):
+        raise ValueError(
+            "minimum_match_position_similarity must be finite and in [0, 1]"
+        )
     if prediction_observation.overflow_counts.shape != (frame_count,):
         raise ValueError(
             "overflow_counts must have one value per common time sample"
@@ -721,15 +786,21 @@ def compare_open_world_tracks(
             for track in prediction_tracks
             if track.localization_eligible[frame_index]
         ]
-        current, match_rows = _frame_assignment(
+        current, match_rows, rejected_rows = _frame_assignment(
             visible_reference,
             visible_prediction,
             frame_index=frame_index,
             frame_diagonal_px=diagonal,
+            minimum_match_position_similarity=minimum_similarity,
         )
         matches.extend(current)
         matched_entities = {item.entity_id for item in current}
         matched_tracks = {item.track_id for item in current}
+        missing_entity_ids = sorted(
+            entity_id
+            for entity_id, _ in visible_reference
+            if entity_id not in matched_entities
+        )
         unmatched_prediction = [
             track
             for track in visible_prediction
@@ -769,16 +840,40 @@ def compare_open_world_tracks(
             )
             + prediction_observation.overflow_counts[frame_index]
         )
+        nearest_rejected_score: dict[str, float] = {}
+        for row in rejected_rows:
+            entity_id = str(row["entity_id"])
+            nearest_rejected_score[entity_id] = max(
+                nearest_rejected_score.get(entity_id, 0.0),
+                float(row["position_score"]),
+            )
+        matched_position_score = (
+            float(
+                np.mean(
+                    [
+                        float(row["position_score"])
+                        for row in match_rows
+                    ]
+                )
+            )
+            if match_rows
+            else 0.0
+        )
+        position_terms = [
+            float(row["position_score"]) for row in match_rows
+        ] + [
+            nearest_rejected_score.get(entity_id, 0.0)
+            for entity_id in missing_entity_ids
+        ]
+        position_diagnostic_score = (
+            float(np.mean(position_terms)) if position_terms else 0.0
+        )
         per_frame.append(
             {
                 "frame": frame_index,
                 "time_s": time_s,
                 "matches": match_rows,
-                "missing_entity_ids": sorted(
-                    entity_id
-                    for entity_id, _ in visible_reference
-                    if entity_id not in matched_entities
-                ),
+                "missing_entity_ids": missing_entity_ids,
                 "residual_track_ids": sorted(
                     track.track_id
                     for track in formal_residual
@@ -787,6 +882,9 @@ def compare_open_world_tracks(
                     track.track_id
                     for track in ambiguous_candidates
                 ),
+                "rejected_candidate_matches": rejected_rows,
+                "matched_position_score": matched_position_score,
+                "position_diagnostic_score": position_diagnostic_score,
                 "formal_prediction_cardinality": formal_cardinality,
                 "participant_prediction_count": sum(
                     float(

@@ -306,15 +306,19 @@ def _dashboard(
 ) -> np.ndarray:
     output = np.full((height, width, 3), 22, dtype=np.uint8)
     matches = list(audit["matches"])
-    position = (
-        float(
-            np.mean(
-                [float(value["position_score"]) for value in matches]
-            )
+    position = float(
+        audit.get(
+            "position_diagnostic_score",
+            (
+                np.mean(
+                    [float(value["position_score"]) for value in matches]
+                )
+                if matches
+                else 0.0
+            ),
         )
-        if matches
-        else 0.0
     )
+    rejected = list(audit.get("rejected_candidate_matches", ()))
     reference_contacts = _active_contact_pairs(
         reference_state,
         frame_index,
@@ -329,7 +333,8 @@ def _dashboard(
         (
             f"matched={len(matches)}  "
             f"missing={len(audit['missing_entity_ids'])}  "
-            f"extra={len(audit['residual_track_ids'])}"
+            f"extra={len(audit['residual_track_ids'])}  "
+            f"null-rejected={len(rejected)}"
         ),
         f"continuous position similarity={position:.3f}",
         (

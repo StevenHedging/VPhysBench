@@ -15,6 +15,8 @@ from typing import Any, Sequence
 
 import numpy as np
 
+from ...common.entities.timeline import build_common_time_grid
+
 
 _EPSILON = 1e-12
 
@@ -359,8 +361,13 @@ def _local_slopes(
                 continue
             start = max(0, frame_index - window_frames)
             end = min(len(times_s), frame_index + window_frames + 1)
-            indices = np.flatnonzero(valid[start:end, body_index]) + start
+            indices = np.arange(start, end)
             if len(indices) < 2:
+                continue
+            # Use a fixed local stencil. Selecting only the available samples
+            # would let a prediction delete one bad observation and silently
+            # improve velocity estimates at neighbouring frames.
+            if not np.all(valid[indices, body_index]):
                 continue
             centered_time = times_s[indices] - np.mean(times_s[indices])
             denominator = float(np.dot(centered_time, centered_time))
@@ -702,7 +709,12 @@ def score_track_coordinates(
     diagonal = _positive_finite(frame_diagonal_px, "frame_diagonal_px")
     _validate_comparison(reference, prediction)
     prediction_indices = _prediction_indices(reference, prediction)
-    all_qualities: list[float] = []
+    time_weights = build_common_time_grid(
+        reference.times_s
+    ).cell_weights_s
+    weighted_quality_total = 0.0
+    reference_exposure_s = 0.0
+    matched_exposure_s = 0.0
     reference_exposure = 0
     matched_exposure = 0
     per_entity: dict[str, dict[str, Any]] = {}
@@ -711,7 +723,9 @@ def score_track_coordinates(
         prediction_index = prediction_indices[reference_index]
         expected = reference.valid[:, reference_index]
         reference_count = int(np.count_nonzero(expected))
+        entity_reference_s = float(np.sum(time_weights[expected]))
         reference_exposure += reference_count
+        reference_exposure_s += entity_reference_s
         frame_quality: list[float | None] = [None] * len(reference.times_s)
         frame_distance: list[float | None] = [None] * len(reference.times_s)
         frame_along_delta: list[float | None] = [None] * len(
@@ -721,6 +735,7 @@ def score_track_coordinates(
             reference.times_s
         )
         entity_qualities: list[float] = []
+        entity_quality_weights: list[float] = []
         if prediction_index is not None:
             common = expected & prediction.valid[:, prediction_index]
             for frame_index in np.flatnonzero(common):
@@ -764,20 +779,40 @@ def score_track_coordinates(
                 frame_along_delta[int(frame_index)] = along_delta
                 frame_normal_delta[int(frame_index)] = normal_delta
                 entity_qualities.append(quality)
-                all_qualities.append(quality)
+                entity_quality_weights.append(
+                    float(time_weights[frame_index])
+                )
             common_count = int(np.count_nonzero(common))
         else:
+            common = np.zeros_like(expected)
             common_count = 0
+        entity_matched_s = float(np.sum(time_weights[common]))
+        entity_quality_total = float(
+            np.dot(entity_qualities, entity_quality_weights)
+        )
+        weighted_quality_total += entity_quality_total
+        matched_exposure_s += entity_matched_s
         matched_exposure += common_count
         per_entity[entity_id] = {
             "score": (
-                float(np.mean(entity_qualities))
-                if entity_qualities
+                entity_quality_total / entity_reference_s
+                if entity_reference_s > _EPSILON
                 else 0.0
+            ),
+            "conditional_score": (
+                entity_quality_total / entity_matched_s
+                if entity_matched_s > _EPSILON
+                else None
             ),
             "reference_exposure_frames": reference_count,
             "matched_exposure_frames": common_count,
-            "coverage": common_count / max(reference_count, 1),
+            "reference_exposure_s": entity_reference_s,
+            "matched_exposure_s": entity_matched_s,
+            "coverage": (
+                entity_matched_s / entity_reference_s
+                if entity_reference_s > _EPSILON
+                else 0.0
+            ),
             "frame_quality": frame_quality,
             "frame_normalized_distance": frame_distance,
             "frame_along_delta_px": frame_along_delta,
@@ -785,11 +820,19 @@ def score_track_coordinates(
         }
     return {
         "score": (
-            float(np.mean(all_qualities)) if all_qualities else None
+            weighted_quality_total / reference_exposure_s
+            if reference_exposure_s > _EPSILON
+            else None
         ),
         "reference_exposure_frames": reference_exposure,
         "matched_exposure_frames": matched_exposure,
-        "coverage": matched_exposure / max(reference_exposure, 1),
+        "reference_exposure_s": reference_exposure_s,
+        "matched_exposure_s": matched_exposure_s,
+        "coverage": (
+            matched_exposure_s / reference_exposure_s
+            if reference_exposure_s > _EPSILON
+            else 0.0
+        ),
         "per_entity": per_entity,
     }
 
@@ -944,16 +987,24 @@ def score_velocity(
     scoring = config or NBodyScoringConfig()
     _validate_comparison(reference, prediction)
     prediction_indices = _prediction_indices(reference, prediction)
-    qualities: list[float] = []
+    time_weights = build_common_time_grid(
+        reference.times_s
+    ).cell_weights_s
+    weighted_quality_total = 0.0
+    reference_exposure_s = 0.0
+    matched_exposure_s = 0.0
     reference_exposure = 0
     matched_exposure = 0
-    per_entity: dict[str, dict[str, float | int]] = {}
+    per_entity: dict[str, dict[str, Any]] = {}
     for reference_index, entity_id in enumerate(reference.entity_ids):
         expected = reference.velocity_valid[:, reference_index]
         expected_count = int(np.count_nonzero(expected))
+        entity_reference_s = float(np.sum(time_weights[expected]))
         reference_exposure += expected_count
+        reference_exposure_s += entity_reference_s
         prediction_index = prediction_indices[reference_index]
         entity_qualities: list[float] = []
+        entity_quality_weights: list[float] = []
         common_count = 0
         if prediction_index is not None:
             common = expected & prediction.velocity_valid[:, prediction_index]
@@ -982,23 +1033,52 @@ def score_velocity(
             entity_qualities = (
                 1.0 / (1.0 + np.square(normalized_error))
             ).tolist()
-            qualities.extend(entity_qualities)
+            entity_quality_weights = time_weights[common].tolist()
+        else:
+            common = np.zeros_like(expected)
+        entity_matched_s = float(np.sum(time_weights[common]))
+        entity_quality_total = float(
+            np.dot(entity_qualities, entity_quality_weights)
+        )
+        weighted_quality_total += entity_quality_total
+        matched_exposure_s += entity_matched_s
         matched_exposure += common_count
         per_entity[entity_id] = {
             "score": (
-                float(np.mean(entity_qualities))
-                if entity_qualities
+                entity_quality_total / entity_reference_s
+                if entity_reference_s > _EPSILON
                 else 0.0
+            ),
+            "conditional_score": (
+                entity_quality_total / entity_matched_s
+                if entity_matched_s > _EPSILON
+                else None
             ),
             "reference_exposure_frames": expected_count,
             "matched_exposure_frames": common_count,
-            "coverage": common_count / max(expected_count, 1),
+            "reference_exposure_s": entity_reference_s,
+            "matched_exposure_s": entity_matched_s,
+            "coverage": (
+                entity_matched_s / entity_reference_s
+                if entity_reference_s > _EPSILON
+                else 0.0
+            ),
         }
     return {
-        "score": float(np.mean(qualities)) if qualities else None,
+        "score": (
+            weighted_quality_total / reference_exposure_s
+            if reference_exposure_s > _EPSILON
+            else None
+        ),
         "reference_exposure_frames": reference_exposure,
         "matched_exposure_frames": matched_exposure,
-        "coverage": matched_exposure / max(reference_exposure, 1),
+        "reference_exposure_s": reference_exposure_s,
+        "matched_exposure_s": matched_exposure_s,
+        "coverage": (
+            matched_exposure_s / reference_exposure_s
+            if reference_exposure_s > _EPSILON
+            else 0.0
+        ),
         "per_entity": per_entity,
     }
 
@@ -1015,6 +1095,9 @@ def score_momentum(
     _validate_comparison(reference, prediction)
     prediction_indices = _prediction_indices(reference, prediction)
     frame_count = len(reference.times_s)
+    time_weights = build_common_time_grid(
+        reference.times_s
+    ).cell_weights_s
     reference_complete = np.all(reference.velocity_valid, axis=1)
     prediction_complete = np.ones(frame_count, dtype=bool)
     if any(index is None for index in prediction_indices):
@@ -1025,16 +1108,61 @@ def score_momentum(
             prediction_complete &= prediction.velocity_valid[
                 :, prediction_index
             ]
-    common = reference_complete & prediction_complete
+    reference_indices = np.flatnonzero(reference_complete)
+    baseline_frame = (
+        int(reference_indices[0]) if len(reference_indices) else None
+    )
+    evaluation_reference = reference_complete.copy()
+    if baseline_frame is not None:
+        evaluation_reference[baseline_frame] = False
+    common = evaluation_reference & prediction_complete
     common_indices = np.flatnonzero(common)
-    reference_count = int(np.count_nonzero(reference_complete))
-    if len(common_indices) < 2:
+    reference_count = int(np.count_nonzero(evaluation_reference))
+    reference_exposure_s = float(
+        np.sum(time_weights[evaluation_reference])
+    )
+    matched_exposure_s = float(np.sum(time_weights[common]))
+    coverage = (
+        matched_exposure_s / reference_exposure_s
+        if reference_exposure_s > _EPSILON
+        else 0.0
+    )
+    if reference_count == 0:
         return {
             "score": None,
             "reference_exposure_frames": reference_count,
             "matched_exposure_frames": int(len(common_indices)),
-            "coverage": len(common_indices) / max(reference_count, 1),
+            "reference_exposure_s": reference_exposure_s,
+            "matched_exposure_s": matched_exposure_s,
+            "coverage": coverage,
             "normalized_change_rmse": None,
+            "baseline_frame": baseline_frame,
+        }
+    assert baseline_frame is not None
+    if not prediction_complete[baseline_frame]:
+        return {
+            "score": 0.0,
+            "reference_exposure_frames": reference_count,
+            "matched_exposure_frames": 0,
+            "reference_exposure_s": reference_exposure_s,
+            "matched_exposure_s": 0.0,
+            "coverage": 0.0,
+            "normalized_change_rmse": None,
+            "baseline_frame": baseline_frame,
+            "baseline_policy": "reference_first_complete_required",
+        }
+    if not len(common_indices):
+        return {
+            "score": 0.0,
+            "reference_exposure_frames": reference_count,
+            "matched_exposure_frames": int(len(common_indices)),
+            "reference_exposure_s": reference_exposure_s,
+            "matched_exposure_s": matched_exposure_s,
+            "coverage": coverage,
+            "normalized_change_rmse": None,
+            "baseline_frame": baseline_frame,
+            "baseline_policy": "reference_first_complete",
+            "insufficient_common_policy": "conservative_zero",
         }
 
     reference_velocity = reference.along_velocity_px_s[common]
@@ -1048,10 +1176,29 @@ def score_momentum(
     masses = reference.masses_kg
     reference_momentum = reference_velocity @ masses
     prediction_momentum = prediction_velocity @ masses
-    reference_change = reference_momentum - reference_momentum[0]
-    prediction_change = prediction_momentum - prediction_momentum[0]
+    reference_baseline = float(
+        reference.along_velocity_px_s[baseline_frame] @ masses
+    )
+    prediction_baseline = float(
+        np.asarray(
+            [
+                prediction.along_velocity_px_s[
+                    baseline_frame, prediction_index
+                ]
+                for prediction_index in prediction_indices
+                if prediction_index is not None
+            ]
+        )
+        @ masses
+    )
+    reference_change = reference_momentum - reference_baseline
+    prediction_change = prediction_momentum - prediction_baseline
     absolute_momentum = np.sum(
-        np.abs(reference_velocity * masses[np.newaxis, :]), axis=1
+        np.abs(
+            reference.along_velocity_px_s[reference_complete]
+            * masses[np.newaxis, :]
+        ),
+        axis=1,
     )
     scale = max(
         scoring.minimum_momentum_scale_kg_px_s,
@@ -1060,14 +1207,33 @@ def score_momentum(
     )
     normalized_error = (prediction_change - reference_change) / scale
     qualities = 1.0 / (1.0 + np.square(normalized_error))
+    matched_weights = time_weights[common]
+    weighted_quality = float(np.dot(qualities, matched_weights))
+    normalized_rmse = float(
+        np.sqrt(
+            np.dot(np.square(normalized_error), matched_weights)
+            / matched_exposure_s
+        )
+    )
     return {
-        "score": float(np.mean(qualities)),
+        "score": (
+            weighted_quality / reference_exposure_s
+            if reference_exposure_s > _EPSILON
+            else None
+        ),
+        "conditional_score": (
+            weighted_quality / matched_exposure_s
+            if matched_exposure_s > _EPSILON
+            else None
+        ),
         "reference_exposure_frames": reference_count,
         "matched_exposure_frames": int(len(common_indices)),
-        "coverage": len(common_indices) / max(reference_count, 1),
-        "normalized_change_rmse": float(
-            np.sqrt(np.mean(np.square(normalized_error)))
-        ),
+        "reference_exposure_s": reference_exposure_s,
+        "matched_exposure_s": matched_exposure_s,
+        "coverage": coverage,
+        "normalized_change_rmse": normalized_rmse,
+        "baseline_frame": baseline_frame,
+        "baseline_policy": "reference_first_complete",
         "reference_momentum_change_kg_px_s": reference_change.tolist(),
         "prediction_momentum_change_kg_px_s": prediction_change.tolist(),
     }
@@ -1087,7 +1253,12 @@ def score_nonpenetration(
         entity_id: index
         for index, entity_id in enumerate(prediction.entity_ids)
     }
-    qualities: list[float] = []
+    time_weights = build_common_time_grid(
+        reference.times_s
+    ).cell_weights_s
+    weighted_quality_total = 0.0
+    reference_exposure_s = 0.0
+    matched_exposure_s = 0.0
     excess_values: list[float] = []
     pair_exposure = 0
     matched_exposure = 0
@@ -1099,10 +1270,15 @@ def score_nonpenetration(
             pair_name = f"{first_id}|{second_id}"
             reference_valid = reference.valid[:, first] & reference.valid[:, second]
             reference_count = int(np.count_nonzero(reference_valid))
+            pair_reference_s = float(
+                np.sum(time_weights[reference_valid])
+            )
             pair_exposure += reference_count
+            reference_exposure_s += pair_reference_s
             prediction_first = prediction_lookup.get(first_id)
             prediction_second = prediction_lookup.get(second_id)
             pair_quality: list[float] = []
+            pair_quality_weights: list[float] = []
             pair_excess: list[float] = []
             if prediction_first is not None and prediction_second is not None:
                 common = (
@@ -1152,30 +1328,65 @@ def score_nonpenetration(
                     )
                     pair_excess.append(excess)
                     pair_quality.append(quality)
+                    pair_quality_weights.append(
+                        float(time_weights[frame_index])
+                    )
                     excess_values.append(excess)
-                    qualities.append(quality)
                 common_count = int(len(indices))
+                common = np.zeros(len(reference.times_s), dtype=bool)
+                common[indices] = True
             else:
+                common = np.zeros(len(reference.times_s), dtype=bool)
                 common_count = 0
+            pair_matched_s = float(np.sum(time_weights[common]))
+            pair_quality_total = float(
+                np.dot(pair_quality, pair_quality_weights)
+            )
+            weighted_quality_total += pair_quality_total
+            matched_exposure_s += pair_matched_s
             matched_exposure += common_count
             per_pair[pair_name] = {
                 "score": (
-                    float(np.mean(pair_quality)) if pair_quality else 0.0
+                    pair_quality_total / pair_reference_s
+                    if pair_reference_s > _EPSILON
+                    else 0.0
+                ),
+                "conditional_score": (
+                    pair_quality_total / pair_matched_s
+                    if pair_matched_s > _EPSILON
+                    else None
                 ),
                 "mean_excess_penetration": (
                     float(np.mean(pair_excess)) if pair_excess else 0.0
                 ),
                 "reference_exposure_frames": reference_count,
                 "matched_exposure_frames": common_count,
+                "reference_exposure_s": pair_reference_s,
+                "matched_exposure_s": pair_matched_s,
+                "coverage": (
+                    pair_matched_s / pair_reference_s
+                    if pair_reference_s > _EPSILON
+                    else 0.0
+                ),
             }
     return {
-        "score": float(np.mean(qualities)) if qualities else None,
+        "score": (
+            weighted_quality_total / reference_exposure_s
+            if reference_exposure_s > _EPSILON
+            else None
+        ),
         "mean_excess_penetration": (
             float(np.mean(excess_values)) if excess_values else 0.0
         ),
         "reference_exposure_frames": pair_exposure,
         "matched_exposure_frames": matched_exposure,
-        "coverage": matched_exposure / max(pair_exposure, 1),
+        "reference_exposure_s": reference_exposure_s,
+        "matched_exposure_s": matched_exposure_s,
+        "coverage": (
+            matched_exposure_s / reference_exposure_s
+            if reference_exposure_s > _EPSILON
+            else 0.0
+        ),
         "per_pair": per_pair,
     }
 
@@ -1216,62 +1427,28 @@ def score_nbody_collision(
         entity_id: index
         for index, entity_id in enumerate(prediction.entity_ids)
     }
-    reference_lookup = {
-        entity_id: index
-        for index, entity_id in enumerate(reference.entity_ids)
-    }
-
-    def pair_comparable(
-        pair: tuple[str, str],
-        frame_index: int,
-    ) -> bool:
-        if not 0 <= frame_index < len(reference.times_s):
-            return False
-        reference_indices = [
-            reference_lookup.get(entity_id) for entity_id in pair
-        ]
-        prediction_indices = [
-            prediction_lookup.get(entity_id) for entity_id in pair
-        ]
-        if any(index is None for index in reference_indices):
-            return True
-        if any(index is None for index in prediction_indices):
-            return False
-        return all(
-            reference.valid[frame_index, reference_index]
-            and prediction.valid[frame_index, prediction_index]
-            for reference_index, prediction_index in zip(
-                reference_indices,
-                prediction_indices,
-            )
-            if reference_index is not None and prediction_index is not None
-        )
-
-    comparable_reference_events = [
-        event
-        for event in reference.contact_events
-        if pair_comparable(event.entity_pair, event.frame_index)
-    ]
-    comparable_prediction_events = [
-        event
-        for event in prediction.contact_events
-        if (
-            any(
-                entity_id not in reference_lookup
-                for entity_id in event.entity_pair
-            )
-            or pair_comparable(event.entity_pair, event.frame_index)
-        )
-    ]
+    # Contact events are existence claims, not optional point samples.
+    # Conditioning the GT event set on prediction visibility lets a model
+    # erase a missed collision by omitting precisely the event frame. The
+    # complete GT graph must therefore remain in the denominator, and every
+    # predicted event (including residual-body pairs) must remain eligible as
+    # a possible false positive.
     contact = score_contact_events(
-        comparable_reference_events,
-        comparable_prediction_events,
+        reference.contact_events,
+        prediction.contact_events,
         time_scale_s=event_time_scale,
         gap_scale_px=event_gap_scale,
     )
+    reference_pair_exposure = 0
     comparable_pair_exposure = 0
     for first in range(len(reference.entity_ids)):
         for second in range(first + 1, len(reference.entity_ids)):
+            reference_pair_valid = (
+                reference.valid[:, first] & reference.valid[:, second]
+            )
+            reference_pair_exposure += int(
+                np.count_nonzero(reference_pair_valid)
+            )
             first_prediction = prediction_lookup.get(
                 reference.entity_ids[first]
             )
@@ -1282,22 +1459,31 @@ def score_nbody_collision(
                 continue
             comparable_pair_exposure += int(
                 np.count_nonzero(
-                    reference.valid[:, first]
-                    & reference.valid[:, second]
+                    reference_pair_valid
                     & prediction.valid[:, first_prediction]
                     & prediction.valid[:, second_prediction]
                 )
             )
-    contact["omitted_reference_event_count"] = (
-        len(reference.contact_events) - len(comparable_reference_events)
-    )
+    contact["omitted_reference_event_count"] = 0
+    contact["reference_pair_exposure_frames"] = reference_pair_exposure
     contact["comparable_pair_exposure_frames"] = comparable_pair_exposure
+    contact_absence_certified = (
+        reference_pair_exposure > 0
+        and comparable_pair_exposure == reference_pair_exposure
+    )
+    contact["contact_absence_certified"] = contact_absence_certified
     if (
-        comparable_pair_exposure == 0
-        and not comparable_reference_events
-        and not comparable_prediction_events
+        not reference.contact_events
+        and not prediction.contact_events
+        and not contact_absence_certified
     ):
-        contact["score"] = None
+        # Empty/empty is perfect only when the prediction exposes every
+        # reference-valid frame of every expected pair. Otherwise a model
+        # could hide a false collision by omitting precisely its event frame.
+        # Absence is a global claim, so partial pair exposure is unavailable
+        # evidence rather than a verified no-contact trajectory.
+        contact["score"] = 0.0
+        contact["incomplete_exposure_policy"] = "conservative_zero"
     velocity = score_velocity(reference, prediction, config=scoring)
     momentum = score_momentum(reference, prediction, config=scoring)
     nonpenetration = score_nonpenetration(

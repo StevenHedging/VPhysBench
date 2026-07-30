@@ -4,6 +4,9 @@ import unittest
 
 import numpy as np
 
+from physbench.evaluation.common.entities.timeline import (
+    build_common_time_grid,
+)
 from physbench.evaluation.scenes.collision.nbody import (
     NBodyExtractionConfig,
     extract_nbody_collision_state,
@@ -211,6 +214,270 @@ class NBodyCollisionTests(unittest.TestCase):
         self.assertEqual(1.0, result["score"])
         self.assertEqual(0, result["matched_event_count"])
 
+    def test_missing_contact_frame_cannot_erase_reference_event(self) -> None:
+        reference = _state(
+            np.asarray(
+                [
+                    [0.0, 6.0],
+                    [2.0, 6.0],
+                    [4.0, 6.0],
+                    [2.0, 8.0],
+                    [0.0, 10.0],
+                ]
+            ),
+            entity_ids=("left", "right"),
+        )
+        wrong_positions = np.asarray(
+            [
+                [0.0, 6.0],
+                [2.0, 6.0],
+                [0.0, 6.0],
+                [2.0, 8.0],
+                [0.0, 10.0],
+            ]
+        )
+        complete_wrong = _state(
+            wrong_positions,
+            entity_ids=("left", "right"),
+        )
+        missing_valid = np.ones((5, 2), dtype=bool)
+        missing_valid[2, 0] = False
+        missing_centers = np.stack(
+            [wrong_positions, np.zeros_like(wrong_positions)],
+            axis=-1,
+        )
+        missing_centers[~missing_valid] = np.nan
+        selectively_missing = extract_nbody_collision_state(
+            missing_centers,
+            missing_valid,
+            reference.times_s.tolist(),
+            entity_ids=reference.entity_ids,
+            radii_px=np.ones(2),
+            masses_kg=np.ones(2),
+            axis_origin_xy=reference.axis_origin_xy,
+            axis_direction_xy=reference.axis_direction_xy,
+            config=NBodyExtractionConfig(
+                contact_tolerance_px=0.25,
+                contact_hysteresis_px=0.25,
+                velocity_window_frames=1,
+            ),
+        )
+        self.assertEqual(1, len(reference.contact_events))
+        self.assertEqual(0, len(complete_wrong.contact_events))
+        self.assertEqual(0, len(selectively_missing.contact_events))
+        complete_score = score_nbody_collision(
+            reference,
+            complete_wrong,
+            frame_diagonal_px=100.0,
+        )
+        missing_score = score_nbody_collision(
+            reference,
+            selectively_missing,
+            frame_diagonal_px=100.0,
+        )
+        self.assertEqual(
+            0.0, complete_score["components"]["contact_graph"]
+        )
+        self.assertEqual(
+            0.0, missing_score["components"]["contact_graph"]
+        )
+        self.assertEqual(
+            0,
+            missing_score["details"]["contact_graph"][
+                "omitted_reference_event_count"
+            ],
+        )
+        self.assertLessEqual(missing_score["score"], complete_score["score"])
+
+    def test_missing_false_contact_frame_cannot_turn_zero_into_positive(
+        self,
+    ) -> None:
+        reference = _state(
+            np.asarray(
+                [
+                    [0.0, 6.0],
+                    [0.0, 6.0],
+                    [0.0, 6.0],
+                    [0.0, 6.0],
+                    [0.0, 6.0],
+                    [0.0, 6.0],
+                    [0.0, 6.0],
+                ]
+            ),
+            entity_ids=("left", "right"),
+        )
+        false_contact_positions = np.asarray(
+            [
+                [0.0, 6.0],
+                [0.0, 6.0],
+                [2.0, 6.0],
+                [4.0, 6.0],
+                [2.0, 6.0],
+                [0.0, 6.0],
+                [0.0, 6.0],
+            ]
+        )
+        complete_false_contact = _state(
+            false_contact_positions,
+            entity_ids=("left", "right"),
+        )
+        missing_valid = np.ones((7, 2), dtype=bool)
+        missing_valid[3] = False
+        missing_centers = np.stack(
+            [
+                false_contact_positions,
+                np.zeros_like(false_contact_positions),
+            ],
+            axis=-1,
+        )
+        missing_centers[~missing_valid] = np.nan
+        selectively_missing = extract_nbody_collision_state(
+            missing_centers,
+            missing_valid,
+            reference.times_s.tolist(),
+            entity_ids=reference.entity_ids,
+            radii_px=np.ones(2),
+            masses_kg=np.ones(2),
+            axis_origin_xy=reference.axis_origin_xy,
+            axis_direction_xy=reference.axis_direction_xy,
+            config=NBodyExtractionConfig(
+                contact_tolerance_px=0.25,
+                contact_hysteresis_px=0.25,
+                velocity_window_frames=1,
+            ),
+        )
+        self.assertEqual((), reference.contact_events)
+        self.assertEqual(1, len(complete_false_contact.contact_events))
+        self.assertEqual((), selectively_missing.contact_events)
+
+        complete_score = score_nbody_collision(
+            reference,
+            complete_false_contact,
+            frame_diagonal_px=100.0,
+        )
+        missing_score = score_nbody_collision(
+            reference,
+            selectively_missing,
+            frame_diagonal_px=100.0,
+        )
+
+        self.assertEqual(
+            0.0, complete_score["components"]["contact_graph"]
+        )
+        self.assertEqual(
+            0.0, missing_score["components"]["contact_graph"]
+        )
+        self.assertEqual(0.0, complete_score["score"])
+        self.assertEqual(0.0, missing_score["score"])
+        contact = missing_score["details"]["contact_graph"]
+        self.assertEqual(7, contact["reference_pair_exposure_frames"])
+        self.assertEqual(6, contact["comparable_pair_exposure_frames"])
+        self.assertFalse(contact["contact_absence_certified"])
+        self.assertEqual(
+            "conservative_zero",
+            contact["incomplete_exposure_policy"],
+        )
+
+    def test_selective_missing_cannot_improve_continuous_physics(
+        self,
+    ) -> None:
+        times = np.asarray([0.0, 0.1, 0.2, 1.2, 1.3, 1.4, 1.5])
+        reference_x = np.column_stack(
+            [4.0 * times, np.full(len(times), 30.0)]
+        )
+        wrong_x = reference_x.copy()
+        wrong_x[3, 0] = 1000.0
+
+        def make_state(x: np.ndarray, valid: np.ndarray):
+            centers = np.stack([x, np.zeros_like(x)], axis=-1)
+            centers[~valid] = np.nan
+            return extract_nbody_collision_state(
+                centers,
+                valid,
+                times.tolist(),
+                entity_ids=("a", "b"),
+                radii_px=np.ones(2),
+                masses_kg=np.ones(2),
+                axis_origin_xy=np.asarray([0.0, 0.0]),
+                axis_direction_xy=np.asarray([1.0, 0.0]),
+                config=NBodyExtractionConfig(
+                    contact_tolerance_px=0.25,
+                    contact_hysteresis_px=0.25,
+                    velocity_window_frames=1,
+                ),
+            )
+
+        reference = make_state(
+            reference_x,
+            np.ones((len(times), 2), dtype=bool),
+        )
+        complete_wrong = make_state(
+            wrong_x,
+            np.ones((len(times), 2), dtype=bool),
+        )
+        missing_valid = np.ones((len(times), 2), dtype=bool)
+        missing_valid[3, 0] = False
+        selectively_missing = make_state(wrong_x, missing_valid)
+        complete_score = score_nbody_collision(
+            reference,
+            complete_wrong,
+            frame_diagonal_px=1100.0,
+        )
+        missing_score = score_nbody_collision(
+            reference,
+            selectively_missing,
+            frame_diagonal_px=1100.0,
+        )
+        for component in (
+            "track_position",
+            "velocity",
+            "momentum",
+            "nonpenetration",
+        ):
+            with self.subTest(component=component):
+                self.assertIsNotNone(
+                    complete_score["components"][component]
+                )
+                self.assertIsNotNone(
+                    missing_score["components"][component]
+                )
+                self.assertLessEqual(
+                    missing_score["components"][component],
+                    complete_score["components"][component] + 1e-12,
+                )
+                detail = missing_score["details"][component]
+                self.assertGreater(detail["reference_exposure_s"], 0.0)
+                self.assertGreaterEqual(detail["matched_exposure_s"], 0.0)
+                self.assertLess(
+                    detail["matched_exposure_s"],
+                    detail["reference_exposure_s"],
+                )
+                self.assertAlmostEqual(
+                    detail["coverage"],
+                    detail["matched_exposure_s"]
+                    / detail["reference_exposure_s"],
+                )
+        self.assertLessEqual(
+            missing_score["score"], complete_score["score"] + 1e-12
+        )
+
+        grid = build_common_time_grid(times)
+        removed_weight = float(grid.cell_weights_s[3])
+        position = missing_score["details"]["track_position"]
+        self.assertAlmostEqual(
+            2.0 * grid.duration_s,
+            position["reference_exposure_s"],
+        )
+        self.assertAlmostEqual(
+            2.0 * grid.duration_s - removed_weight,
+            position["matched_exposure_s"],
+        )
+        self.assertNotAlmostEqual(
+            13.0 / 14.0,
+            position["coverage"],
+            places=4,
+        )
+
     def test_close_disjoint_position_scores_above_far_position(self) -> None:
         reference = _state(
             np.asarray(
@@ -344,8 +611,14 @@ class NBodyCollisionTests(unittest.TestCase):
         self.assertEqual(
             0.0, result["details"]["track_position"]["coverage"]
         )
+        self.assertEqual(
+            "conservative_zero",
+            result["details"]["contact_graph"][
+                "incomplete_exposure_policy"
+            ],
+        )
 
-    def test_missing_body_is_omitted_from_content_not_counted_twice(
+    def test_missing_body_has_conservative_zero_pair_physics(
         self,
     ) -> None:
         reference = _state(
@@ -371,10 +644,20 @@ class NBodyCollisionTests(unittest.TestCase):
         result = score_nbody_collision(
             reference, prediction, frame_diagonal_px=100.0
         )
-        self.assertAlmostEqual(1.0, result["score"])
-        self.assertIn("momentum", result["omitted_components"])
-        self.assertIn("nonpenetration", result["omitted_components"])
-        self.assertIn("contact_graph", result["omitted_components"])
+        self.assertEqual(0.0, result["score"])
+        self.assertEqual([], result["omitted_components"])
+        for component in (
+            "contact_graph",
+            "momentum",
+            "nonpenetration",
+        ):
+            self.assertEqual(0.0, result["components"][component])
+        self.assertEqual(
+            "conservative_zero",
+            result["details"]["contact_graph"][
+                "incomplete_exposure_policy"
+            ],
+        )
 
     def test_malformed_or_incompatible_inputs_raise_value_error(self) -> None:
         with self.assertRaisesRegex(ValueError, "at least two physical bodies"):

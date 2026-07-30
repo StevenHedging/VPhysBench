@@ -155,6 +155,141 @@ class OpenWorldObserverTests(unittest.TestCase):
         )
         self.assertLess(result.integrity.soft_detection_accuracy, 0.1)
 
+    def test_null_assignment_separates_far_replacement_from_near_disjoint(
+        self,
+    ) -> None:
+        reference = _reference_track(
+            "ball_1",
+            [10.0, 10.0, 10.0],
+            grid=self.grid,
+        )
+
+        def compare_at(x: float):
+            observed = track_open_world_detections(
+                [
+                    [_detection(index, f"candidate_{index}", x)]
+                    for index in range(3)
+                ],
+                time_grid=self.grid,
+            )
+            return compare_open_world_tracks(
+                reference_tracks=[reference],
+                prediction_observation=observed,
+                time_grid=self.grid,
+                frame_diagonal_px=float(np.hypot(96, 48)),
+                minimum_match_position_similarity=0.1,
+            )
+
+        near = compare_at(18.0)
+        far = compare_at(90.0)
+        for frame in near.per_frame:
+            self.assertEqual(1, len(frame["matches"]))
+            self.assertEqual([], frame["missing_entity_ids"])
+            self.assertEqual([], frame["residual_track_ids"])
+            self.assertEqual([], frame["rejected_candidate_matches"])
+        for frame in far.per_frame:
+            self.assertEqual([], frame["matches"])
+            self.assertEqual(["ball_1"], frame["missing_entity_ids"])
+            self.assertEqual(1, len(frame["residual_track_ids"]))
+            self.assertEqual(1, len(frame["rejected_candidate_matches"]))
+            rejected = frame["rejected_candidate_matches"][0]
+            self.assertEqual(
+                "position_similarity_below_minimum",
+                rejected["rejection_reason"],
+            )
+            self.assertLess(rejected["position_score"], 0.1)
+            self.assertGreater(frame["position_diagnostic_score"], 0.0)
+            self.assertGreater(
+                near.per_frame[frame["frame"]][
+                    "position_diagnostic_score"
+                ],
+                frame["position_diagnostic_score"],
+            )
+        self.assertEqual(0.0, far.integrity.presence_detection_accuracy)
+        self.assertEqual(0.0, far.integrity.exposure_recall)
+        self.assertEqual(0.0, far.integrity.exposure_precision)
+
+    def test_rejected_participant_does_not_block_close_tentative_tier(
+        self,
+    ) -> None:
+        reference = _reference_track(
+            "ball_1",
+            [10.0, 10.0, 10.0],
+            grid=self.grid,
+        )
+        participant = OpenWorldTrack(
+            track_id="far_participant",
+            detections=tuple(
+                _detection(
+                    index,
+                    f"far_{index}",
+                    90.0,
+                    tier=EvidenceTier.PARTICIPANT,
+                )
+                for index in range(3)
+            ),
+            confirmed=True,
+            evidence_tier=EvidenceTier.PARTICIPANT,
+        )
+        tentative = OpenWorldTrack(
+            track_id="near_tentative",
+            detections=tuple(
+                _detection(
+                    index,
+                    f"near_{index}",
+                    11.0,
+                    tier=EvidenceTier.TENTATIVE,
+                    sources=("motion_circle",),
+                )
+                for index in range(3)
+            ),
+            confirmed=False,
+            evidence_tier=EvidenceTier.TENTATIVE,
+        )
+        result = compare_open_world_tracks(
+            reference_tracks=[reference],
+            prediction_observation=OpenWorldObservation(
+                tracks=(participant, tentative),
+                overflow_counts=np.zeros(3),
+            ),
+            time_grid=self.grid,
+            frame_diagonal_px=float(np.hypot(96, 48)),
+            minimum_match_position_similarity=0.1,
+        )
+        for frame in result.per_frame:
+            self.assertEqual(
+                "near_tentative",
+                frame["matches"][0]["prediction_track_id"],
+            )
+            self.assertEqual(
+                ["far_participant"],
+                frame["residual_track_ids"],
+            )
+            self.assertEqual([], frame["missing_entity_ids"])
+
+    def test_null_assignment_similarity_threshold_is_validated(self) -> None:
+        reference = _reference_track(
+            "ball_1",
+            [10.0, 10.0, 10.0],
+            grid=self.grid,
+        )
+        observation = track_open_world_detections(
+            [
+                [_detection(index, f"candidate_{index}", 10.0)]
+                for index in range(3)
+            ],
+            time_grid=self.grid,
+        )
+        for invalid in (-0.1, 1.1, float("nan"), float("inf")):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                compare_open_world_tracks(
+                    reference_tracks=[reference],
+                    prediction_observation=observation,
+                    time_grid=self.grid,
+                    frame_diagonal_px=float(np.hypot(96, 48)),
+                    minimum_match_position_similarity=invalid,
+                )
+
     def test_single_frame_tentative_extra_is_not_free(self) -> None:
         references = [
             _reference_track("ball_1", [10, 10, 10], grid=self.grid)

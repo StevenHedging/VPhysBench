@@ -44,7 +44,6 @@ from .observation import stabilize_collision_instance_masks
 from .open_world import (
     build_multiframe_collision_entity_prompts,
     discover_prediction_objects,
-    prediction_observation_from_instance_masks,
     reference_tracks_from_instance_masks,
 )
 from .v5_visualization import write_collision_v5_visualization
@@ -54,9 +53,9 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
     """Shadow v5 evaluator with manifest cardinality and residual discovery."""
 
     evaluator_id = "collision_1d_open_world_nbody"
-    evaluator_version = "2.1"
-    sequential_evaluator_version = "2.1"
-    robust_evaluator_version = "2.1"
+    evaluator_version = "2.2"
+    sequential_evaluator_version = "2.2"
+    robust_evaluator_version = "2.2"
     scene_id = "collision_1d"
     primary_score = "collision_1d_open_world_similarity"
     allow_partial_prediction = True
@@ -70,12 +69,13 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 "version": self.evaluator_version,
                 "config": config,
                 "entity_contract": "manifest_v1",
-                "observer": "open_world_v1.1",
-                "physics": "nbody_v1",
+                "observer": "open_world_v1.2",
+                "physics": "nbody_v1.2",
             }
         )
 
     def describe_observation(self) -> dict[str, Any]:
+        assignment = self.config["object_centric_scoring"]["assignment"]
         return {
             "subject": "manifest_declared_n_body_instances",
             "segmentation": self._segmenter.describe(),
@@ -86,8 +86,16 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 "per_frame_motion_and_high_confidence_circle_discovery"
             ),
             "identity": (
-                "causal_track_ids_plus_per_frame_one_to_one_matches"
+                "causal_track_ids_plus_evidence_tiered_hungarian_with_null"
             ),
+            "assignment": {
+                "method": "evidence_tiered_hungarian_with_null",
+                "position_kernel": "reference_scaled_cauchy",
+                "minimum_match_position_similarity": float(
+                    assignment["minimum_match_position_similarity"]
+                ),
+                "rejected_edge_policy": "missing_reference_plus_extra_prediction",
+            },
             "coordinate_system": "frozen_reference_track_axis",
             "cardinality": "case_entity_manifest_not_scene_constant",
         }
@@ -403,40 +411,18 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 "reason": f"{type(exc).__name__}: {exc}",
             }
             prediction_failures.append(prediction_failure)
-            try:
-                prediction_objects = (
-                    prediction_observation_from_instance_masks(
-                        prediction_masks,
-                        time_grid=time_grid,
-                        quality_config=quality,
-                        available=prediction_available,
-                    )
-                )
-                prediction_objects = OpenWorldObservation(
-                    tracks=prediction_objects.tracks,
-                    overflow_counts=prediction_objects.overflow_counts,
-                    diagnostics={
-                        **prediction_objects.diagnostics,
-                        "residual_failure": prediction_failure,
-                    },
-                )
-            except Exception as fallback_exc:
-                prediction_objects = _empty_prediction_observation(
-                    len(times_s),
-                    code="prediction_observation_fallback_failed",
-                    reason=(
-                        f"{type(fallback_exc).__name__}: {fallback_exc}"
-                    ),
-                )
-                prediction_failures.append(
-                    {
-                        "code": "prediction_observation_fallback_failed",
-                        "reason": (
-                            f"{type(fallback_exc).__name__}: "
-                            f"{fallback_exc}"
-                        ),
-                    }
-                )
+            # Open-world discovery is the only channel that can establish
+            # that no additional physical object exists. Falling back to the
+            # directed manifest-cardinality masks would therefore fail open:
+            # a prediction with hidden extras could receive a perfect score.
+            # The protocol freezes prediction observation failures as an
+            # evaluated conservative zero, while retaining the directed
+            # observation diagnostics above for provenance.
+            prediction_objects = _empty_prediction_observation(
+                len(times_s),
+                code=prediction_failure["code"],
+                reason=prediction_failure["reason"],
+            )
 
         frame_diagonal = float(
             np.hypot(
@@ -444,12 +430,20 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 reference_video.frames[0].shape[0],
             )
         )
+        minimum_match_position_similarity = float(
+            self.config["object_centric_scoring"]["assignment"][
+                "minimum_match_position_similarity"
+            ]
+        )
         try:
             comparison = compare_open_world_tracks(
                 reference_tracks=reference_tracks,
                 prediction_observation=prediction_objects,
                 time_grid=time_grid,
                 frame_diagonal_px=frame_diagonal,
+                minimum_match_position_similarity=(
+                    minimum_match_position_similarity
+                ),
             )
         except Exception as exc:
             failure = {
@@ -467,6 +461,9 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 prediction_observation=prediction_objects,
                 time_grid=time_grid,
                 frame_diagonal_px=frame_diagonal,
+                minimum_match_position_similarity=(
+                    minimum_match_position_similarity
+                ),
             )
 
         prediction_entity_ids = list(entity_ids)
@@ -624,18 +621,7 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
             scene_name="Open-world N-body collision",
         )
         per_frame_position = [
-            (
-                float(
-                    np.mean(
-                        [
-                            float(value["position_score"])
-                            for value in row["matches"]
-                        ]
-                    )
-                )
-                if row["matches"]
-                else 0.0
-            )
+            float(row["position_diagnostic_score"])
             for row in comparison.per_frame
         ]
         save_iou_curve(
@@ -644,7 +630,9 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
             ious=per_frame_position,
             case_id=request.case["case_id"],
             scene_name="Open-world N-body collision position",
-            series_label="Matched entity continuous position score",
+            series_label=(
+                "Matched/nearest-rejected continuous position score"
+            ),
             y_label="Position similarity",
             metric_name="score",
         )
@@ -1171,7 +1159,7 @@ def _prediction_nbody_inputs(
     entity_lookup = {
         entity_id: index for index, entity_id in enumerate(entity_ids)
     }
-    ever_matched_tracks: set[str] = set()
+    matched_frames_by_track: dict[str, set[int]] = {}
     for match in comparison_matches:
         entity_index = entity_lookup[match.entity_id]
         track = track_objects[match.track_id]
@@ -1185,7 +1173,9 @@ def _prediction_nbody_inputs(
             radii[entity_index][frame_index] = math.sqrt(
                 float(track.areas_px2[frame_index]) / math.pi
             )
-        ever_matched_tracks.add(match.track_id)
+        matched_frames_by_track.setdefault(match.track_id, set()).add(
+            frame_index
+        )
 
     output_ids = list(entity_ids)
     masses = [float(value) for value in reference_masses]
@@ -1197,23 +1187,39 @@ def _prediction_nbody_inputs(
         )
     for track_id, track in track_objects.items():
         if (
-            track_id in ever_matched_tracks
             # Weak static-circle evidence still pays an existence penalty.
             # Only a full participant can create a body or contact event in
             # the scene-specific N-body model.
-            or float(
+            float(
                 track.metadata.get("formal_exposure_weight", 0.0)
             )
             < 1.0 - 1e-12
-            or int(np.count_nonzero(track.observed)) < 2
         ):
             continue
+        unmatched = track.observed.copy()
+        for frame_index in matched_frames_by_track.get(track_id, ()):
+            unmatched[frame_index] = False
+        unmatched_indices = np.flatnonzero(unmatched)
+        if not len(unmatched_indices):
+            continue
+        # Keep one residual channel per persistent prediction track. Internal
+        # gaps are legitimate: those detections were assigned to an expected
+        # entity at that instant. This gives a strict slot partition even for
+        # alternating match/unmatch patterns and retains singleton residual
+        # evidence for penetration/contact diagnostics where applicable.
+        segment_valid = unmatched
+        segment_xy = np.full(
+            (frame_count, 2),
+            np.nan,
+            dtype=np.float64,
+        )
+        segment_xy[segment_valid] = track.xy[segment_valid]
         output_ids.append(f"residual:{track_id}")
-        centers.append(track.xy.copy())
-        valid.append(track.observed.copy())
+        centers.append(segment_xy)
+        valid.append(segment_valid)
         radius = np.full(frame_count, np.nan, dtype=np.float64)
         assert track.areas_px2 is not None
-        finite = track.observed & np.isfinite(track.areas_px2)
+        finite = segment_valid & np.isfinite(track.areas_px2)
         radius[finite] = np.sqrt(track.areas_px2[finite] / math.pi)
         fill = (
             float(np.median(radius[finite]))
@@ -1374,22 +1380,21 @@ def _per_frame_rows(
                     audit["ambiguous_candidate_track_ids"],
                     separators=(",", ":"),
                 ),
+                "rejected_candidate_matches": json.dumps(
+                    audit["rejected_candidate_matches"],
+                    separators=(",", ":"),
+                ),
                 "matches": json.dumps(
                     audit["matches"],
                     separators=(",", ":"),
                 ),
-                "position_score": (
-                    float(
-                        np.mean(
-                            [
-                                float(value["position_score"])
-                                for value in audit["matches"]
-                            ]
-                        )
-                    )
-                    if audit["matches"]
-                    else 0.0
-                ),
+                "position_score": audit["position_diagnostic_score"],
+                "position_diagnostic_score": audit[
+                    "position_diagnostic_score"
+                ],
+                "matched_position_score": audit[
+                    "matched_position_score"
+                ],
                 "shape_score": subject_rows[frame_index].get("shape"),
                 "appearance_score": subject_rows[frame_index].get(
                     "appearance"

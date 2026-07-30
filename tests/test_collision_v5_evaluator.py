@@ -13,6 +13,7 @@ from unittest.mock import patch
 import cv2
 import numpy as np
 
+from physbench.evaluation.common.entities.contracts import EntityMatch
 from physbench.evaluation.common.entities.observer import (
     EvidenceTier,
     ObjectDetection,
@@ -308,7 +309,15 @@ class CollisionV5EvaluatorTests(unittest.TestCase):
         contract_evaluator = CollisionOpenWorldCaseEvaluator(
             copy.deepcopy(self.config)
         )
-        declared_primary = contract_evaluator.describe()["primary_score"]
+        description = contract_evaluator.describe()
+        self.assertEqual("2.2", description["version"])
+        self.assertEqual(
+            0.1,
+            description["observation"]["assignment"][
+                "minimum_match_position_similarity"
+            ],
+        )
+        declared_primary = description["primary_score"]
         masks = _instance_masks(2)
         _, analysis = self._analyze(
             count=2,
@@ -324,6 +333,26 @@ class CollisionV5EvaluatorTests(unittest.TestCase):
             analysis.metrics[declared_primary],
             analysis.metrics["collision_1d_open_world_similarity"],
         )
+
+    def test_v5_passes_frozen_null_assignment_threshold(self) -> None:
+        masks = _instance_masks(2)
+        implementation = v5_module.compare_open_world_tracks
+        with patch.object(
+            v5_module,
+            "compare_open_world_tracks",
+            wraps=implementation,
+        ) as comparison:
+            _, analysis = self._analyze(
+                count=2,
+                outcomes=[masks, masks],
+            )
+        self.assertAlmostEqual(1.0, analysis.score, places=6)
+        self.assertGreaterEqual(comparison.call_count, 1)
+        for call in comparison.call_args_list:
+            self.assertEqual(
+                0.1,
+                call.kwargs["minimum_match_position_similarity"],
+            )
 
     def test_direct_runtime_failure_continues_with_residual_tracks(self) -> None:
         masks = _instance_masks(2)
@@ -347,6 +376,38 @@ class CollisionV5EvaluatorTests(unittest.TestCase):
         self.assertEqual(2, analysis.quality["prediction_track_count"])
         self.assertTrue(math.isfinite(analysis.score))
         self.assertGreater(analysis.score, 0.0)
+
+    def test_residual_observation_failure_is_conservative_zero(self) -> None:
+        masks = _instance_masks(2)
+
+        def failed_discovery(frames, **kwargs):
+            del frames, kwargs
+            raise RuntimeError("open-world observer unavailable")
+
+        _, analysis = self._analyze(
+            count=2,
+            outcomes=[masks, masks],
+            discovery=failed_discovery,
+        )
+        self.assertEqual(0.0, analysis.score)
+        self.assertTrue(analysis.quality["degraded"])
+        self.assertIn(
+            "prediction_residual_observation_failed",
+            analysis.quality["degradation_codes"],
+        )
+        self.assertEqual(0, analysis.quality["prediction_track_count"])
+        self.assertEqual(
+            "failed_as_empty_prediction",
+            analysis.quality["prediction_open_world_observation"][
+                "status"
+            ],
+        )
+        self.assertNotEqual(
+            "failed_but_residual_discovery_continued",
+            analysis.quality["prediction_directed_observation"].get(
+                "status"
+            ),
+        )
 
     def test_empty_and_short_prediction_are_finite_missing_evidence(self) -> None:
         reference = _instance_masks(2)
@@ -374,7 +435,9 @@ class CollisionV5EvaluatorTests(unittest.TestCase):
         self.assertLess(short.score, 1.0)
         self.assertEqual(1, short.quality["available_prediction_frames"])
 
-    def test_extra_and_missing_are_applied_by_integrity_gate_once(self) -> None:
+    def test_extra_and_missing_have_conservative_integrity_semantics(
+        self,
+    ) -> None:
         reference = _instance_masks(2)
         missing = _instance_masks(2, missing={1})
         _, missing_analysis = self._analyze(
@@ -390,17 +453,13 @@ class CollisionV5EvaluatorTests(unittest.TestCase):
             places=7,
         )
         self.assertAlmostEqual(
-            1.0,
+            0.0,
             missing_analysis.metrics[
                 "collision_nbody_state_similarity"
             ]["score"],
             places=7,
         )
-        self.assertAlmostEqual(
-            missing_integrity["integrity_gate"],
-            missing_analysis.score,
-            places=6,
-        )
+        self.assertEqual(0.0, missing_analysis.score)
 
         extra_masks = _instance_masks(1, x_values=[80])
 
@@ -584,6 +643,119 @@ class CollisionV5EvaluatorTests(unittest.TestCase):
         self.assertEqual(
             [f"residual:{participant_track.track_id}"],
             residual_ids,
+        )
+
+    def test_partially_matched_participant_conserves_unmatched_detections(
+        self,
+    ) -> None:
+        grid = v5_module.build_common_time_grid(_TIMES)
+        masks = _instance_masks(1, x_values=[100])[0]
+        detections = detections_from_instance_masks(
+            [masks],
+            entity_class="ball",
+            source="participant",
+            evidence_tier=EvidenceTier.PARTICIPANT,
+            confidence=1.0,
+            minimum_area_px2=8,
+        )
+        observation = track_open_world_detections(
+            detections,
+            time_grid=grid,
+            maximum_gap_s=0.25,
+            minimum_scale_px=4.0,
+        )
+        self.assertEqual(1, len(observation.tracks))
+        track = observation.tracks[0]
+        match = EntityMatch(
+            frame_index=0,
+            entity_id="ball_1",
+            track_id=track.track_id,
+            localization_quality=1.0,
+            normalized_distance=0.0,
+            weight=float(grid.cell_weights_s[0]),
+            association_eligible=True,
+        )
+        _, valid, _, ids, _ = v5_module._prediction_nbody_inputs(
+            comparison_matches=(match,),
+            observation=observation,
+            entity_ids=("ball_1", "ball_2"),
+            reference_radii=np.full((_FRAME_COUNT, 2), 5.0),
+            reference_masses=np.asarray([0.01, 0.02]),
+            time_grid=grid,
+        )
+        residual_index = ids.index(f"residual:{track.track_id}")
+        self.assertEqual(
+            [True, False, False, False, False],
+            valid[:, 0].tolist(),
+        )
+        self.assertEqual(
+            [False, True, True, True, True],
+            valid[:, residual_index].tolist(),
+        )
+        self.assertFalse(
+            np.any(valid[:, 0] & valid[:, residual_index])
+        )
+        self.assertEqual(
+            track.to_object_track(
+                frame_count=_FRAME_COUNT,
+                time_weights_s=grid.cell_weights_s,
+            ).observed.tolist(),
+            (valid[:, 0] | valid[:, residual_index]).tolist(),
+        )
+
+    def test_alternating_matches_preserve_singleton_residual_slots(
+        self,
+    ) -> None:
+        grid = v5_module.build_common_time_grid(_TIMES)
+        masks = _instance_masks(1, x_values=[100])[0]
+        observation = track_open_world_detections(
+            detections_from_instance_masks(
+                [masks],
+                entity_class="ball",
+                source="participant",
+                evidence_tier=EvidenceTier.PARTICIPANT,
+                confidence=1.0,
+                minimum_area_px2=8,
+            ),
+            time_grid=grid,
+            maximum_gap_s=0.25,
+            minimum_scale_px=4.0,
+        )
+        track = observation.tracks[0]
+        matches = tuple(
+            EntityMatch(
+                frame_index=frame_index,
+                entity_id="ball_1",
+                track_id=track.track_id,
+                localization_quality=1.0,
+                normalized_distance=0.0,
+                weight=float(grid.cell_weights_s[frame_index]),
+                association_eligible=True,
+            )
+            for frame_index in (0, 2, 4)
+        )
+        _, valid, _, ids, _ = v5_module._prediction_nbody_inputs(
+            comparison_matches=matches,
+            observation=observation,
+            entity_ids=("ball_1", "ball_2"),
+            reference_radii=np.full((_FRAME_COUNT, 2), 5.0),
+            reference_masses=np.asarray([0.01, 0.02]),
+            time_grid=grid,
+        )
+        residual_index = ids.index(f"residual:{track.track_id}")
+        self.assertEqual(
+            [True, False, True, False, True],
+            valid[:, 0].tolist(),
+        )
+        self.assertEqual(
+            [False, True, False, True, False],
+            valid[:, residual_index].tolist(),
+        )
+        self.assertTrue(
+            np.all(valid[:, 0] | valid[:, residual_index])
+        )
+        self.assertFalse(
+            np.any(valid[:, 0] & valid[:, residual_index])
         )
 
 
