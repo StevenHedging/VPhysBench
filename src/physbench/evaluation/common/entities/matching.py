@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Sequence
 
 import numpy as np
@@ -28,7 +27,7 @@ def freeze_initial_assignment(
     maximum_match_cost: float,
     unmatched_entity_cost: float = 1.0,
     unmatched_track_cost: float = 1.0,
-    maximum_tracks: int = 16,
+    maximum_entities: int = 16,
 ) -> FrozenAssignment:
     """Solve rectangular identity matching with explicit unmatched dustbins.
 
@@ -38,20 +37,22 @@ def freeze_initial_assignment(
     """
 
     entity_list = list(entities)
-    track_list = [str(track_id) for track_id in track_ids]
+    all_track_list = [str(track_id) for track_id in track_ids]
     costs = np.asarray(cost_matrix, dtype=np.float64)
-    expected_shape = (len(entity_list), len(track_list))
+    expected_shape = (len(entity_list), len(all_track_list))
     if costs.shape != expected_shape:
         raise ValueError(
             f"cost_matrix must have shape {expected_shape}, got {costs.shape}"
         )
     if len({item.entity_id for item in entity_list}) != len(entity_list):
         raise ValueError("entity IDs must be unique")
-    if len(set(track_list)) != len(track_list):
+    if len(set(all_track_list)) != len(all_track_list):
         raise ValueError("track IDs must be unique")
-    if len(track_list) > maximum_tracks:
+    if not isinstance(maximum_entities, int) or maximum_entities < 0:
+        raise ValueError("maximum_entities must be a non-negative integer")
+    if len(entity_list) > maximum_entities:
         raise ValueError(
-            f"at most {maximum_tracks} initial tracks are supported"
+            f"at most {maximum_entities} expected entities are supported"
         )
     penalties = (
         maximum_match_cost,
@@ -60,44 +61,73 @@ def freeze_initial_assignment(
     )
     if any(not math.isfinite(float(value)) or value < 0 for value in penalties):
         raise ValueError("matching thresholds and costs must be finite and >= 0")
+    finite_costs = costs[np.isfinite(costs)]
+    if finite_costs.size and float(finite_costs.min()) < 0.0:
+        raise ValueError("finite matching costs must be non-negative")
 
-    @lru_cache(maxsize=None)
-    def solve(
-        entity_index: int,
-        used_mask: int,
-    ) -> tuple[float, tuple[int | None, ...]]:
-        if entity_index == len(entity_list):
-            residual_count = len(track_list) - used_mask.bit_count()
-            return residual_count * unmatched_track_cost, ()
+    # Exact dynamic programming over the expected-entity mask. Complexity is
+    # O(num_tracks * num_entities * 2**num_entities), so an arbitrarily noisy
+    # prediction can contribute all residual tracks without making runtime
+    # exponential in the number of hallucinated candidates.
+    empty_assignment: tuple[int | None, ...] = (None,) * len(entity_list)
+    states: dict[int, tuple[float, tuple[int | None, ...]]] = {
+        0: (0.0, empty_assignment)
+    }
+    for track_index in range(len(all_track_list)):
+        next_states: dict[int, tuple[float, tuple[int | None, ...]]] = {}
+        for used_mask, (state_cost, assignment) in states.items():
+            _keep_best(
+                next_states,
+                used_mask,
+                (
+                    state_cost + unmatched_track_cost,
+                    assignment,
+                ),
+            )
+            for entity_index in range(len(entity_list)):
+                entity_bit = 1 << entity_index
+                if used_mask & entity_bit:
+                    continue
+                match_cost = float(costs[entity_index, track_index])
+                if (
+                    not math.isfinite(match_cost)
+                    or match_cost > maximum_match_cost
+                ):
+                    continue
+                candidate_assignment = list(assignment)
+                candidate_assignment[entity_index] = track_index
+                _keep_best(
+                    next_states,
+                    used_mask | entity_bit,
+                    (
+                        state_cost + match_cost,
+                        tuple(candidate_assignment),
+                    ),
+                )
+        states = next_states
 
-        tail_cost, tail_assignment = solve(entity_index + 1, used_mask)
-        best = (
-            unmatched_entity_cost + tail_cost,
-            (None,) + tail_assignment,
+    candidates = [
+        (
+            state_cost
+            + (
+                len(entity_list) - used_mask.bit_count()
+            )
+            * unmatched_entity_cost,
+            assignment,
         )
-        for track_index in range(len(track_list)):
-            if used_mask & (1 << track_index):
-                continue
-            match_cost = float(costs[entity_index, track_index])
-            if not math.isfinite(match_cost) or match_cost > maximum_match_cost:
-                continue
-            candidate_tail_cost, candidate_tail = solve(
-                entity_index + 1,
-                used_mask | (1 << track_index),
-            )
-            candidate = (
-                match_cost + candidate_tail_cost,
-                (track_index,) + candidate_tail,
-            )
-            if _assignment_sort_key(candidate) < _assignment_sort_key(best):
-                best = candidate
-        return best
-
-    total_cost, assignment = solve(0, 0)
-    used = {index for index in assignment if index is not None}
+        for used_mask, (state_cost, assignment) in states.items()
+    ]
+    total_cost, assignment = min(candidates, key=_assignment_sort_key)
+    used_track_ids = {
+        all_track_list[index]
+        for index in assignment
+        if index is not None
+    }
     entity_to_track = {
         entity.entity_id: (
-            track_list[track_index] if track_index is not None else None
+            all_track_list[track_index]
+            if track_index is not None
+            else None
         )
         for entity, track_index in zip(entity_list, assignment)
     }
@@ -105,8 +135,8 @@ def freeze_initial_assignment(
         entity_to_track=entity_to_track,
         residual_track_ids=tuple(
             track_id
-            for index, track_id in enumerate(track_list)
-            if index not in used
+            for track_id in all_track_list
+            if track_id not in used_track_ids
         ),
         unmatched_entity_ids=tuple(
             entity.entity_id
@@ -126,3 +156,15 @@ def _assignment_sort_key(
         index if index is not None else 1_000_000 for index in assignment
     )
     return round(float(cost), 12), normalized
+
+
+def _keep_best(
+    states: dict[int, tuple[float, tuple[int | None, ...]]],
+    mask: int,
+    candidate: tuple[float, tuple[int | None, ...]],
+) -> None:
+    current = states.get(mask)
+    if current is None or (
+        _assignment_sort_key(candidate) < _assignment_sort_key(current)
+    ):
+        states[mask] = candidate

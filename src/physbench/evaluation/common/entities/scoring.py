@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass
 from typing import Mapping, Sequence
@@ -51,14 +52,18 @@ class GOSPADecomposition:
 class EntityIntegrityScore:
     score: float
     integrity_gate: float
+    presence_detection_accuracy: float
     soft_detection_accuracy: float
     association_accuracy: float
     matched_localization_quality: float
     matched_exposure: float
     reference_exposure: float
     prediction_exposure: float
-    detection_recall: float
-    detection_precision: float
+    association_matched_exposure: float
+    association_reference_exposure: float
+    association_prediction_exposure: float
+    exposure_recall: float
+    exposure_precision: float
     pair_association: dict[str, float]
     gospa: GOSPADecomposition
 
@@ -66,6 +71,9 @@ class EntityIntegrityScore:
         return {
             "score": self.score,
             "integrity_gate": self.integrity_gate,
+            "presence_detection_accuracy": (
+                self.presence_detection_accuracy
+            ),
             "soft_detection_accuracy": self.soft_detection_accuracy,
             "association_accuracy": self.association_accuracy,
             "matched_localization_quality": (
@@ -74,8 +82,17 @@ class EntityIntegrityScore:
             "matched_exposure": self.matched_exposure,
             "reference_exposure": self.reference_exposure,
             "prediction_exposure": self.prediction_exposure,
-            "detection_recall": self.detection_recall,
-            "detection_precision": self.detection_precision,
+            "association_matched_exposure": (
+                self.association_matched_exposure
+            ),
+            "association_reference_exposure": (
+                self.association_reference_exposure
+            ),
+            "association_prediction_exposure": (
+                self.association_prediction_exposure
+            ),
+            "exposure_recall": self.exposure_recall,
+            "exposure_precision": self.exposure_precision,
             "pair_association": self.pair_association,
             "gospa": self.gospa.to_dict(),
         }
@@ -116,9 +133,10 @@ def distance_similarity(
     kernel: str = "cauchy",
 ) -> float:
     """Continuous position score with non-zero support beyond mask overlap."""
-    distance = max(float(normalized_distance), 0.0)
-    if not math.isfinite(distance):
+    raw_distance = float(normalized_distance)
+    if not math.isfinite(raw_distance):
         return 0.0
+    distance = max(raw_distance, 0.0)
     if kernel == "cauchy":
         return float(1.0 / (1.0 + distance * distance))
     if kernel == "gaussian":
@@ -139,6 +157,8 @@ def compare_positions(
     kernel: str = "cauchy",
 ) -> PositionComparison:
     """Compare centroids using only reference/condition-side scale."""
+    if kernel not in {"cauchy", "gaussian"}:
+        raise ValueError(f"unsupported distance kernel: {kernel}")
     parameters = {
         "radius_multiplier": radius_multiplier,
         "diagonal_floor_fraction": diagonal_floor_fraction,
@@ -154,9 +174,17 @@ def compare_positions(
         raise ValueError("at least one position scale must be positive")
     reference = np.asarray(reference_xy, dtype=np.float64)
     prediction = np.asarray(prediction_xy, dtype=np.float64)
-    if reference.shape != prediction.shape or reference.ndim != 1:
-        raise ValueError("positions must have the same one-dimensional shape")
-    if not np.isfinite(reference).all() or not np.isfinite(prediction).all():
+    if (
+        reference.shape != prediction.shape
+        or reference.ndim != 1
+        or reference.size == 0
+    ):
+        raise ValueError(
+            "positions must have the same non-empty one-dimensional shape"
+        )
+    if not np.isfinite(reference).all():
+        raise ValueError("reference positions must be finite")
+    if not np.isfinite(prediction).all():
         return PositionComparison(
             centroid_distance_px=float("inf"),
             tolerance_px=0.0,
@@ -165,12 +193,12 @@ def compare_positions(
             score=0.0,
             kernel=kernel,
         )
-    area = max(float(reference_area_px2), 0.0)
-    diagonal = max(float(frame_diagonal_px), 0.0)
-    if not math.isfinite(area):
-        area = 0.0
-    if not math.isfinite(diagonal):
-        diagonal = 0.0
+    area = float(reference_area_px2)
+    diagonal = float(frame_diagonal_px)
+    if not math.isfinite(area) or area < 0.0:
+        raise ValueError("reference_area_px2 must be finite and non-negative")
+    if not math.isfinite(diagonal) or diagonal <= 0.0:
+        raise ValueError("frame_diagonal_px must be finite and positive")
     radius = math.sqrt(area / math.pi)
     scale = max(
         radius_multiplier * radius,
@@ -264,27 +292,67 @@ def score_entity_integrity(
     *,
     reference_exposure: Mapping[str, float],
     prediction_exposure: Mapping[str, float],
+    reference_association_exposure: Mapping[str, float] | None = None,
+    prediction_association_exposure: Mapping[str, float] | None = None,
     gospa_order: float = 2.0,
     gospa_cutoff: float = 1.0,
     gospa_alpha: float = 2.0,
 ) -> EntityIntegrityScore:
-    """Continuous HOTA-style entity-set and identity score.
+    """Audit localization plus cardinality and observable identity integrity.
 
     `prediction_exposure` must include unmatched residual tracks. This is what
     makes persistent extra or duplicated physical objects lower the score.
+    When any match is not association-eligible, both association-exposure
+    mappings are required so unobservable identity slots are excluded from
+    AssA without hiding their presence or localization evidence.
     """
     reference = _sanitize_exposure(reference_exposure, "reference")
     prediction = _sanitize_exposure(prediction_exposure, "prediction")
     _validate_one_to_one(matches)
-    for match in matches:
-        if match.entity_id not in reference:
+    _validate_exposure_conservation(matches, reference, prediction)
+    if (
+        reference_association_exposure is None
+    ) != (
+        prediction_association_exposure is None
+    ):
+        raise ValueError(
+            "association exposure mappings must be provided together"
+        )
+    if reference_association_exposure is None:
+        if any(not match.association_eligible for match in matches):
             raise ValueError(
-                f"match references unknown entity {match.entity_id!r}"
+                "explicit association exposure mappings are required "
+                "when a match is not association-eligible"
             )
-        if match.track_id not in prediction:
-            raise ValueError(
-                f"match references unknown track {match.track_id!r}"
-            )
+        association_reference = dict(reference)
+        association_prediction = dict(prediction)
+    else:
+        association_reference = _sanitize_exposure(
+            reference_association_exposure,
+            "reference association",
+        )
+        association_prediction = _sanitize_exposure(
+            prediction_association_exposure or {},
+            "prediction association",
+        )
+        _validate_association_exposure(
+            association_reference,
+            reference,
+            "reference",
+        )
+        _validate_association_exposure(
+            association_prediction,
+            prediction,
+            "prediction",
+        )
+    association_matches = [
+        match for match in matches if match.association_eligible
+    ]
+    _validate_exposure_conservation(
+        association_matches,
+        association_reference,
+        association_prediction,
+    )
 
     reference_total = float(sum(reference.values()))
     prediction_total = float(sum(prediction.values()))
@@ -310,34 +378,75 @@ def score_entity_integrity(
         detection_accuracy = 1.0
     else:
         detection_accuracy = matched_localization_quality / denominator
+    presence_denominator = (
+        reference_total + prediction_total - matched_exposure
+    )
+    if presence_denominator <= 1e-12:
+        presence_detection_accuracy = 1.0
+    else:
+        presence_detection_accuracy = (
+            matched_exposure / presence_denominator
+        )
 
+    association_reference_total = float(
+        sum(association_reference.values())
+    )
+    association_prediction_total = float(
+        sum(association_prediction.values())
+    )
+    association_matched_exposure = float(
+        sum(match.weight for match in association_matches)
+    )
     pair_exposure: dict[tuple[str, str], float] = {}
-    for match in matches:
+    for match in association_matches:
         key = match.entity_id, match.track_id
         pair_exposure[key] = pair_exposure.get(key, 0.0) + match.weight
     pair_association: dict[str, float] = {}
     association_numerator = 0.0
     for (entity_id, track_id), exposure in pair_exposure.items():
-        pair_maximum = min(reference[entity_id], prediction[track_id])
+        pair_maximum = min(
+            association_reference[entity_id],
+            association_prediction[track_id],
+        )
         if exposure > pair_maximum + 1e-9:
             raise ValueError(
                 f"pair exposure exceeds lifecycle for {entity_id}/{track_id}"
             )
         pair_union = (
-            reference[entity_id] + prediction[track_id] - exposure
+            association_reference[entity_id]
+            + association_prediction[track_id]
+            - exposure
         )
         association = exposure / pair_union if pair_union > 1e-12 else 1.0
-        pair_association[f"{entity_id}::{track_id}"] = float(association)
+        pair_key = json.dumps(
+            [entity_id, track_id],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        pair_association[pair_key] = float(association)
         association_numerator += exposure * association
     association_accuracy = (
-        association_numerator / matched_exposure
-        if matched_exposure > 1e-12
-        else (1.0 if reference_total <= 1e-12 and prediction_total <= 1e-12 else 0.0)
+        association_numerator / association_matched_exposure
+        if association_matched_exposure > 1e-12
+        else (
+            1.0
+            if association_reference_total <= 1e-12
+            and association_prediction_total <= 1e-12
+            else 0.0
+        )
     )
     integrity_gate = (
-        max(detection_accuracy, 0.0) * max(association_accuracy, 0.0)
+        max(presence_detection_accuracy, 0.0)
+        * max(association_accuracy, 0.0)
     )
-    score = math.sqrt(integrity_gate)
+    # Keep the familiar localization-aware HOTA-style diagnostic separate
+    # from the formal cardinality/identity gate. Scene adapters score
+    # position once in content rather than letting absolute trajectory error
+    # enter both this gate and scene physics.
+    score = math.sqrt(
+        max(detection_accuracy, 0.0)
+        * max(association_accuracy, 0.0)
+    )
     recall = (
         matched_exposure / reference_total
         if reference_total > 1e-12
@@ -360,6 +469,9 @@ def score_entity_integrity(
     return EntityIntegrityScore(
         score=float(np.clip(score, 0.0, 1.0)),
         integrity_gate=float(np.clip(integrity_gate, 0.0, 1.0)),
+        presence_detection_accuracy=float(
+            np.clip(presence_detection_accuracy, 0.0, 1.0)
+        ),
         soft_detection_accuracy=float(
             np.clip(detection_accuracy, 0.0, 1.0)
         ),
@@ -370,8 +482,11 @@ def score_entity_integrity(
         matched_exposure=matched_exposure,
         reference_exposure=reference_total,
         prediction_exposure=prediction_total,
-        detection_recall=float(np.clip(recall, 0.0, 1.0)),
-        detection_precision=float(np.clip(precision, 0.0, 1.0)),
+        association_matched_exposure=association_matched_exposure,
+        association_reference_exposure=association_reference_total,
+        association_prediction_exposure=association_prediction_total,
+        exposure_recall=float(np.clip(recall, 0.0, 1.0)),
+        exposure_precision=float(np.clip(precision, 0.0, 1.0)),
         pair_association=pair_association,
         gospa=gospa,
     )
@@ -384,13 +499,15 @@ def _sanitize_exposure(
     output = {}
     for item_id, raw in values.items():
         value = float(raw)
-        if not item_id:
-            raise ValueError(f"{label} exposure IDs must be non-empty")
+        if not isinstance(item_id, str) or not item_id:
+            raise ValueError(
+                f"{label} exposure IDs must be non-empty strings"
+            )
         if not math.isfinite(value) or value < 0.0:
             raise ValueError(
                 f"{label} exposure for {item_id!r} must be finite and >= 0"
             )
-        output[str(item_id)] = value
+        output[item_id] = value
     return output
 
 
@@ -414,6 +531,61 @@ def _validate_one_to_one(matches: Sequence[EntityMatch]) -> None:
         track_slots.add(track_slot)
 
 
+def _validate_exposure_conservation(
+    matches: Sequence[EntityMatch],
+    reference: Mapping[str, float],
+    prediction: Mapping[str, float],
+) -> None:
+    """Reject match tables that spend an ID's exposure more than once."""
+    by_entity: dict[str, float] = {}
+    by_track: dict[str, float] = {}
+    for match in matches:
+        if match.entity_id not in reference:
+            raise ValueError(
+                f"match references unknown entity {match.entity_id!r}"
+            )
+        if match.track_id not in prediction:
+            raise ValueError(
+                f"match references unknown track {match.track_id!r}"
+            )
+        by_entity[match.entity_id] = (
+            by_entity.get(match.entity_id, 0.0) + match.weight
+        )
+        by_track[match.track_id] = (
+            by_track.get(match.track_id, 0.0) + match.weight
+        )
+    for entity_id, exposure in by_entity.items():
+        if exposure > reference[entity_id] + 1e-9:
+            raise ValueError(
+                "matched exposure exceeds lifecycle for entity "
+                f"{entity_id!r}"
+            )
+    for track_id, exposure in by_track.items():
+        if exposure > prediction[track_id] + 1e-9:
+            raise ValueError(
+                "matched exposure exceeds lifecycle for track "
+                f"{track_id!r}"
+            )
+
+
+def _validate_association_exposure(
+    association: Mapping[str, float],
+    total: Mapping[str, float],
+    label: str,
+) -> None:
+    if set(association) != set(total):
+        raise ValueError(
+            f"{label} association exposure IDs must exactly match "
+            f"{label} exposure IDs"
+        )
+    for item_id, exposure in association.items():
+        if exposure > total[item_id] + 1e-9:
+            raise ValueError(
+                f"{label} association exposure exceeds total exposure "
+                f"for {item_id!r}"
+            )
+
+
 def _gospa(
     matches: Sequence[EntityMatch],
     *,
@@ -424,12 +596,18 @@ def _gospa(
     cutoff: float,
     alpha: float,
 ) -> GOSPADecomposition:
-    if order < 1.0:
-        raise ValueError("GOSPA order must be >= 1")
-    if cutoff <= 0.0:
-        raise ValueError("GOSPA cutoff must be positive")
-    if not 0.0 < alpha <= 2.0:
-        raise ValueError("GOSPA alpha must be in (0, 2]")
+    if not math.isfinite(order) or order < 1.0:
+        raise ValueError("GOSPA order must be finite and >= 1")
+    if not math.isfinite(cutoff) or cutoff <= 0.0:
+        raise ValueError("GOSPA cutoff must be finite and positive")
+    if not math.isfinite(alpha) or not 0.0 < alpha <= 2.0:
+        raise ValueError("GOSPA alpha must be finite and in (0, 2]")
+    try:
+        cutoff_power = cutoff**order
+    except OverflowError as exc:
+        raise ValueError("GOSPA cutoff**order must be finite") from exc
+    if not math.isfinite(cutoff_power):
+        raise ValueError("GOSPA cutoff**order must be finite")
     localization_power = float(
         sum(
             match.weight
@@ -439,10 +617,12 @@ def _gospa(
     )
     missed_exposure = max(reference_total - matched_exposure, 0.0)
     false_exposure = max(prediction_total - matched_exposure, 0.0)
-    unit_cardinality_power = cutoff**order / alpha
+    unit_cardinality_power = cutoff_power / alpha
     missed_power = unit_cardinality_power * missed_exposure
     false_power = unit_cardinality_power * false_exposure
     total_power = localization_power + missed_power + false_power
+    if not math.isfinite(total_power):
+        raise ValueError("GOSPA total power must be finite")
     distance = total_power ** (1.0 / order)
     union_exposure = max(
         reference_total + prediction_total - matched_exposure,

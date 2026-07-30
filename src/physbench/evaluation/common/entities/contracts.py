@@ -107,6 +107,14 @@ class ObjectTrack:
             minimum=0.0,
             maximum=1.0,
         )
+        if areas is not None and np.any(
+            observed & ~np.isfinite(areas)
+        ):
+            raise ValueError("observed areas_px2 values must be finite")
+        if confidence is not None and np.any(
+            observed & ~np.isfinite(confidence)
+        ):
+            raise ValueError("observed confidence values must be finite")
         object.__setattr__(self, "xy", xy)
         object.__setattr__(self, "observed", observed)
         object.__setattr__(self, "visibility", normalized_visibility)
@@ -127,6 +135,8 @@ class ObjectTrack:
         array = np.asarray(value, dtype=np.float64)
         if array.shape != (expected_length,):
             raise ValueError(f"{name} must have one value per frame")
+        if np.isinf(array).any():
+            raise ValueError(f"{name} values must not be infinite")
         finite = array[np.isfinite(array)]
         if finite.size and float(finite.min()) < minimum:
             raise ValueError(f"{name} values must be >= {minimum:g}")
@@ -157,6 +167,7 @@ class EntityMatch:
     localization_quality: float
     normalized_distance: float
     weight: float = 1.0
+    association_eligible: bool = True
 
     def __post_init__(self) -> None:
         if self.frame_index < 0:
@@ -173,6 +184,8 @@ class EntityMatch:
             raise ValueError("normalized_distance must be non-negative")
         if not math.isfinite(float(self.weight)) or float(self.weight) <= 0.0:
             raise ValueError("weight must be finite and positive")
+        if not isinstance(self.association_eligible, bool):
+            raise ValueError("association_eligible must be a boolean")
 
 
 def exposure_by_id(
