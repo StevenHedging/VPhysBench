@@ -2,7 +2,7 @@
 
 Physics Video Benchmark 是一个面向物理视频生成模型的六场景、训推一体评测框架。当前
 Dataset release 是
-`datasets/physics_video/releases/5.0.0/dataset.json`，包含 609 个 case 和 1,655 个
+`datasets/physics_video/releases/5.1.0/dataset.json`，包含 609 个 case 和 1,660 个
 锁定资产：
 
 - 单摆 `pendulum`
@@ -87,7 +87,7 @@ PYTHONPATH=src:tests /root/miniconda3/envs/phybench/bin/python \
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/5.0.0/dataset.json \
+  --dataset datasets/physics_video/releases/5.1.0/dataset.json \
   --check-asset-hashes
 ```
 
@@ -167,7 +167,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 ```text
 physics_video_benchmark/
-├── datasets/                 # 唯一权威数据根；5.0.0 是当前 release
+├── datasets/                 # 唯一权威数据根；5.1.0 是当前 release
 ├── tasks/official/           # direct_eval 与 finetune_eval 两份模型无关 Task
 ├── baselines/                # schema v5 Bundle、adapter/driver 与本机配置模板
 ├── configs/evaluation/       # scene evaluator 协议

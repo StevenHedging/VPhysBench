@@ -3,14 +3,14 @@
 `datasets/` 是仓库唯一权威数据根。当前正式入口：
 
 ```text
-physics_video/releases/4.0.0/dataset.json
+physics_video/releases/5.1.0/dataset.json
 ```
 
 目录职责：
 
 - `physics_video/assets/`：逐 scene/case 组织的 source 与 canonical 媒体；
 - `physics_video/provenance/`：导入来源、原始标注和对齐审核；
-- `physics_video/releases/4.0.0/`：当前 Dataset descriptor、Case schema 3.0、
+- `physics_video/releases/5.1.0/`：当前 Dataset descriptor、Case schema 3.0、
   scene、View 和 asset lock；
 - `physics_video/releases/<older>/`：只读的历史 release。
 

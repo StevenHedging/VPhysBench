@@ -5,7 +5,7 @@ import unittest
 from collections import Counter
 from pathlib import Path
 
-from physbench.data_layout import LATEST_DATASET, V4_DATASET, V5_DATASET
+from physbench.data_layout import V4_DATASET, V5_DATASET
 from physbench.datasets import load_dataset
 
 
@@ -18,8 +18,7 @@ class SixSceneDatasetV5Tests(unittest.TestCase):
         cls.v4 = load_dataset(V4_DATASET)
         cls.v5 = load_dataset(V5_DATASET, check_assets=True)
 
-    def test_v5_is_latest_and_has_the_frozen_release_identity(self) -> None:
-        self.assertEqual(V5_DATASET, LATEST_DATASET)
+    def test_v5_has_the_frozen_release_identity(self) -> None:
         self.assertEqual(
             "physics_video_six_scene_v5",
             self.v5.descriptor["dataset_id"],

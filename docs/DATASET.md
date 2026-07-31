@@ -5,12 +5,12 @@
 当前 DatasetSnapshot：
 
 ```text
-dataset_id:     physics_video_six_scene_v5
-release:        5.0.0
-descriptor:     datasets/physics_video/releases/5.0.0/dataset.json
+dataset_id:     physics_video_six_scene_v5p1
+release:        5.1.0
+descriptor:     datasets/physics_video/releases/5.1.0/dataset.json
 cases:          609
-locked assets:  1655
-dataset digest: 8a34015ef6ee6949b91d048c9f327f4553e5fe86b5ed8d7883539e5c5377d863
+locked assets:  1660
+dataset digest: ed395e528a7457d1fccb2a6d88f271009f2995120b5a0db61c52a3f1e348a781
 ```
 
 `datasets/` 是唯一权威数据根。Baseline、cache 和 run 不能回写或覆盖这里的资产。
@@ -34,19 +34,24 @@ datasets/
     └── releases/
         ├── 3.0.0/                    # 冻结旧 release
         ├── 4.0.0/                    # 冻结五场景 release
-        └── 5.0.0/
+        ├── 5.0.0/                    # 冻结的六场景首次导入
+        └── 5.1.0/
             ├── dataset.json          # 唯一加载入口
             ├── release.json          # Dataset 与资产集合 digest
             ├── cases.jsonl           # Case schema 3.0
             ├── assets.lock.json      # 引用资产的大小和 SHA-256
-            ├── expansion_audit.json
+            ├── ball_spec_catalog.json
+            ├── annotation_corrections.json
+            ├── asset_directory_mapping.json
+            ├── split_audit.json
+            ├── migration_audit.json
             ├── scenes/
             └── views/
 ```
 
 原始压缩包按字节保存在 `assets/source_archives/`，Case 的
 `provenance.source_locator` 记录 archive/member。供运行和评估使用的 canonical
-视频、首帧等按 scene/case 存放，路径稳定且受 asset lock 保护。
+视频、首帧等按 scene/描述性物理目录存放，路径稳定且受 asset lock 保护。
 
 ## 3. Case schema 3.0
 
@@ -87,9 +92,11 @@ case.text.prompt
 }
 ```
 
-该 prompt 描述 scene 与可见运动，不含按 case 拼接的结构化数值。所有 Baseline 都以它
-为文本源；是否原样使用、追加物理文本或转换成其它模型表示，由 Baseline 的
-`input_policy` 与 adapter 决定。Task 不生成或选择 prompt。
+该 prompt 描述 scene 与可见运动。碰撞 scene 的 5.1.0 prompt 逐 case 明确球数、
+从左到右的球规格、运动方向和初速度，避免用一个模板模糊不同情景；其它 scene
+继续使用各自冻结的 scene 文本。所有 Baseline 都以它为文本源；是否原样使用、
+追加结构化物理文本或转换成其它模型表示，由 Baseline 的 `input_policy` 与 adapter
+决定。Task 不生成或选择 prompt。
 
 ## 5. 结构化物理标注
 
@@ -128,7 +135,7 @@ conditionable Case 中。数据导入时无法建立可靠标注对应关系的�
 典型 Case：
 
 ```text
-assets/<scene_id>/<case_id>/
+assets/<scene_id>/<descriptive_physical_case_directory>/
 ├── source/                 # 可选原始字节
 └── canonical/
     ├── reference.mp4       # evaluator 使用的物理参考
@@ -139,6 +146,10 @@ assets/<scene_id>/<case_id>/
 
 - Case 中的路径相对 `dataset.asset_root`；
 - `assets.lock.json` 封印所有引用文件的大小和 SHA-256；
+- 5.1.0 的目录名只编码 scene 的主要结构化物理量与唯一身份后缀，不使用背景、
+  颜色或采集环境；
+- 5.1.0 的新路径是指向冻结媒体的硬链接，不复制视频 payload；旧路径继续供
+  5.0.0 使用；
 - I2V 使用显式 `assets.first_frame`，不在运行时从 GT 临时补首帧；
 - reference/source/provenance 属于 evaluator 或数据审计，不交给生成 driver；
 - 尺寸、FPS、帧数、抽帧和特征派生物只能进入 immutable cache 或 run。
@@ -151,7 +162,7 @@ assets/<scene_id>/<case_id>/
 V2V 必须另外登记独立输入视频资产，例如 `assets.input_video`。其中
 `conditioning_video` 只是 adapter 对该输入媒体 channel 的角色名，不表示 Task
 层的物理信息分组；reference、physics reference 和 source video 均禁止充当 V2V 输入。
-当前 5.0.0 release 没有正式 `assets.input_video`，因此 V2V Bundle 只是接口能力，
+当前 5.1.0 release 没有正式 `assets.input_video`，因此 V2V Bundle 只是接口能力，
 不能直接运行官方数据。
 
 ## 7. View A：finetune_eval
@@ -178,6 +189,9 @@ View A 是有约束的 subset；未进入 View A 的有效 case 仍属于 Datase
 碰撞补充数据中，同质球且来源 curation 为 train/test 的样本分别进入 train/test_id；
 异质球的来源 test 样本进入 test_ood1。异质球来源 train 与 9 个来源侧 near-replicate
 样本不进入 View A，以保持 collision-pair OOD 纯度，但仍保留在 Dataset 和 View B。
+平抛使用 `grouped_physical_signature_holdout_v1`：球规格、发射高度和重算后的初速度
+完全相同的 case 必须整体进入 train 或 test_id。背景不参与 signature；当前仍保持
+70/27 数量，且 train/test_id 的物理 signature 交集为 0。
 
 ## 8. View B：direct_eval
 
@@ -188,7 +202,34 @@ View B：
 - group 尽量均衡；
 - group 是报告/抽样维度，不表达模型的物理使用方式，也不等同于 ID/OOD 层级。
 
-## 9. Release 5.0.0 的扩展语义
+## 9. Release 5.1.0 的规范化语义
+
+5.1.0 从不可变的 5.0.0 派生：
+
+- 统一钢球规格 ID：小球 15 mm / 14.00 g，中球 20 mm / 33.13 g，
+  大球 25 mm / 64.77 g；
+- 对使用旧直径除以光电门遮挡时间得到的速度，保持遮挡时间不变并同步重算；
+- 平抛的质量、半径和初速度按权威规格修正；装置侧辅助测量保留但设为
+  `annotated=false`；
+- 碰撞 prompt 逐 case 描述球数、从左到右的规格、运动方向和初速度，不推测碰撞结果；
+- 平抛 View A 改为 grouped physical-signature holdout，消除 train/test_id
+  相同物理条件泄漏；
+- 六个 scene 的 case 资产统一使用含主要物理量的描述性目录；背景只属于
+  `appearance`/OOD 元数据，不进入 `physics`、物理 signature 或目录名；
+- case ID 和媒体内容不变，新目录全部用硬链接实现。
+
+可复现脚本：
+
+```bash
+PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
+  scripts/normalize_dataset_v51.py
+```
+
+逐 case 修正、规格别名、目录映射和新划分分别见 release 内的
+`annotation_corrections.json`、`ball_spec_catalog.json`、
+`asset_directory_mapping.json` 和 `split_audit.json`。
+
+### 5.0.0 导入历史
 
 5.0.0 从不可变的 4.0.0 派生：
 
@@ -221,7 +262,7 @@ canonical prompt 的历史迁移语义保持不变。
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/5.0.0/dataset.json \
+  --dataset datasets/physics_video/releases/5.1.0/dataset.json \
   --check-assets
 ```
 
@@ -230,7 +271,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/5.0.0/dataset.json \
+  --dataset datasets/physics_video/releases/5.1.0/dataset.json \
   --check-asset-hashes
 ```
 

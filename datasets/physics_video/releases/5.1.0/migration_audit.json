@@ -1,0 +1,33 @@
+{
+  "asset_directory_mapping_count": 609,
+  "asset_materialization": "hard_links_only",
+  "background_in_asset_directory_names": false,
+  "background_in_physics": false,
+  "base_dataset_digest": "8a34015ef6ee6949b91d048c9f327f4553e5fe86b5ed8d7883539e5c5377d863",
+  "base_dataset_id": "physics_video_six_scene_v5",
+  "base_release": "../5.0.0/dataset.json",
+  "base_release_files_digest": "abb15a794ca1ef480786095b00835027e21b5ecbb15e6b58b15a1fa39b337eaa",
+  "canonical_ball_spec_ids": [
+    "glass_ball_d13p5mm_m3p46g",
+    "steel_ball_large_d25mm_m64p77g",
+    "steel_ball_medium_d20mm_m33p13g",
+    "steel_ball_small_d15mm_m14g"
+  ],
+  "case_count": 609,
+  "case_ids_sha256": "51ab636cca5e9942c4c5717ea08c38b6ae940bdb9ac2ca813397141371867903",
+  "collision_case_correction_count": 330,
+  "collision_velocity_correction_count": 278,
+  "media_payload_copied_bytes": 0,
+  "parabolic_case_correction_count": 97,
+  "parabolic_split_policy": "grouped_physical_signature_holdout_v1",
+  "parabolic_train_test_signature_overlap_count": 0,
+  "scene_case_counts": {
+    "collision_1d": 330,
+    "free_fall": 11,
+    "inclined_plane_slide": 95,
+    "parabolic_motion": 97,
+    "pendulum": 40,
+    "uniform_circular_motion": 36
+  },
+  "schema_version": "1.0"
+}
