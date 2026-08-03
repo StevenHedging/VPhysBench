@@ -10,11 +10,13 @@ from ..contracts import CaseEvaluationRequest, CaseEvaluationResult
 from .errors import ReferenceAnalysisError, SceneAnalysisError
 from .entities.timeline import build_common_time_grid
 from .media import (
+    EvaluationTimelinePlan,
     SampledVideo,
     VideoProtocolError,
     probe_image_size,
     probe_video,
     reference_timeline,
+    resolve_evaluation_timeline,
     resolve_shared_spatial_plan,
     sample_video,
 )
@@ -279,17 +281,63 @@ class ReferenceCaseEvaluator(ABC):
         reference_path: Path | None = None
         times_s: list[float] = []
         shared_media_provenance: dict[str, Any] | None = None
+        timeline_plan: EvaluationTimelinePlan | None = None
+        reference_info = None
+        prediction_info = None
         try:
             reference_path, reference_mode, parent_id = (
                 resolve_physics_reference(request)
             )
             timeline = self.config["timeline"]
-            times_s = reference_timeline(
-                reference_path,
-                fps=float(timeline["fps"]),
-                max_duration_s=float(timeline["maximum_duration_s"]),
-                minimum_duration_s=float(timeline["minimum_duration_s"]),
+            timeline_policy = str(
+                timeline.get("policy", "fixed_reference_cap_v1")
             )
+            if timeline_policy == "physical_reference_full_common_fps_v1":
+                try:
+                    reference_info = probe_video(reference_path)
+                except VideoProtocolError as exc:
+                    raise VideoProtocolError(
+                        f"reference_{exc.code}",
+                        f"cannot inspect physics reference video: {exc}",
+                    ) from exc
+                try:
+                    prediction_info = probe_video(prediction_path)
+                except VideoProtocolError as exc:
+                    raise VideoProtocolError(
+                        f"prediction_{exc.code}",
+                        f"cannot inspect prediction video: {exc}",
+                    ) from exc
+                reference_case = (
+                    request.case_catalog.get(parent_id, request.case)
+                    if parent_id is not None
+                    else request.case
+                )
+                temporal = reference_case.get("temporal", {})
+                reference_source_time_scale = float(
+                    temporal.get("encoded_to_physical_speed", 1.0)
+                )
+                timeline_plan = resolve_evaluation_timeline(
+                    reference_info=reference_info,
+                    prediction_info=prediction_info,
+                    config=timeline,
+                    reference_source_time_scale=(
+                        reference_source_time_scale
+                    ),
+                )
+                times_s = list(timeline_plan.sample_times_s)
+                resolved_timeline_fps = timeline_plan.fps
+                reference_source_time_scale = (
+                    timeline_plan.reference_source_time_scale
+                )
+            else:
+                times_s = reference_timeline(
+                    reference_path,
+                    fps=float(timeline["fps"]),
+                    max_duration_s=float(timeline["maximum_duration_s"]),
+                    minimum_duration_s=float(timeline["minimum_duration_s"]),
+                )
+                resolved_timeline_fps = float(timeline["fps"])
+                reference_source_time_scale = 1.0
             spatial = self.config["spatial"]
             spatial_policy = str(
                 spatial.get(
@@ -312,7 +360,11 @@ class ReferenceCaseEvaluator(ABC):
             return self._outcome(
                 request,
                 evaluator,
-                status="unavailable",
+                status=(
+                    "protocol_error"
+                    if exc.code.startswith("prediction_")
+                    else "unavailable"
+                ),
                 code=exc.code,
                 reason=str(exc),
             )
@@ -322,8 +374,14 @@ class ReferenceCaseEvaluator(ABC):
                 **common_sampling,
                 "width": int(spatial["width"]),
                 "height": int(spatial["height"]),
+                "source_time_scale": reference_source_time_scale,
             }
-            prediction_sampling = dict(reference_sampling)
+            prediction_sampling = {
+                **common_sampling,
+                "width": int(spatial["width"]),
+                "height": int(spatial["height"]),
+                "source_time_scale": 1.0,
+            }
         elif spatial_policy == "shared_reference_content_no_pad_v1":
             try:
                 if reference_mode == "parent_physics_reference":
@@ -334,13 +392,14 @@ class ReferenceCaseEvaluator(ABC):
                         "yet defined without cropping, padding, or content-based "
                         "registration",
                     )
-                try:
-                    reference_info = probe_video(reference_path)
-                except VideoProtocolError as exc:
-                    raise VideoProtocolError(
-                        f"reference_{exc.code}",
-                        f"cannot inspect physics reference video: {exc}",
-                    ) from exc
+                if reference_info is None:
+                    try:
+                        reference_info = probe_video(reference_path)
+                    except VideoProtocolError as exc:
+                        raise VideoProtocolError(
+                            f"reference_{exc.code}",
+                            f"cannot inspect physics reference video: {exc}",
+                        ) from exc
                 first_frame_asset = request.case.get("assets", {}).get(
                     "first_frame"
                 )
@@ -383,7 +442,8 @@ class ReferenceCaseEvaluator(ABC):
                             "Case first_frame and physics reference video have "
                             "different aspect ratios",
                         )
-                prediction_info = probe_video(prediction_path)
+                if prediction_info is None:
+                    prediction_info = probe_video(prediction_path)
                 spatial_plan = resolve_shared_spatial_plan(
                     reference_info=reference_info,
                     prediction_info=prediction_info,
@@ -403,6 +463,7 @@ class ReferenceCaseEvaluator(ABC):
                     "height": spatial_plan.height,
                     "spatial_policy": "reference_content_crop_resize_no_pad",
                     "crop_xywh": spatial_plan.reference_crop_xywh,
+                    "source_time_scale": reference_source_time_scale,
                 }
                 prediction_sampling = {
                     **common_sampling,
@@ -410,6 +471,7 @@ class ReferenceCaseEvaluator(ABC):
                     "height": spatial_plan.height,
                     "spatial_policy": "reference_content_crop_resize_no_pad",
                     "crop_xywh": spatial_plan.prediction_crop_xywh,
+                    "source_time_scale": 1.0,
                 }
             except VideoProtocolError as exc:
                 if exc.code.startswith("reference_"):
@@ -530,22 +592,37 @@ class ReferenceCaseEvaluator(ABC):
             "prediction_video_sha256": sha256_file(prediction_path),
             "parent_case_id": parent_id,
             "timeline": {
-                "fps": float(timeline["fps"]),
+                "fps": float(resolved_timeline_fps),
                 "duration_s": times_s[-1],
                 "frame_count": len(times_s),
-                "policy": "case_reference_bounded",
+                "policy": (
+                    timeline_plan.policy
+                    if timeline_plan is not None
+                    else "case_reference_bounded"
+                ),
                 "prediction_frame_zero_injected": False,
+                **(
+                    {"resolution": timeline_plan.provenance}
+                    if timeline_plan is not None
+                    else {}
+                ),
             },
             "sampling": {
                 "reference": {
                     "source": reference_video.info.to_dict(),
                     "source_indices": reference_video.source_indices,
                     "spatial_transform": reference_video.spatial_transform,
+                    "temporal_transform": (
+                        reference_video.temporal_transform
+                    ),
                 },
                 "prediction": {
                     "source": prediction_video.info.to_dict(),
                     "source_indices": prediction_video.source_indices,
                     "spatial_transform": prediction_video.spatial_transform,
+                    "temporal_transform": (
+                        prediction_video.temporal_transform
+                    ),
                     **(
                         {"available": prediction_video.available}
                         if self.allow_partial_prediction

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import math
 from math import gcd
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,7 @@ class SampledVideo:
     source_indices: list[int]
     spatial_transform: dict
     available: list[bool] | None = None
+    temporal_transform: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if self.available is None:
@@ -62,6 +64,25 @@ class SampledVideo:
             "available",
             [bool(value) for value in self.available],
         )
+
+
+@dataclass(frozen=True)
+class EvaluationTimelinePlan:
+    """One physical-time grid shared by a reference and prediction.
+
+    ``reference_source_time_scale`` maps one physical second on the common
+    grid to encoded seconds in the reference asset.  It is greater than one
+    for a slow-motion source that must be played faster to recover physical
+    time.  Prediction media contracts already use physical time from frame
+    zero and therefore keep a scale of one.
+    """
+
+    sample_times_s: list[float]
+    fps: float
+    duration_s: float
+    reference_source_time_scale: float
+    policy: str
+    provenance: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -94,6 +115,125 @@ def probe_video(path: Path) -> VideoInfo:
         width=width,
         height=height,
         last_frame_time_s=(count - 1) / fps,
+    )
+
+
+def resolve_evaluation_timeline(
+    *,
+    reference_info: VideoInfo,
+    prediction_info: VideoInfo,
+    config: dict[str, Any],
+    reference_source_time_scale: float = 1.0,
+) -> EvaluationTimelinePlan:
+    """Resolve an adaptive physical-time grid without shortening to prediction.
+
+    The policy is intentionally narrow.  Duration is determined only by the
+    reference's physical duration (optionally bounded by a protocol safety
+    cap), so a short prediction cannot evade later reference motion.  The
+    sample rate uses the common native temporal resolution, bounded by the
+    protocol, to avoid manufacturing duplicate frames when both sources
+    already expose a lower native rate.
+    """
+
+    policy = str(config.get("policy", "fixed_reference_cap_v1"))
+    if policy != "physical_reference_full_common_fps_v1":
+        raise VideoProtocolError(
+            "invalid_timeline_policy",
+            f"unsupported adaptive timeline policy: {policy!r}",
+        )
+    scale = float(reference_source_time_scale)
+    if not math.isfinite(scale) or scale <= 0.0:
+        raise VideoProtocolError(
+            "reference_time_scale_invalid",
+            "reference encoded_to_physical_speed must be finite and positive",
+        )
+    maximum_fps = float(config["fps"])
+    minimum_fps = float(
+        config.get("minimum_evaluation_fps", config["minimum_source_fps"])
+    )
+    if (
+        not math.isfinite(maximum_fps)
+        or not math.isfinite(minimum_fps)
+        or maximum_fps <= 0.0
+        or minimum_fps <= 0.0
+        or minimum_fps > maximum_fps
+    ):
+        raise VideoProtocolError(
+            "invalid_timeline_fps_bounds",
+            "adaptive timeline FPS bounds must be positive and ordered",
+        )
+
+    reference_physical_fps = reference_info.fps * scale
+    prediction_physical_fps = prediction_info.fps
+    common_native_fps = min(
+        reference_physical_fps,
+        prediction_physical_fps,
+        maximum_fps,
+    )
+    resolved_fps = max(minimum_fps, common_native_fps)
+
+    reference_physical_duration = reference_info.last_frame_time_s / scale
+    maximum_duration = float(config["maximum_duration_s"])
+    minimum_duration = float(config["minimum_duration_s"])
+    if (
+        not math.isfinite(maximum_duration)
+        or not math.isfinite(minimum_duration)
+        or maximum_duration <= 0.0
+        or minimum_duration < 0.0
+        or minimum_duration > maximum_duration
+    ):
+        raise VideoProtocolError(
+            "invalid_timeline_duration_bounds",
+            "adaptive timeline duration bounds must be finite and ordered",
+        )
+    duration = min(reference_physical_duration, maximum_duration)
+    if duration < minimum_duration:
+        raise VideoProtocolError(
+            "reference_too_short",
+            "reference covers "
+            f"{reference_physical_duration:.6f}s of physical time; minimum is "
+            f"{minimum_duration:g}s",
+        )
+
+    regular_count = int(math.floor(duration * resolved_fps + 1e-9)) + 1
+    times = (np.arange(regular_count, dtype=np.float64) / resolved_fps).tolist()
+    endpoint_appended = bool(duration - times[-1] > 1e-9)
+    if endpoint_appended:
+        times.append(float(duration))
+    if len(times) < 2:
+        raise VideoProtocolError(
+            "reference_too_short",
+            "adaptive physical timeline yields fewer than two samples",
+        )
+    duration_capped = bool(
+        maximum_duration + 1e-12 < reference_physical_duration
+    )
+    return EvaluationTimelinePlan(
+        sample_times_s=times,
+        fps=float(resolved_fps),
+        duration_s=float(duration),
+        reference_source_time_scale=scale,
+        policy=policy,
+        provenance={
+            "policy": policy,
+            "duration_source": "reference_physical_duration",
+            "prediction_duration_can_shorten_timeline": False,
+            "reference_encoded_fps": reference_info.fps,
+            "reference_source_time_scale": scale,
+            "reference_physical_fps": reference_physical_fps,
+            "reference_encoded_duration_s": reference_info.last_frame_time_s,
+            "reference_physical_duration_s": reference_physical_duration,
+            "prediction_physical_fps": prediction_physical_fps,
+            "prediction_duration_s": prediction_info.last_frame_time_s,
+            "common_native_fps": common_native_fps,
+            "minimum_evaluation_fps": minimum_fps,
+            "maximum_evaluation_fps": maximum_fps,
+            "resolved_fps": resolved_fps,
+            "maximum_duration_s": maximum_duration,
+            "duration_capped": duration_capped,
+            "resolved_duration_s": duration,
+            "reference_endpoint_appended": endpoint_appended,
+        },
     )
 
 
@@ -371,18 +511,27 @@ def sample_video(
     allow_partial: bool = False,
     spatial_policy: str = "preserve_aspect_ratio_letterbox",
     crop_xywh: tuple[int, int, int, int] | None = None,
+    source_time_scale: float = 1.0,
 ) -> SampledVideo:
     if not sample_times_s:
         raise VideoProtocolError("empty_timeline", "sample timeline is empty")
     if not isinstance(allow_partial, bool):
         raise TypeError("allow_partial must be a boolean")
+    source_time_scale = float(source_time_scale)
+    if not math.isfinite(source_time_scale) or source_time_scale <= 0.0:
+        raise VideoProtocolError(
+            "invalid_source_time_scale",
+            "source_time_scale must be finite and positive",
+        )
     info = probe_video(path)
     if info.fps < min_source_fps:
         raise VideoProtocolError(
             "source_fps_too_low",
             f"{path} has {info.fps:g} FPS; minimum is {min_source_fps:g}",
         )
-    required_end = max(sample_times_s)
+    physical_times = np.asarray(sample_times_s, dtype=np.float64)
+    source_times = physical_times * source_time_scale
+    required_end = float(np.max(source_times))
     if (
         not allow_partial
         and info.last_frame_time_s + duration_tolerance_s < required_end
@@ -390,15 +539,14 @@ def sample_video(
         raise VideoProtocolError(
             "insufficient_duration",
             f"{path} ends at frame time {info.last_frame_time_s:.6f}s, "
-            f"but protocol requires {required_end:.6f}s",
+            f"but protocol requires encoded source time {required_end:.6f}s",
         )
-    raw_indices = np.rint(np.asarray(sample_times_s) * info.fps).astype(int)
+    raw_indices = np.rint(source_times * info.fps).astype(int)
     available_by_metadata = (
         (raw_indices >= 0)
         & (raw_indices < info.frame_count)
         & (
-            np.asarray(sample_times_s, dtype=np.float64)
-            <= info.last_frame_time_s + duration_tolerance_s
+            source_times <= info.last_frame_time_s + duration_tolerance_s
         )
     )
     if decode_policy not in {"legacy_random_seek", "sequential_forward"}:
@@ -420,7 +568,7 @@ def sample_video(
     ):
         raise VideoProtocolError(
             "insufficient_duration",
-            f"{path} has no source frame for t={required_end:.6f}s",
+            f"{path} has no source frame for encoded t={required_end:.6f}s",
         )
     capture = cv2.VideoCapture(str(path))
     if not capture.isOpened():
@@ -487,6 +635,15 @@ def sample_video(
                 crop_xywh=crop_xywh,
             ),
             available=available,
+            temporal_transform={
+                "policy": "physical_time_to_encoded_source_time_v1",
+                "source_time_scale": source_time_scale,
+                "sample_count": len(sample_times_s),
+                "physical_start_time_s": float(physical_times[0]),
+                "physical_end_time_s": float(physical_times[-1]),
+                "encoded_start_time_s": float(source_times[0]),
+                "encoded_end_time_s": float(source_times[-1]),
+            },
         )
 
     requested = {
@@ -587,6 +744,15 @@ def sample_video(
             )
         ),
         available=available,
+        temporal_transform={
+            "policy": "physical_time_to_encoded_source_time_v1",
+            "source_time_scale": source_time_scale,
+            "sample_count": len(sample_times_s),
+            "physical_start_time_s": float(physical_times[0]),
+            "physical_end_time_s": float(physical_times[-1]),
+            "encoded_start_time_s": float(source_times[0]),
+            "encoded_end_time_s": float(source_times[-1]),
+        },
     )
 
 

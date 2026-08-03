@@ -11,6 +11,7 @@ from physbench.evaluation.common import media
 from physbench.evaluation.common.media import (
     VideoInfo,
     VideoProtocolError,
+    resolve_evaluation_timeline,
     sample_video,
 )
 
@@ -109,6 +110,90 @@ class ForwardVideoSamplingTests(unittest.TestCase):
             pad_value=7,
         )
         self.assertEqual(first_transform, sampled.spatial_transform)
+
+    def test_physical_timeline_recovers_full_slow_motion_reference(self) -> None:
+        reference = VideoInfo(
+            frame_count=79,
+            fps=30.0,
+            width=480,
+            height=960,
+            last_frame_time_s=78 / 30.0,
+        )
+        prediction = VideoInfo(
+            frame_count=81,
+            fps=16.0,
+            width=480,
+            height=832,
+            last_frame_time_s=5.0,
+        )
+        plan = resolve_evaluation_timeline(
+            reference_info=reference,
+            prediction_info=prediction,
+            config={
+                "policy": "physical_reference_full_common_fps_v1",
+                "fps": 32.0,
+                "minimum_evaluation_fps": 8.0,
+                "maximum_duration_s": 5.0,
+                "minimum_duration_s": 0.25,
+                "minimum_source_fps": 8.0,
+            },
+            reference_source_time_scale=8.0,
+        )
+
+        self.assertEqual(16.0, plan.fps)
+        self.assertAlmostEqual(78 / 240.0, plan.duration_s)
+        self.assertAlmostEqual(plan.duration_s, plan.sample_times_s[-1])
+        self.assertFalse(
+            plan.provenance["prediction_duration_can_shorten_timeline"]
+        )
+        self.assertEqual(240.0, plan.provenance["reference_physical_fps"])
+
+    def test_physical_timeline_uses_prediction_fps_without_its_duration(self) -> None:
+        reference = VideoInfo(121, 60.0, 640, 480, 2.0)
+        short_prediction = VideoInfo(13, 24.0, 640, 480, 0.5)
+        plan = resolve_evaluation_timeline(
+            reference_info=reference,
+            prediction_info=short_prediction,
+            config={
+                "policy": "physical_reference_full_common_fps_v1",
+                "fps": 32.0,
+                "minimum_evaluation_fps": 8.0,
+                "maximum_duration_s": 5.0,
+                "minimum_duration_s": 0.25,
+                "minimum_source_fps": 8.0,
+            },
+        )
+
+        self.assertEqual(24.0, plan.fps)
+        self.assertEqual(2.0, plan.duration_s)
+        self.assertEqual(0.5, plan.provenance["prediction_duration_s"])
+
+    def test_source_time_scale_maps_physical_endpoint_to_last_frame(self) -> None:
+        frames = [
+            np.full((2, 4, 3), index, dtype=np.uint8)
+            for index in range(79)
+        ]
+        capture = FakeCapture(frames)
+        info = VideoInfo(79, 30.0, 4, 2, 78 / 30.0)
+        physical_end = 78 / 240.0
+        with (
+            patch.object(media, "probe_video", return_value=info),
+            patch.object(media.cv2, "VideoCapture", return_value=capture),
+        ):
+            sampled = sample_video(
+                Path("slow-motion.mp4"),
+                sample_times_s=[0.0, physical_end],
+                width=4,
+                height=2,
+                decode_policy="sequential_forward",
+                source_time_scale=8.0,
+            )
+
+        self.assertEqual([0, 78], sampled.source_indices)
+        self.assertEqual(
+            8.0, sampled.temporal_transform["source_time_scale"]
+        )
+        np.testing.assert_array_equal(frames[-1], sampled.frames[-1])
 
     def test_shared_i2v_plan_removes_only_declared_canvas_margin(
         self,

@@ -233,7 +233,7 @@
         "device": "auto"
       },
       "multi_frame_observation": {
-        "track_top_ratio": 0.74,
+        "track_top_ratio": 0.55,
         "track_bottom_ratio": 0.93,
         "blur_kernel": 5,
         "blur_sigma": 1.2,
@@ -698,8 +698,10 @@
       "evaluator_contract": "robust_subject_v3",
       "reference_observation_policy": "condition_causal_symmetric",
       "timeline": {
+        "policy": "physical_reference_full_common_fps_v1",
         "fps": 32.0,
-        "maximum_duration_s": 0.5,
+        "minimum_evaluation_fps": 8.0,
+        "maximum_duration_s": 5.0,
         "minimum_duration_s": 0.25,
         "minimum_source_fps": 8.0,
         "duration_tolerance_s": 0.02,
@@ -807,7 +809,7 @@
         "mode": "all",
         "layout": "quad",
         "codec": "h264",
-        "fps": 32.0,
+        "fps": null,
         "panel_width": 360,
         "panel_height": 720
       }

@@ -205,6 +205,46 @@ class CollisionV5EvaluatorTests(unittest.TestCase):
         evaluator._segmenter = _ScriptedSegmenter(outcomes)
         return evaluator
 
+    def test_current_search_band_seeds_real_supplement_balls(self) -> None:
+        root = Path(__file__).parents[1]
+        protocol = json.loads(
+            (
+                root
+                / "configs/evaluation/protocols/scene_default_v10.json"
+            ).read_text(encoding="utf-8")
+        )
+        config = protocol["scenes"]["collision_1d"][
+            "multi_frame_observation"
+        ]
+        reference = (
+            root
+            / "datasets/physics_video/assets/collision_1d"
+            / "collision_n2-single_b1-steelL-d25mm-m64p77g-v0mps_"
+            "b2-steelM-d20mm-m33p13g-vneg0p2847mps_img0989"
+            / "canonical/reference.mp4"
+        )
+        capture = cv2.VideoCapture(str(reference))
+        ok, frame = capture.read()
+        capture.release()
+        self.assertTrue(ok)
+        frame = cv2.resize(frame, (936, 540))
+
+        prompts, metadata = (
+            open_world.build_multiframe_collision_entity_prompts(
+                [frame],
+                expected_count=2,
+                entity_ids=["ball_1", "ball_2"],
+                config=config,
+            )
+        )
+
+        circles = metadata["selected_circles_xyr"]
+        self.assertEqual(2, len(prompts))
+        self.assertEqual(2, len(circles))
+        self.assertTrue(all(float(circle[0]) > 800.0 for circle in circles))
+        self.assertTrue(all(float(circle[1]) < 400.0 for circle in circles))
+        self.assertEqual("multiframe_hough_circle", metadata["seed_source"])
+
     def _analyze(
         self,
         *,
