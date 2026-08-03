@@ -7,6 +7,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import cv2
+import numpy as np
+
 from physbench.baselines.wan22_media import Wan22MediaAdapter
 
 
@@ -16,6 +19,38 @@ def file_sha256(path: Path) -> str:
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg/ffprobe required")
 class Wan22MediaTests(unittest.TestCase):
+    def test_edge_contain_preserves_full_view_without_black_margin(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "condition.png"
+            frame = np.full((90, 160, 3), (20, 80, 160), dtype=np.uint8)
+            self.assertTrue(cv2.imwrite(str(source), frame))
+            adapter = Wan22MediaAdapter({
+                "width": 96,
+                "height": 160,
+                "fps": 24,
+                "max_frames": 21,
+                "min_frames": 5,
+                "pad_color": "black",
+                "pad_mode": "edge",
+            })
+            output = root / "contained.png"
+            record = adapter.normalize_first_frame(
+                source,
+                output,
+                source_is_video=False,
+                materialize=True,
+            )
+
+            contained = cv2.imread(str(output), cv2.IMREAD_COLOR)
+            self.assertIsNotNone(contained)
+            self.assertEqual((160, 96, 3), contained.shape)
+            self.assertTrue(np.all(contained == frame[0, 0]))
+            self.assertEqual(
+                "aspect_preserving_contain_edge_replicate",
+                record["spatial_mapping"]["policy"],
+            )
+
     def test_i2v_profiles_require_a_shared_vae_grid(self) -> None:
         with self.assertRaisesRegex(ValueError, "divisible by 32"):
             Wan22MediaAdapter({

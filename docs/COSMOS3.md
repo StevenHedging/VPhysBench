@@ -102,7 +102,8 @@ src/physbench/baseline_plugins/resources/five_scene_physics_clauses_v1.json
 | free_fall | 480 | `9,16` |
 | collision_1d | 480 | `16,9` |
 | inclined_plane_slide | 480 | `16,9` |
-| uniform_circular_motion | 480 | `4,3` |
+| parabolic_motion | 480 | `9,16`（完整 `1:2` 内容 contain 后评估时去 margin） |
+| uniform_circular_motion | 480 | `9,16` |
 
 时间固定为：
 
@@ -191,7 +192,9 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 ## 7. Evaluation
 
-Cosmos 只生成 prediction。Reference、parent reference、mask、timeline 与 scene-local
+Cosmos 只生成 prediction。首帧在 run-local 目录中等比 contain 到模型画布，空余区域
+用边缘像素复制；Dataset 资产不变，评估时该临时 margin 会按 sealed contract 排除。
+Reference、parent reference、mask、timeline 与 scene-local
 物理评分由 Benchmark evaluator 解析。无可信物理 reference 的 OOD case 返回明确错误，
 不会伪造 GT。
 

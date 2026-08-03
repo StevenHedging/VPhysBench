@@ -45,6 +45,9 @@
         },
         "collision_1d": {
           "$ref": "#/$defs/referenceScene"
+        },
+        "parabolic_motion": {
+          "$ref": "#/$defs/openWorldV2ParabolicScene"
         }
       },
       "additionalProperties": {
@@ -196,20 +199,53 @@
       "type": "object",
       "required": [
         "enabled",
-        "external_root",
-        "repository_link",
-        "namespace",
         "fps"
       ],
       "properties": {
         "enabled": {"type": "boolean"},
-        "external_root": {"type": "string", "minLength": 1},
-        "external_root_env": {"type": "string", "minLength": 1},
-        "repository_link": {"type": "string", "minLength": 1},
-        "namespace": {"type": "string", "minLength": 1},
+        "external_root": {
+          "type": "string",
+          "minLength": 1,
+          "deprecated": true,
+          "description": "Legacy protocol provenance only; current writers always use the owning evaluation directory."
+        },
+        "external_root_env": {
+          "type": "string",
+          "minLength": 1,
+          "deprecated": true,
+          "description": "Legacy protocol provenance only; current writers do not read this environment variable."
+        },
+        "repository_link": {
+          "type": "string",
+          "minLength": 1,
+          "deprecated": true,
+          "description": "Legacy protocol provenance only; current manifests use evaluation-relative paths."
+        },
+        "namespace": {
+          "type": "string",
+          "minLength": 1,
+          "deprecated": true,
+          "description": "Legacy protocol provenance only; evaluator versions are not directory components."
+        },
+        "mode": {
+          "enum": ["all", "issues_only", "sampled", "off"]
+        },
+        "layout": {"enum": ["side_by_side", "quad"]},
+        "codec": {"enum": ["h264", "avc1"]},
+        "sample_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "issue_score_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
         "fps": {"type": "number", "exclusiveMinimum": 0},
         "panel_width": {"type": "integer", "minimum": 64},
-        "panel_height": {"type": "integer", "minimum": 64}
+        "panel_height": {"type": "integer", "minimum": 64},
+        "footer_height": {"type": "integer", "minimum": 64}
       },
       "additionalProperties": false
     },
@@ -236,7 +272,8 @@
             "inclined_plane_state_v6",
             "inclined_plane_state_v7",
             "uniform_circular_motion_state_v6",
-            "uniform_circular_motion_state_v7"
+            "uniform_circular_motion_state_v7",
+            "parabolic_motion_state_v1"
           ]
         },
         "observer_protocol": {"const": "open_world_v2"},
@@ -434,6 +471,17 @@
               ]
             }
           }
+        }
+      ]
+    },
+    "openWorldV2ParabolicScene": {
+      "allOf": [
+        {"$ref": "#/$defs/openWorldV2Scene"},
+        {
+          "properties": {
+            "type": {"const": "parabolic_motion_state_v1"}
+          },
+          "required": ["open_world_observation", "quality"]
         }
       ]
     },

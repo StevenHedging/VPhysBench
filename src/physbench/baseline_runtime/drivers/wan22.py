@@ -127,6 +127,7 @@ class Wan22ManagedDriver(ManagedDriver):
                 "scene_aspect_ratio_bucket_then_fit_and_pad",
             ),
             "pad_color": spatial.get("pad_color", "black"),
+            "pad_mode": spatial.get("pad_mode", "color"),
             "aspect_ratio_buckets": {
                 "enabled": True,
                 "buckets": buckets,

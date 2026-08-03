@@ -28,6 +28,9 @@ class Wan22MediaAdapter:
         self.max_frames = int(policy["max_frames"])
         self.min_frames = int(policy.get("min_frames", 5))
         self.pad_color = str(policy.get("pad_color", "black"))
+        self.pad_mode = str(policy.get("pad_mode", "color"))
+        if self.pad_mode not in {"color", "edge"}:
+            raise ValueError("WAN pad_mode must be color or edge")
         if self.width % 32 or self.height % 32:
             raise ValueError(
                 "WAN I2V target width and height must be divisible by 32"
@@ -161,10 +164,58 @@ class Wan22MediaAdapter:
             frames = self.min_frames
         return frames
 
-    def _spatial_filter(self, width: int, height: int) -> str:
+    @staticmethod
+    def _contain_geometry(
+        source_width: int,
+        source_height: int,
+        width: int,
+        height: int,
+    ) -> tuple[int, int, int, int, int, int]:
+        scale = min(width / source_width, height / source_height)
+        resized_width = max(1, int(round(source_width * scale)))
+        resized_height = max(1, int(round(source_height * scale)))
+        left = (width - resized_width) // 2
+        right = width - resized_width - left
+        top = (height - resized_height) // 2
+        bottom = height - resized_height - top
+        return resized_width, resized_height, left, right, top, bottom
+
+    def _spatial_filter(
+        self,
+        width: int,
+        height: int,
+        *,
+        source_width: int | None = None,
+        source_height: int | None = None,
+    ) -> str:
+        if self.pad_mode == "color":
+            return (
+                f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:"
+                f"color={self.pad_color},setsar=1"
+            )
+        if source_width is None or source_height is None:
+            raise ValueError(
+                "edge-replicated WAN contain requires source dimensions"
+            )
+        (
+            resized_width,
+            resized_height,
+            left,
+            right,
+            top,
+            bottom,
+        ) = self._contain_geometry(
+            source_width,
+            source_height,
+            width,
+            height,
+        )
         return (
-            f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color={self.pad_color},setsar=1"
+            f"scale={resized_width}:{resized_height},"
+            f"pad={width}:{height}:{left}:{top}:color=black,"
+            f"fillborders=left={left}:right={right}:top={top}:"
+            f"bottom={bottom}:mode=smear,setsar=1"
         )
 
     def normalize_video(
@@ -198,7 +249,18 @@ class Wan22MediaAdapter:
         if abs(speed_factor - 1.0) > 1e-12:
             temporal_filters.append(f"setpts=PTS/{speed_factor:g}")
         temporal_filters.append(f"fps={self.fps}")
-        temporal_filters.append(self._spatial_filter(width, height))
+        temporal_filters.append(
+            self._spatial_filter(
+                width,
+                height,
+                source_width=(
+                    int(source_probe["width"]) if source_probe else None
+                ),
+                source_height=(
+                    int(source_probe["height"]) if source_probe else None
+                ),
+            )
+        )
         command = [
             "ffmpeg", "-v", "error", "-y", "-i", str(source),
             "-vf", ",".join(temporal_filters),
@@ -244,24 +306,54 @@ class Wan22MediaAdapter:
             "spatial_mapping": {
                 "width": width,
                 "height": height,
-                "policy": "aspect_preserving_fit_and_pad",
-                "pad_color": self.pad_color,
+                "policy": (
+                    "aspect_preserving_contain_edge_replicate"
+                    if self.pad_mode == "edge"
+                    else "aspect_preserving_fit_and_pad"
+                ),
+                "pad_mode": self.pad_mode,
+                **(
+                    {"pad_color": self.pad_color}
+                    if self.pad_mode == "color"
+                    else {}
+                ),
             },
             "command": command,
         }
 
     def normalize_first_frame(
-        self, source: Path, output: Path, *, source_is_video: bool, materialize: bool,
+        self,
+        source: Path,
+        output: Path,
+        *,
+        source_is_video: bool,
+        materialize: bool,
         scene_id: str | None = None,
     ) -> dict[str, Any]:
         exists = source.is_file()
         if materialize and not exists:
             raise FileNotFoundError(f"first-frame source not found: {source}")
+        source_probe = self.probe(source) if exists else None
         command = ["ffmpeg", "-v", "error", "-y", "-i", str(source)]
         profile = self.profile(scene_id)
         width, height = int(profile["width"]), int(profile["height"])
         command += [
-            "-vf", self._spatial_filter(width, height), "-frames:v", "1", "-update", "1", str(output),
+            "-vf",
+            self._spatial_filter(
+                width,
+                height,
+                source_width=(
+                    int(source_probe["width"]) if source_probe else None
+                ),
+                source_height=(
+                    int(source_probe["height"]) if source_probe else None
+                ),
+            ),
+            "-frames:v",
+            "1",
+            "-update",
+            "1",
+            str(output),
         ]
         output_probe = None
         if materialize:
@@ -270,10 +362,20 @@ class Wan22MediaAdapter:
             if not output.is_file():
                 subprocess.run(command, check=True)
             output_probe = self.probe(output)
-            if output_probe["width"] != width or output_probe["height"] != height:
-                raise RuntimeError(f"normalized first frame failed verification: {output_probe}")
+            if (
+                output_probe["width"] != width
+                or output_probe["height"] != height
+            ):
+                raise RuntimeError(
+                    "normalized first frame failed verification: "
+                    f"{output_probe}"
+                )
         return {
-            "kind": "first_frame_from_video" if source_is_video else "first_frame_from_image",
+            "kind": (
+                "first_frame_from_video"
+                if source_is_video
+                else "first_frame_from_image"
+            ),
             "status": "materialized" if materialize else "planned",
             "source": str(source),
             "output": str(output),
@@ -282,8 +384,17 @@ class Wan22MediaAdapter:
             "spatial_mapping": {
                 "width": width,
                 "height": height,
-                "policy": "aspect_preserving_fit_and_pad",
-                "pad_color": self.pad_color,
+                "policy": (
+                    "aspect_preserving_contain_edge_replicate"
+                    if self.pad_mode == "edge"
+                    else "aspect_preserving_fit_and_pad"
+                ),
+                "pad_mode": self.pad_mode,
+                **(
+                    {"pad_color": self.pad_color}
+                    if self.pad_mode == "color"
+                    else {}
+                ),
             },
             "command": command,
         }

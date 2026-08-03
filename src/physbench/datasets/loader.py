@@ -15,7 +15,7 @@ FORBIDDEN_CASE_KEYS = {
     "prompt_profile_id",
     "view_a_split",
 }
-REQUIRED_CASE_KEYS = {
+REQUIRED_CASE_KEYS_V3 = {
     "schema_version",
     "case_id",
     "scene_id",
@@ -27,6 +27,16 @@ REQUIRED_CASE_KEYS = {
     "provenance",
     "ood",
     "has_real_reference_video",
+}
+REQUIRED_CASE_KEYS_V4 = REQUIRED_CASE_KEYS_V3 - {"ood"}
+GENERALIZATION_REGIMES = {"id", "ood", "mixed"}
+GENERALIZATION_FACTOR_CATEGORIES = {
+    "physical_parameter",
+    "object_composition",
+    "interaction_structure",
+    "appearance",
+    "environment",
+    "acquisition",
 }
 
 
@@ -41,6 +51,90 @@ def _load_directory_json(directory: Path) -> dict[str, dict[str, Any]]:
             raise ValueError(f"duplicate scene config: {key}")
         values[key] = value
     return values
+
+
+def _validate_scene_v2(scene: dict[str, Any]) -> None:
+    required = {
+        "schema_version",
+        "scene_id",
+        "display_name",
+        "structured_physics_parameters",
+        "non_conditionable_physics_parameters",
+        "generalization_factors",
+        "constraints",
+        "metric_spec",
+    }
+    if set(scene) != required:
+        raise ValueError(
+            f"scene {scene.get('scene_id')} schema 2.0 fields must be "
+            f"{sorted(required)}"
+        )
+    if scene["schema_version"] != "2.0":
+        raise ValueError(f"scene {scene.get('scene_id')} must use schema 2.0")
+    require_safe_id(scene["scene_id"], label="scene.scene_id")
+    if (
+        not isinstance(scene["display_name"], str)
+        or not scene["display_name"].strip()
+    ):
+        raise ValueError(
+            f"scene {scene['scene_id']} display_name must be non-empty"
+        )
+    for field in (
+        "structured_physics_parameters",
+        "non_conditionable_physics_parameters",
+    ):
+        values = scene[field]
+        if not isinstance(values, list) or any(
+            not isinstance(value, str) or not value for value in values
+        ):
+            raise ValueError(
+                f"scene {scene['scene_id']} {field} must be a string array"
+            )
+        if len(values) != len(set(values)):
+            raise ValueError(f"scene {scene['scene_id']} {field} has duplicates")
+    factors = scene["generalization_factors"]
+    if not isinstance(factors, list):
+        raise ValueError(
+            f"scene {scene['scene_id']} generalization_factors must be an array"
+        )
+    factor_names: list[str] = []
+    for index, factor in enumerate(factors):
+        if not isinstance(factor, dict) or set(factor) != {
+            "name",
+            "category",
+            "source",
+        }:
+            raise ValueError(
+                f"scene {scene['scene_id']} factor {index} has invalid fields"
+            )
+        require_safe_id(
+            factor["name"],
+            label=f"scene.{scene['scene_id']}.generalization_factors[{index}].name",
+        )
+        if factor["category"] not in GENERALIZATION_FACTOR_CATEGORIES:
+            raise ValueError(
+                f"scene {scene['scene_id']} factor {factor['name']} has "
+                f"invalid category={factor['category']}"
+            )
+        if (
+            not isinstance(factor["source"], str)
+            or not factor["source"].strip()
+        ):
+            raise ValueError(
+                f"scene {scene['scene_id']} factor {factor['name']} needs source"
+            )
+        factor_names.append(factor["name"])
+    if len(factor_names) != len(set(factor_names)):
+        raise ValueError(
+            f"scene {scene['scene_id']} generalization factor names repeat"
+        )
+    if not isinstance(scene["constraints"], list) or any(
+        not isinstance(value, str) or not value.strip()
+        for value in scene["constraints"]
+    ):
+        raise ValueError(f"scene {scene['scene_id']} constraints must be strings")
+    if not isinstance(scene["metric_spec"], dict):
+        raise ValueError(f"scene {scene['scene_id']} metric_spec must be an object")
 
 
 def _assert_no_model_payload(case: dict[str, Any]) -> None:
@@ -66,11 +160,33 @@ def _assert_no_model_payload(case: dict[str, Any]) -> None:
 
 
 def _validate_case(case: dict[str, Any], known_scenes: set[str]) -> None:
-    missing = sorted(REQUIRED_CASE_KEYS - set(case))
+    schema_version = case.get("schema_version")
+    if schema_version not in {"3.0", "4.0"}:
+        raise ValueError(
+            f"case {case.get('case_id')} must use schema_version=3.0 or 4.0"
+        )
+    required = (
+        REQUIRED_CASE_KEYS_V3
+        if schema_version == "3.0"
+        else REQUIRED_CASE_KEYS_V4
+    )
+    missing = sorted(required - set(case))
     if missing:
-        raise ValueError(f"dataset v3 case {case.get('case_id')} missing {missing}")
-    if case["schema_version"] != "3.0":
-        raise ValueError(f"case {case.get('case_id')} must use schema_version=3.0")
+        raise ValueError(
+            f"dataset case {case.get('case_id')} missing {missing}"
+        )
+    if schema_version == "4.0" and "ood" in case:
+        raise ValueError(
+            f"dataset v4 case {case.get('case_id')} must not contain view-relative ood"
+        )
+    if schema_version == "4.0":
+        allowed = REQUIRED_CASE_KEYS_V4 | {"alignment"}
+        unknown = sorted(set(case) - allowed)
+        if unknown:
+            raise ValueError(
+                f"dataset v4 case {case.get('case_id')} has unknown fields: "
+                f"{unknown}"
+            )
     require_safe_id(case.get("case_id"), label="case.case_id")
     require_safe_id(case.get("scene_id"), label="case.scene_id")
     _assert_no_model_payload(case)
@@ -161,6 +277,165 @@ def _validate_case(case: dict[str, Any], known_scenes: set[str]) -> None:
         raise ValueError(
             f"case {case['case_id']} has_real_reference_video must be boolean"
         )
+    for field in ("appearance", "temporal", "provenance"):
+        if not isinstance(case[field], dict):
+            raise ValueError(
+                f"case {case['case_id']} {field} must be an object"
+            )
+    alignment = case.get("alignment")
+    if alignment is not None and not isinstance(alignment, dict):
+        raise ValueError(
+            f"case {case['case_id']} alignment must be null or an object"
+        )
+
+
+def _validate_factor_list(
+    value: Any,
+    *,
+    label: str,
+) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        raise ValueError(f"{label} must be an array")
+    factors: list[dict[str, str]] = []
+    for index, factor in enumerate(value):
+        if not isinstance(factor, dict) or set(factor) != {"name", "category"}:
+            raise ValueError(
+                f"{label}[{index}] must contain exactly name and category"
+            )
+        name = factor["name"]
+        category = factor["category"]
+        require_safe_id(name, label=f"{label}[{index}].name")
+        if category not in GENERALIZATION_FACTOR_CATEGORIES:
+            raise ValueError(
+                f"{label}[{index}].category must be one of "
+                f"{sorted(GENERALIZATION_FACTOR_CATEGORIES)}"
+            )
+        factors.append({"name": name, "category": category})
+    if len({item["name"] for item in factors}) != len(factors):
+        raise ValueError(f"{label} must not repeat factor names")
+    return factors
+
+
+def _validate_view_a_v3(
+    view: dict[str, Any],
+    *,
+    case_ids: set[str],
+    case_scene: dict[str, str],
+) -> None:
+    if view.get("view_id") != "view_a":
+        raise ValueError(
+            "dataset view key view_a does not match its view_id"
+        )
+    if view.get("coverage") != "complete":
+        raise ValueError("dataset view view_a schema 3.0 must have complete coverage")
+    semantics = view.get("split_semantics")
+    if not isinstance(semantics, dict):
+        raise ValueError("dataset view view_a split_semantics must be an object")
+    if semantics.get("primary_partitions") != ["train", "test"]:
+        raise ValueError(
+            "dataset view view_a primary_partitions must be ['train', 'test']"
+        )
+    if semantics.get("generalization_regimes") != ["id", "ood", "mixed"]:
+        raise ValueError(
+            "dataset view view_a generalization_regimes must be "
+            "['id', 'ood', 'mixed']"
+        )
+    if semantics.get("regime_is_relative_to") != "view_a.train":
+        raise ValueError(
+            "dataset view view_a regimes must be relative to view_a.train"
+        )
+
+    scenes = view.get("scenes")
+    if not isinstance(scenes, dict) or not scenes:
+        raise ValueError("dataset view view_a scenes must be non-empty")
+    train_ids: list[str] = []
+    test_ids: list[str] = []
+    for scene_id, groups in scenes.items():
+        if not isinstance(scene_id, str) or not isinstance(groups, dict):
+            raise ValueError("dataset view view_a has an invalid scene bucket")
+        if set(groups) != {"train", "test"}:
+            raise ValueError(
+                f"dataset view view_a scene {scene_id} must contain train/test"
+            )
+        for partition in ("train", "test"):
+            members = groups[partition]
+            if not isinstance(members, list) or any(
+                not isinstance(case_id, str) or not case_id
+                for case_id in members
+            ):
+                raise ValueError(
+                    f"dataset view view_a has invalid {scene_id}/{partition} members"
+                )
+            for case_id in members:
+                actual_scene = case_scene.get(case_id)
+                if actual_scene is not None and actual_scene != scene_id:
+                    raise ValueError(
+                        f"dataset view view_a places case {case_id} from scene "
+                        f"{actual_scene} in scene bucket {scene_id}"
+                    )
+            (train_ids if partition == "train" else test_ids).extend(members)
+    all_ids = train_ids + test_ids
+    if len(all_ids) != len(set(all_ids)):
+        raise ValueError("dataset view view_a contains duplicate case IDs")
+    unknown = set(all_ids) - case_ids
+    if unknown:
+        raise ValueError(
+            f"dataset view view_a references unknown cases: {sorted(unknown)}"
+        )
+    if set(all_ids) != case_ids:
+        raise ValueError("dataset view view_a must cover the complete case set")
+
+    annotations = view.get("test_annotations")
+    if not isinstance(annotations, dict):
+        raise ValueError("dataset view view_a test_annotations must be an object")
+    if set(annotations) != set(test_ids):
+        raise ValueError(
+            "dataset view view_a test_annotations must exactly cover test cases"
+        )
+    for case_id, annotation in annotations.items():
+        if not isinstance(annotation, dict) or set(annotation) != {
+            "generalization_regime",
+            "ood_factors",
+            "co_varying_factors",
+            "rationale",
+        }:
+            raise ValueError(
+                f"view_a test annotation {case_id} has invalid fields"
+            )
+        regime = annotation["generalization_regime"]
+        if regime not in GENERALIZATION_REGIMES:
+            raise ValueError(
+                f"view_a test annotation {case_id} has invalid regime={regime}"
+            )
+        ood_factors = _validate_factor_list(
+            annotation["ood_factors"],
+            label=f"view_a.test_annotations.{case_id}.ood_factors",
+        )
+        co_varying = _validate_factor_list(
+            annotation["co_varying_factors"],
+            label=f"view_a.test_annotations.{case_id}.co_varying_factors",
+        )
+        rationale = annotation["rationale"]
+        if not isinstance(rationale, str) or not rationale.strip():
+            raise ValueError(
+                f"view_a test annotation {case_id} rationale must be non-empty"
+            )
+        if regime == "id" and (ood_factors or co_varying):
+            raise ValueError(
+                f"view_a ID annotation {case_id} cannot declare held-out factors"
+            )
+        if regime == "ood" and (not ood_factors or co_varying):
+            raise ValueError(
+                f"view_a OOD annotation {case_id} requires only OOD factors"
+            )
+        if regime == "mixed" and (not ood_factors or not co_varying):
+            raise ValueError(
+                f"view_a mixed annotation {case_id} requires OOD and co-varying factors"
+            )
+
+    expected_case_set_digest = canonical_sha256(sorted(all_ids))
+    if view.get("case_set_sha256") != expected_case_set_digest:
+        raise ValueError("dataset view view_a case_set_sha256 mismatch")
 
 
 def _validate_views(
@@ -172,8 +447,18 @@ def _validate_views(
         for case in cases
     }
     for view_id, view in views.items():
+        if view_id == "view_a" and view.get("schema_version") == "3.0":
+            _validate_view_a_v3(
+                view,
+                case_ids=case_ids,
+                case_scene=case_scene,
+            )
+            continue
         if view.get("schema_version") != "2.0":
-            raise ValueError(f"dataset view {view_id} must use schema_version=2.0")
+            raise ValueError(
+                f"dataset view {view_id} must use schema_version=2.0, or "
+                "view_a schema_version=3.0"
+            )
         if view.get("view_id") != view_id:
             raise ValueError(
                 f"dataset view key {view_id} does not match "
@@ -236,6 +521,66 @@ def _validate_views(
             )
 
 
+def _validate_v4_scene_case_and_view_contracts(
+    cases: tuple[dict[str, Any], ...],
+    scenes: dict[str, dict[str, Any]],
+    view_a: dict[str, Any],
+) -> None:
+    by_id = {case["case_id"]: case for case in cases}
+    for case in cases:
+        scene = scenes[case["scene_id"]]
+        conditionable = set(scene["structured_physics_parameters"])
+        non_conditionable = set(scene["non_conditionable_physics_parameters"])
+        overlap = conditionable & non_conditionable
+        if overlap:
+            raise ValueError(
+                f"scene {case['scene_id']} repeats physics parameters across "
+                f"conditionable sets: {sorted(overlap)}"
+            )
+        for name, quantity in case["physics"].items():
+            expected = (
+                conditionable
+                if quantity["annotated"]
+                else non_conditionable
+            )
+            if name not in expected:
+                state = (
+                    "structured"
+                    if quantity["annotated"]
+                    else "non-conditionable"
+                )
+                raise ValueError(
+                    f"case {case['case_id']} physics.{name} is {state} but absent "
+                    f"from its scene contract"
+                )
+
+    for case_id, annotation in view_a["test_annotations"].items():
+        case = by_id[case_id]
+        declared = {
+            factor["name"]: factor["category"]
+            for factor in scenes[case["scene_id"]]["generalization_factors"]
+        }
+        for factor in annotation["ood_factors"]:
+            if declared.get(factor["name"]) != factor["category"]:
+                raise ValueError(
+                    f"view_a factor {factor['name']} for case {case_id} is not "
+                    "declared by the scene with the same category"
+                )
+        structured = set(
+            scenes[case["scene_id"]]["structured_physics_parameters"]
+        )
+        for factor in annotation["co_varying_factors"]:
+            if factor["category"] == "physical_parameter":
+                valid = factor["name"] in structured
+            else:
+                valid = declared.get(factor["name"]) == factor["category"]
+            if not valid:
+                raise ValueError(
+                    f"view_a co-varying factor {factor['name']} for case "
+                    f"{case_id} is absent from the scene contract"
+                )
+
+
 def _load_asset_lock(
     root: Path,
     descriptor: dict[str, Any],
@@ -295,8 +640,11 @@ def load_dataset(
 ) -> DatasetSnapshot:
     descriptor_path = Path(path).resolve()
     descriptor = load_json(descriptor_path)
-    if descriptor.get("schema_version") != "3.0":
-        raise ValueError("dataset descriptor must use schema_version=3.0")
+    descriptor_schema = descriptor.get("schema_version")
+    if descriptor_schema not in {"3.0", "4.0"}:
+        raise ValueError(
+            "dataset descriptor must use schema_version=3.0 or 4.0"
+        )
     require_safe_id(
         descriptor.get("dataset_id"),
         label="dataset.dataset_id",
@@ -306,9 +654,18 @@ def load_dataset(
     scene_configs = _load_directory_json(root / descriptor["scene_catalog"])
     if not scene_configs:
         raise ValueError("dataset scene catalog is empty")
+    if descriptor_schema == "4.0":
+        for scene in scene_configs.values():
+            _validate_scene_v2(scene)
     seen: set[str] = set()
     for case in cases:
         _validate_case(case, set(scene_configs))
+        expected_case_schema = descriptor_schema
+        if case.get("schema_version") != expected_case_schema:
+            raise ValueError(
+                f"dataset descriptor schema {descriptor_schema} cannot contain "
+                f"case schema {case.get('schema_version')}"
+            )
         if case["case_id"] in seen:
             raise ValueError(f"duplicate dataset case ID {case['case_id']}")
         seen.add(case["case_id"])
@@ -317,6 +674,12 @@ def load_dataset(
         for view_id, relative_path in descriptor["views"].items()
     }
     _validate_views(cases, views)
+    if descriptor_schema == "4.0":
+        _validate_v4_scene_case_and_view_contracts(
+            cases,
+            scene_configs,
+            views["view_a"],
+        )
     asset_root = (root / descriptor.get("asset_root", ".")).resolve()
     asset_lock = _load_asset_lock(root, descriptor, cases)
     if check_asset_hashes and asset_lock is None:

@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.0",
+  "template_set_id": "six_scene_physics_clauses_v1",
+  "description": "Structured physical quantities appended to a Dataset-owned case prompt for the six-scene benchmark.",
+  "scenes": {
+    "pendulum": {
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "string_length", "required": true, "expected_unit": "m", "precision": 3, "template": "the string length is {value} meters"},
+        {"name": "bob_radius", "required": true, "expected_unit": "m", "precision": 3, "template": "the spherical bob radius is {value} meters"},
+        {"name": "pendulum_length", "required": true, "expected_unit": "m", "precision": 3, "template": "the pivot-to-bob-center pendulum length is {value} meters"},
+        {"name": "initial_angle", "required": true, "expected_unit": "deg", "precision": 1, "template": "the initial release angle is {value} degrees"}
+      ]
+    },
+    "free_fall": {
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "initial_height", "required": true, "expected_unit": "m", "precision": 2, "template": "the initial vertical drop height is {value} meters"},
+        {"name": "ball_radius", "required": true, "expected_unit": "m", "precision": 4, "template": "the ball radius is {value} meters"},
+        {"name": "ball_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "the ball mass is {value} kilograms"},
+        {"name": "initial_velocity", "required": true, "expected_unit": "m/s", "precision": 3, "template": "the initial vertical velocity is {value} meters per second"}
+      ]
+    },
+    "collision_1d": {
+      "parameter_intro": " Physical parameters (balls are numbered from left to right in the initial frame, and rightward velocity is positive): ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "ball_1_initial_velocity", "required": true, "expected_unit": "m/s", "precision": 4, "template": "ball 1 initial velocity is {value} meters per second"},
+        {"name": "ball_1_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "ball 1 mass is {value} kilograms"},
+        {"name": "ball_1_radius", "required": true, "expected_unit": "m", "precision": 5, "template": "ball 1 radius is {value} meters"},
+        {"name": "ball_2_initial_velocity", "required": true, "expected_unit": "m/s", "precision": 4, "template": "ball 2 initial velocity is {value} meters per second"},
+        {"name": "ball_2_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "ball 2 mass is {value} kilograms"},
+        {"name": "ball_2_radius", "required": true, "expected_unit": "m", "precision": 5, "template": "ball 2 radius is {value} meters"},
+        {"name": "ball_3_initial_velocity", "required": false, "expected_unit": "m/s", "precision": 4, "template": "ball 3 initial velocity is {value} meters per second"},
+        {"name": "ball_3_mass", "required": false, "expected_unit": "kg", "precision": 5, "template": "ball 3 mass is {value} kilograms"},
+        {"name": "ball_3_radius", "required": false, "expected_unit": "m", "precision": 5, "template": "ball 3 radius is {value} meters"}
+      ]
+    },
+    "inclined_plane_slide": {
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "incline_angle", "required": true, "expected_unit": "deg", "precision": 1, "template": "the incline angle is {value} degrees"},
+        {"name": "block_length", "required": true, "expected_unit": "m", "precision": 3, "template": "the block length is {value} meters"},
+        {"name": "block_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "the block mass is {value} kilograms"},
+        {"name": "calibration_length", "required": true, "expected_unit": "m", "precision": 3, "template": "the calibrated reference length is {value} meters"},
+        {"name": "gravity_acceleration", "required": true, "expected_unit": "m/s^2", "precision": 5, "template": "the gravitational acceleration is {value} meters per second squared"},
+        {"name": "kinetic_friction_coefficient", "required": true, "expected_unit": "1", "precision": 3, "template": "the kinetic friction coefficient is {value}"},
+        {"name": "friction_force", "required": true, "expected_unit": "N", "precision": 5, "template": "the kinetic friction force is {value} newtons"},
+        {"name": "theoretical_acceleration", "required": true, "expected_unit": "m/s^2", "precision": 4, "template": "the theoretical acceleration down the incline is {value} meters per second squared"}
+      ]
+    },
+    "parabolic_motion": {
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "initial_horizontal_velocity", "required": true, "expected_unit": "m/s", "precision": 4, "template": "the initial horizontal speed is {value} meters per second"},
+        {"name": "launch_height", "required": true, "expected_unit": "m", "precision": 3, "template": "the launch height is {value} meters"},
+        {"name": "ball_radius", "required": true, "expected_unit": "m", "precision": 5, "template": "the ball radius is {value} meters"},
+        {"name": "ball_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "the ball mass is {value} kilograms"}
+      ]
+    },
+    "uniform_circular_motion": {
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "angular_velocity", "required": true, "expected_unit": "deg/s", "precision": 2, "template": "the angular velocity is {value} degrees per second"},
+        {"name": "object_1_orbit_radius", "required": true, "expected_unit": "m", "precision": 2, "template": "object 1 orbit radius is {value} meters"},
+        {"name": "object_2_orbit_radius", "required": false, "expected_unit": "m", "precision": 2, "template": "object 2 orbit radius is {value} meters"}
+      ]
+    }
+  }
+}

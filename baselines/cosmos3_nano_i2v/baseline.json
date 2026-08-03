@@ -13,6 +13,7 @@
     "free_fall",
     "collision_1d",
     "inclined_plane_slide",
+    "parabolic_motion",
     "uniform_circular_motion"
   ],
   "capabilities": {
@@ -68,28 +69,46 @@
     },
     "spatial": {
       "type": "cosmos3_resolution_aspect_token_v1",
+      "conditioning_transform": "aspect_preserving_contain",
+      "conditioning_margin_fill": "edge_replicate",
       "policy": "scene_profile_then_native_cosmos_preprocessor",
       "scene_profiles": {
-              "pendulum": {
-                "resolution": 480,
-                "aspect_ratio": "9,16"
-              },
-              "free_fall": {
-                "resolution": 480,
-                "aspect_ratio": "9,16"
-              },
-              "collision_1d": {
-                "resolution": 480,
-                "aspect_ratio": "16,9"
-              },
-              "inclined_plane_slide": {
-                "resolution": 480,
-                "aspect_ratio": "16,9"
-              },
-              "uniform_circular_motion": {
-                "resolution": 480,
-                "aspect_ratio": "4,3"
-              }
+        "pendulum": {
+          "resolution": 480,
+          "aspect_ratio": "9,16",
+          "width": 480,
+          "height": 832
+        },
+        "free_fall": {
+          "resolution": 480,
+          "aspect_ratio": "9,16",
+          "width": 480,
+          "height": 832
+        },
+        "collision_1d": {
+          "resolution": 480,
+          "aspect_ratio": "16,9",
+          "width": 832,
+          "height": 480
+        },
+        "inclined_plane_slide": {
+          "resolution": 480,
+          "aspect_ratio": "16,9",
+          "width": 832,
+          "height": 480
+        },
+        "parabolic_motion": {
+          "resolution": 480,
+          "aspect_ratio": "9,16",
+          "width": 480,
+          "height": 832
+        },
+        "uniform_circular_motion": {
+          "resolution": 480,
+          "aspect_ratio": "9,16",
+          "width": 480,
+          "height": 832
+        }
       }
     },
     "temporal": {

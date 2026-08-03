@@ -698,6 +698,8 @@ def _load_condition_frame(
     request: CaseEvaluationRequest,
     *,
     config: Mapping[str, Any],
+    normalized_reference_frame: np.ndarray | None = None,
+    normalized_reference_transform: Mapping[str, object] | None = None,
 ) -> tuple[np.ndarray, Path, dict[str, object]]:
     value = request.case.get("assets", {}).get("first_frame")
     if not isinstance(value, str) or not value:
@@ -720,6 +722,21 @@ def _load_condition_frame(
             f"condition frame does not exist: {path}",
         )
     spatial = config["spatial"]
+    if spatial.get("policy") == "shared_reference_content_no_pad_v1":
+        if (
+            normalized_reference_frame is None
+            or normalized_reference_transform is None
+        ):
+            raise ReferenceAnalysisError(
+                "reference_condition_alignment_missing",
+                "no-pad pendulum evaluation requires the normalized "
+                "reference frame-zero coordinate system",
+            )
+        return (
+            np.array(normalized_reference_frame, copy=True),
+            path,
+            dict(normalized_reference_transform),
+        )
     frame, transform = letterbox_condition_image(
         path,
         width=int(spatial["width"]),

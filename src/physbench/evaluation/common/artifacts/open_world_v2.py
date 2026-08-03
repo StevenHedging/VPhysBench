@@ -5,7 +5,7 @@ evaluators should finish their numeric comparison first and then call
 ``write_open_world_v2_artifacts``.  Rendering failures are sealed in the
 local manifest and never alter the already-computed case score.
 
-The external MP4 shows the reference and prediction side by side.  It keeps
+The run-owned MP4 shows the reference and prediction side by side.  It keeps
 all expected entity identities and all observer tracks visible, including
 unmatched and tentative tracks, and adds a compact cardinality/lifecycle
 dashboard.  The companion JSON is intentionally scene-neutral and contains
@@ -16,8 +16,6 @@ from __future__ import annotations
 
 import hashlib
 import math
-import os
-import re
 from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -34,80 +32,33 @@ from ..entities.v2 import (
     ExpectedEntityTimeline,
     ObjectCentricComparisonV2,
 )
+from .layout import visualization_bundle_directory
+from .video import CompatibleMp4Writer
 
 
-DEFAULT_EXTERNAL_ROOT = Path(
-    "/mnt/nvme1/physics_video_benchmark/evaluation_visualizations"
-)
-DEFAULT_EXTERNAL_ROOT_ENV = "PHYSBENCH_VISUALIZATION_ROOT"
-DEFAULT_REPOSITORY_LINK = "visualizations"
 ARTIFACT_PROTOCOL_ID = "open_world_v2_artifacts"
-ARTIFACT_PROTOCOL_VERSION = "1.0"
-LOCAL_MANIFEST_NAME = "open_world_v2_artifact_manifest.json"
-
-_SAFE_COMPONENT = re.compile(r"[^A-Za-z0-9._-]+")
-
-
-def _safe_component(value: object, *, fallback: str) -> str:
-    """Return one non-traversing path component with a stable suffix."""
-
-    raw = str(value or "").strip()
-    if not raw:
-        return fallback
-    normalized = _SAFE_COMPONENT.sub("_", raw).strip("._")
-    normalized = normalized[:96]
-    if not normalized:
-        normalized = fallback
-    if normalized == raw and normalized not in {".", ".."}:
-        return normalized
-    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:8]
-    return f"{normalized}-{digest}"
+ARTIFACT_PROTOCOL_VERSION = "3.0"
+LOCAL_MANIFEST_NAME = "visualization_manifest.json"
 
 
 def _artifact_directory(
     request: Any,
     *,
     config: Mapping[str, Any],
-) -> tuple[Path, Path, str]:
-    environment_name = str(
-        config.get("external_root_env", DEFAULT_EXTERNAL_ROOT_ENV)
-    ).strip()
-    configured_root = (
-        config.get("external_root", DEFAULT_EXTERNAL_ROOT)
-        or DEFAULT_EXTERNAL_ROOT
+) -> tuple[Path, Path, Path]:
+    del config  # Storage is owned by the evaluation, never by protocol config.
+    return visualization_bundle_directory(
+        request,
+        identity_payload={
+            "run_id": getattr(request, "run_id", None),
+            "job_id": request.job.get("job_id"),
+            "case": _json_safe(request.case),
+            "prediction": _json_safe(
+                getattr(request, "prediction", None)
+            ),
+            "evaluator_config": _json_safe(request.evaluator_config),
+        },
     )
-    root_value = (
-        os.environ.get(environment_name)
-        if environment_name
-        else None
-    ) or configured_root
-    root = Path(str(root_value)).expanduser().resolve()
-    namespace = _safe_component(
-        config.get("namespace", "scene_default_v6"),
-        fallback="scene_default_v6",
-    )
-    scene_id = _safe_component(
-        request.case.get("scene_id", "unknown_scene"),
-        fallback="unknown_scene",
-    )
-    case_id = _safe_component(
-        request.case.get("case_id", "unknown_case"),
-        fallback="unknown_case",
-    )
-    job_id = _safe_component(
-        request.job.get("job_id", "unknown_job"),
-        fallback="unknown_job",
-    )
-    identity = hashlib.sha256(
-        str(request.artifact_dir.resolve()).encode("utf-8")
-    ).hexdigest()[:16]
-    relative = (
-        Path(namespace)
-        / scene_id
-        / case_id
-        / f"{job_id}-{identity}"
-    )
-    return root / relative, relative, str(root)
 
 
 def _json_safe(value: Any) -> Any:
@@ -379,6 +330,7 @@ def _reference_panel(
     frame_index: int,
     timelines: Sequence[ExpectedEntityTimeline],
     audit: Mapping[str, Any],
+    reference_role: str,
     panel_width: int,
     panel_height: int,
 ) -> np.ndarray:
@@ -431,7 +383,7 @@ def _reference_panel(
     _header(
         output,
         (
-            f"REFERENCE | frame={frame_index} | "
+            f"{reference_role} | frame={frame_index} | "
             f"expected={audit.get('expected_cardinality', 0)}"
         ),
         "legal absent=" + (",".join(map(str, absent)) or "none"),
@@ -485,7 +437,24 @@ def _prediction_panel(
     }
     for track, detection in detections.get(frame_index, ()):
         track_id = track.track_id
-        color = _identity_color(f"track:{track_id}")
+        matched_entity_id = matches.get(track_id)
+        color = (
+            _identity_color(f"entity:{matched_entity_id}")
+            if matched_entity_id is not None
+            else (
+                (40, 70, 255)
+                if track_id in extra
+                else (
+                    (0, 190, 255)
+                    if track_id in ambiguous
+                    else (
+                        (220, 70, 220)
+                        if track_id in rejected
+                        else _identity_color(f"track:{track_id}")
+                    )
+                )
+            )
+        )
         canvas_mask = _mask_to_canvas(
             detection.mask,
             source_shape=source.shape[:2],
@@ -558,6 +527,57 @@ def _prediction_panel(
             f"{float(audit.get('formal_prediction_cardinality', 0.0)):g}"
         ),
         " | ".join(state),
+    )
+    return output
+
+
+def _overlap_panel(
+    reference_frame: np.ndarray,
+    *,
+    reference_union: np.ndarray | None,
+    prediction_union: np.ndarray | None,
+    union_iou: float | None,
+    reference_complete: bool,
+    prediction_complete: bool,
+    panel_width: int,
+    panel_height: int,
+) -> np.ndarray:
+    """Render the complete-subject mask difference without hiding gaps."""
+
+    source = _normalize_frame(reference_frame)
+    gray = cv2.cvtColor(source, cv2.COLOR_BGR2GRAY)
+    base = (0.38 * cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)).astype(
+        np.uint8
+    )
+    reference = _normalize_mask(reference_union, shape=source.shape[:2])
+    prediction = _normalize_mask(prediction_union, shape=source.shape[:2])
+    comparable = (
+        reference is not None
+        and prediction is not None
+        and reference_complete
+        and prediction_complete
+        and union_iou is not None
+    )
+    if comparable:
+        reference_binary = reference > 0
+        prediction_binary = prediction > 0
+        base[reference_binary & ~prediction_binary] = (255, 80, 60)
+        base[prediction_binary & ~reference_binary] = (40, 70, 255)
+        base[reference_binary & prediction_binary] = (40, 230, 80)
+    output, _, _, _ = _letterbox(
+        base,
+        width=panel_width,
+        height=panel_height,
+    )
+    score = "n/a" if union_iou is None else f"{union_iou:.3f}"
+    _header(
+        output,
+        f"FULL-SUBJECT MASK AUDIT | IoU={score}",
+        (
+            "blue=reference only | red=prediction only | green=intersection"
+            if comparable
+            else "not directly comparable or mask observation incomplete"
+        ),
     )
     return output
 
@@ -740,6 +760,8 @@ def _dashboard(
     rows: Sequence[Mapping[str, Any]],
     full_subject_iou: float | None,
     scene_name: str,
+    score_summary: Mapping[str, Any] | None = None,
+    scene_diagnostic: Mapping[str, Any] | None = None,
 ) -> np.ndarray:
     output = np.full((height, width, 3), 22, dtype=np.uint8)
     row = rows[frame_index]
@@ -747,20 +769,60 @@ def _dashboard(
         "n/a" if full_subject_iou is None else f"{full_subject_iou:.3f}"
     )
     matched = len(row.get("matches", ()))
+    score_values = dict(score_summary or {})
+    score = score_values.get("score")
+    score_text = (
+        "n/a"
+        if not isinstance(score, (int, float)) or not math.isfinite(float(score))
+        else f"{float(score):.3f}"
+    )
+    component_values = score_values.get("components", {})
+    component_text = ""
+    compact_components: list[str] = []
+    if isinstance(component_values, Mapping):
+        for key, value in component_values.items():
+            if isinstance(value, (int, float)) and math.isfinite(float(value)):
+                compact_components.append(f"{key}={float(value):.2f}")
+        if compact_components:
+            component_text = " | " + " ".join(compact_components[:4])
+    compact_layout = width < 700
+    compact_component_lines = (
+        [
+            "components: " + " ".join(compact_components[index : index + 2])
+            for index in range(0, min(len(compact_components), 4), 2)
+        ]
+        if compact_layout
+        else []
+    )
     lines = [
-        f"OPEN-WORLD V2 AUDIT | {scene_name}",
+        (
+            "OPEN-WORLD V2 AUDIT"
+            if compact_layout
+            else f"OPEN-WORLD V2 AUDIT | {scene_name}"
+        ),
+        *([scene_name] if compact_layout else []),
+        (
+            f"score={score_text}{'' if compact_layout else component_text}"
+        ),
+        *compact_component_lines,
         (
             f"t={time_s:.3f}s  expected="
             f"{row.get('expected_cardinality', 0)}  predicted="
             f"{float(row.get('formal_prediction_cardinality', 0.0)):g}  "
             f"matched={matched}  full-subject IoU={iou_text}"
         ),
-        "missing: " + _format_ids(row.get("missing_entity_ids", ())),
-        "extra: " + _format_ids(row.get("extra_track_ids", ())),
-        "rejected: " + _rejected_text(
-            row.get("rejected_candidate_matches", ())
+        (
+            "missing: "
+            + _format_ids(row.get("missing_entity_ids", ()), maximum=42)
+            + " | extra: "
+            + _format_ids(row.get("extra_track_ids", ()), maximum=42)
         ),
-        "ID switches: " + _switch_text(row.get("id_switches", ())),
+        (
+            "rejected: "
+            + _rejected_text(row.get("rejected_candidate_matches", ()))
+            + " | switches: "
+            + _switch_text(row.get("id_switches", ()))
+        ),
         (
             "birth/death: "
             + _format_ids(row.get("birth_track_ids", ()), maximum=42)
@@ -768,12 +830,26 @@ def _dashboard(
             + _format_ids(row.get("death_track_ids", ()), maximum=42)
         ),
     ]
-    graph_x = min(
-        max(int(width * 0.59), 8),
-        max(width - 88, 8),
+    for key, value in list(dict(scene_diagnostic or {}).items())[:3]:
+        if isinstance(value, float):
+            rendered = "n/a" if not math.isfinite(value) else f"{value:.3f}"
+        else:
+            rendered = str(value)
+        lines.append(f"{key}: {rendered}")
+    graph_x = (
+        15
+        if compact_layout
+        else min(
+            max(int(width * 0.59), 8),
+            max(width - 88, 8),
+        )
     )
-    line_width = max(graph_x - 30, 120)
+    line_width = max(
+        (width - 30 if compact_layout else graph_x - 30),
+        120,
+    )
     y = 27
+    line_step = max(min((height - 24) // max(len(lines), 1), 26), 19)
     for index, line in enumerate(lines):
         _put_line(
             output,
@@ -788,15 +864,19 @@ def _dashboard(
             scale=0.50 if index == 0 else 0.41,
             thickness=2 if index == 0 else 1,
         )
-        y += 26
+        y += line_step
+    graph_y = max(int(height * 0.69), y + 8) if compact_layout else 20
     graph_width = max(width - graph_x - 18, 80)
-    graph_height = max(height - 38, 60)
+    graph_height = max(
+        height - graph_y - 18 if compact_layout else height - 38,
+        60,
+    )
     _draw_cardinality_history(
         output,
         rows=rows,
         through=frame_index,
         x0=graph_x,
-        y0=20,
+        y0=graph_y,
         width=graph_width,
         height=graph_height,
     )
@@ -1015,6 +1095,9 @@ def _audit_payload(
     prediction_complete: Sequence[bool],
     full_subject_ious: Sequence[float | None],
     prediction_available: Sequence[bool],
+    reference_role: str,
+    score_summary: Mapping[str, Any] | None,
+    per_frame_diagnostics: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     for frame_index, source in enumerate(comparison.per_frame):
@@ -1045,6 +1128,9 @@ def _audit_payload(
                 "prediction_media_available": bool(
                     prediction_available[frame_index]
                 ),
+                "scene_diagnostics": _json_safe(
+                    per_frame_diagnostics[frame_index]
+                ),
             }
         )
     return {
@@ -1057,6 +1143,8 @@ def _audit_payload(
         "job_id": request.job.get("job_id"),
         "scene_id": request.case.get("scene_id"),
         "scene_name": scene_name,
+        "reference_role": reference_role,
+        "score_summary": _json_safe(score_summary or {}),
         "times_s": [float(value) for value in times_s],
         "expected_entities": _timeline_payload(timelines),
         "prediction_observation": _observation_payload(observation),
@@ -1129,6 +1217,48 @@ def _derived_fps(times_s: Sequence[float]) -> float:
     return float(np.clip(1.0 / step, 1.0, 60.0))
 
 
+def _render_policy(
+    request: Any,
+    *,
+    config: Mapping[str, Any],
+    score_summary: Mapping[str, Any] | None,
+    has_issues: bool,
+) -> tuple[bool, str]:
+    """Resolve deterministic all/issues/sampled/off rendering policy."""
+
+    mode = str(config.get("mode", "all"))
+    if mode == "off":
+        return False, "mode_off"
+    if mode == "all":
+        return True, "mode_all"
+    score = (score_summary or {}).get("score")
+    threshold = float(config.get("issue_score_threshold", 0.999))
+    score_issue = (
+        isinstance(score, (int, float))
+        and math.isfinite(float(score))
+        and float(score) < threshold
+    )
+    issue = bool(has_issues or score_issue)
+    if mode == "issues_only":
+        return issue, "issue_detected" if issue else "no_issue_detected"
+    if mode != "sampled":
+        raise ValueError(
+            "visualization mode must be all, issues_only, sampled, or off"
+        )
+    if issue:
+        return True, "issue_detected"
+    sample_rate = float(config.get("sample_rate", 0.1))
+    if not 0.0 <= sample_rate <= 1.0:
+        raise ValueError("visualization sample_rate must be in [0, 1]")
+    key = (
+        f"{request.case.get('case_id', '')}:"
+        f"{request.job.get('job_id', '')}"
+    )
+    bucket = int(hashlib.sha256(key.encode("utf-8")).hexdigest()[:8], 16)
+    selected = bucket / float(0xFFFFFFFF) < sample_rate
+    return selected, "sample_selected" if selected else "sample_not_selected"
+
+
 def render_open_world_v2_overlay(
     path: Path,
     *,
@@ -1142,8 +1272,15 @@ def render_open_world_v2_overlay(
     full_subject_ious: Sequence[float | None],
     prediction_available: Sequence[bool],
     config: Mapping[str, Any],
+    reference_union_masks: Sequence[np.ndarray | None] | None = None,
+    prediction_union_masks: Sequence[np.ndarray | None] | None = None,
+    reference_complete: Sequence[bool] | None = None,
+    prediction_complete: Sequence[bool] | None = None,
+    reference_role: str = "REFERENCE",
+    score_summary: Mapping[str, Any] | None = None,
+    per_frame_diagnostics: Sequence[Mapping[str, Any]] | None = None,
 ) -> None:
-    """Render the side-by-side overlay.
+    """Render a synchronized side-by-side or four-panel audit overlay.
 
     This low-level function intentionally raises on invalid inputs or codec
     failures.  ``write_open_world_v2_artifacts`` is the score-safe boundary.
@@ -1162,18 +1299,40 @@ def render_open_world_v2_overlay(
     )
     if not math.isfinite(fps) or fps <= 0.0 or fps > 120.0:
         raise ValueError("visualization fps must be in (0, 120]")
-    codec = str(config.get("codec", "mp4v"))
+    codec = str(config.get("codec", "h264"))
     if len(codec) != 4 or not codec.isascii():
         raise ValueError("visualization codec must contain four ASCII bytes")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    writer = cv2.VideoWriter(
-        str(path),
-        cv2.VideoWriter_fourcc(*codec),
-        fps,
-        (2 * panel_width, panel_height + footer_height),
+    layout = str(config.get("layout", "side_by_side"))
+    if layout not in {"side_by_side", "quad"}:
+        raise ValueError("visualization layout must be side_by_side or quad")
+    frame_count = len(times_s)
+    reference_unions = list(reference_union_masks or [None] * frame_count)
+    prediction_unions = list(prediction_union_masks or [None] * frame_count)
+    reference_completeness = list(reference_complete or [False] * frame_count)
+    prediction_completeness = list(prediction_complete or [False] * frame_count)
+    diagnostics = list(per_frame_diagnostics or [{} for _ in times_s])
+    if not all(
+        len(values) == frame_count
+        for values in (
+            reference_unions,
+            prediction_unions,
+            reference_completeness,
+            prediction_completeness,
+            diagnostics,
+        )
+    ):
+        raise ValueError("overlay mask and diagnostic timelines must match times_s")
+    output_size = (
+        (2 * panel_width, 2 * panel_height)
+        if layout == "quad"
+        else (2 * panel_width, panel_height + footer_height)
     )
-    if not writer.isOpened():
-        raise RuntimeError(f"cannot create open-world overlay: {path}")
+    writer = CompatibleMp4Writer(
+        path,
+        fps=fps,
+        size=output_size,
+        codec=codec,
+    )
     rows = [dict(row) for row in comparison.per_frame]
     detections = _detections_by_frame(prediction_observation)
     try:
@@ -1184,6 +1343,7 @@ def render_open_world_v2_overlay(
                 frame_index=frame_index,
                 timelines=expected_timelines,
                 audit=audit,
+                reference_role=reference_role,
                 panel_width=panel_width,
                 panel_height=panel_height,
             )
@@ -1200,29 +1360,49 @@ def render_open_world_v2_overlay(
                 panel_height=panel_height,
             )
             dashboard = _dashboard(
-                width=2 * panel_width,
-                height=footer_height,
+                width=(panel_width if layout == "quad" else 2 * panel_width),
+                height=(panel_height if layout == "quad" else footer_height),
                 frame_index=frame_index,
                 time_s=float(time_s),
                 rows=rows,
                 full_subject_iou=full_subject_ious[frame_index],
                 scene_name=scene_name,
+                score_summary=score_summary,
+                scene_diagnostic=diagnostics[frame_index],
             )
-            writer.write(
-                np.vstack(
-                    (
-                        np.hstack(
-                            (
-                                reference,
-                                prediction,
-                            )
-                        ),
-                        dashboard,
+            if layout == "quad":
+                overlap = _overlap_panel(
+                    reference_frames[frame_index],
+                    reference_union=reference_unions[frame_index],
+                    prediction_union=prediction_unions[frame_index],
+                    union_iou=full_subject_ious[frame_index],
+                    reference_complete=bool(reference_completeness[frame_index]),
+                    prediction_complete=bool(prediction_completeness[frame_index]),
+                    panel_width=panel_width,
+                    panel_height=panel_height,
+                )
+                writer.write(
+                    np.vstack(
+                        (
+                            np.hstack((reference, prediction)),
+                            np.hstack((overlap, dashboard)),
+                        )
                     )
                 )
-            )
-    finally:
-        writer.release()
+            else:
+                writer.write(
+                    np.vstack(
+                        (
+                            np.hstack((reference, prediction)),
+                            dashboard,
+                        )
+                    )
+                )
+    except BaseException:
+        writer.abort()
+        raise
+    else:
+        writer.close()
     if not path.is_file() or path.stat().st_size <= 0:
         raise RuntimeError(
             f"open-world overlay writer produced no output: {path}"
@@ -1244,11 +1424,15 @@ def write_open_world_v2_artifacts(
     prediction_union_masks: Sequence[np.ndarray | None] | None = None,
     full_subject_ious: Sequence[float | None] | None = None,
     prediction_available: Sequence[bool] | None = None,
+    reference_role: str = "REFERENCE",
+    score_summary: Mapping[str, Any] | None = None,
+    per_frame_diagnostics: Sequence[Mapping[str, Any]] | None = None,
+    has_issues: bool = False,
 ) -> dict[str, Any]:
-    """Write one external overlay/audit pair and a local hashed manifest.
+    """Write one run-owned overlay/audit pair and a local hashed manifest.
 
     The returned mapping can be merged directly into
-    ``CaseEvaluationResult.artifacts``.  All external failures become a
+    ``CaseEvaluationResult.artifacts``.  All rendering failures become a
     ``status=failed`` manifest.  The function only raises if even the local
     artifact directory/manifest cannot be written.  Union-mask overrides must
     contain the complete physical-subject set, including unmatched formal
@@ -1259,6 +1443,22 @@ def write_open_world_v2_artifacts(
     artifact_config = dict(config or {})
     request.artifact_dir.mkdir(parents=True, exist_ok=True)
     local_manifest = request.artifact_dir / LOCAL_MANIFEST_NAME
+    if not bool(getattr(request, "save_visualizations", False)):
+        manifest = {
+            "schema_version": "1.0",
+            "artifact_protocol": {
+                "id": ARTIFACT_PROTOCOL_ID,
+                "version": ARTIFACT_PROTOCOL_VERSION,
+            },
+            "status": "disabled",
+            "reason": "runtime_save_visualizations_false",
+            "storage_policy": "run_owned_video_disabled_by_run_policy",
+        }
+        write_json(local_manifest, manifest)
+        return {
+            "open_world_v2_artifact_manifest": str(local_manifest),
+            "open_world_v2_artifacts": manifest,
+        }
     if not bool(artifact_config.get("enabled", True)):
         manifest = {
             "schema_version": "1.0",
@@ -1267,7 +1467,30 @@ def write_open_world_v2_artifacts(
                 "version": ARTIFACT_PROTOCOL_VERSION,
             },
             "status": "disabled",
-            "storage_policy": "external_unsealed_diagnostic",
+            "storage_policy": "run_owned_visualization_disabled_by_protocol",
+        }
+        write_json(local_manifest, manifest)
+        return {
+            "open_world_v2_artifact_manifest": str(local_manifest),
+            "open_world_v2_artifacts": manifest,
+        }
+
+    should_render, render_reason = _render_policy(
+        request,
+        config=artifact_config,
+        score_summary=score_summary,
+        has_issues=has_issues,
+    )
+    if not should_render:
+        manifest = {
+            "schema_version": "1.0",
+            "artifact_protocol": {
+                "id": ARTIFACT_PROTOCOL_ID,
+                "version": ARTIFACT_PROTOCOL_VERSION,
+            },
+            "status": "skipped",
+            "reason": render_reason,
+            "storage_policy": "run_owned_policy_selected_diagnostic",
         }
         write_json(local_manifest, manifest)
         return {
@@ -1341,14 +1564,26 @@ def write_open_world_v2_artifacts(
             ]
         else:
             ious = supplied_ious
+        display_ious = (
+            ious
+            if reference_role == "REFERENCE"
+            else [None for _ in ious]
+        )
+        diagnostics = list(
+            per_frame_diagnostics or [{} for _ in range(len(times_s))]
+        )
+        if len(diagnostics) != len(times_s):
+            raise ValueError(
+                "per_frame_diagnostics must have one value per time sample"
+            )
 
-        directory, relative, external_root = _artifact_directory(
+        directory, relative, visualization_root = _artifact_directory(
             request,
             config=artifact_config,
         )
         directory.mkdir(parents=True, exist_ok=True)
-        video_path = directory / "open_world_v2_overlay.mp4"
-        audit_path = directory / "open_world_v2_audit.json"
+        video_path = directory / "visualization.mp4"
+        audit_path = directory / "audit.json"
         render_open_world_v2_overlay(
             video_path,
             scene_name=scene_name,
@@ -1358,9 +1593,16 @@ def write_open_world_v2_artifacts(
             expected_timelines=expected_timelines,
             prediction_observation=prediction_observation,
             comparison=comparison,
-            full_subject_ious=ious,
+            full_subject_ious=display_ious,
             prediction_available=available,
             config=artifact_config,
+            reference_union_masks=reference_unions,
+            prediction_union_masks=prediction_unions,
+            reference_complete=reference_complete,
+            prediction_complete=prediction_complete,
+            reference_role=reference_role,
+            score_summary=score_summary,
+            per_frame_diagnostics=diagnostics,
         )
         audit = _audit_payload(
             request,
@@ -1375,15 +1617,12 @@ def write_open_world_v2_artifacts(
             prediction_complete=prediction_complete,
             full_subject_ious=ious,
             prediction_available=available,
+            reference_role=reference_role,
+            score_summary=score_summary,
+            per_frame_diagnostics=diagnostics,
         )
         write_json(audit_path, _json_safe(audit))
 
-        repository_link = str(
-            artifact_config.get(
-                "repository_link",
-                DEFAULT_REPOSITORY_LINK,
-            )
-        ).strip() or DEFAULT_REPOSITORY_LINK
         paths = {
             "overlay_video": video_path,
             "audit_json": audit_path,
@@ -1391,9 +1630,7 @@ def write_open_world_v2_artifacts(
         files = {
             name: {
                 "path": str(path.resolve()),
-                "repository_path": (
-                    Path(repository_link) / relative / path.name
-                ).as_posix(),
+                "visualization_path": (relative / path.name).as_posix(),
                 "sha256": sha256_file(path),
                 "size_bytes": path.stat().st_size,
             }
@@ -1406,17 +1643,17 @@ def write_open_world_v2_artifacts(
                 "version": ARTIFACT_PROTOCOL_VERSION,
             },
             "status": "complete",
+            "render_reason": render_reason,
             "evaluator_config_sha256": canonical_sha256(
                 _json_safe(request.evaluator_config)
             ),
             "storage_policy": (
-                "external_unsealed_diagnostic_with_local_hashed_manifest"
+                "run_owned_evaluation_artifact_with_local_hashed_manifest"
             ),
-            "external_root": external_root,
-            "external_directory": str(directory.resolve()),
-            "repository_directory": (
-                Path(repository_link) / relative
-            ).as_posix(),
+            "run_id": getattr(request, "run_id", None),
+            "visualization_root": str(visualization_root),
+            "visualization_directory": str(directory.resolve()),
+            "visualization_relative_directory": relative.as_posix(),
             "files": files,
         }
     except Exception as exc:
@@ -1443,9 +1680,6 @@ def write_open_world_v2_artifacts(
 __all__ = [
     "ARTIFACT_PROTOCOL_ID",
     "ARTIFACT_PROTOCOL_VERSION",
-    "DEFAULT_EXTERNAL_ROOT",
-    "DEFAULT_EXTERNAL_ROOT_ENV",
-    "DEFAULT_REPOSITORY_LINK",
     "LOCAL_MANIFEST_NAME",
     "render_open_world_v2_overlay",
     "write_open_world_v2_artifacts",

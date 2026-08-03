@@ -1,0 +1,1774 @@
+{
+  "asset_lock": {
+    "asset_files": 1617,
+    "asset_files_digest": "f5698cd55fbff491906ec4f2010730b960acb9d45054972b5318055bf2a1e277"
+  },
+  "collision_prompt_repair": {
+    "case_ids": [
+      "collision_r2_large_steel_medium_steel_small_steel_v01165",
+      "collision_r2_large_steel_medium_steel_small_steel_v01313",
+      "collision_r2_large_steel_medium_steel_small_steel_v02174",
+      "collision_r2_large_steel_medium_steel_small_steel_v02358",
+      "collision_r2_large_steel_medium_steel_small_steel_v03033",
+      "collision_r2_small_steel_glass_marble_glass_marble_v01509",
+      "collision_r2_small_steel_glass_marble_glass_marble_v02179",
+      "collision_r2_small_steel_glass_marble_glass_marble_v02935",
+      "collision_r2_small_steel_glass_marble_glass_marble_v05212",
+      "collision_r2_small_steel_glass_marble_glass_marble_v05533",
+      "collision_r2_small_steel_medium_steel_large_steel_v01985",
+      "collision_r2_small_steel_medium_steel_large_steel_v03759",
+      "collision_r2_small_steel_medium_steel_large_steel_v04097",
+      "collision_r2_small_steel_medium_steel_large_steel_v06332",
+      "collision_r2_small_steel_medium_steel_large_steel_v07389",
+      "collision_supp_20260729_img_0969_two_ball_single_incident",
+      "collision_supp_20260729_img_0970_two_ball_single_incident",
+      "collision_supp_20260729_img_0971_two_ball_single_incident",
+      "collision_supp_20260729_img_0972_two_ball_single_incident",
+      "collision_supp_20260729_img_0973_two_ball_single_incident",
+      "collision_supp_20260729_img_0974_two_ball_single_incident",
+      "collision_supp_20260729_img_0975_two_ball_single_incident",
+      "collision_supp_20260729_img_0976_two_ball_single_incident",
+      "collision_supp_20260729_img_0977_two_ball_single_incident",
+      "collision_supp_20260729_img_0978_two_ball_single_incident",
+      "collision_supp_20260729_img_0979_two_ball_single_incident",
+      "collision_supp_20260729_img_0980_two_ball_single_incident",
+      "collision_supp_20260729_img_0981_two_ball_single_incident",
+      "collision_supp_20260729_img_0982_two_ball_single_incident",
+      "collision_supp_20260729_img_0983_two_ball_single_incident",
+      "collision_supp_20260729_img_0984_two_ball_single_incident",
+      "collision_supp_20260729_img_0985_two_ball_single_incident",
+      "collision_supp_20260729_img_0986_two_ball_single_incident",
+      "collision_supp_20260729_img_0987_two_ball_single_incident",
+      "collision_supp_20260729_img_0988_two_ball_single_incident",
+      "collision_supp_20260729_img_0989_two_ball_single_incident",
+      "collision_supp_20260729_img_0990_two_ball_single_incident",
+      "collision_supp_20260729_img_0991_two_ball_single_incident",
+      "collision_supp_20260729_img_0994_two_ball_single_incident",
+      "collision_supp_20260729_img_0995_two_ball_single_incident",
+      "collision_supp_20260729_img_0996_two_ball_single_incident",
+      "collision_supp_20260729_img_0997_two_ball_single_incident",
+      "collision_supp_20260729_img_0998_two_ball_single_incident",
+      "collision_supp_20260729_img_0999_two_ball_single_incident",
+      "collision_supp_20260729_img_1001_two_ball_single_incident",
+      "collision_supp_20260729_img_1002_two_ball_single_incident",
+      "collision_supp_20260729_img_1003_two_ball_single_incident",
+      "collision_supp_20260729_img_1004_two_ball_single_incident",
+      "collision_supp_20260729_img_1005_two_ball_single_incident",
+      "collision_supp_20260729_img_1006_two_ball_single_incident",
+      "collision_supp_20260729_img_1009_two_ball_single_incident",
+      "collision_supp_20260729_img_1010_two_ball_single_incident",
+      "collision_supp_20260729_img_1012_two_ball_single_incident",
+      "collision_supp_20260729_img_1013_two_ball_single_incident",
+      "collision_supp_20260729_img_1014_two_ball_single_incident",
+      "collision_supp_20260729_img_1015_two_ball_single_incident",
+      "collision_supp_20260729_img_1016_two_ball_single_incident",
+      "collision_supp_20260729_img_1017_two_ball_single_incident",
+      "collision_supp_20260729_img_1018_two_ball_single_incident",
+      "collision_supp_20260729_img_1019_two_ball_single_incident",
+      "collision_supp_20260729_img_1020_two_ball_single_incident",
+      "collision_supp_20260729_img_1021_two_ball_single_incident",
+      "collision_supp_20260729_img_1022_two_ball_single_incident",
+      "collision_supp_20260729_img_1023_two_ball_single_incident",
+      "collision_supp_20260729_img_1024_two_ball_single_incident",
+      "collision_supp_20260729_img_1026_two_ball_single_incident",
+      "collision_supp_20260729_img_1027_two_ball_single_incident",
+      "collision_supp_20260729_img_1028_two_ball_single_incident",
+      "collision_supp_20260729_img_1029_two_ball_single_incident",
+      "collision_supp_20260729_img_1030_two_ball_single_incident",
+      "collision_supp_20260729_img_1031_two_ball_single_incident",
+      "collision_supp_20260729_img_1032_two_ball_single_incident",
+      "collision_supp_20260729_img_1033_two_ball_single_incident",
+      "collision_supp_20260729_img_1034_two_ball_single_incident",
+      "collision_supp_20260729_img_1035_two_ball_single_incident",
+      "collision_supp_20260729_img_1036_two_ball_single_incident",
+      "collision_supp_20260729_img_1037_two_ball_single_incident",
+      "collision_supp_20260729_img_1038_two_ball_single_incident",
+      "collision_supp_20260729_img_1039_two_ball_single_incident",
+      "collision_supp_20260729_img_1043_two_ball_single_incident",
+      "collision_supp_20260729_img_1044_two_ball_single_incident",
+      "collision_supp_20260729_img_1045_two_ball_single_incident",
+      "collision_supp_20260729_img_1046_two_ball_single_incident",
+      "collision_supp_20260729_img_1047_two_ball_single_incident",
+      "collision_supp_20260729_img_1048_two_ball_single_incident",
+      "collision_supp_20260729_img_1049_two_ball_single_incident",
+      "collision_supp_20260729_img_1050_two_ball_single_incident",
+      "collision_supp_20260729_img_1051_two_ball_single_incident",
+      "collision_supp_20260729_img_1052_two_ball_single_incident",
+      "collision_supp_20260729_img_1053_two_ball_single_incident",
+      "collision_supp_20260729_img_1056_two_ball_single_incident",
+      "collision_supp_20260729_img_1057_two_ball_single_incident",
+      "collision_supp_20260729_img_1058_two_ball_single_incident",
+      "collision_supp_20260729_img_1059_two_ball_single_incident",
+      "collision_supp_20260729_img_1060_two_ball_single_incident",
+      "collision_supp_20260729_img_1061_two_ball_single_incident",
+      "collision_supp_20260729_img_1062_two_ball_single_incident",
+      "collision_supp_20260729_img_1063_two_ball_single_incident",
+      "collision_supp_20260729_img_1064_two_ball_single_incident",
+      "collision_supp_20260729_img_1065_two_ball_single_incident",
+      "collision_supp_20260729_img_1066_two_ball_single_incident",
+      "collision_supp_20260729_img_1067_two_ball_single_incident",
+      "collision_supp_20260729_img_1068_two_ball_single_incident",
+      "collision_supp_20260729_img_1069_two_ball_single_incident",
+      "collision_supp_20260729_img_1070_two_ball_single_incident",
+      "collision_supp_20260729_img_1071_two_ball_single_incident",
+      "collision_supp_20260729_img_1072_two_ball_single_incident",
+      "collision_supp_20260729_img_1073_two_ball_single_incident",
+      "collision_supp_20260729_img_1074_two_ball_single_incident",
+      "collision_supp_20260729_img_1075_two_ball_single_incident",
+      "collision_supp_20260729_img_1076_two_ball_single_incident",
+      "collision_supp_20260729_img_1077_two_ball_single_incident",
+      "collision_supp_20260729_img_1084_two_ball_single_incident",
+      "collision_supp_20260729_img_1085_two_ball_single_incident",
+      "collision_supp_20260729_img_1086_two_ball_single_incident",
+      "collision_supp_20260729_img_1087_two_ball_single_incident",
+      "collision_supp_20260729_img_1088_two_ball_single_incident",
+      "collision_supp_20260729_img_1089_two_ball_single_incident",
+      "collision_supp_20260729_img_1090_two_ball_single_incident",
+      "collision_supp_20260729_img_1091_two_ball_single_incident",
+      "collision_supp_20260729_img_1092_two_ball_single_incident",
+      "collision_supp_20260729_img_1093_two_ball_single_incident",
+      "collision_supp_20260729_img_1094_two_ball_single_incident",
+      "collision_supp_20260729_img_1095_two_ball_single_incident",
+      "collision_supp_20260729_img_1097_two_ball_single_incident",
+      "collision_supp_20260729_img_1098_two_ball_single_incident",
+      "collision_supp_20260729_img_1099_two_ball_single_incident",
+      "collision_supp_20260729_img_1100_two_ball_single_incident",
+      "collision_supp_20260729_img_1101_two_ball_single_incident",
+      "collision_supp_20260729_img_1102_two_ball_single_incident",
+      "collision_supp_20260729_img_1103_two_ball_single_incident",
+      "collision_supp_20260729_img_1105_two_ball_single_incident",
+      "collision_supp_20260729_img_1106_two_ball_single_incident",
+      "collision_supp_20260729_img_1108_two_ball_single_incident",
+      "collision_supp_20260729_img_1110_two_ball_single_incident",
+      "collision_supp_20260729_img_1111_two_ball_single_incident",
+      "collision_supp_20260729_img_1112_two_ball_single_incident",
+      "collision_supp_20260729_img_1113_two_ball_single_incident",
+      "collision_supp_20260729_img_1114_two_ball_single_incident",
+      "collision_supp_20260729_img_1115_two_ball_single_incident",
+      "collision_supp_20260729_img_1116_two_ball_single_incident",
+      "collision_supp_20260729_img_1117_two_ball_single_incident",
+      "collision_supp_20260729_img_1118_two_ball_single_incident",
+      "collision_supp_20260729_img_1119_two_ball_single_incident",
+      "collision_supp_20260729_img_1120_two_ball_single_incident",
+      "collision_supp_20260729_img_1158_two_ball_opposed_incident",
+      "collision_supp_20260729_img_1160_two_ball_opposed_incident",
+      "collision_supp_20260729_img_1162_two_ball_opposed_incident",
+      "collision_supp_20260729_img_1163_two_ball_opposed_incident",
+      "collision_supp_20260729_img_1164_two_ball_opposed_incident",
+      "collision_supp_20260729_img_1167_two_ball_opposed_incident",
+      "collision_supp_20260729_img_1169_two_ball_opposed_incident",
+      "collision_supp_20260729_img_1170_two_ball_opposed_incident",
+      "collision_supp_20260729_img_1171_two_ball_opposed_incident",
+      "collision_supp_20260729_img_1173_two_ball_opposed_incident",
+      "collision_supp_20260729_img_1176_two_ball_single_incident",
+      "collision_supp_20260729_img_1177_two_ball_single_incident",
+      "collision_supp_20260729_img_1178_two_ball_single_incident",
+      "collision_supp_20260729_img_1180_two_ball_single_incident",
+      "collision_supp_20260729_img_1182_two_ball_single_incident",
+      "collision_supp_20260729_img_1183_two_ball_single_incident",
+      "collision_supp_20260729_img_1184_two_ball_single_incident",
+      "collision_supp_20260729_img_1185_two_ball_single_incident",
+      "collision_supp_20260729_img_1186_two_ball_single_incident",
+      "collision_supp_20260729_img_1187_two_ball_single_incident",
+      "collision_supp_20260729_img_1190_two_ball_single_incident",
+      "collision_supp_20260729_img_1191_two_ball_single_incident",
+      "collision_supp_20260729_img_1192_two_ball_single_incident",
+      "collision_supp_20260729_img_1193_two_ball_single_incident",
+      "collision_supp_20260729_img_1194_two_ball_single_incident",
+      "collision_supp_20260729_img_1195_two_ball_single_incident",
+      "collision_supp_20260729_img_1196_two_ball_single_incident",
+      "collision_supp_20260729_img_1197_two_ball_single_incident",
+      "collision_supp_20260729_img_1198_two_ball_single_incident",
+      "collision_supp_20260729_img_1199_two_ball_single_incident",
+      "collision_supp_20260729_img_1200_two_ball_single_incident",
+      "collision_supp_20260729_img_1201_two_ball_single_incident",
+      "collision_supp_20260729_img_1202_two_ball_single_incident",
+      "collision_supp_20260729_img_1203_two_ball_single_incident",
+      "collision_supp_20260729_img_1204_two_ball_single_incident",
+      "collision_supp_20260729_img_1205_two_ball_single_incident",
+      "collision_supp_20260729_img_1206_two_ball_single_incident",
+      "collision_supp_20260729_img_1207_two_ball_single_incident",
+      "collision_supp_20260729_img_1208_two_ball_single_incident",
+      "collision_supp_20260729_img_1209_two_ball_single_incident"
+    ],
+    "changes": [
+      {
+        "after": "A fixed-camera real-world laboratory video of three balls moving along a straight track. The left ball moves right toward two initially stationary balls and collides with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right toward two initially stationary balls and collides centrally with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_r2_large_steel_medium_steel_small_steel_v01165",
+        "prompt_family": "three_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of three balls moving along a straight track. The left ball moves right toward two initially stationary balls and collides with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right toward two initially stationary balls and collides centrally with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_r2_large_steel_medium_steel_small_steel_v01313",
+        "prompt_family": "three_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of three balls moving along a straight track. The left ball moves right toward two initially stationary balls and collides with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right toward two initially stationary balls and collides centrally with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_r2_large_steel_medium_steel_small_steel_v02174",
+        "prompt_family": "three_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of three balls moving along a straight track. The left ball moves right toward two initially stationary balls and collides with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right toward two initially stationary balls and collides centrally with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_r2_large_steel_medium_steel_small_steel_v02358",
+        "prompt_family": "three_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of three balls moving along a straight track. The left ball moves right toward two initially stationary balls and collides with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right toward two initially stationary balls and collides centrally with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_r2_large_steel_medium_steel_small_steel_v03033",
+        "prompt_family": "three_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of three balls moving along a straight track. The left ball moves right toward two initially stationary balls and collides with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0075,
+        "ball_2_radius_m": 0.00675,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right toward two initially stationary balls and collides centrally with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_r2_small_steel_glass_marble_glass_marble_v01509",
+        "prompt_family": "three_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of three balls moving along a straight track. The left ball moves right toward two initially stationary balls and collides with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0075,
+        "ball_2_radius_m": 0.00675,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right toward two initially stationary balls and collides centrally with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_r2_small_steel_glass_marble_glass_marble_v02179",
+        "prompt_family": "three_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of three balls moving along a straight track. The left ball moves right toward two initially stationary balls and collides with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0075,
+        "ball_2_radius_m": 0.00675,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right toward two initially stationary balls and collides centrally with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_r2_small_steel_glass_marble_glass_marble_v02935",
+        "prompt_family": "three_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of three balls moving along a straight track. The left ball moves right toward two initially stationary balls and collides with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0075,
+        "ball_2_radius_m": 0.00675,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right toward two initially stationary balls and collides centrally with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_r2_small_steel_glass_marble_glass_marble_v05212",
+        "prompt_family": "three_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of three balls moving along a straight track. The left ball moves right toward two initially stationary balls and collides with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0075,
+        "ball_2_radius_m": 0.00675,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right toward two initially stationary balls and collides centrally with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_r2_small_steel_glass_marble_glass_marble_v05533",
+        "prompt_family": "three_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of three balls moving along a straight track. The left ball moves right toward two initially stationary balls and collides with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0075,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right toward two initially stationary balls and collides centrally with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_r2_small_steel_medium_steel_large_steel_v01985",
+        "prompt_family": "three_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of three balls moving along a straight track. The left ball moves right toward two initially stationary balls and collides with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0075,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right toward two initially stationary balls and collides centrally with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_r2_small_steel_medium_steel_large_steel_v03759",
+        "prompt_family": "three_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of three balls moving along a straight track. The left ball moves right toward two initially stationary balls and collides with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0075,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right toward two initially stationary balls and collides centrally with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_r2_small_steel_medium_steel_large_steel_v04097",
+        "prompt_family": "three_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of three balls moving along a straight track. The left ball moves right toward two initially stationary balls and collides with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0075,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right toward two initially stationary balls and collides centrally with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_r2_small_steel_medium_steel_large_steel_v06332",
+        "prompt_family": "three_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of three balls moving along a straight track. The left ball moves right toward two initially stationary balls and collides with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0075,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right toward two initially stationary balls and collides centrally with the middle ball. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_r2_small_steel_medium_steel_large_steel_v07389",
+        "prompt_family": "three_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0969_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0970_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0971_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0972_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0973_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0974_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0975_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0976_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0977_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0978_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0979_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0980_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0981_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0982_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0983_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0984_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0985_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0986_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0987_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0988_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0989_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0990_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0991_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0994_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0995_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0996_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0997_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0998_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_0999_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1001_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1002_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1003_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1004_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1005_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1006_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1009_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1010_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1012_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1013_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1014_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1015_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1016_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1017_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1018_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1019_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1020_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1021_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1022_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1023_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1024_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1026_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1027_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1028_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1029_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1030_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1031_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1032_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1033_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1034_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1035_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1036_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1037_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1038_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1039_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1043_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1044_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1045_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1046_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1047_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1048_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1049_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1050_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1051_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1052_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1053_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1056_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1057_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1058_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1059_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1060_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1061_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1062_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1063_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1064_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1065_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1066_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1067_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1068_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1069_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1070_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1071_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1072_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1073_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1074_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1075_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1076_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1077_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1084_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1085_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1086_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1087_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1088_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1089_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1090_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1091_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1092_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1093_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1094_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1095_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1097_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1098_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1099_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1100_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1101_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1102_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1103_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1105_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1106_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1108_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1110_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1111_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1112_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1113_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1114_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1115_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1116_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1117_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1118_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1119_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.01,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1120_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball moves right while the right ball moves left, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.01,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right while the right ball moves left, and the balls collide head-on. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1158_two_ball_opposed_incident",
+        "prompt_family": "two_ball_opposed_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball moves right while the right ball moves left, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.01,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right while the right ball moves left, and the balls collide head-on. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1160_two_ball_opposed_incident",
+        "prompt_family": "two_ball_opposed_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball moves right while the right ball moves left, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.01,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right while the right ball moves left, and the balls collide head-on. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1162_two_ball_opposed_incident",
+        "prompt_family": "two_ball_opposed_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball moves right while the right ball moves left, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.01,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right while the right ball moves left, and the balls collide head-on. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1163_two_ball_opposed_incident",
+        "prompt_family": "two_ball_opposed_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball moves right while the right ball moves left, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.01,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right while the right ball moves left, and the balls collide head-on. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1164_two_ball_opposed_incident",
+        "prompt_family": "two_ball_opposed_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball moves right while the right ball moves left, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.01,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right while the right ball moves left, and the balls collide head-on. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1167_two_ball_opposed_incident",
+        "prompt_family": "two_ball_opposed_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball moves right while the right ball moves left, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.01,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right while the right ball moves left, and the balls collide head-on. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1169_two_ball_opposed_incident",
+        "prompt_family": "two_ball_opposed_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball moves right while the right ball moves left, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.01,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right while the right ball moves left, and the balls collide head-on. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1170_two_ball_opposed_incident",
+        "prompt_family": "two_ball_opposed_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball moves right while the right ball moves left, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.01,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right while the right ball moves left, and the balls collide head-on. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1171_two_ball_opposed_incident",
+        "prompt_family": "two_ball_opposed_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball moves right while the right ball moves left, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.01,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball moves right while the right ball moves left, and the balls collide head-on. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1173_two_ball_opposed_incident",
+        "prompt_family": "two_ball_opposed_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1176_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1177_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1178_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1180_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1182_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1183_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1184_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1185_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1186_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1187_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1190_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1191_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1192_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1193_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1194_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1195_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1196_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1197_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1198_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1199_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1200_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1201_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1202_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1203_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1204_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1205_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1206_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1207_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1208_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      },
+      {
+        "after": "A fixed-camera real-world laboratory video of two balls moving along a straight track. The left ball is initially stationary while the right ball moves left toward it, and the balls collide. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "ball_1_radius_m": 0.0125,
+        "ball_2_radius_m": 0.0075,
+        "before": "A fixed-camera real-world laboratory video of aligned balls undergoing a one-dimensional collision. The left ball is initially stationary while the right ball moves left toward it, and the balls collide centrally. The camera and track remain stationary, and the motion unfolds at the true physical time scale.",
+        "case_id": "collision_supp_20260729_img_1209_two_ball_single_incident",
+        "prompt_family": "two_ball_single_incident"
+      }
+    ],
+    "count": 185,
+    "counts_by_prompt_family": {
+      "three_ball_single_incident": 15,
+      "two_ball_opposed_incident": 10,
+      "two_ball_single_incident": 160
+    },
+    "selection": "first colliding ball pair has unequal annotated radii"
+  },
+  "dataset_id": "physics_video_five_scene_v7",
+  "historical_release_safety": {
+    "old_shared_assets_overwritten": false,
+    "old_shared_assets_retained_for_releases": [
+      "5.1.0",
+      "6.0.0"
+    ],
+    "release_7_uses_dedicated_realtime_assets": true
+  },
+  "parabolic_realtime_media_repair": {
+    "after": {
+      "alignment_timing": {
+        "output_fps": 240.0,
+        "output_frames": 79,
+        "physical_playback_speedup": 1.0,
+        "timing_audit_record": "releases/7.0.0/text_video_alignment_repair.json",
+        "timing_policy": "retime_slow_motion_source_to_physical_fps_preserve_all_frames"
+      },
+      "first_frame": "assets/parabolic_motion/projectile_steelM-d20mm-m33p13g_h0p77m_v1p8051mps_img0539/canonical/first_frame_realtime.png",
+      "first_frame_sha256": "7ff7cc96d0b9814d5be8f03ada5031b9fd8a05d9500424d569ef2d6f44c2a40c",
+      "first_frame_size_bytes": 30359,
+      "reference_probe": {
+        "avg_frame_rate": "240/1",
+        "duration_s": 0.329167,
+        "fps": 240.0,
+        "frames": 79,
+        "height": 960,
+        "nominal_fps": 240.0,
+        "nominal_frame_rate": "240/1",
+        "time_base": "1/24000",
+        "width": 480
+      },
+      "reference_sha256": "df6922639b8004054881a1fcc4163109e120c58944665b7ff7472b722e102519",
+      "reference_size_bytes": 50619,
+      "reference_video": "assets/parabolic_motion/projectile_steelM-d20mm-m33p13g_h0p77m_v1p8051mps_img0539/canonical/reference_realtime.mp4",
+      "temporal": {
+        "annotation_source": "30 fps slow-motion source retimed to the measured physical 240 fps; all retained frames are preserved",
+        "encoded_to_physical_speed": 1.0,
+        "time_scale": "real_time"
+      }
+    },
+    "before": {
+      "alignment_timing": {
+        "output_fps": 30.0,
+        "output_frames": 79,
+        "physical_playback_speedup": 8.0,
+        "timing_audit_record": "provenance/alignment/native_timing_20260731_v1/audit.jsonl",
+        "timing_policy": "preserve_source_fps_and_all_trimmed_frames"
+      },
+      "first_frame": "assets/parabolic_motion/projectile_steelM-d20mm-m33p13g_h0p77m_v1p8051mps_img0539/canonical/first_frame.png",
+      "first_frame_sha256": "9086019a5d676752d90e9d9413f59c99f5ffc4eb6b4987b504cba15493610ee5",
+      "reference_probe": {
+        "avg_frame_rate": "30/1",
+        "duration_s": 2.633333,
+        "fps": 30.0,
+        "frames": 79,
+        "height": 960,
+        "nominal_fps": 30.0,
+        "nominal_frame_rate": "30/1",
+        "time_base": "1/15360",
+        "width": 480
+      },
+      "reference_sha256": "d7b484d254f54742f7380d6df2931c9e274f7100c15183dbb29bed28989d8447",
+      "reference_video": "assets/parabolic_motion/projectile_steelM-d20mm-m33p13g_h0p77m_v1p8051mps_img0539/canonical/reference.mp4",
+      "temporal": {
+        "annotation_source": "source frame rate and all frames in the retained source window are preserved; baseline adapters handle timing",
+        "encoded_to_physical_speed": 8.0,
+        "time_scale": "source_timing"
+      }
+    },
+    "case_id": "parabolic_img_0539",
+    "retiming": {
+      "ffmpeg_setpts": "N/(240*TB)",
+      "output_fps": 240.0,
+      "physical_playback_speedup_before": 8.0,
+      "source_encoded_fps": 30.0
+    },
+    "source_trim": {
+      "end_frame_exclusive": 134,
+      "frames": 79,
+      "start_frame": 55
+    },
+    "source_video": "assets/parabolic_motion/projectile_steelM-d20mm-m33p13g_h0p77m_v1p8051mps_img0539/source/reference.mov"
+  },
+  "post_repair_dataset_digest": "9c89d2a2848253ffcc7dafeba9f7fb1b230db78c0fa09c7efc3045306aa2014f",
+  "pre_repair_dataset_digest": "5df2b42c67ce58801e89d10635523f30414757126b7f2922886a8c961c74fffa",
+  "release": "7.0.0",
+  "release_strategy": "in_place_no_new_release",
+  "repair_id": "dataset_v7_text_video_alignment_20260803_v1",
+  "schema_version": "1.0"
+}

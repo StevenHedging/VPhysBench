@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -139,27 +140,116 @@ def _inputs() -> dict:
 
 
 class OpenWorldV2ArtifactTest(unittest.TestCase):
-    def test_external_overlay_and_lossless_audit_are_locally_manifested(
+    def test_issues_only_policy_skips_clean_case_deterministically(self) -> None:
+        values = _inputs()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = SimpleNamespace(
+                artifact_dir=root / "local",
+                case={"case_id": "clean", "scene_id": "free_fall"},
+                job={"job_id": "clean_job"},
+                evaluator_config={"type": "free_fall_state_v7"},
+                prediction={"video_sha256": "0" * 64},
+                run_id="baseline_clean_run",
+                save_visualizations=True,
+                visualization_root=root / "run" / "evaluation" / "visualizations",
+            )
+            artifacts = visual.write_open_world_v2_artifacts(
+                request,
+                config={
+                    "enabled": True,
+                    "mode": "issues_only",
+                },
+                score_summary={"score": 1.0},
+                has_issues=False,
+                **values,
+            )
+            manifest = json.loads(
+                Path(
+                    artifacts["open_world_v2_artifact_manifest"]
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual("skipped", manifest["status"])
+            self.assertEqual("no_issue_detected", manifest["reason"])
+            self.assertFalse(request.visualization_root.exists())
+
+    def test_quad_layout_records_score_and_scene_diagnostics(self) -> None:
+        values = _inputs()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = SimpleNamespace(
+                artifact_dir=root / "local",
+                case={"case_id": "quad", "scene_id": "free_fall"},
+                job={"job_id": "quad_job"},
+                evaluator_config={"type": "free_fall_state_v7"},
+                prediction={"video_sha256": "1" * 64},
+                run_id="baseline_quad_run",
+                save_visualizations=True,
+                visualization_root=root / "run" / "evaluation" / "visualizations",
+            )
+            artifacts = visual.write_open_world_v2_artifacts(
+                request,
+                config={
+                    "enabled": True,
+                    "mode": "all",
+                    "layout": "quad",
+                    "panel_width": 128,
+                    "panel_height": 96,
+                    "fps": 10.0,
+                },
+                score_summary={
+                    "score": 0.75,
+                    "components": {"physics": 0.8},
+                },
+                per_frame_diagnostics=[
+                    {"axis progress": index / 2} for index in range(3)
+                ],
+                **values,
+            )
+            manifest = json.loads(
+                Path(
+                    artifacts["open_world_v2_artifact_manifest"]
+                ).read_text(encoding="utf-8")
+            )
+            video_path = Path(manifest["files"]["overlay_video"]["path"])
+            capture = cv2.VideoCapture(str(video_path))
+            self.assertEqual(256, int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)))
+            self.assertEqual(192, int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+            capture.release()
+            audit = json.loads(
+                Path(manifest["files"]["audit_json"]["path"]).read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(0.75, audit["score_summary"]["score"])
+            self.assertEqual(
+                0.5,
+                audit["per_frame"][1]["scene_diagnostics"][
+                    "axis progress"
+                ],
+            )
+
+    def test_run_owned_overlay_and_lossless_audit_are_locally_manifested(
         self,
     ) -> None:
         values = _inputs()
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             request = SimpleNamespace(
-                artifact_dir=root / "local" / "case",
+                artifact_dir=root / "run" / "evaluation" / "cases" / "job_0",
                 case={
                     "case_id": "case_with_events",
                     "scene_id": "free_fall",
                 },
                 job={"job_id": "job_0"},
                 evaluator_config={"type": "free_fall_state_v6"},
+                run_id="baseline_task_run",
+                save_visualizations=True,
+                visualization_root=root / "run" / "evaluation" / "visualizations",
             )
             artifacts = visual.write_open_world_v2_artifacts(
                 request,
                 config={
-                    "external_root": str(root / "external"),
-                    "external_root_env": "UNSET_OPEN_WORLD_V2_TEST_ROOT",
-                    "repository_link": "visualizations",
                     "panel_width": 128,
                     "panel_height": 96,
                     "footer_height": 96,
@@ -183,12 +273,21 @@ class OpenWorldV2ArtifactTest(unittest.TestCase):
                 manifest["files"]["overlay_video"]["path"]
             )
             audit_path = Path(manifest["files"]["audit_json"]["path"])
+            relative = Path(manifest["visualization_directory"]).relative_to(
+                root / "run" / "evaluation" / "visualizations"
+            )
+            self.assertEqual(
+                ("free_fall", "case_with_events"),
+                relative.parts[:2],
+            )
+            self.assertEqual("visualization.mp4", video_path.name)
+            self.assertEqual("audit.json", audit_path.name)
             self.assertTrue(video_path.is_file())
             self.assertTrue(audit_path.is_file())
             self.assertIn(
-                "visualizations/",
+                "free_fall/case_with_events/",
                 manifest["files"]["overlay_video"][
-                    "repository_path"
+                    "visualization_path"
                 ],
             )
             for record in manifest["files"].values():
@@ -201,6 +300,30 @@ class OpenWorldV2ArtifactTest(unittest.TestCase):
             self.assertEqual(256, int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)))
             self.assertEqual(192, int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)))
             capture.release()
+
+            probe = json.loads(
+                subprocess.run(
+                    [
+                        "ffprobe",
+                        "-v",
+                        "error",
+                        "-select_streams",
+                        "v:0",
+                        "-show_entries",
+                        "stream=codec_name,pix_fmt",
+                        "-of",
+                        "json",
+                        str(video_path),
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout
+            )
+            self.assertEqual("h264", probe["streams"][0]["codec_name"])
+            self.assertEqual("yuv420p", probe["streams"][0]["pix_fmt"])
+            payload = video_path.read_bytes()
+            self.assertGreater(payload.find(b"mdat"), payload.find(b"moov"))
 
             audit = json.loads(audit_path.read_text(encoding="utf-8"))
             self.assertEqual(
@@ -237,6 +360,34 @@ class OpenWorldV2ArtifactTest(unittest.TestCase):
                 ],
             )
 
+    def test_run_policy_disables_run_owned_video_by_default(self) -> None:
+        values = _inputs()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = SimpleNamespace(
+                artifact_dir=root / "local",
+                case={"case_id": "disabled", "scene_id": "free_fall"},
+                job={"job_id": "disabled_job"},
+                evaluator_config={"type": "free_fall_state_v7"},
+                run_id="baseline_run",
+                save_visualizations=False,
+                visualization_root=root / "run" / "evaluation" / "visualizations",
+            )
+            artifacts = visual.write_open_world_v2_artifacts(
+                request,
+                config={
+                    "enabled": True,
+                },
+                **values,
+            )
+            manifest = artifacts["open_world_v2_artifacts"]
+            self.assertEqual("disabled", manifest["status"])
+            self.assertEqual(
+                "runtime_save_visualizations_false",
+                manifest["reason"],
+            )
+            self.assertFalse(request.visualization_root.exists())
+
     def test_renderer_failure_is_a_score_safe_failed_manifest(self) -> None:
         values = _inputs()
         with tempfile.TemporaryDirectory() as temporary:
@@ -246,15 +397,18 @@ class OpenWorldV2ArtifactTest(unittest.TestCase):
                 case={"case_id": "case_0", "scene_id": "pendulum"},
                 job={"job_id": "job_0"},
                 evaluator_config={"type": "pendulum_state_v6"},
+                run_id="baseline_failure_run",
+                save_visualizations=True,
+                visualization_root=root / "run" / "evaluation" / "visualizations",
             )
             with patch.object(
                 visual,
                 "render_open_world_v2_overlay",
-                side_effect=PermissionError("external volume unavailable"),
+                side_effect=PermissionError("run visualization unavailable"),
             ):
                 artifacts = visual.write_open_world_v2_artifacts(
                     request,
-                    config={"external_root": str(root / "external")},
+                    config={"enabled": True},
                     **values,
                 )
             manifest = json.loads(
@@ -269,7 +423,7 @@ class OpenWorldV2ArtifactTest(unittest.TestCase):
             )
             self.assertEqual("PermissionError", manifest["error"]["type"])
             self.assertIn(
-                "external volume unavailable",
+                "run visualization unavailable",
                 manifest["error"]["message"],
             )
 

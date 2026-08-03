@@ -1,0 +1,20 @@
+# Frozen inference-relevant values from the official ICML 2026 configuration.
+# Training-only paths and logging credentials are intentionally omitted.
+denoising_step_list:
+  - 1000
+  - 500
+denoising_step_list_first_chunk:
+  - 1000
+  - 750
+  - 500
+  - 250
+warp_denoising_step: true
+num_train_timestep: 1000
+timestep_shift: 5.0
+guidance_scale: 3.0
+denoising_loss_type: flow
+mixed_precision: true
+num_frame_per_block: 1
+model_kwargs:
+  timestep_shift: 5.0
+

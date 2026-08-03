@@ -2,6 +2,9 @@
 
 日期：2026-07-30
 
+> 历史快照：文中的全局外置可视化路径记录当时实现。当前实现统一写入所属
+> AtomicRun/reevaluation 的 `evaluation/visualizations/`，不要照搬旧路径。
+
 ## 1. 结论与发布边界
 
 `scene_default_v5` 已把公共开放世界实体层接入 `collision_1d`，实现：

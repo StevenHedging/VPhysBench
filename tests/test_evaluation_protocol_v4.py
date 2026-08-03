@@ -295,7 +295,7 @@ class EvaluationProtocolV4Tests(unittest.TestCase):
             result["components"]["instance_trajectories"], 1.0
         )
 
-    def test_visualization_is_external_and_locally_manifested(self) -> None:
+    def test_visualization_is_run_owned_and_locally_manifested(self) -> None:
         times = [0.0, 0.1, 0.2, 0.3]
         frames = [
             np.full((100, 160, 3), 120, dtype=np.uint8)
@@ -344,16 +344,16 @@ class EvaluationProtocolV4Tests(unittest.TestCase):
                 case={"case_id": "collision_case"},
                 job={"job_id": "job_collision_case"},
                 evaluator_config={"type": "collision_1d_state_v3"},
+                run_id="collision_v4_test_run",
+                save_visualizations=True,
+                visualization_root=root / "run" / "evaluation" / "visualizations",
             )
             request.artifact_dir.mkdir(parents=True)
             artifacts = write_collision_visualization(
                 request,
                 config={
                     "enabled": True,
-                    "external_root": str(root / "external"),
-                    "external_root_env": "UNSET_PHYSBENCH_TEST_ROOT",
-                    "repository_link": "visualizations",
-                    "namespace": "test_v4",
+                    "codec": "h264",
                     "fps": 10.0,
                     "panel_width": 160,
                     "panel_height": 100,
@@ -391,7 +391,11 @@ class EvaluationProtocolV4Tests(unittest.TestCase):
             for record in manifest["files"].values():
                 path = Path(record["path"])
                 self.assertTrue(path.is_file())
-                self.assertTrue(path.is_relative_to(root / "external"))
+                self.assertTrue(
+                    path.is_relative_to(
+                        root / "run" / "evaluation" / "visualizations"
+                    )
+                )
                 self.assertGreater(record["size_bytes"], 0)
 
 

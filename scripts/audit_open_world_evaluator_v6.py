@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Run targeted open-world-v2 prediction and reference audits.
 
-This entry point covers the four non-collision ``open_world_v2`` evaluators.
+This entry point covers the non-collision ``open_world_v2`` evaluators,
+including the Dataset 6.0 parabolic-motion evaluator added in protocol v8.
 Collision remains frozen on evaluator 2.2 and has its own v5 audit script.
-Large overlays are written through each evaluator's configured external
-visualization root; the local audit directory contains scores, curves, and
-the machine-readable open-world audit.
+Standalone audits save scores, curves, and the machine-readable open-world
+audit, but intentionally do not write process videos.  Process visualization
+belongs to an AtomicRun evaluation and is enabled through the main CLI.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ SUPPORTED_SCENES = {
     "free_fall",
     "inclined_plane_slide",
     "uniform_circular_motion",
+    "parabolic_motion",
 }
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -68,6 +70,7 @@ def _arguments() -> argparse.Namespace:
     )
     parser.add_argument("--self-check", action="store_true")
     parser.add_argument("--device", default="auto")
+    parser.add_argument("--run-id")
     parser.add_argument("--output", type=Path, required=True)
     return parser.parse_args()
 
@@ -352,7 +355,11 @@ def _scene_config(
         raise ValueError(
             f"{scene_id} is not configured for open_world_v2"
         )
-    if not str(config.get("type", "")).endswith(("_v6", "_v7")):
+    evaluator_type = str(config.get("type", ""))
+    if not (
+        evaluator_type.endswith(("_v6", "_v7"))
+        or evaluator_type == "parabolic_motion_state_v1"
+    ):
         raise ValueError(
             f"{scene_id} is not routed to a supported open-world evaluator"
         )
@@ -374,6 +381,7 @@ def _evaluate(
     evaluator_config: dict[str, Any],
     reference_mode: str | None = None,
     reference_parent_id: str | None = None,
+    run_id: str,
 ) -> dict[str, Any]:
     job_id = _job_id(protocol_id, case["case_id"], variant)
     artifact_dir = output / "cases" / job_id
@@ -395,6 +403,8 @@ def _evaluate(
         asset_root=asset_root,
         artifact_dir=artifact_dir,
         evaluator_config=evaluator_config,
+        run_id=run_id,
+        save_visualizations=False,
     )
     result = evaluator.evaluate(request).to_dict()
     result["audit_variant"] = variant
@@ -431,6 +441,7 @@ def main() -> None:
     implementation = _implementation_snapshot(Path(protocol["path"]))
     registry = SceneEvaluatorRegistry(protocol)
     output = args.output.expanduser().resolve()
+    run_id = args.run_id or output.name
     output.mkdir(parents=True, exist_ok=True)
     records: list[dict[str, Any]] = []
     evaluators: dict[str, dict[str, Any]] = {}
@@ -505,6 +516,7 @@ def main() -> None:
                     evaluator_config=config,
                     reference_mode=mode,
                     reference_parent_id=parent_id,
+                    run_id=run_id,
                 )
             except Exception as exc:
                 result = _failure_record(
@@ -591,6 +603,7 @@ def main() -> None:
             "fingerprint": protocol["fingerprint"],
             "runtime_overrides": {
                 "sam2.device": args.device,
+                "save_visualizations": False,
             },
         },
         "implementation": implementation,

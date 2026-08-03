@@ -59,6 +59,17 @@
         {"name": "object_1_orbit_radius", "required": true, "expected_unit": "m", "precision": 2, "template": "object 1 orbit radius is {value} meters"},
         {"name": "object_2_orbit_radius", "required": false, "expected_unit": "m", "precision": 2, "template": "object 2 orbit radius is {value} meters"}
       ]
+    },
+    "parabolic_motion": {
+      "parameter_intro": " Physical parameters: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "initial_horizontal_velocity", "required": true, "expected_unit": "m/s", "precision": 4, "template": "the initial horizontal speed is {value} meters per second"},
+        {"name": "launch_height", "required": true, "expected_unit": "m", "precision": 3, "template": "the launch height is {value} meters"},
+        {"name": "ball_radius", "required": true, "expected_unit": "m", "precision": 5, "template": "the ball radius is {value} meters"},
+        {"name": "ball_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "the ball mass is {value} kilograms"}
+      ]
     }
   }
 }

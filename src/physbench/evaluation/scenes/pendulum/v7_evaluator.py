@@ -143,7 +143,14 @@ class PendulumOpenWorldCaseEvaluatorV7(ReferenceCaseEvaluator):
         proposal_config = self.config["motion_proposal"]
         observation_config = self.config["open_world_observation"]
         condition_frame, condition_path, condition_transform = (
-            _load_condition_frame(request, config=self.config)
+            _load_condition_frame(
+                request,
+                config=self.config,
+                normalized_reference_frame=reference_video.frames[0],
+                normalized_reference_transform=(
+                    reference_video.spatial_transform
+                ),
+            )
         )
         try:
             initial_angle_deg = float(
@@ -746,6 +753,34 @@ class PendulumOpenWorldCaseEvaluatorV7(ReferenceCaseEvaluator):
                 prediction_union_masks=prediction_union,
                 full_subject_ious=full_ious,
                 prediction_available=prediction_available,
+                reference_role=(
+                    "CONDITION ANCHOR"
+                    if reference_mode == "parent_physics_reference"
+                    else "REFERENCE"
+                ),
+                score_summary={
+                    "score": score,
+                    "components": {
+                        "physics": float(state_score["score"]),
+                        "subject": float(subject.score),
+                        "topology": float(topology_metric["score"]),
+                        "integrity": float(comparison.integrity.score),
+                    },
+                },
+                per_frame_diagnostics=[
+                    {
+                        "position": row.get("position_score"),
+                        "string intact": topology.get("string_intact_score"),
+                        "branch detected": topology.get(
+                            "branch_string_detected"
+                        ),
+                    }
+                    for row, topology in zip(
+                        comparison.per_frame,
+                        topology_rows,
+                    )
+                ],
+                has_issues=bool(prediction_failures or comparison.failed),
             )
         )
         primary_metric = {

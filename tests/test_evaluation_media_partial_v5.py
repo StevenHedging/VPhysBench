@@ -404,5 +404,210 @@ class ReferenceEvaluatorPartialSamplingTests(unittest.TestCase):
         )
 
 
+class ReferenceEvaluatorNoPadTests(unittest.TestCase):
+    @staticmethod
+    def _config() -> dict:
+        return {
+            "evaluator_contract": "robust_subject_v3",
+            "timeline": {
+                "fps": 2.0,
+                "maximum_duration_s": 1.0,
+                "minimum_duration_s": 0.1,
+                "minimum_source_fps": 1.0,
+            },
+            "spatial": {
+                "width": 480,
+                "height": 832,
+                "policy": "shared_reference_content_no_pad_v1",
+            },
+        }
+
+    @staticmethod
+    def _contract() -> dict:
+        return {
+            "schema_version": "1.0",
+            "policy": "i2v_conditioning_content_v1",
+            "conditioning_asset": "first.png",
+            "conditioning_transform": "aspect_preserving_contain",
+            "model_canvas": {"width": 480, "height": 832},
+            "model_canvas_margin_fill": "edge_replicate",
+            "evaluation_view": "exclude_model_canvas_padding",
+        }
+
+    @staticmethod
+    def _request(
+        root: Path,
+        *,
+        contract: dict | None,
+        has_real_reference: bool = True,
+    ) -> CaseEvaluationRequest:
+        reference = root / "reference.mp4"
+        prediction = root / "prediction.mp4"
+        condition = root / "first.png"
+        reference.touch()
+        prediction.touch()
+        condition.touch()
+        return CaseEvaluationRequest(
+            job={"job_id": "job"},
+            case={
+                "case_id": "case",
+                "scene_id": "collision_1d",
+                "assets": {"first_frame": "first.png"},
+                "has_real_reference_video": has_real_reference,
+            },
+            case_catalog={},
+            prediction={
+                "status": "complete",
+                "video_path": str(prediction),
+                **(
+                    {"spatial_alignment": contract}
+                    if contract is not None
+                    else {}
+                ),
+            },
+            asset_root=root,
+            artifact_dir=root / "artifacts",
+            evaluator_config={},
+        )
+
+    def test_missing_contract_with_different_aspect_is_conservative_zero(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = self._request(root, contract=None)
+            infos = [
+                VideoInfo(10, 10.0, 16, 9, 0.9),
+                VideoInfo(10, 10.0, 4, 3, 0.9),
+            ]
+            with (
+                patch.object(
+                    base,
+                    "resolve_physics_reference",
+                    return_value=(
+                        root / "reference.mp4",
+                        "same_case_reference",
+                        None,
+                    ),
+                ),
+                patch.object(base, "reference_timeline", return_value=[0.0]),
+                patch.object(base, "probe_video", side_effect=infos),
+            ):
+                result = _SamplingEvaluator(self._config()).evaluate(request)
+
+        self.assertEqual("evaluated", result.status)
+        self.assertEqual(0.0, result.score)
+        self.assertEqual(
+            "prediction_spatial_contract_missing",
+            result.reason_code,
+        )
+
+    def test_prediction_canvas_mismatch_is_conservative_zero(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = self._request(root, contract=self._contract())
+            infos = [
+                VideoInfo(10, 10.0, 1080, 1920, 0.9),
+                VideoInfo(10, 10.0, 832, 480, 0.9),
+            ]
+            with (
+                patch.object(
+                    base,
+                    "resolve_physics_reference",
+                    return_value=(
+                        root / "reference.mp4",
+                        "same_case_reference",
+                        None,
+                    ),
+                ),
+                patch.object(base, "reference_timeline", return_value=[0.0]),
+                patch.object(base, "probe_video", side_effect=infos),
+                patch.object(
+                    base,
+                    "probe_image_size",
+                    return_value=(1080, 1920),
+                ),
+            ):
+                result = _SamplingEvaluator(self._config()).evaluate(request)
+
+        self.assertEqual("evaluated", result.status)
+        self.assertEqual(0.0, result.score)
+        self.assertEqual(
+            "prediction_model_canvas_mismatch",
+            result.reason_code,
+        )
+
+    def test_unreadable_conditioning_asset_is_reference_unavailable(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = self._request(root, contract=self._contract())
+            with (
+                patch.object(
+                    base,
+                    "resolve_physics_reference",
+                    return_value=(
+                        root / "reference.mp4",
+                        "same_case_reference",
+                        None,
+                    ),
+                ),
+                patch.object(base, "reference_timeline", return_value=[0.0]),
+                patch.object(
+                    base,
+                    "probe_video",
+                    return_value=VideoInfo(10, 10.0, 1080, 1920, 0.9),
+                ),
+                patch.object(
+                    base,
+                    "probe_image_size",
+                    side_effect=VideoProtocolError(
+                        "conditioning_image_unreadable",
+                        "fixture unreadable",
+                    ),
+                ),
+            ):
+                result = _SamplingEvaluator(self._config()).evaluate(request)
+
+        self.assertEqual("unavailable", result.status)
+        self.assertIsNone(result.score)
+        self.assertEqual(
+            "reference_conditioning_image_unreadable",
+            result.reason_code,
+        )
+
+    def test_parent_reference_is_explicitly_rejected_by_no_pad_protocol(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = self._request(
+                root,
+                contract=self._contract(),
+                has_real_reference=False,
+            )
+            with (
+                patch.object(
+                    base,
+                    "resolve_physics_reference",
+                    return_value=(
+                        root / "reference.mp4",
+                        "parent_physics_reference",
+                        "parent-case",
+                    ),
+                ),
+                patch.object(base, "reference_timeline", return_value=[0.0]),
+            ):
+                result = _SamplingEvaluator(self._config()).evaluate(request)
+
+        self.assertEqual("unavailable", result.status)
+        self.assertIsNone(result.score)
+        self.assertEqual(
+            "reference_parent_spatial_alignment_unsupported",
+            result.reason_code,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Complete train/test View A with relative generalization annotations",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "view_id",
+    "coverage",
+    "selection_policy",
+    "split_semantics",
+    "case_set_sha256",
+    "scenes",
+    "test_annotations"
+  ],
+  "properties": {
+    "schema_version": {"const": "3.0"},
+    "view_id": {"const": "view_a"},
+    "coverage": {"const": "complete"},
+    "selection_policy": {"type": "string", "minLength": 1},
+    "split_semantics": {
+      "type": "object",
+      "required": [
+        "primary_partitions",
+        "generalization_regimes",
+        "regime_is_relative_to",
+        "factor_categories"
+      ],
+      "properties": {
+        "primary_partitions": {
+          "prefixItems": [{"const": "train"}, {"const": "test"}],
+          "items": false
+        },
+        "generalization_regimes": {
+          "prefixItems": [
+            {"const": "id"},
+            {"const": "ood"},
+            {"const": "mixed"}
+          ],
+          "items": false
+        },
+        "regime_is_relative_to": {"const": "view_a.train"},
+        "factor_categories": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/factorCategory"},
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "case_set_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "scenes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["train", "test"],
+        "properties": {
+          "train": {"$ref": "#/$defs/caseIds"},
+          "test": {"$ref": "#/$defs/caseIds"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "test_annotations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "generalization_regime",
+          "ood_factors",
+          "co_varying_factors",
+          "rationale"
+        ],
+        "properties": {
+          "generalization_regime": {"enum": ["id", "ood", "mixed"]},
+          "ood_factors": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/factor"}
+          },
+          "co_varying_factors": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/factor"}
+          },
+          "rationale": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "caseIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+      },
+      "uniqueItems": true
+    },
+    "factorCategory": {
+      "enum": [
+        "physical_parameter",
+        "object_composition",
+        "interaction_structure",
+        "appearance",
+        "environment",
+        "acquisition"
+      ]
+    },
+    "factor": {
+      "type": "object",
+      "required": ["name", "category"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+        },
+        "category": {"$ref": "#/$defs/factorCategory"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

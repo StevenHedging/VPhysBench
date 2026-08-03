@@ -18,6 +18,9 @@ class CaseEvaluationRequest:
     asset_root: Path
     artifact_dir: Path
     evaluator_config: dict[str, Any]
+    run_id: str | None = None
+    save_visualizations: bool = False
+    visualization_root: Path | None = None
 
 
 @dataclass

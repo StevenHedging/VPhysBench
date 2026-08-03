@@ -7710,6 +7710,10 @@ class RigidBodyOpenWorldCaseEvaluatorBase(ReferenceCaseEvaluator):
         prediction_union_masks: Sequence[np.ndarray],
         full_subject_ious: Sequence[float | None],
         prediction_available: Sequence[bool],
+        reference_role: str,
+        score_summary: Mapping[str, Any],
+        per_frame_diagnostics: Sequence[Mapping[str, Any]],
+        has_issues: bool,
     ) -> dict[str, Any]:
         """Write diagnostics after scoring without extending its failure surface."""
 
@@ -7728,6 +7732,10 @@ class RigidBodyOpenWorldCaseEvaluatorBase(ReferenceCaseEvaluator):
                 prediction_union_masks=prediction_union_masks,
                 full_subject_ious=full_subject_ious,
                 prediction_available=prediction_available,
+                reference_role=reference_role,
+                score_summary=score_summary,
+                per_frame_diagnostics=per_frame_diagnostics,
+                has_issues=has_issues,
             )
         except Exception:
             # Even a local-manifest write failure is an artifact failure, not
@@ -8169,6 +8177,36 @@ class RigidBodyOpenWorldCaseEvaluatorBase(ReferenceCaseEvaluator):
             prediction_union_masks=result.prediction_union_masks,
             full_subject_ious=ious,
             prediction_available=available.tolist(),
+            reference_role=(
+                "CONDITION ANCHOR"
+                if reference_mode == "parent_physics_reference"
+                else "REFERENCE"
+            ),
+            score_summary={
+                "score": score,
+                "components": {
+                    "physics": float(result.state_metric["score"]),
+                    "subject": float(subject.score),
+                    "integrity": float(result.comparison.integrity.score),
+                },
+            },
+            per_frame_diagnostics=[
+                {
+                    "axis": (
+                        "vertical"
+                        if self.scene_kind == "free_fall"
+                        else "incline"
+                    ),
+                    "reference progress": row.get(
+                        "reference_progress_normalized"
+                    ),
+                    "prediction progress": row.get(
+                        "prediction_progress_normalized"
+                    ),
+                }
+                for row in result.per_frame
+            ],
+            has_issues=bool(prediction_failures or comparison.failed),
         )
         primary = {
             **result.composition,

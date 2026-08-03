@@ -127,6 +127,45 @@ class PredictionArtifactTests(unittest.TestCase):
                     run_dir=temporary,
                 )
 
+    def test_prediction_spatial_contract_is_bound_to_frozen_job(self) -> None:
+        contract = {
+            "schema_version": "1.0",
+            "policy": "i2v_conditioning_content_v1",
+            "conditioning_asset": "assets/first.png",
+            "conditioning_transform": "aspect_preserving_contain",
+            "model_canvas": {"width": 480, "height": 832},
+            "model_canvas_margin_fill": "edge_replicate",
+            "evaluation_view": "exclude_model_canvas_padding",
+        }
+        job = {
+            **self._job(),
+            "native_inputs": {"spatial_alignment": contract},
+        }
+        prediction = {
+            "job_id": "job_1",
+            "case_id": "case_1",
+            "baseline_id": "fixture",
+            "evaluation_partition": "test_id",
+            "seed": 42,
+            "status": "planned",
+            "video_path": None,
+            "spatial_alignment": {
+                **contract,
+                "model_canvas": {"width": 832, "height": 480},
+            },
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(
+                ValueError,
+                "spatial_alignment differs",
+            ):
+                validate_prediction_records(
+                    [prediction],
+                    jobs=[job],
+                    baseline_id="fixture",
+                    run_dir=temporary,
+                )
+
     def test_validation_detects_prediction_artifact_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = Path(temporary) / "run"

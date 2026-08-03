@@ -5,9 +5,10 @@ Release 5.0.0 remains immutable.  This migration:
 
 * applies the user-confirmed steel-ball specifications;
 * recomputes velocities that were derived from a corrected diameter;
-* writes collision prompts from each case's actual left-to-right state;
+* writes process-only prompts without structured numeric values;
 * marks non-conditionable parabolic setup measurements as unannotated;
 * groups identical parabolic physical signatures into one View A partition;
+* retires five invalid synthetic-first-frame pendulum OOD cases;
 * gives every case a concise, physics-bearing asset directory; and
 * materializes the new asset paths as hard links to the frozen media bytes.
 """
@@ -40,6 +41,7 @@ from physbench.io import (  # noqa: E402
     write_json,
     write_jsonl,
 )
+from physbench.splitters import build_view_b  # noqa: E402
 
 
 DATA_ROOT = ROOT / "datasets" / "physics_video"
@@ -49,6 +51,16 @@ BASE_ROOT = RELEASES_ROOT / "5.0.0"
 OUTPUT_ROOT = RELEASES_ROOT / "5.1.0"
 DATASET_ID = "physics_video_six_scene_v5p1"
 RELEASE = "5.1.0"
+RETIRED_SYNTHETIC_PENDULUM_OOD_CASE_IDS = {
+    "pendulum_ltot0110mm_lrope0100mm_r010mm_a010deg_ood01",
+    "pendulum_ltot0130mm_lrope0120mm_r010mm_a030deg_ood02",
+    "pendulum_ltot0130mm_lrope0120mm_r010mm_a030deg_ood03",
+    "pendulum_ltot0155mm_lrope0145mm_r010mm_a020deg_ood04",
+    "pendulum_ltot0155mm_lrope0145mm_r010mm_a020deg_ood05",
+}
+NATIVE_TIMING_AUDIT_REFERENCE = (
+    "provenance/alignment/native_timing_20260731_v1/audit.jsonl"
+)
 
 PARABOLIC_AUXILIARY_FIELDS = {
     "photogate_block_time",
@@ -303,32 +315,126 @@ def normalize_collision(case: dict[str, Any]) -> dict[str, Any]:
 
 
 def collision_prompt(case: dict[str, Any]) -> str:
-    sequence = case["appearance"]["ball_sequence"]
-    count_word = {2: "two", 3: "three"}[len(sequence)]
-    relation = "between" if len(sequence) == 2 else "among"
-    states: list[str] = []
-    for index, spec_id in enumerate(sequence, 1):
-        spec = BALL_SPECS[spec_id]
-        velocity = float(
-            case["physics"][f"ball_{index}_initial_velocity"]["value"]
+    structure = case["appearance"]["collision_structure"]
+    process = {
+        "three_ball_single_incident": (
+            "The left ball moves right toward two initially stationary balls "
+            "and collides centrally with the middle ball."
+        ),
+        "two_ball_single_incident": (
+            "The left ball is initially stationary while the right ball moves "
+            "left toward it, and the balls collide centrally."
+        ),
+        "two_ball_opposed_incident": (
+            "The left ball moves right while the right ball moves left, and "
+            "the balls collide head-on."
+        ),
+    }
+    if structure not in process:
+        raise ValueError(
+            f"unsupported collision structure in prompt: {structure}"
         )
-        if velocity > 0.0:
-            motion = f"moves right at {abs(velocity):.4f} m/s"
-        elif velocity < 0.0:
-            motion = f"moves left at {abs(velocity):.4f} m/s"
-        else:
-            motion = "is initially stationary"
-        states.append(
-            f"ball {index} is a {spec['prompt_label']} and {motion}"
-        )
-    state_text = "; ".join(states)
     return (
-        "A fixed-camera real-world laboratory video of a one-dimensional "
-        f"central collision {relation} {count_word} aligned balls. At frame 0, "
-        f"all {count_word} balls are fully visible. From left to right, "
-        f"{state_text}. The camera and track remain stationary, and the "
-        "collision is recorded at the true physical time scale."
+        "A fixed-camera real-world laboratory video of aligned balls "
+        "undergoing a one-dimensional collision. "
+        f"{process[structure]} The camera and track remain stationary, and "
+        "the motion unfolds at the true physical time scale."
     )
+
+
+def normalize_process_text(case: dict[str, Any]) -> None:
+    scene_id = case["scene_id"]
+    if scene_id == "collision_1d":
+        prompt = collision_prompt(case)
+        annotation_source = "collision_process_prompt_v3"
+    elif scene_id == "parabolic_motion":
+        prompt = (
+            "A fixed-camera real-world laboratory video of a ball in "
+            "horizontal projectile motion. The ball begins moving leftward "
+            "with a horizontal velocity and follows a continuous downward "
+            "parabolic trajectory under gravity at the true physical time "
+            "scale."
+        )
+        annotation_source = "scene_process_prompt_v2"
+    elif scene_id == "inclined_plane_slide":
+        prompt = (
+            "A fixed-camera real-world laboratory video of a block released "
+            "from rest at the top of an inclined plane. The block begins "
+            "sliding and accelerates down the plane under gravity while "
+            "remaining in contact with its surface."
+        )
+        annotation_source = "scene_process_prompt_v2"
+    elif scene_id == "uniform_circular_motion":
+        object_count = case["appearance"]["object_count"]
+        subject = {
+            1: "a block",
+            2: "two blocks",
+        }.get(object_count)
+        if subject is None:
+            raise ValueError(
+                f"unsupported circular object count: {object_count}"
+            )
+        prompt = (
+            "A fixed overhead real-world laboratory video of "
+            f"{subject} undergoing uniform circular motion on a rotating "
+            "disk. The rotation center and camera remain fixed, and each "
+            "block follows a circular path while the disk rotates steadily."
+        )
+        annotation_source = "scene_process_prompt_v2"
+    elif scene_id in {"pendulum", "free_fall"}:
+        return
+    else:
+        raise ValueError(f"unsupported scene text normalization: {scene_id}")
+    case["text"] = {
+        "schema_version": "1.0",
+        "prompt": prompt,
+        "language": "en",
+        "annotation_source": annotation_source,
+    }
+
+
+def normalize_native_timing_metadata(case: dict[str, Any]) -> None:
+    scene_id = case["scene_id"]
+    alignment = case.get("alignment")
+    restore = (
+        scene_id in {"free_fall", "parabolic_motion"}
+        or (
+            scene_id == "collision_1d"
+            and alignment is not None
+            and alignment["method"]
+            == "first_persistent_all_balls_clear_gate_crop"
+        )
+    )
+    if not restore:
+        return
+    speed = (
+        8.0
+        if (
+            scene_id == "free_fall"
+            or case["case_id"] == "parabolic_img_0539"
+        )
+        else 1.0
+    )
+    case["temporal"] = {
+        "encoded_to_physical_speed": speed,
+        "time_scale": "source_timing",
+        "annotation_source": (
+            "source frame rate and all frames in the retained source window "
+            "are preserved; baseline adapters handle timing"
+        ),
+    }
+    if alignment is not None:
+        alignment["timing_policy"] = (
+            "preserve_source_fps_and_all_trimmed_frames"
+        )
+        alignment["timing_audit_record"] = NATIVE_TIMING_AUDIT_REFERENCE
+        alignment["output_frames"] = (
+            int(alignment["source_end_frame_exclusive"])
+            - int(alignment["source_start_frame"])
+        )
+        alignment["output_fps"] = float(alignment["source_fps"])
+        if scene_id == "parabolic_motion":
+            alignment["physical_playback_speedup"] = speed
 
 
 def normalize_parabolic(case: dict[str, Any]) -> dict[str, Any]:
@@ -540,7 +646,7 @@ def collision_directory(case: dict[str, Any]) -> tuple[str, list[str]]:
             f"v{decimal_token(float(velocity))}mps"
         )
         tokens.append(token)
-    name = "v51_collision_" + "_".join(tokens + [identity_token(
+    name = "collision_" + "_".join(tokens + [identity_token(
         case["case_id"]
     )])
     return name, tokens
@@ -565,7 +671,7 @@ def descriptive_directory(case: dict[str, Any]) -> tuple[str, list[str]]:
                 + "mps"
             ),
         ]
-        return f"v51_projectile_{'_'.join(tokens)}_{identity}", tokens
+        return f"projectile_{'_'.join(tokens)}_{identity}", tokens
     if scene_id == "free_fall":
         tokens = [
             f"r{decimal_token(physics['ball_radius']['value'] * 1000)}mm",
@@ -573,7 +679,7 @@ def descriptive_directory(case: dict[str, Any]) -> tuple[str, list[str]]:
             f"h{decimal_token(physics['initial_height']['value'])}m",
             f"v{decimal_token(physics['initial_velocity']['value'])}mps",
         ]
-        return f"v51_freefall_{'_'.join(tokens)}_{identity}", tokens
+        return f"freefall_{'_'.join(tokens)}_{identity}", tokens
     if scene_id == "inclined_plane_slide":
         tokens = [
             f"a{decimal_token(physics['incline_angle']['value'])}deg",
@@ -585,7 +691,7 @@ def descriptive_directory(case: dict[str, Any]) -> tuple[str, list[str]]:
                 )
             ),
         ]
-        return f"v51_incline_{'_'.join(tokens)}_{identity}", tokens
+        return f"incline_{'_'.join(tokens)}_{identity}", tokens
     if scene_id == "uniform_circular_motion":
         tokens = [
             f"w{decimal_token(physics['angular_velocity']['value'])}dps",
@@ -605,7 +711,7 @@ def descriptive_directory(case: dict[str, Any]) -> tuple[str, list[str]]:
                 )
                 + "mm"
             )
-        return f"v51_circular_{'_'.join(tokens)}_{identity}", tokens
+        return f"circular_{'_'.join(tokens)}_{identity}", tokens
     if scene_id == "pendulum":
         tokens = [
             f"l{decimal_token(physics['pendulum_length']['value'] * 1000)}mm",
@@ -613,7 +719,7 @@ def descriptive_directory(case: dict[str, Any]) -> tuple[str, list[str]]:
             f"r{decimal_token(physics['bob_radius']['value'] * 1000)}mm",
             f"a{decimal_token(physics['initial_angle']['value'])}deg",
         ]
-        return f"v51_pendulum_{'_'.join(tokens)}_{identity}", tokens
+        return f"pendulum_{'_'.join(tokens)}_{identity}", tokens
     raise ValueError(f"unsupported scene for asset naming: {scene_id}")
 
 
@@ -770,10 +876,11 @@ def validate_normalized_cases(cases: list[dict[str, Any]]) -> None:
                     raise ValueError(
                         f"collision radius mismatch: {case['case_id']}"
                     )
-                if spec["prompt_label"] not in case["text"]["prompt"]:
-                    raise ValueError(
-                        f"collision prompt omits ball spec: {case['case_id']}"
-                    )
+            if re.search(r"\d", case["text"]["prompt"]):
+                raise ValueError(
+                    f"collision prompt leaks a numeric value: "
+                    f"{case['case_id']}"
+                )
         if case["scene_id"] == "parabolic_motion":
             spec = BALL_SPECS[case["appearance"]["ball_spec_id"]]
             block_time = case["physics"]["photogate_block_time"]["value"]
@@ -810,16 +917,47 @@ def build_release() -> tuple[Path, str]:
     base_files_before = release_file_digests(BASE_ROOT)
     base_release = load_json(BASE_ROOT / "release.json")
     base_cases = load_jsonl(BASE_ROOT / descriptor["cases"])
-    cases = copy.deepcopy(base_cases)
+    cases = [
+        copy.deepcopy(case)
+        for case in base_cases
+        if case["case_id"] not in RETIRED_SYNTHETIC_PENDULUM_OOD_CASE_IDS
+    ]
     corrections: list[dict[str, Any]] = []
     for case in cases:
         if case["scene_id"] == "collision_1d":
             corrections.append(normalize_collision(case))
         elif case["scene_id"] == "parabolic_motion":
             corrections.append(normalize_parabolic(case))
+        normalize_process_text(case)
+        normalize_native_timing_metadata(case)
+        if case["scene_id"] == "collision_1d":
+            corrections[-1]["corrected"]["prompt"] = (
+                case["text"]["prompt"]
+            )
 
     base_view_a = load_json(BASE_ROOT / "views/view_a.json")
     view_a, split_audit = grouped_parabolic_split(cases, base_view_a)
+    for scene_groups in view_a["scenes"].values():
+        for partition, case_ids in scene_groups.items():
+            scene_groups[partition] = [
+                case_id
+                for case_id in case_ids
+                if case_id not in RETIRED_SYNTHETIC_PENDULUM_OOD_CASE_IDS
+            ]
+    view_a_ids = sorted(
+        case_id
+        for scene_groups in view_a["scenes"].values()
+        for case_ids in scene_groups.values()
+        for case_id in case_ids
+    )
+    view_a["case_set_sha256"] = canonical_sha256(view_a_ids)
+    view_b = build_view_b(cases, groups=5, seed=42)
+    view_b.update({
+        "schema_version": "2.0",
+        "view_id": "view_b",
+        "coverage": "complete",
+    })
+    view_b.pop("view", None)
     asset_mappings = [
         materialize_descriptive_assets(case)
         for case in cases
@@ -860,10 +998,7 @@ def build_release() -> tuple[Path, str]:
         shutil.copytree(BASE_ROOT / "scenes", stage / "scenes")
         write_jsonl(stage / "cases.jsonl", cases)
         write_json(stage / "views/view_a.json", view_a)
-        shutil.copy2(
-            BASE_ROOT / "views/view_b.json",
-            stage / "views/view_b.json",
-        )
+        write_json(stage / "views/view_b.json", view_b)
         write_json(
             stage / "dataset.json",
             {
@@ -942,6 +1077,24 @@ def build_release() -> tuple[Path, str]:
                     base_files_before
                 ),
                 "case_count": len(cases),
+                "retired_case_ids": sorted(
+                    RETIRED_SYNTHETIC_PENDULUM_OOD_CASE_IDS
+                ),
+                "retired_case_reason": (
+                    "invalid synthetic first frames did not match their "
+                    "physics-reference video frame zero"
+                ),
+                "native_timing_policy": (
+                    "preserve_source_fps_and_all_frames_in_retained_window"
+                ),
+                "native_timing_audit": NATIVE_TIMING_AUDIT_REFERENCE,
+                "native_timing_case_count": 406,
+                "native_timing_scene_case_counts": {
+                    "collision_1d": 298,
+                    "free_fall": 11,
+                    "parabolic_motion": 97,
+                },
+                "model_frame_constraint_in_dataset_assets": False,
                 "case_ids_sha256": canonical_sha256(
                     [case["case_id"] for case in cases]
                 ),
@@ -958,7 +1111,10 @@ def build_release() -> tuple[Path, str]:
                 ),
                 "canonical_ball_spec_ids": sorted(BALL_SPECS),
                 "asset_directory_mapping_count": len(asset_mappings),
-                "asset_materialization": "hard_links_only",
+                "asset_materialization": (
+                    "mixed_native_timing_reencode_and_verified_hardlinks"
+                ),
+                "asset_directory_materialization": "hard_links_only",
                 "media_payload_copied_bytes": 0,
                 "background_in_physics": False,
                 "background_in_asset_directory_names": False,
@@ -969,16 +1125,19 @@ def build_release() -> tuple[Path, str]:
         (stage / "README.md").write_text(
             """# Physics Video Dataset 5.1.0
 
-该 release 从不可变的 5.0.0 派生，case ID 和媒体字节保持稳定。
+该 release 从不可变的 5.0.0 派生；被保留的单摆 parent case 及媒体保持稳定。
 
 - 使用用户确认的钢球规格统一碰撞和平抛标注；
 - 由错误直径派生的光电门速度已按原遮挡时间重新计算；
-- 碰撞 prompt 逐 case 描述球数、从左到右规格、方向和初速度；
+- 文本只描述物理过程，不包含具体物理数值、背景颜色或裁剪提示；
+- 移除 5 条首帧与参考视频不匹配的合成单摆 OOD case，保留其真实 parent case；
+- canonical 视频保留裁剪窗口内的全部源帧和源 FPS，模型时序适配只在基线侧完成；
 - 平抛辅助装置量保留作 provenance，但不再作为可条件化物理输入；
 - 平抛 View A 按球规格、发射高度和初速度成组划分，无 train/test_id
   物理 signature 重叠；
 - 六个 scene 的每个 case 均使用简短的结构化物理目录名，背景不参与命名；
-- 新资产路径全部是指向 5.0.0 冻结媒体的硬链接，不复制媒体 payload。
+- 395 条需裁剪的平抛/补充碰撞视频仅重编码必要的事件窗口与空间变换，
+  不改变窗口内帧数和源 FPS；11 条自由落体 canonical 与慢动作源文件字节相同。
 
 详见 `ball_spec_catalog.json`、`annotation_corrections.json`、
 `asset_directory_mapping.json`、`split_audit.json` 和

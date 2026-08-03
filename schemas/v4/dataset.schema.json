@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Physics video Dataset bundle with train/test views",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "dataset_id",
+    "release",
+    "cases",
+    "asset_root",
+    "asset_lock",
+    "release_manifest",
+    "scene_catalog",
+    "views"
+  ],
+  "properties": {
+    "schema_version": {"const": "4.0"},
+    "dataset_id": {"type": "string", "minLength": 1},
+    "release": {"type": "string", "minLength": 1},
+    "cases": {"type": "string", "minLength": 1},
+    "asset_root": {"type": "string", "minLength": 1},
+    "asset_lock": {"type": "string", "minLength": 1},
+    "release_manifest": {"type": "string", "minLength": 1},
+    "scene_catalog": {"type": "string", "minLength": 1},
+    "views": {
+      "type": "object",
+      "required": ["view_a", "view_b"],
+      "properties": {
+        "view_a": {"type": "string", "minLength": 1},
+        "view_b": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

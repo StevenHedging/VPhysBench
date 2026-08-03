@@ -98,7 +98,8 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   baseline list
 ```
 
-当前应发现七个 Baseline ID。检查解析结果：
+输出应包含 `baselines/` 下全部 portable manifest；不要在运维文档中锁死数量。
+检查解析结果：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
@@ -129,6 +130,10 @@ done
 checkpoint identity 与 adapter/TaskBuilder fingerprint。
 
 ## 6. 编译 TaskInstance
+
+本节命令保留为现有五场景Baseline的兼容性操作，因此显式使用4.0.0和历史Task。当前
+Dataset/Task入口是`6.0.0`与`six_scene_*`；只有已实现并声明
+`parabolic_motion`支持的Baseline才能编译完整六场景Task，不能静默跳过该scene。
 
 Direct-eval：
 
@@ -188,6 +193,10 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --output-root runs_v2 \
   --execute
 ```
+
+可视化视频默认关闭。只有需要人工审计时才添加 `--save-visualizations`；启用后写入
+`runs_v2/<run_id>/evaluation/visualizations/<scene>/<case>/...`。视频使用
+H.264/yuv420p/fast-start，避免旧 `mp4v` 在浏览器中出现“加载视频文件时出错”。
 
 AtomicRun 不覆盖已有目录。单 case 或 subset run 是工程诊断，coverage 不完整时没有正式
 Task score。
@@ -264,7 +273,11 @@ runs_v2/<run_id>/
 │   ├── task_result.json
 │   ├── case_metrics.jsonl        # legacy consumer projection
 │   ├── summary.json              # legacy consumer projection
-│   └── cases/<job_id>/
+│   ├── cases/<job_id>/
+│   └── visualizations/            # 仅 --save-visualizations 时创建
+│       └── <scene>/<case>/<seed-or-evaluation>-<hash>/
+│           ├── visualization.mp4
+│           └── audit.json
 └── reevaluations/                 # 可选、并存、按协议指纹隔离
     └── <protocol_id>/<protocol_sha256>/<evaluation_id>/
 ```
@@ -383,34 +396,41 @@ evaluation/cases/<job_id>/physical_subject_iou_curve.png
 正式 Task score 只在严格 coverage 为 1 时存在。不要把部分运行的
 `observed_mean_score` 当作正式结果。
 
-### 12.1 v4 碰撞过程可视化
+### 12.1 运行级过程可视化
 
-碰撞 v4 会把大型诊断写到 NVMe，并在仓库顶层提供统一入口。首次配置：
+过程视频属于某个 Baseline 执行某个 Task 的 AtomicRun。只有显式添加
+`--save-visualizations` 时才保存，默认关闭。Canonical evaluation 的目录为：
 
-```bash
-mkdir -p /mnt/nvme1/physics_video_benchmark/evaluation_visualizations
-
-ln -s /mnt/nvme1/physics_video_benchmark/evaluation_visualizations \
-  visualizations
+```text
+runs_v2/<run_id>/evaluation/visualizations/
+  <scene>/<case>/<seed-or-evaluation>-<hash>/
+    visualization.mp4
+    audit.json
 ```
 
-执行 `ln -s` 前应确认仓库中不存在同名普通目录；当前工作区已经完成该配置。
-`visualizations` 被 `.gitignore` 忽略。若机器没有该挂载点，可以覆盖外置根：
+并存式重评归属于具体 evaluation variant，目录为：
+
+```text
+runs_v2/<run_id>/reevaluations/<protocol>/<fingerprint>/<evaluation_id>/
+  evaluation/visualizations/<scene>/<case>/<evaluation>-<hash>/...
+```
+
+例如：
 
 ```bash
-PHYSBENCH_VISUALIZATION_ROOT=/path/with/enough/space \
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   evaluate \
   --run-dir runs_v2/RUN_ID \
-  --protocol-id scene_default_v4 \
-  --evaluation-id collision-v4-audit-001
+  --protocol-id scene_default_v8 \
+  --evaluation-id manual-audit-001 \
+  --save-visualizations
 ```
 
-外置根必须位于 AtomicRun 之外。不要在 `runs_v2/<run>/evaluation` 或
-`reevaluations/...` 内创建逃逸 symlink；这两类 sealed 目录会拒绝包含 symlink 的
-目标路径。每个 Case 的正式目录只保留带 size/SHA-256/config digest 的
-`collision_visualization_manifest.json`，外部文件是可重建、非 sealed 的人工审计
-材料。
+不能通过 symlink 把这些文件逃逸到 run 外部。每个 Case 的
+`visualization_manifest.json` 记录 run-owned 路径、大小、SHA-256 和 evaluator config
+digest；重评的 `artifact_manifest.json` 还会覆盖整个 visualization bundle。独立审计
+脚本不是 AtomicRun，因此只写分数、曲线和机器可读审计，不生成过程视频，不能伪装成
+某个 run 的正式评测结果。
 
 单独审计冻结 View B 的 32 个碰撞 reference：
 
@@ -419,7 +439,7 @@ CUDA_VISIBLE_DEVICES=1 HF_HUB_OFFLINE=1 PYTHONPATH=src \
   /root/miniconda3/envs/phybench/bin/python \
   scripts/audit_collision_evaluator_v4.py \
   --device cuda \
-  --output visualizations/scene_default_v4/\
+  --output /mnt/nvme1/physics_video_benchmark/evaluation_audits/\
 collision_reference_observability_audit.json
 ```
 
@@ -521,7 +541,7 @@ Dataset、TaskInstance 和 prediction 新建 AtomicRun。
 ## 15. 发布检查单
 
 1. Dataset 完整哈希验收通过。
-2. 七个当前 manifest 均可 discovery/validate。
+2. 所有当前 portable manifest 均可 discovery/validate。
 3. 同一 Task 的 generic/physics canonical plan 完全相同。
 4. ignored/required input policy audit 通过。
 5. TaskInstance deterministic，bundle/deployment/adapter 指纹齐全。

@@ -23,6 +23,13 @@ uses Cosmos-native
 resolution/aspect-ratio tokens, 480p, 24 FPS and 121 frames. The evaluator
 owns video resampling and physical-time alignment.
 
+Before invoking Cosmos' native same-size loader, the managed driver derives a
+run-local, aspect-preserving contain view of the Dataset first frame, using
+edge replication rather than black padding for the temporary canvas margin. It never
+changes the Dataset asset and never crops or stretches physical content. The
+sealed I2V spatial contract lets the evaluator remove the model-canvas margin
+and compare GT/prediction on one equal-size, equal-aspect, no-padding view.
+
 This identity denotes the base pretrained snapshot at revision
 `411f42a8fdfb8c5b2583cb8786e0938f49796eaa`. A separately trained checkpoint
 must be registered as another Baseline identity.

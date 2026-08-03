@@ -2,6 +2,9 @@
 
 日期：2026-07-30
 
+> 历史快照：文中的全局外置可视化路径记录当时实现。当前实现统一写入所属
+> AtomicRun/reevaluation 的 `evaluation/visualizations/`，不要照搬旧路径。
+
 ## 1. 结论与边界
 
 `scene_default_v6` 已将单摆、自由落体、斜面下滑和匀速圆周运动迁移到公共

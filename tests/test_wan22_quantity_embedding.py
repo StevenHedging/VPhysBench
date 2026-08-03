@@ -420,7 +420,13 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
                 adaptation = self.adapter.adapt_case(case, role="eval")
                 native = adaptation["native_inputs"]
                 self.assertEqual(
-                    {"vision", "text", "generation_shape", "physics"},
+                    {
+                        "vision",
+                        "text",
+                        "generation_shape",
+                        "physics",
+                        "spatial_alignment",
+                    },
                     set(native),
                 )
                 self.assertEqual(

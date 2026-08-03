@@ -251,7 +251,7 @@ WAN I2V：
 
 | scene | target |
 | --- | --- |
-| pendulum, free_fall, uniform_circular_motion | 480 × 832 |
+| pendulum, free_fall, parabolic_motion, uniform_circular_motion | 480 × 832 |
 | collision_1d, inclined_plane_slide | 832 × 480 |
 
 WAN 时间规格为 24 FPS、5–121 帧、合法 `4n+1`，按物理时间前缀适配。
@@ -260,12 +260,32 @@ Cosmos I2V：
 
 | scene | resolution | aspect ratio |
 | --- | ---: | --- |
-| pendulum, free_fall | 480 | `9,16` |
+| pendulum, free_fall, uniform_circular_motion | 480 | `9,16` |
 | collision_1d, inclined_plane_slide | 480 | `16,9` |
-| uniform_circular_motion | 480 | `4,3` |
+| parabolic_motion | 480 | `9,16`（完整 `1:2` 内容 contain） |
 
 Cosmos 固定 24 FPS、121 帧。生成与 GT 不要求相同分辨率或帧数；统一 timeline 与几何
 对齐属于 evaluator。
+
+### 9.1 I2V 无填边空间契约
+
+正式 I2V Adapter 必须在 `native_inputs.spatial_alignment` 中封印：
+
+```text
+policy                 = i2v_conditioning_content_v1
+conditioning_transform = aspect_preserving_contain
+model_canvas            = {width, height}
+model_canvas_margin_fill = edge_replicate
+evaluation_view         = exclude_model_canvas_padding
+conditioning_asset      = assets.first_frame
+```
+
+Prediction record 由 managed runtime 绑定同一份契约，Driver 不能覆盖。模型输入可以
+在固定 canvas 中使用 edge-replicated contain margin，但禁止黑边、crop-to-fill 和
+非等比拉伸；评估器会在
+内存中排除该 margin，并以 reference 的完整视野建立共同无填边画布。没有 sealed
+contract 且输出长宽比不同的 prediction 不允许通过事后 letterbox、拉伸或内容配准
+进入正式评分。
 
 ## 10. 审计输出
 

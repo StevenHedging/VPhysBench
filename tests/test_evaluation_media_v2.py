@@ -109,6 +109,97 @@ class ForwardVideoSamplingTests(unittest.TestCase):
         )
         self.assertEqual(first_transform, sampled.spatial_transform)
 
+    def test_shared_i2v_plan_removes_only_declared_model_canvas_margin(
+        self,
+    ) -> None:
+        reference = VideoInfo(
+            frame_count=301,
+            fps=60.0,
+            width=1080,
+            height=1920,
+            last_frame_time_s=5.0,
+        )
+        prediction = VideoInfo(
+            frame_count=81,
+            fps=16.0,
+            width=480,
+            height=832,
+            last_frame_time_s=5.0,
+        )
+        contract = {
+            "schema_version": "1.0",
+            "policy": "i2v_conditioning_content_v1",
+            "conditioning_asset": "case/first_frame.png",
+            "conditioning_transform": "aspect_preserving_contain",
+            "model_canvas": {"width": 480, "height": 832},
+            "model_canvas_margin_fill": "edge_replicate",
+            "evaluation_view": "exclude_model_canvas_padding",
+        }
+        plan = media.resolve_shared_spatial_plan(
+            reference_info=reference,
+            prediction_info=prediction,
+            maximum_width=640,
+            maximum_height=480,
+            alignment_contract=contract,
+            expected_conditioning_asset="case/first_frame.png",
+        )
+
+        self.assertEqual((270, 480), (plan.width, plan.height))
+        self.assertEqual((0, 0, 1080, 1920), plan.reference_crop_xywh)
+        self.assertEqual((6, 0, 468, 832), plan.prediction_crop_xywh)
+        self.assertFalse(plan.provenance["padding_used_for_evaluation"])
+        self.assertFalse(plan.provenance["aspect_ratio_distortion"])
+        self.assertFalse(plan.provenance["physical_reference_content_cropped"])
+
+    def test_no_pad_sampling_crops_then_resizes_without_black_border(
+        self,
+    ) -> None:
+        frame = np.full((4, 6, 3), 7, dtype=np.uint8)
+        frame[1:3, 1:5] = 90
+        capture = FakeCapture([frame])
+        info = VideoInfo(
+            frame_count=1,
+            fps=10.0,
+            width=6,
+            height=4,
+            last_frame_time_s=0.0,
+        )
+        with (
+            patch.object(media, "probe_video", return_value=info),
+            patch.object(media.cv2, "VideoCapture", return_value=capture),
+        ):
+            sampled = sample_video(
+                Path("cropped.mp4"),
+                sample_times_s=[0.0],
+                width=8,
+                height=4,
+                spatial_policy="reference_content_crop_resize_no_pad",
+                crop_xywh=(1, 1, 4, 2),
+            )
+
+        self.assertEqual((4, 8, 3), sampled.frames[0].shape)
+        self.assertTrue(np.all(sampled.frames[0] == 90))
+        self.assertEqual(
+            "reference_content_crop_resize_no_pad",
+            sampled.spatial_transform["policy"],
+        )
+        self.assertIsNone(sampled.spatial_transform["padding"])
+
+    def test_no_contract_rejects_different_aspect_ratios(self) -> None:
+        with self.assertRaises(VideoProtocolError) as raised:
+            media.resolve_shared_spatial_plan(
+                reference_info=VideoInfo(10, 10.0, 16, 9, 0.9),
+                prediction_info=VideoInfo(10, 10.0, 4, 3, 0.9),
+                maximum_width=160,
+                maximum_height=90,
+                alignment_contract=None,
+                expected_conditioning_asset=None,
+            )
+        self.assertEqual(
+            "prediction_spatial_contract_missing",
+            raised.exception.code,
+        )
+
     def test_forward_decode_failure_keeps_protocol_error_semantics(
         self,
     ) -> None:

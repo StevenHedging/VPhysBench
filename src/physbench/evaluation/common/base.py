@@ -12,7 +12,10 @@ from .entities.timeline import build_common_time_grid
 from .media import (
     SampledVideo,
     VideoProtocolError,
+    probe_image_size,
+    probe_video,
     reference_timeline,
+    resolve_shared_spatial_plan,
     sample_video,
 )
 from .reference import resolve_physics_reference
@@ -275,6 +278,7 @@ class ReferenceCaseEvaluator(ABC):
         reference_video: SampledVideo | None = None
         reference_path: Path | None = None
         times_s: list[float] = []
+        shared_spatial_provenance: dict[str, Any] | None = None
         try:
             reference_path, reference_mode, parent_id = (
                 resolve_physics_reference(request)
@@ -287,10 +291,14 @@ class ReferenceCaseEvaluator(ABC):
                 minimum_duration_s=float(timeline["minimum_duration_s"]),
             )
             spatial = self.config["spatial"]
-            sampling = {
+            spatial_policy = str(
+                spatial.get(
+                    "policy",
+                    "preserve_aspect_ratio_letterbox",
+                )
+            )
+            common_sampling = {
                 "sample_times_s": times_s,
-                "width": int(spatial["width"]),
-                "height": int(spatial["height"]),
                 "pad_value": int(spatial.get("pad_value", 0)),
                 "min_source_fps": float(timeline["minimum_source_fps"]),
                 "duration_tolerance_s": float(
@@ -300,7 +308,149 @@ class ReferenceCaseEvaluator(ABC):
                     timeline.get("decode_policy", "legacy_random_seek")
                 ),
             }
-            reference_video = sample_video(reference_path, **sampling)
+        except VideoProtocolError as exc:
+            return self._outcome(
+                request,
+                evaluator,
+                status="unavailable",
+                code=exc.code,
+                reason=str(exc),
+            )
+
+        if spatial_policy == "preserve_aspect_ratio_letterbox":
+            reference_sampling = {
+                **common_sampling,
+                "width": int(spatial["width"]),
+                "height": int(spatial["height"]),
+            }
+            prediction_sampling = dict(reference_sampling)
+        elif spatial_policy == "shared_reference_content_no_pad_v1":
+            try:
+                if reference_mode == "parent_physics_reference":
+                    raise VideoProtocolError(
+                        "reference_parent_spatial_alignment_unsupported",
+                        "the no-padding protocol requires a same-Case physical "
+                        "reference; parent-reference coordinate mapping is not "
+                        "yet defined without cropping, padding, or content-based "
+                        "registration",
+                    )
+                try:
+                    reference_info = probe_video(reference_path)
+                except VideoProtocolError as exc:
+                    raise VideoProtocolError(
+                        f"reference_{exc.code}",
+                        f"cannot inspect physics reference video: {exc}",
+                    ) from exc
+                first_frame_asset = request.case.get("assets", {}).get(
+                    "first_frame"
+                )
+                contract = prediction.get("spatial_alignment")
+                if contract is not None and not isinstance(contract, dict):
+                    raise VideoProtocolError(
+                        "prediction_spatial_contract_invalid",
+                        "prediction spatial_alignment must be an object",
+                    )
+                if contract is not None:
+                    if not isinstance(first_frame_asset, str) or not first_frame_asset:
+                        raise VideoProtocolError(
+                            "reference_conditioning_asset_missing",
+                            "I2V spatial alignment requires a Case first_frame asset",
+                        )
+                    asset_root = request.asset_root.resolve()
+                    conditioning_path = (asset_root / first_frame_asset).resolve()
+                    try:
+                        conditioning_path.relative_to(asset_root)
+                    except ValueError as exc:
+                        raise VideoProtocolError(
+                            "reference_conditioning_asset_path_escape",
+                            "Case first_frame escapes the Dataset asset root",
+                        ) from exc
+                    try:
+                        conditioning_width, conditioning_height = (
+                            probe_image_size(conditioning_path)
+                        )
+                    except VideoProtocolError as exc:
+                        raise VideoProtocolError(
+                            f"reference_{exc.code}",
+                            f"cannot inspect Case conditioning image: {exc}",
+                        ) from exc
+                    if (
+                        conditioning_width * reference_info.height
+                        != conditioning_height * reference_info.width
+                    ):
+                        raise VideoProtocolError(
+                            "reference_conditioning_aspect_mismatch",
+                            "Case first_frame and physics reference video have "
+                            "different aspect ratios",
+                        )
+                prediction_info = probe_video(prediction_path)
+                spatial_plan = resolve_shared_spatial_plan(
+                    reference_info=reference_info,
+                    prediction_info=prediction_info,
+                    maximum_width=int(spatial["width"]),
+                    maximum_height=int(spatial["height"]),
+                    alignment_contract=contract,
+                    expected_conditioning_asset=(
+                        first_frame_asset
+                        if isinstance(first_frame_asset, str)
+                        else None
+                    ),
+                )
+                shared_spatial_provenance = spatial_plan.provenance
+                reference_sampling = {
+                    **common_sampling,
+                    "width": spatial_plan.width,
+                    "height": spatial_plan.height,
+                    "spatial_policy": "reference_content_crop_resize_no_pad",
+                    "crop_xywh": spatial_plan.reference_crop_xywh,
+                }
+                prediction_sampling = {
+                    **common_sampling,
+                    "width": spatial_plan.width,
+                    "height": spatial_plan.height,
+                    "spatial_policy": "reference_content_crop_resize_no_pad",
+                    "crop_xywh": spatial_plan.prediction_crop_xywh,
+                }
+            except VideoProtocolError as exc:
+                if exc.code.startswith("reference_"):
+                    return self._outcome(
+                        request,
+                        evaluator,
+                        status="unavailable",
+                        code=exc.code,
+                        reason=str(exc),
+                    )
+                if self.robust_subject:
+                    return self._degraded_output(
+                        request,
+                        evaluator,
+                        code=exc.code,
+                        reason=str(exc),
+                        times_s=times_s,
+                        reference_path=reference_path,
+                        prediction_path=prediction_path,
+                    )
+                return self._outcome(
+                    request,
+                    evaluator,
+                    status="unavailable",
+                    code=exc.code,
+                    reason=str(exc),
+                )
+        else:
+            return self._outcome(
+                request,
+                evaluator,
+                status="error",
+                code="invalid_spatial_policy",
+                reason=f"unsupported spatial policy: {spatial_policy!r}",
+            )
+
+        try:
+            reference_video = sample_video(
+                reference_path,
+                **reference_sampling,
+            )
         except VideoProtocolError as exc:
             return self._outcome(
                 request,
@@ -313,7 +463,7 @@ class ReferenceCaseEvaluator(ABC):
         try:
             prediction_video = sample_video(
                 prediction_path,
-                **sampling,
+                **prediction_sampling,
                 allow_partial=self.allow_partial_prediction,
             )
         except VideoProtocolError as exc:
@@ -423,6 +573,11 @@ class ReferenceCaseEvaluator(ABC):
                     ),
                 },
             },
+            **(
+                {"shared_spatial_alignment": shared_spatial_provenance}
+                if shared_spatial_provenance is not None
+                else {}
+            ),
             **analysis.provenance,
         }
         return CaseEvaluationResult(

@@ -169,6 +169,15 @@ def validate_prediction_records(
                 f"prediction {job_id} has invalid status "
                 f"{prediction.get('status')!r}"
             )
+        expected_spatial_alignment = job.get("native_inputs", {}).get(
+            "spatial_alignment"
+        )
+        observed_spatial_alignment = prediction.get("spatial_alignment")
+        if observed_spatial_alignment != expected_spatial_alignment:
+            raise ValueError(
+                f"prediction {job_id} spatial_alignment differs from the "
+                "compiled I2V contract"
+            )
         video_path = prediction.get("video_path")
         if video_path is not None and (
             not isinstance(video_path, str) or not video_path

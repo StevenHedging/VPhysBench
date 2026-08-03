@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Physics-video scene definition",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "scene_id",
+    "display_name",
+    "structured_physics_parameters",
+    "non_conditionable_physics_parameters",
+    "generalization_factors",
+    "constraints",
+    "metric_spec"
+  ],
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "scene_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "display_name": {"type": "string", "minLength": 1},
+    "structured_physics_parameters": {"$ref": "#/$defs/ids"},
+    "non_conditionable_physics_parameters": {"$ref": "#/$defs/ids"},
+    "generalization_factors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "category", "source"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+          },
+          "category": {
+            "enum": [
+              "physical_parameter",
+              "object_composition",
+              "interaction_structure",
+              "appearance",
+              "environment",
+              "acquisition"
+            ]
+          },
+          "source": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "metric_spec": {"type": "object"}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+      },
+      "uniqueItems": true
+    }
+  }
+}

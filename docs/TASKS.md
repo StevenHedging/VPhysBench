@@ -2,15 +2,14 @@
 
 ## 1. Task 的职责
 
-Task 是模型无关的评测定义。schema 3.0 只包含：
+Task 是模型无关的评测定义。当前schema 4.0包含：
 
 | 字段 | 含义 |
 | --- | --- |
 | `task_id` | 稳定任务身份 |
 | `family` | `finetune_eval` 或 `direct_eval` |
 | `dataset_id` / `dataset_view` | 数据快照与 View |
-| `selection` | scene、partition、group 或显式 case |
-| `ood2` | 可选 held-out scene recipe |
+| `selection` | scene、test regime、group或显式case |
 | `seeds` | 训练与推理 seed |
 | `evaluation` | Benchmark-owned 评估协议 |
 
@@ -23,50 +22,67 @@ adaptation ID 都必须匹配 `^[A-Za-z0-9][A-Za-z0-9_.-]*$`。路径分隔符�
 
 ## 2. 官方 Task
 
-当前只有两份官方 Task：
+当前六场景Dataset对应两份官方Task；两份五场景Task只用于4.0.0历史结果：
 
 | 文件 | family | View | 训练 |
 | --- | --- | --- | --- |
-| `tasks/official/five_scene_finetune_eval.json` | `finetune_eval` | A | 是 |
-| `tasks/official/five_scene_direct_eval.json` | `direct_eval` | B | 否 |
+| `tasks/official/six_scene_finetune_eval.json` | `finetune_eval` | A | 是 |
+| `tasks/official/six_scene_direct_eval.json` | `direct_eval` | B | 否 |
+| `tasks/official/five_scene_finetune_eval.json` | 历史`finetune_eval` | A | 是 |
+| `tasks/official/five_scene_direct_eval.json` | 历史`direct_eval` | B | 否 |
 
-Direct-eval 示例：
+现有五场景Baseline在当前6.0.0上的工程检查使用
+`tasks/smoke/five_scene_direct_eval_v6.json`。它不是正式榜单Task，但可以避免为了smoke
+回退到旧Dataset；完整六场景评测仍必须使用上述`six_scene_*`官方Task。
+
+Fine-tune + eval 示例：
 
 ```json
 {
-  "schema_version": "3.0",
-  "task_id": "five_scene_direct_eval_v6",
-  "family": "direct_eval",
-  "dataset_id": "physics_video_five_scene_v4",
-  "dataset_view": "view_b",
+  "schema_version": "4.0",
+  "task_id": "six_scene_finetune_eval_v1",
+  "family": "finetune_eval",
+  "dataset_id": "physics_video_six_scene_v6",
+  "dataset_view": "view_a",
   "selection": {
     "scene_ids": [
       "pendulum",
       "free_fall",
       "collision_1d",
       "inclined_plane_slide",
-      "uniform_circular_motion"
+      "uniform_circular_motion",
+      "parabolic_motion"
     ],
-    "groups": "all",
-    "case_ids": []
+    "test_regimes": "all"
   },
-  "ood2": {"enabled": false},
   "seeds": {
-    "training": [],
+    "training": [42],
     "inference": [42]
   },
-  "evaluation": {"protocol": "scene_default_v3"}
+  "evaluation": {
+    "protocol": "scene_default_v8",
+    "reporting": {
+      "primary_score": "overall_test",
+      "breakdowns": ["generalization_regime", "ood_factor"],
+      "minimum_subgroup_jobs": 5
+    }
+  }
 }
 ```
+
+两份六场景官方 Task 固定 `scene_default_v8`；五场景历史 Task 和兼容性 smoke 继续固定
+其原协议，不能把不同 protocol identity 的分数混合。
 
 `finetune_eval` 必须使用 View A，且一个 AtomicRun 恰好有一个 training seed；
 `direct_eval` 必须使用 View B，且没有 training seed。多个 seed 应展开成多个独立
 AtomicRun，不能在同一模型产物中混合。
 
-两份官方 Task 均使用 v6 identity 并显式固定 `scene_default_v3`。v3 在 v2 的时间轴和
-顺序解码基础上加入主体位置、形状、外貌评分及 prediction-side 退化零分语义，因此不能
-沿用 v5 Task ID。历史 v4/v5 run 的 frozen Task 和 canonical evaluation 保持不变；
-不同协议的结果和 evaluator 指纹不能混合聚合。
+schema 4.0不再选择`test_id/test_ood1` partition。finetune Task只运行`test`，总体Test
+分是主分；`test_regimes`仅用于完整Task的诊断筛选。官方Task固定为`all`，并要求报告
+ID/OOD/mixed与OOD factor。少于5个job的子组显示`N/A`，但不影响完整总体Test主分。
+
+现有部分Baseline manifest仍只声明支持五个scene，因此不能直接运行六场景Task；需要先
+为Baseline实现平抛适配并更新其`supported_scenes`。Task不会绕过这一能力检查。
 
 ## 3. CanonicalTaskPlan
 
@@ -80,7 +96,7 @@ DatasetSnapshot + TaskSpec
 → CanonicalTaskPlan
 ```
 
-Plan schema 3.0 的核心结构：
+Plan schema 4.0 的核心结构：
 
 ```text
 task_id / family
@@ -94,9 +110,15 @@ jobs[]
   ├── scene_id
   ├── evaluation_partition
   └── seed
+evaluation_annotations[job_id]
+  ├── generalization_regime
+  ├── ood_factors[]
+  └── co_varying_factors[]
+reporting_policy
 ```
 
-`jobs` 是生成和评估的唯一主表。Baseline 不得重新选例、改变 partition、替换 seed
+`jobs` 是生成和评估的唯一主表。schema 4.0的finetune job统一使用`test`作为
+`evaluation_partition`；泛化标签是只读报告元数据。Baseline不得重新选例、改变划分、替换seed
 或跳过难例。Job ID 由 Task、case 与 seed 构成，不编码 Baseline 的物理使用策略。
 
 ## 4. 一份 Task，多种 Baseline
@@ -108,7 +130,7 @@ one Dataset × one Task × many Baseline identities
 ```
 
 例如 `cosmos3_nano_i2v_generic` 和 `cosmos3_nano_i2v_physics` 都编译
-`five_scene_direct_eval.json`。两者接收同一 Case prompt、首帧与 annotated 物理标注；
+`six_scene_direct_eval.json`。两者接收同一Case prompt、首帧与annotated物理标注；
 前者通过 `input_policy.physics.usage=ignored` 明确不消费物理字段，后者通过
 `usage=required` 与 `structured_text` adapter 追加物理信息。
 
@@ -175,8 +197,8 @@ binding 都会改变或破坏 digest。
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
-  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
-  --task tasks/official/five_scene_finetune_eval.json \
+  --dataset datasets/physics_video/releases/6.0.0/dataset.json \
+  --task tasks/official/six_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
   --output /tmp/wan22_physics_task_instance.json
 ```
@@ -192,8 +214,8 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval.json \
+  --dataset datasets/physics_video/releases/6.0.0/dataset.json \
+  --task tasks/official/six_scene_direct_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --output-root runs_v2 \
   --run-id wan22_generic_dryrun
@@ -201,6 +223,17 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 确认 TaskInstance 与本机部署后，使用新的 run ID 并添加 `--execute`。AtomicRun 不覆盖
 已有目录。
+
+过程可视化视频默认不保存，以避免大量占用磁盘。需要人工审计时显式添加：
+
+```text
+--save-visualizations
+```
+
+启用后结果写入
+`runs_v2/<run_id>/evaluation/visualizations/<scene>/<case>/...`；该参数只控制运行内的
+诊断视频，不改变评测分数。并存式重评的视频写入对应 reevaluation 的
+`evaluation/visualizations/`，不会修改 canonical evaluation。
 
 Direct-eval 工程 smoke 可加：
 
@@ -220,8 +253,8 @@ Direct-eval 工程 smoke 可加：
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   matrix-run \
-  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval.json \
+  --dataset datasets/physics_video/releases/6.0.0/dataset.json \
+  --task tasks/official/six_scene_direct_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
   --matrix-id wan22_prompt_injection_ablation \
@@ -248,7 +281,7 @@ TaskInstance digest。`orchestration_status=complete` 表示所有 AtomicRun 已
 - family 或训练/评估生命周期改变；
 - Dataset View、scene、partition 或 case selection 改变；
 - seed policy 改变；
-- OOD2 recipe 改变；
+- train/test或test generalization selection改变；
 - 正式评估协议改变。
 
 以下变化应创建或升级 Baseline，而不是复制 Task：
@@ -261,6 +294,6 @@ TaskInstance digest。`orchestration_status=complete` 表示所有 AtomicRun 已
 
 ## 11. 历史兼容
 
-旧任务文件曾把 generic/physics 作为 Task 字段或文件名的一部分。schema 3.0 loader
-会拒绝这些额外字段；新实验必须使用当前两份官方 Task。历史 run 可继续通过其冻结
-Task 与 compatibility evaluator 读取，但不能用旧 Task 编译新的 BaselineTaskInstance。
+旧任务文件曾把generic/physics作为Task字段或文件名的一部分。schema 3.0与五场景Task
+继续用于历史run复现；六场景新实验必须使用schema 4.0的当前两份官方Task。schema 4.0
+loader会拒绝`ood2`和`eval_partitions`等旧字段，避免把旧三分法重新带入新结果。

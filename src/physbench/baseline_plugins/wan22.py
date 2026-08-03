@@ -91,10 +91,15 @@ class Wan22ExecutionEngine:
         supervised = case.get("supervised_targets", {}).get("video")
         if isinstance(supervised, dict):
             assets[supervised["asset_key"]] = supervised["asset"]
+        legacy_ood = case.get("ood", {"level": "id", "factors": []})
         split = (
             "train"
             if case["case_id"] in train_case_ids
-            else ("test_ood1" if case["ood"]["level"] == "ood1" else "test_id")
+            else (
+                "test_ood1"
+                if legacy_ood.get("level") == "ood1"
+                else "test_id"
+            )
         )
         input_views: dict[str, dict[str, Any]] = {}
         if assets.get("first_frame"):
@@ -114,7 +119,7 @@ class Wan22ExecutionEngine:
             "has_real_reference_video": case.get(
                 "has_real_reference_video", False
             ),
-            "ood": case["ood"],
+            "ood": legacy_ood,
             "provenance": case.get(
                 "provenance",
                 {

@@ -82,6 +82,44 @@ def _prediction_zero_result(
     )
 
 
+def _diagnostic_group_result(
+    items: list[dict[str, Any]],
+    *,
+    minimum_jobs: int,
+) -> dict[str, Any]:
+    scores = [
+        float(item["score"])
+        for item in items
+        if item["status"] == "evaluated"
+    ]
+    expected = len(items)
+    coverage = len(scores) / expected if expected else 0.0
+    if expected == 0:
+        status = "not_applicable"
+    elif expected < minimum_jobs:
+        status = "insufficient_samples"
+    elif coverage == 1.0:
+        status = "complete"
+    else:
+        status = "partial"
+    return {
+        "status": status,
+        "minimum_jobs": minimum_jobs,
+        "expected_jobs": expected,
+        "evaluated_jobs": len(scores),
+        "coverage": coverage,
+        "score": (
+            mean(scores)
+            if expected >= minimum_jobs and coverage == 1.0
+            else None
+        ),
+        "observed_mean_score": mean(scores) if scores else None,
+        "status_counts": dict(
+            sorted(Counter(item["status"] for item in items).items())
+        ),
+    }
+
+
 def aggregate_task_results(
     *,
     plan: dict[str, Any],
@@ -135,7 +173,16 @@ def aggregate_task_results(
             if item["status"] == "evaluated"
         ]
         item_coverage = len(scores) / len(items) if items else 0.0
-        if plan["family"] == "finetune_eval":
+        if (
+            plan["family"] == "finetune_eval"
+            and "evaluation_annotations" in plan
+        ):
+            strict_score = (
+                mean(scores) if items and item_coverage == 1.0 else None
+            )
+            observed = mean(scores) if scores else None
+            policy = "mean_all_test_jobs_regimes_are_diagnostics"
+        elif plan["family"] == "finetune_eval":
             partitions = sorted(
                 {
                     item["evaluation_partition"]
@@ -211,6 +258,74 @@ def aggregate_task_results(
         "by_scene": by_scene,
         "breakdown": breakdown,
     }
+    evaluation_annotations = plan.get("evaluation_annotations")
+    if isinstance(evaluation_annotations, dict):
+        reporting = plan.get("reporting_policy", {})
+        minimum_jobs = reporting.get("minimum_subgroup_jobs", 1)
+        if (
+            isinstance(minimum_jobs, bool)
+            or not isinstance(minimum_jobs, int)
+            or minimum_jobs < 1
+        ):
+            raise ValueError(
+                "plan.reporting_policy.minimum_subgroup_jobs must be positive"
+            )
+        result_by_job = {item["job_id"]: item for item in official}
+        unknown_annotations = set(evaluation_annotations) - set(result_by_job)
+        if unknown_annotations:
+            raise ValueError(
+                "plan evaluation annotations reference jobs absent from results: "
+                f"{sorted(unknown_annotations)}"
+            )
+
+        regime_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        scene_regime_groups: dict[
+            tuple[str, str], list[dict[str, Any]]
+        ] = defaultdict(list)
+        factor_groups: dict[
+            tuple[str, str], list[dict[str, Any]]
+        ] = defaultdict(list)
+        for job_id, annotation in evaluation_annotations.items():
+            item = result_by_job[job_id]
+            regime = annotation["generalization_regime"]
+            regime_groups[regime].append(item)
+            scene_regime_groups[(item["scene_id"], regime)].append(item)
+            for factor in annotation["ood_factors"]:
+                factor_groups[(factor["category"], factor["name"])].append(item)
+
+        by_regime = {
+            regime: _diagnostic_group_result(
+                regime_groups.get(regime, []),
+                minimum_jobs=minimum_jobs,
+            )
+            for regime in ("id", "ood", "mixed")
+        }
+        by_scene_regime = {
+            f"{scene_id}/{regime}": _diagnostic_group_result(
+                scene_regime_groups.get((scene_id, regime), []),
+                minimum_jobs=minimum_jobs,
+            )
+            for scene_id in plan["scene_ids"]
+            for regime in ("id", "ood", "mixed")
+        }
+        by_ood_factor = {
+            f"{category}/{name}": {
+                "category": category,
+                "factor": name,
+                **_diagnostic_group_result(
+                    items,
+                    minimum_jobs=minimum_jobs,
+                ),
+            }
+            for (category, name), items in sorted(factor_groups.items())
+        }
+        result["generalization_breakdown"] = {
+            "regimes_are_relative_to": "view_a.train",
+            "minimum_subgroup_jobs": minimum_jobs,
+            "by_regime": by_regime,
+            "by_scene_regime": by_scene_regime,
+            "by_ood_factor": by_ood_factor,
+        }
     if include_degraded_diagnostics:
         degraded = [
             item
@@ -248,9 +363,12 @@ def evaluate_task(
     protocol: dict[str, Any],
     output_dir: str | Path,
     registry: SceneEvaluatorRegistry | None = None,
+    run_id: str | None = None,
+    save_visualizations: bool = False,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Evaluate every frozen inference job and aggregate a strict Task score."""
     directory = Path(output_dir)
+    effective_run_id = run_id or directory.resolve().parent.name
     case_root = directory / "cases"
     directory.mkdir(parents=True, exist_ok=True)
     case_root.mkdir(parents=True, exist_ok=True)
@@ -349,6 +467,9 @@ def evaluate_task(
                 asset_root=Path(asset_root).resolve(),
                 artifact_dir=artifact_dir,
                 evaluator_config=protocol["scenes"].get(job["scene_id"], {}),
+                run_id=effective_run_id,
+                save_visualizations=save_visualizations,
+                visualization_root=directory / "visualizations",
             )
             try:
                 evaluator = active_registry.resolve(job["scene_id"])

@@ -1,24 +1,30 @@
 {
-  "schema_version": "3.0",
-  "task_id": "five_scene_direct_eval_v6",
+  "schema_version": "4.0",
+  "task_id": "five_scene_direct_eval_v7",
   "family": "direct_eval",
-  "dataset_id": "physics_video_five_scene_v4",
+  "dataset_id": "physics_video_five_scene_v7",
   "dataset_view": "view_b",
   "selection": {
     "scene_ids": [
       "pendulum",
-      "free_fall",
       "collision_1d",
       "inclined_plane_slide",
-      "uniform_circular_motion"
+      "uniform_circular_motion",
+      "parabolic_motion"
     ],
     "groups": "all",
     "case_ids": []
   },
-  "ood2": {"enabled": false},
   "seeds": {
     "training": [],
     "inference": [42]
   },
-  "evaluation": {"protocol": "scene_default_v3"}
+  "evaluation": {
+    "protocol": "scene_default_v10",
+    "reporting": {
+      "primary_score": "overall_test",
+      "breakdowns": [],
+      "minimum_subgroup_jobs": 5
+    }
+  }
 }

@@ -678,6 +678,29 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 reference_state=reference_state,
                 prediction_state=prediction_state,
                 prediction_available=prediction_available,
+                reference_role=(
+                    "PHYSICS REFERENCE"
+                    if reference_mode == "parent_physics_reference"
+                    else "REFERENCE"
+                ),
+                score_summary={
+                    "score": score,
+                    "components": {
+                        "physics": float(nbody_score["score"]),
+                        "integrity": float(comparison.integrity.score),
+                        **{
+                            key: float(value)
+                            for key, value in nbody_score.get(
+                                "components", {}
+                            ).items()
+                            if value is not None
+                        },
+                    },
+                },
+                has_issues=bool(
+                    prediction_failures
+                    or getattr(comparison, "failed", False)
+                ),
             )
         integrity = comparison.integrity.to_dict()
         primary_metric = {

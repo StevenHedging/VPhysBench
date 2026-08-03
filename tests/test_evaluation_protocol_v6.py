@@ -74,6 +74,7 @@ class EvaluationProtocolV6Tests(unittest.TestCase):
         cls.v5 = load_evaluation_protocol("scene_default_v5")
         cls.v6 = load_evaluation_protocol("scene_default_v6")
         cls.v7 = load_evaluation_protocol("scene_default_v7")
+        cls.v8 = load_evaluation_protocol("scene_default_v8")
 
     def test_old_protocols_and_collision_22_remain_frozen(self) -> None:
         self.assertEqual(V3_PROTOCOL_FINGERPRINT, self.v3["fingerprint"])
@@ -131,7 +132,7 @@ class EvaluationProtocolV6Tests(unittest.TestCase):
                     registry.resolve(scene_id).describe()["fingerprint"],
                 )
 
-    def test_v6_configuration_has_common_audit_and_external_visualization(
+    def test_v6_legacy_visualization_storage_fields_remain_frozen(
         self,
     ) -> None:
         for scene_id, config in self.v6["scenes"].items():
@@ -603,6 +604,7 @@ class EvaluationProtocolV6Tests(unittest.TestCase):
                 "inclined_plane_state_v7",
                 "uniform_circular_motion_state_v6",
                 "uniform_circular_motion_state_v7",
+                "parabolic_motion_state_v1",
             },
             set(contract["properties"]["type"]["enum"]),
         )
@@ -659,6 +661,18 @@ class EvaluationProtocolV6Tests(unittest.TestCase):
                     ]["type"]["enum"]
                 ),
             )
+        self.assertEqual(
+            {"$ref": "#/$defs/openWorldV2ParabolicScene"},
+            schema["properties"]["scenes"]["properties"][
+                "parabolic_motion"
+            ],
+        )
+        self.assertEqual(
+            "parabolic_motion_state_v1",
+            schema["$defs"]["openWorldV2ParabolicScene"]["allOf"][1][
+                "properties"
+            ]["type"]["const"],
+        )
 
     def test_every_schema_evaluator_type_is_registry_resolvable(self) -> None:
         schema = json.loads(
@@ -684,6 +698,39 @@ class EvaluationProtocolV6Tests(unittest.TestCase):
         self.assertEqual(
             schema_types,
             set(registry_types) - {"unsupported"},
+        )
+
+    def test_v8_adds_parabolic_and_uses_run_owned_visualization(self) -> None:
+        self.assertEqual("scene_default_v8", self.v8["protocol_id"])
+        for scene_id in self.v7["scenes"]:
+            previous = dict(self.v7["scenes"][scene_id])
+            latest = dict(self.v8["scenes"][scene_id])
+            previous.pop("visualization", None)
+            visualization = latest.pop("visualization")
+            self.assertEqual(
+                previous,
+                latest,
+            )
+            self.assertNotIn("namespace", visualization)
+            self.assertNotIn("external_root", visualization)
+            self.assertNotIn("external_root_env", visualization)
+            self.assertNotIn("repository_link", visualization)
+            self.assertEqual("h264", visualization["codec"])
+            self.assertEqual("quad", visualization["layout"])
+            self.assertEqual("all", visualization["mode"])
+        parabolic = SceneEvaluatorRegistry(self.v8).resolve(
+            "parabolic_motion"
+        )
+        self.assertNotIn(
+            "namespace",
+            self.v8["scenes"]["parabolic_motion"]["visualization"],
+        )
+        description = parabolic.describe()
+        self.assertEqual("parabolic_motion_state", description["id"])
+        self.assertEqual("1.0", description["version"])
+        self.assertEqual(
+            "scene_subject_state_similarity",
+            description["primary_score"],
         )
 
 

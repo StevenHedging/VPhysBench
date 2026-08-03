@@ -176,16 +176,16 @@ def _inputs(body_count: int) -> dict:
 class _MemoryWriter:
     def __init__(self):
         self.frames: list[np.ndarray] = []
-        self.released = False
-
-    def isOpened(self) -> bool:
-        return True
+        self.closed = False
 
     def write(self, frame: np.ndarray) -> None:
         self.frames.append(frame.copy())
 
-    def release(self) -> None:
-        self.released = True
+    def close(self) -> None:
+        self.closed = True
+
+    def abort(self) -> None:
+        self.closed = True
 
 
 class CollisionV5VisualizationTests(unittest.TestCase):
@@ -196,8 +196,8 @@ class CollisionV5VisualizationTests(unittest.TestCase):
             with self.subTest(body_count=body_count):
                 writer = _MemoryWriter()
                 with patch.object(
-                    visual.cv2,
-                    "VideoWriter",
+                    visual,
+                    "CompatibleMp4Writer",
                     return_value=writer,
                 ):
                     visual._write_video(
@@ -210,7 +210,7 @@ class CollisionV5VisualizationTests(unittest.TestCase):
                         },
                     )
                 self.assertEqual(3, len(writer.frames))
-                self.assertTrue(writer.released)
+                self.assertTrue(writer.closed)
                 self.assertTrue(
                     all(
                         frame.shape == (144, 240, 3)
@@ -250,7 +250,7 @@ class CollisionV5VisualizationTests(unittest.TestCase):
         self.assertIn("extra=1", headers[0][1])
         self.assertIn("overflow=1", headers[0][1])
 
-    def test_complete_external_manifest_records_degraded_prediction_state(
+    def test_complete_run_owned_manifest_records_degraded_prediction_state(
         self,
     ) -> None:
         values = _inputs(4)
@@ -258,9 +258,12 @@ class CollisionV5VisualizationTests(unittest.TestCase):
             root = Path(temporary)
             request = SimpleNamespace(
                 artifact_dir=root / "sealed" / "case",
-                case={"case_id": "four_body"},
+                case={"case_id": "four_body", "scene_id": "collision_1d"},
                 job={"job_id": "job_four_body"},
                 evaluator_config={"type": "collision_1d_state_v5"},
+                run_id="baseline_collision_run",
+                save_visualizations=True,
+                visualization_root=root / "run" / "evaluation" / "visualizations",
             )
 
             def fake_video(path: Path, **_kwargs) -> None:
@@ -275,12 +278,6 @@ class CollisionV5VisualizationTests(unittest.TestCase):
                     request,
                     config={
                         "enabled": True,
-                        "external_root": str(root / "external"),
-                        "external_root_env": (
-                            "UNSET_PHYSBENCH_V5_VIS_TEST_ROOT"
-                        ),
-                        "repository_link": "visualizations",
-                        "namespace": "test_v5",
                     },
                     **values,
                 )
@@ -290,6 +287,21 @@ class CollisionV5VisualizationTests(unittest.TestCase):
             )
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             self.assertEqual("complete", manifest["status"])
+            relative = Path(manifest["visualization_directory"]).relative_to(
+                root / "run" / "evaluation" / "visualizations"
+            )
+            self.assertEqual(
+                ("collision_1d", "four_body"),
+                relative.parts[:2],
+            )
+            self.assertEqual(
+                "visualization.mp4",
+                Path(manifest["files"]["observation_video"]["path"]).name,
+            )
+            self.assertEqual(
+                "audit.json",
+                Path(manifest["files"]["audit_json"]["path"]).name,
+            )
             audit_path = Path(manifest["files"]["audit_json"]["path"])
             audit = json.loads(audit_path.read_text(encoding="utf-8"))
             self.assertEqual(4, len(audit["entity_ids"]))
@@ -320,7 +332,35 @@ class CollisionV5VisualizationTests(unittest.TestCase):
                 self.assertTrue(Path(record["path"]).is_file())
                 self.assertEqual(64, len(record["sha256"]))
 
-    def test_external_failure_is_sealed_as_best_effort_manifest(self) -> None:
+    def test_run_policy_disables_collision_run_owned_video(self) -> None:
+        values = _inputs(2)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = SimpleNamespace(
+                artifact_dir=root / "sealed" / "case",
+                case={"case_id": "two_body", "scene_id": "collision_1d"},
+                job={"job_id": "job_two_body"},
+                evaluator_config={"type": "collision_1d_state_v5"},
+                run_id="baseline_collision_run",
+                save_visualizations=False,
+                visualization_root=root / "run" / "evaluation" / "visualizations",
+            )
+            artifacts = visual.write_collision_v5_visualization(
+                request,
+                config={
+                    "enabled": True,
+                },
+                **values,
+            )
+            manifest = artifacts["collision_v5_visualization"]
+            self.assertEqual("disabled", manifest["status"])
+            self.assertEqual(
+                "runtime_save_visualizations_false",
+                manifest["reason"],
+            )
+            self.assertFalse(request.visualization_root.exists())
+
+    def test_run_owned_failure_is_sealed_as_best_effort_manifest(self) -> None:
         values = _inputs(2)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -329,15 +369,18 @@ class CollisionV5VisualizationTests(unittest.TestCase):
                 case={"case_id": "two_body"},
                 job={"job_id": "job_two_body"},
                 evaluator_config={"type": "collision_1d_state_v5"},
+                run_id="baseline_collision_failure_run",
+                save_visualizations=True,
+                visualization_root=root / "run" / "evaluation" / "visualizations",
             )
             with patch.object(
                 visual,
                 "_artifact_directory",
-                side_effect=PermissionError("external root is read-only"),
+                side_effect=PermissionError("run directory is read-only"),
             ):
                 artifacts = visual.write_collision_v5_visualization(
                     request,
-                    config={"enabled": True, "external_root": str(root)},
+                    config={"enabled": True},
                     **values,
                 )
             manifest_path = Path(
@@ -351,7 +394,7 @@ class CollisionV5VisualizationTests(unittest.TestCase):
             )
             self.assertEqual("PermissionError", manifest["error"]["type"])
             self.assertIn(
-                "external root is read-only",
+                "run directory is read-only",
                 manifest["error"]["message"],
             )
 

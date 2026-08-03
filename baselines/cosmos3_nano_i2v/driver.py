@@ -12,6 +12,47 @@ from physbench.baseline_runtime import DirectManagedDriver
 from physbench.io import sha256_file, write_json
 
 
+def _materialize_contain_condition(
+    source: Path,
+    output: Path,
+    *,
+    width: int,
+    height: int,
+) -> None:
+    """Preserve the full Case view before Cosmos' same-size native loader."""
+    import cv2
+
+    frame = cv2.imread(str(source), cv2.IMREAD_COLOR)
+    if frame is None:
+        raise ValueError(f"cannot read Cosmos3 first frame: {source}")
+    source_height, source_width = frame.shape[:2]
+    scale = min(width / source_width, height / source_height)
+    resized_width = max(1, int(round(source_width * scale)))
+    resized_height = max(1, int(round(source_height * scale)))
+    resized = cv2.resize(
+        frame,
+        (resized_width, resized_height),
+        interpolation=(
+            cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
+        ),
+    )
+    left = (width - resized_width) // 2
+    right = width - resized_width - left
+    top = (height - resized_height) // 2
+    bottom = height - resized_height - top
+    materialized = cv2.copyMakeBorder(
+        resized,
+        top,
+        bottom,
+        left,
+        right,
+        borderType=cv2.BORDER_REPLICATE,
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if not cv2.imwrite(str(output), materialized):
+        raise RuntimeError(f"cannot write Cosmos3 condition image: {output}")
+
+
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -135,6 +176,21 @@ class Driver(DirectManagedDriver):
             )
         predictor = self.bundle.value["runner"]["config"]
         shape = native["generation_shape"]
+        alignment = native.get("spatial_alignment")
+        if not isinstance(alignment, dict):
+            raise ValueError(
+                "Cosmos3 I2V requires a sealed spatial_alignment contract"
+            )
+        canvas = alignment["model_canvas"]
+        conditioned_first_frame = (
+            run_dir / "conditioning" / f"{job['job_id']}.png"
+        ).resolve()
+        _materialize_contain_condition(
+            first_frame,
+            conditioned_first_frame,
+            width=int(canvas["width"]),
+            height=int(canvas["height"]),
+        )
         worker_index = self._worker_index(job["job_id"])
         output_root = (
             run_dir
@@ -149,7 +205,7 @@ class Driver(DirectManagedDriver):
             "name": job["job_id"],
             "prompt": native["text"]["prompt"],
             "negative_prompt": predictor["negative_prompt"],
-            "vision_path": str(first_frame),
+            "vision_path": str(conditioned_first_frame),
             "enable_sound": False,
             "num_steps": int(predictor["num_inference_steps"]),
             "guidance": float(predictor["guidance"]),
@@ -168,7 +224,9 @@ class Driver(DirectManagedDriver):
             "payload_path": str(payload_path),
             "output_root": str(output_root),
             "output_video": str(output_video),
-            "first_frame": str(first_frame),
+            "first_frame": str(conditioned_first_frame),
+            "source_first_frame": str(first_frame),
+            "spatial_alignment": alignment,
             "worker_index": worker_index,
         }
 

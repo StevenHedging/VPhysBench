@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +96,34 @@ def _validate_managed_outputs(
                 f"managed prediction {job_id} video_path must be null or "
                 "a non-empty string"
             )
+
+
+def _seal_prediction_spatial_alignment(
+    instance: BaselineTaskInstance,
+    predictions: list[dict[str, Any]],
+) -> None:
+    """Bind driver output to the compiler-sealed I2V spatial contract."""
+    jobs = {
+        job["job_id"]: job
+        for job in instance.value["inference"]["jobs"]
+    }
+    for prediction in predictions:
+        job = jobs[prediction["job_id"]]
+        expected = job["native_inputs"].get("spatial_alignment")
+        observed = prediction.get("spatial_alignment")
+        if expected is None:
+            if observed is not None:
+                raise ValueError(
+                    "driver advertised an unsealed spatial alignment for "
+                    f"{prediction['job_id']}"
+                )
+            continue
+        if observed is not None and observed != expected:
+            raise ValueError(
+                "driver spatial alignment differs from the compiled contract "
+                f"for {prediction['job_id']}"
+            )
+        prediction["spatial_alignment"] = copy.deepcopy(expected)
 
 
 def _merge_dependency_paths(
@@ -255,4 +284,5 @@ class ManagedBaselinePlugin(BaselinePlugin):
             training,
             predictions,
         )
+        _seal_prediction_spatial_alignment(instance, predictions)
         return training, predictions

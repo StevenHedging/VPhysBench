@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import os
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -10,32 +9,71 @@ import numpy as np
 
 from ....io import canonical_sha256, sha256_file, write_json
 from ...common.entities.observer import OpenWorldObservation
+from ...common.artifacts.layout import visualization_bundle_directory
+from ...common.artifacts.video import CompatibleMp4Writer
 from .nbody import NBodyCollisionState
+
+
+ARTIFACT_PROTOCOL_ID = "collision_nbody_artifacts"
+ARTIFACT_PROTOCOL_VERSION = "3.0"
+LOCAL_MANIFEST_NAME = "visualization_manifest.json"
+
+
+def _render_policy(
+    request: Any,
+    *,
+    config: Mapping[str, Any],
+    score_summary: Mapping[str, Any] | None,
+    has_issues: bool,
+) -> tuple[bool, str]:
+    mode = str(config.get("mode", "all"))
+    if mode == "off":
+        return False, "mode_off"
+    if mode == "all":
+        return True, "mode_all"
+    score = (score_summary or {}).get("score")
+    threshold = float(config.get("issue_score_threshold", 0.999))
+    issue = bool(
+        has_issues
+        or (
+            isinstance(score, (int, float))
+            and float(score) < threshold
+        )
+    )
+    if mode == "issues_only":
+        return issue, "issue_detected" if issue else "no_issue_detected"
+    if mode != "sampled":
+        raise ValueError(
+            "visualization mode must be all, issues_only, sampled, or off"
+        )
+    if issue:
+        return True, "issue_detected"
+    rate = float(config.get("sample_rate", 0.1))
+    if not 0.0 <= rate <= 1.0:
+        raise ValueError("visualization sample_rate must be in [0, 1]")
+    key = f"{request.case.get('case_id', '')}:{request.job.get('job_id', '')}"
+    bucket = int(hashlib.sha256(key.encode("utf-8")).hexdigest()[:8], 16)
+    selected = bucket / float(0xFFFFFFFF) < rate
+    return selected, "sample_selected" if selected else "sample_not_selected"
 
 
 def _artifact_directory(
     request: Any,
     *,
     config: Mapping[str, Any],
-) -> tuple[Path, str]:
-    environment_name = str(
-        config.get(
-            "external_root_env",
-            "PHYSBENCH_VISUALIZATION_ROOT",
-        )
+) -> tuple[Path, Path, Path]:
+    del config  # Storage is owned by the evaluation, never by protocol config.
+    return visualization_bundle_directory(
+        request,
+        fallback_scene="collision_1d",
+        identity_payload={
+            "run_id": getattr(request, "run_id", None),
+            "job_id": request.job.get("job_id"),
+            "case": request.case,
+            "prediction": getattr(request, "prediction", None),
+            "evaluator_config": request.evaluator_config,
+        },
     )
-    root_value = os.environ.get(environment_name) or config["external_root"]
-    root = Path(root_value).expanduser()
-    namespace = str(config.get("namespace", "scene_default_v5"))
-    identity = hashlib.sha256(
-        str(request.artifact_dir.resolve()).encode("utf-8")
-    ).hexdigest()[:16]
-    relative = (
-        Path(namespace)
-        / request.case["case_id"]
-        / f"{request.job['job_id']}-{identity}"
-    )
-    return root / relative, relative.as_posix()
 
 
 def _identity_color(value: str) -> tuple[int, int, int]:
@@ -118,6 +156,31 @@ def _header(
         )
 
 
+def _fit_panel(
+    frame: np.ndarray,
+    *,
+    width: int,
+    height: int,
+) -> np.ndarray:
+    """Letterbox one diagnostic panel without distorting trajectories."""
+
+    source_height, source_width = frame.shape[:2]
+    scale = min(width / source_width, height / source_height)
+    target_width = max(1, int(round(source_width * scale)))
+    target_height = max(1, int(round(source_height * scale)))
+    interpolation = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
+    resized = cv2.resize(
+        frame,
+        (target_width, target_height),
+        interpolation=interpolation,
+    )
+    output = np.zeros((height, width, 3), dtype=np.uint8)
+    x = (width - target_width) // 2
+    y = (height - target_height) // 2
+    output[y : y + target_height, x : x + target_width] = resized
+    return output
+
+
 def _reference_panel(
     frame: np.ndarray,
     *,
@@ -126,6 +189,7 @@ def _reference_panel(
     masks: Sequence[Sequence[np.ndarray]],
     xy: np.ndarray,
     valid: np.ndarray,
+    reference_role: str,
 ) -> np.ndarray:
     output = frame.copy()
     for entity_index, entity_id in enumerate(entity_ids):
@@ -155,7 +219,7 @@ def _reference_panel(
             )
     _header(
         output,
-        f"REFERENCE | frame={frame_index} | N={len(entity_ids)}",
+        f"{reference_role} | frame={frame_index} | N={len(entity_ids)}",
     )
     return output
 
@@ -204,10 +268,22 @@ def _prediction_panel(
         exposure_weight,
         detection,
     ) in detections.get(frame_index, ()):
-        color = _identity_color(f"prediction:{track_id}")
+        relation = match_by_track.get(track_id)
+        color = (
+            _identity_color(f"reference:{relation}")
+            if relation is not None
+            else (
+                (40, 70, 255)
+                if track_id in residual
+                else (
+                    (0, 190, 255)
+                    if track_id in ambiguous
+                    else _identity_color(f"prediction:{track_id}")
+                )
+            )
+        )
         if detection.mask is not None:
             output = _blend_mask(output, detection.mask, color)
-        relation = match_by_track.get(track_id)
         suffix = (
             f"->{relation}"
             if relation is not None
@@ -259,22 +335,32 @@ def _overlap_panel(
     reference_union: np.ndarray,
     prediction_union: np.ndarray,
     union_iou: float | None,
+    comparable: bool = True,
 ) -> np.ndarray:
     gray = cv2.cvtColor(reference_frame, cv2.COLOR_BGR2GRAY)
     output = (0.38 * cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)).astype(
         np.uint8
     )
-    reference = np.asarray(reference_union) > 0
-    prediction = np.asarray(prediction_union) > 0
-    output[reference & ~prediction] = (255, 80, 60)
-    output[prediction & ~reference] = (40, 70, 255)
-    output[reference & prediction] = (40, 230, 80)
-    score = "n/a" if union_iou is None else f"{union_iou:.3f}"
+    if comparable:
+        reference = np.asarray(reference_union) > 0
+        prediction = np.asarray(prediction_union) > 0
+        output[reference & ~prediction] = (255, 80, 60)
+        output[prediction & ~reference] = (40, 70, 255)
+        output[reference & prediction] = (40, 230, 80)
+    score = (
+        "n/a"
+        if union_iou is None or not comparable
+        else f"{union_iou:.3f}"
+    )
     _header(
         output,
         f"SUBJECT MASK AUDIT | frame={frame_index} | IoU={score}",
         secondary=(
-            "blue=GT only | red=prediction only | green=intersection"
+            (
+                "blue=reference only | red=prediction only | green=intersection"
+                if comparable
+                else "physics-parent reference is not a direct pixel GT"
+            )
         ),
     )
     return output
@@ -303,6 +389,7 @@ def _dashboard(
     audit: Mapping[str, Any],
     reference_state: NBodyCollisionState,
     prediction_state: NBodyCollisionState | None,
+    score_summary: Mapping[str, Any] | None,
 ) -> np.ndarray:
     output = np.full((height, width, 3), 22, dtype=np.uint8)
     matches = list(audit["matches"])
@@ -327,8 +414,36 @@ def _dashboard(
         prediction_state,
         frame_index,
     )
+    summary = dict(score_summary or {})
+    case_score = summary.get("score")
+    case_score_text = (
+        "n/a"
+        if not isinstance(case_score, (int, float))
+        else f"{float(case_score):.3f}"
+    )
+    components = summary.get("components", {})
+    component_text = ""
+    if isinstance(components, Mapping):
+        component_text = " ".join(
+            f"{key}={float(value):.2f}"
+            for key, value in list(components.items())[:5]
+            if isinstance(value, (int, float))
+        )
+
+    def velocities(state: NBodyCollisionState | None) -> str:
+        if state is None:
+            return "unavailable"
+        values = []
+        for entity_index, entity_id in enumerate(state.entity_ids):
+            if state.velocity_valid[frame_index, entity_index]:
+                values.append(
+                    f"{entity_id}={state.along_velocity_px_s[frame_index, entity_index]:.1f}"
+                )
+        return ", ".join(values) or "unavailable"
+
     lines = [
         "OPEN-WORLD N-BODY AUDIT",
+        f"case score={case_score_text}  {component_text}",
         f"time={time_s:.3f}s  frame={frame_index}",
         (
             f"matched={len(matches)}  "
@@ -366,8 +481,11 @@ def _dashboard(
                 else (", ".join(prediction_contacts) or "none")
             )
         ),
+        "GT velocity(px/s): " + velocities(reference_state),
+        "prediction velocity(px/s): " + velocities(prediction_state),
     ]
-    y = 36
+    y = 30
+    line_step = max(min((height - 18) // max(len(lines), 1), 30), 18)
     for index, line in enumerate(lines):
         cv2.putText(
             output,
@@ -379,7 +497,7 @@ def _dashboard(
             2 if index == 0 else 1,
             cv2.LINE_AA,
         )
-        y += 34
+        y += line_step
     return output
 
 
@@ -402,19 +520,26 @@ def _write_video(
     prediction_state: NBodyCollisionState | None,
     prediction_available: Sequence[bool],
     config: Mapping[str, Any],
+    reference_role: str = "REFERENCE",
+    score_summary: Mapping[str, Any] | None = None,
 ) -> None:
     panel_width = int(config.get("panel_width", 640))
     panel_height = int(config.get("panel_height", 360))
     fps = float(config.get("fps", 16.0))
+    codec = str(config.get("codec", "h264"))
+    if min(panel_width, panel_height) < 64:
+        raise ValueError("visualization dimensions must each be >= 64")
+    if not np.isfinite(fps) or fps <= 0.0 or fps > 120.0:
+        raise ValueError("visualization fps must be in (0, 120]")
+    if len(codec) != 4 or not codec.isascii():
+        raise ValueError("visualization codec must contain four ASCII bytes")
     detections = _prediction_detections(prediction_observation)
-    writer = cv2.VideoWriter(
-        str(path),
-        cv2.VideoWriter_fourcc(*"mp4v"),
-        fps,
-        (2 * panel_width, 2 * panel_height),
+    writer = CompatibleMp4Writer(
+        path,
+        fps=fps,
+        size=(2 * panel_width, 2 * panel_height),
+        codec=codec,
     )
-    if not writer.isOpened():
-        raise RuntimeError(f"cannot create v5 collision visualization: {path}")
     try:
         for frame_index, time_s in enumerate(times_s):
             audit = comparison[frame_index]
@@ -426,6 +551,7 @@ def _write_video(
                     masks=reference_masks,
                     xy=reference_xy,
                     valid=reference_valid,
+                    reference_role=reference_role,
                 ),
                 _prediction_panel(
                     prediction_frames[frame_index],
@@ -440,6 +566,7 @@ def _write_video(
                     reference_union=reference_union[frame_index],
                     prediction_union=prediction_union[frame_index],
                     union_iou=union_ious[frame_index],
+                    comparable=reference_role == "REFERENCE",
                 ),
                 _dashboard(
                     width=reference_frames[frame_index].shape[1],
@@ -449,10 +576,15 @@ def _write_video(
                     audit=audit,
                     reference_state=reference_state,
                     prediction_state=prediction_state,
+                    score_summary=score_summary,
                 ),
             ]
             normalized = [
-                cv2.resize(value, (panel_width, panel_height))
+                _fit_panel(
+                    value,
+                    width=panel_width,
+                    height=panel_height,
+                )
                 for value in panels
             ]
             writer.write(
@@ -463,8 +595,11 @@ def _write_video(
                     )
                 )
             )
-    finally:
-        writer.release()
+    except BaseException:
+        writer.abort()
+        raise
+    else:
+        writer.close()
 
 
 def write_collision_v5_visualization(
@@ -486,27 +621,73 @@ def write_collision_v5_visualization(
     reference_state: NBodyCollisionState,
     prediction_state: NBodyCollisionState | None,
     prediction_available: Sequence[bool],
+    reference_role: str = "REFERENCE",
+    score_summary: Mapping[str, Any] | None = None,
+    has_issues: bool = False,
 ) -> dict[str, Any]:
     """Write an arbitrary-cardinality diagnostic without changing the score."""
 
-    local_manifest = (
-        request.artifact_dir / "collision_v5_visualization_manifest.json"
-    )
+    local_manifest = request.artifact_dir / LOCAL_MANIFEST_NAME
+    if not bool(getattr(request, "save_visualizations", False)):
+        manifest = {
+            "schema_version": "1.0",
+            "artifact_protocol": {
+                "id": ARTIFACT_PROTOCOL_ID,
+                "version": ARTIFACT_PROTOCOL_VERSION,
+            },
+            "status": "disabled",
+            "reason": "runtime_save_visualizations_false",
+            "storage_policy": "run_owned_video_disabled_by_run_policy",
+        }
+        write_json(local_manifest, manifest)
+        return {
+            "collision_v5_visualization_manifest": str(local_manifest),
+            "collision_v5_visualization": manifest,
+        }
     if not config.get("enabled", True):
         manifest = {
             "schema_version": "1.0",
+            "artifact_protocol": {
+                "id": ARTIFACT_PROTOCOL_ID,
+                "version": ARTIFACT_PROTOCOL_VERSION,
+            },
             "status": "disabled",
-            "storage_policy": "external_unsealed_diagnostic",
+            "storage_policy": "run_owned_visualization_disabled_by_protocol",
         }
         write_json(local_manifest, manifest)
         return {
             "collision_v5_visualization_manifest": str(local_manifest)
         }
+    should_render, render_reason = _render_policy(
+        request,
+        config=config,
+        score_summary=score_summary,
+        has_issues=has_issues,
+    )
+    if not should_render:
+        manifest = {
+            "schema_version": "1.0",
+            "artifact_protocol": {
+                "id": ARTIFACT_PROTOCOL_ID,
+                "version": ARTIFACT_PROTOCOL_VERSION,
+            },
+            "status": "skipped",
+            "reason": render_reason,
+            "storage_policy": "run_owned_policy_selected_diagnostic",
+        }
+        write_json(local_manifest, manifest)
+        return {
+            "collision_v5_visualization_manifest": str(local_manifest),
+            "collision_v5_visualization": manifest,
+        }
     try:
-        directory, relative = _artifact_directory(request, config=config)
+        directory, relative, visualization_root = _artifact_directory(
+            request,
+            config=config,
+        )
         directory.mkdir(parents=True, exist_ok=True)
-        video_path = directory / "open_world_nbody_audit.mp4"
-        audit_path = directory / "open_world_nbody_audit.json"
+        video_path = directory / "visualization.mp4"
+        audit_path = directory / "audit.json"
         _write_video(
             video_path,
             times_s=times_s,
@@ -525,6 +706,8 @@ def write_collision_v5_visualization(
             prediction_state=prediction_state,
             prediction_available=prediction_available,
             config=config,
+            reference_role=reference_role,
+            score_summary=score_summary,
         )
         write_json(
             audit_path,
@@ -540,6 +723,8 @@ def write_collision_v5_visualization(
                     if prediction_state is not None
                     else None
                 ),
+                "reference_role": reference_role,
+                "score_summary": dict(score_summary or {}),
                 "reference_contact_events": [
                     {
                         "entity_pair": list(event.entity_pair),
@@ -590,9 +775,6 @@ def write_collision_v5_visualization(
                 "per_frame": list(comparison),
             },
         )
-        repository_link = str(
-            config.get("repository_link", "visualizations")
-        )
         paths = {
             "observation_video": video_path,
             "audit_json": audit_path,
@@ -600,9 +782,7 @@ def write_collision_v5_visualization(
         files = {
             name: {
                 "path": str(path.resolve()),
-                "repository_path": (
-                    Path(repository_link) / relative / path.name
-                ).as_posix(),
+                "visualization_path": (relative / path.name).as_posix(),
                 "sha256": sha256_file(path),
                 "size_bytes": path.stat().st_size,
             }
@@ -610,22 +790,31 @@ def write_collision_v5_visualization(
         }
         manifest = {
             "schema_version": "1.0",
+            "artifact_protocol": {
+                "id": ARTIFACT_PROTOCOL_ID,
+                "version": ARTIFACT_PROTOCOL_VERSION,
+            },
             "status": "complete",
+            "render_reason": render_reason,
             "evaluator_config_sha256": canonical_sha256(
                 request.evaluator_config
             ),
             "storage_policy": (
-                "external_unsealed_diagnostic_with_local_hashed_manifest"
+                "run_owned_evaluation_artifact_with_local_hashed_manifest"
             ),
-            "external_directory": str(directory.resolve()),
-            "repository_directory": (
-                Path(repository_link) / relative
-            ).as_posix(),
+            "run_id": getattr(request, "run_id", None),
+            "visualization_root": str(visualization_root),
+            "visualization_directory": str(directory.resolve()),
+            "visualization_relative_directory": relative.as_posix(),
             "files": files,
         }
     except Exception as exc:
         manifest = {
             "schema_version": "1.0",
+            "artifact_protocol": {
+                "id": ARTIFACT_PROTOCOL_ID,
+                "version": ARTIFACT_PROTOCOL_VERSION,
+            },
             "status": "failed",
             "storage_policy": "best_effort_never_changes_case_score",
             "error": {

@@ -13,10 +13,6 @@ SUPPORTED_EVALUATOR_TYPES = frozenset(
         "pendulum_state_v3",
         "pendulum_state_v6",
         "pendulum_state_v7",
-        "free_fall_state_v1",
-        "free_fall_state_v2",
-        "free_fall_state_v6",
-        "free_fall_state_v7",
         "inclined_plane_state_v1",
         "inclined_plane_state_v2",
         "inclined_plane_state_v6",
@@ -29,6 +25,7 @@ SUPPORTED_EVALUATOR_TYPES = frozenset(
         "collision_1d_state_v2",
         "collision_1d_state_v3",
         "collision_1d_state_v5",
+        "parabolic_motion_state_v1",
         "unsupported",
     }
 )
@@ -74,22 +71,6 @@ class SceneEvaluatorRegistry:
             )
 
             evaluator = PendulumOpenWorldCaseEvaluatorV7(config)
-        elif evaluator_type in {"free_fall_state_v1", "free_fall_state_v2"}:
-            from .scenes.free_fall.evaluator import FreeFallCaseEvaluator
-
-            evaluator = FreeFallCaseEvaluator(config)
-        elif evaluator_type == "free_fall_state_v6":
-            from .scenes.free_fall.v6_evaluator import (
-                FreeFallOpenWorldCaseEvaluator,
-            )
-
-            evaluator = FreeFallOpenWorldCaseEvaluator(config)
-        elif evaluator_type == "free_fall_state_v7":
-            from .scenes.free_fall.v7_evaluator import (
-                FreeFallOpenWorldCaseEvaluatorV7,
-            )
-
-            evaluator = FreeFallOpenWorldCaseEvaluatorV7(config)
         elif evaluator_type in {
             "inclined_plane_state_v1",
             "inclined_plane_state_v2",
@@ -146,6 +127,12 @@ class SceneEvaluatorRegistry:
             )
 
             evaluator = CollisionOpenWorldCaseEvaluator(config)
+        elif evaluator_type == "parabolic_motion_state_v1":
+            from .scenes.parabolic_motion.evaluator import (
+                ParabolicMotionCaseEvaluator,
+            )
+
+            evaluator = ParabolicMotionCaseEvaluator(config)
         elif evaluator_type == "unsupported":
             evaluator = UnsupportedSceneEvaluator(scene_id, config)
         else:

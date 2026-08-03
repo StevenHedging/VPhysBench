@@ -1,4 +1,4 @@
-# 五场景评估协议
+# 场景评估协议
 
 ## 1. 边界与输入
 
@@ -31,7 +31,7 @@ configs/evaluation/protocols/scene_default_v4.json
 ```
 
 v4 只把 `collision_1d` 升级到 evaluator `1.4`，其余四个 scene 仍为 `1.3`。它增加
-多帧角色发现、双向且互斥的 SAM2 实例传播、观测可靠性惩罚和外置过程可视化。v4
+多帧角色发现、双向且互斥的 SAM2 实例传播、观测可靠性惩罚和运行内过程可视化。v4
 目前不替换官方 v6 Task 所固定的 v3；使用 v4 必须创建新的 reevaluation variant，
 不能覆盖或混用已有 v3 分数。
 
@@ -116,10 +116,22 @@ v7 的审计入口会把两种 reference-as-prediction 检查分开：
 - `physics_parent_as_prediction` 表示把 OOD Case 的 physics-identical parent 当作
   prediction 输入，仅用于检查 capability 隔离，不能并入 GT-self 统计。
 
-完整设计、失败语义、外置可视化与冻结审计见
+完整设计、失败语义、过程可视化与冻结审计见
 [`experiments/OPEN_WORLD_V7_20260730.md`](experiments/OPEN_WORLD_V7_20260730.md)。
-v7 未被官方 Task JSON 自动启用；使用者必须创建绑定其 protocol fingerprint 的新
-evaluation variant，不能覆盖旧 leaderboard。
+
+Dataset 6.0 的六场景接入协议是：
+
+```text
+configs/evaluation/protocols/scene_default_v8.json
+```
+
+v8 逐字段保留 v7 的五个既有 scene 配置，并新增
+`parabolic_motion_state_v1`。平抛 evaluator 使用独立首帧主体发现、拒绝式绑定、
+开放世界追踪和经验 GT 相对的平抛专用轨迹距离；Task-facing 主指标仍为
+`scene_subject_state_similarity`。新增 scene 的标准实现与验收流程见
+[`NEW_SCENE_EVALUATOR.md`](NEW_SCENE_EVALUATOR.md)。
+Dataset 6.0 的 `six_scene_direct_eval_v1` 与 `six_scene_finetune_eval_v1` 均显式绑定
+v8。v7 及更早版本只用于复现历史结果，不能覆盖 v8 leaderboard。
 
 `plan.jobs` 是主表。缺失 prediction、重复 prediction、失败生成或未知 case 都必须产生
 一个显式 case result。
@@ -187,7 +199,7 @@ case    = 0.60 × subject + 0.40 × scene_physics_state
 到固定画布，因此形状项不会被绝对位置和尺度重复主导。所有逐帧值写入
 `subject_components.csv`。
 
-没有同 Case GT、只能使用 parent physics reference 时：
+旧协议中没有同 Case GT、只能使用 parent physics reference 时：
 
 ```text
 case = 0.70 × parent-relative physics state
@@ -198,6 +210,11 @@ parent 视频只提供动力学 GT，不参与 OOD 外貌或像素位置评分�
 `assets.first_frame` 读取；prediction 第 0 帧 mask 仅作为不可变条件图上的主体 ROI，
 mask 缺失或错误会得到保守低分。由于不存在真实 continuation，后续绝对位置和形状没有
 可识别 GT，不会伪造这两项。
+
+这条 parent-reference 评分仅用于复现旧协议。`scene_default_v10` 的无填边空间协议
+要求真实 same-Case GT；在尚未定义一个不依赖 padding、裁剪或 prediction 内容配准的
+parent-to-Case 坐标映射前，parent-reference Case 会明确返回
+`reference_parent_spatial_alignment_unsupported`，不会静默走旧 letterbox 分支。
 
 v6 不再把对象完整性作为普通加权项，而使用不可稀释的两层组合：
 
@@ -272,6 +289,28 @@ Reference 与 prediction 可以有不同分辨率、FPS 和帧数，但必须覆
 6. letterbox 到 scene canvas；
 7. 保存 source indices 和空间变换。
 
+正式五场景 Task 从 `scene_default_v10` 起不再使用第 5–6 步的独立
+letterbox。I2V Adapter 必须封印 `spatial_alignment`：首帧只能等比 contain
+到模型画布，不得裁剪或拉伸。评估器按该不可变契约裁掉 prediction 的模型画布
+边缘区域，保留完整物理首帧视野；随后把 GT 与 prediction 分别等比 resize 到
+由 Case reference 长宽比决定的同一无填边画布。最终送入 Scene observer 的两路
+帧具有完全相同的宽、高和长宽比，且：
+
+- 不补黑边或其他 padding；
+- 不对任一路做非等比拉伸；
+- 不裁剪 GT 的物理内容；
+- 不按 prediction 内容进行配准或动态取景；
+- 模型画布临时 margin 统一使用边缘像素复制，不允许黑边；
+- prediction 尺寸、conditioning asset 或契约不匹配时按 prediction failure
+  保守计零；
+- 无契约的 T2V/旧 prediction 只有在源长宽比已与 reference 精确相同时才可评估。
+
+模型内部可为了满足 VAE/patch 尺寸使用临时 contain margin，但该区域不属于评估
+画面，也不会进入 Scene 指标。Provenance 的 `shared_spatial_alignment` 记录双方原始
+尺寸、固定 crop、共同目标尺寸，以及
+`padding_used_for_evaluation=false`、`aspect_ratio_distortion=false` 和
+`physical_reference_content_cropped=false`。
+
 不会补 GT 首帧，不会重复末帧掩盖时长不足。
 
 - v1 `legacy_random_seek`：按请求顺序对每个 index 执行一次
@@ -287,10 +326,10 @@ evaluator identity。
 | scene | v2/v3 timeline | decode | 最小时长 | 最大时长 | canvas |
 | --- | --- | --- | ---: | ---: | --- |
 | pendulum | reference-bounded，16 Hz | sequential | 4.8 s | 5 s | 480 × 832 |
-| free_fall | reference-bounded，32 Hz | sequential | 0.2 s | 1 s | 480 × 832 |
+| collision_1d | reference-bounded，16 Hz | sequential | 1.5 s | 5 s | 960 × 540 |
 | inclined_plane_slide | reference-bounded，16 Hz | sequential | 1 s | 5 s | 640 × 480 |
 | uniform_circular_motion | reference-bounded，8 Hz | sequential | 3 s | 5 s | 640 × 480 |
-| collision_1d | reference-bounded，16 Hz | sequential | 1.5 s | 5 s | 640 × 360 |
+| parabolic_motion | reference-bounded，32 Hz | sequential | 0.25 s | 0.5 s | 480 × 960 |
 
 所有源视频最低要求为 8 FPS。时间轴由 reference 的实际末帧时间决定，但不会超过
 协议的最大时长。采样点保持协议 FPS，因此最后一个采样点是不晚于 reference 边界的
@@ -336,6 +375,10 @@ same_case_reference
 - parent 位于冻结 case catalog；
 - structured physics 完全一致；
 - parent reference 存在。
+
+以上是旧协议的 reference 解析能力。正式 `scene_default_v10` 额外要求
+`same_case_reference`；parent-reference 在新空间协议下会明确标记 reference
+unavailable，不能回退到 letterbox。
 
 它是动力学 reference，不是同外观视觉 GT。v3 的外貌项使用 OOD Case 自己的条件首帧，
 不使用 parent 像素。协议保留 `physics_model` 和 `reference_free` 模式，但当前五场景
@@ -1150,28 +1193,27 @@ collision_state_score =
 每个成功或可保守退化的 v4 碰撞 Case 都会 best-effort 生成：
 
 ```text
-collision_observation.mp4
+visualization.mp4
 collision_instance_similarity.png
 collision_event_timeline.png
 collision_tracks.csv
-collision_observation.json
+audit.json
 ```
 
 视频为 2×2 面板：reference 角色 mask/质心/轨迹、prediction 对应视图、union mask
 重合图，以及逐帧 IoU、seed、接触帧和角色状态 dashboard。两张图分别展示三角色及
 union IoU 曲线、三角色归一化轨迹和 reference/prediction 接触时刻。
 
-大文件写入 `PHYSBENCH_VISUALIZATION_ROOT`，默认是：
+大型文件写入当前 evaluation 自己的目录：
 
 ```text
-/mnt/nvme1/physics_video_benchmark/evaluation_visualizations
+evaluation/visualizations/collision_1d/<case>/<seed-or-evaluation>-<hash>/
 ```
 
-仓库顶层 `visualizations` 是该目录的本机链接。正式 Case artifact 目录只保存
-`collision_visualization_manifest.json`，其中记录外部绝对路径、仓库链接路径、
-文件大小、SHA-256 和 evaluator config digest。外置可视化属于未封印诊断，不进入
-AtomicRun/reevaluation 的 sealed artifact manifest；生成失败也不会改变 Case 分数或
-状态。
+Case artifact 目录保存 `visualization_manifest.json`，其中记录 run-owned 路径、文件
+大小、SHA-256 和 evaluator config digest。并存式重评会把视频纳入该 variant 的
+artifact manifest；生成失败仍不会改变 Case 分数或状态。旧协议 JSON 中保留的
+`external_root`/`namespace` 字段只用于冻结指纹复现，当前存储逻辑不会读取它们。
 
 ### 11.10 v5 Case 实体清单与任意 N
 
@@ -1317,7 +1359,7 @@ Task-facing 正式主 metric 仍为 `scene_subject_state_similarity`；碰撞 ev
 继续作为 Jensen 风格的必需诊断曲线，不充当内容 gate。这样既保留物理主体外貌差异，
 也不让未匹配的额外物体被同一 appearance 项重复惩罚。
 
-### 11.14 v5 可视化、审计与已知限制
+### 11.14 碰撞可视化、审计与已知限制
 
 每个 Case 的本地产物包括：
 
@@ -1326,18 +1368,17 @@ per_frame.csv
 physical_subject_iou_curve.png
 entity_position_curve.png
 object_cardinality_timeline.png
-collision_v5_visualization_manifest.json
+visualization_manifest.json
 ```
 
-大型过程可视化继续外置到 `PHYSBENCH_VISUALIZATION_ROOT`，默认：
+大型过程可视化写入当前 evaluation：
 
 ```text
-/mnt/nvme1/physics_video_benchmark/evaluation_visualizations
+evaluation/visualizations/collision_1d/<case>/<seed-or-evaluation>-<hash>/
 ```
 
-外置 Case bundle 包含 `open_world_nbody_audit.mp4` 和
-`open_world_nbody_audit.json`，仓库顶层 `visualizations` 链接可直接访问。外置写入是
-best-effort diagnostic；失败只记录在 hashed manifest 中，不改变评分或 Case 状态。
+Case bundle 统一包含 `visualization.mp4` 和 `audit.json`。它是 run-owned best-effort
+diagnostic；失败只记录在 hashed manifest 中，不改变评分或 Case 状态。
 
 最终 r7 真实审计中，GT-self 两条 Case 均为 `evaluated`，N-body 五个 component 均为
 1；最终分数分别为 `0.9880578251` 和 `0.9693811074`。未到 1 的部分来自
@@ -1443,33 +1484,74 @@ Prediction-side observation/comparison 失败走 fail-closed：保留所有 expe
 尾段同样按 unavailable media + missing exposure 处理。Reference/condition/manifest
 失败是 `unavailable`；真正未捕获的代码错误仍是 `error`。
 
-### 12.4 v6/v7 过程审计
+### 12.4 Evaluation-owned 统一过程审计
 
-四个新 adapter 都写入：
-
-```text
-per_frame.csv
-physical_subject_iou_curve.png
-entity_position_curve.png
-object_cardinality_timeline.png
-open_world_v2_artifact_manifest.json
-```
-
-Scene 另写冻结轴/角轨迹曲线和 JSON audit。IoU 的 prediction union 包含全部正式
-residual，而不只是匹配主体；因此额外对象可直接在 Jensen 风格曲线和 overlay 中
-看到。大型通用 bundle 位于：
+过程视频属于某个 Baseline 执行某个 Task 的具体 evaluation。Canonical evaluation
+使用：
 
 ```text
-/mnt/nvme1/physics_video_benchmark/evaluation_visualizations/
-  <scene_default_v6|scene_default_v7>/<scene>/<case>/<job>-<artifact-identity>/
-    open_world_v2_overlay.mp4
-    open_world_v2_audit.json
+runs_v2/<run_id>/evaluation/visualizations/
+  <scene>/<case>/<seed-or-evaluation>-<stable-identity>/
+    visualization.mp4
+    audit.json
 ```
 
-仓库顶层 `visualizations` 是该外置根目录的链接。本地 manifest 记录外部绝对路径、
-仓库链接路径、SHA-256、大小和 evaluator config digest；渲染失败只写
-`status=failed`，不改变 Case score。碰撞继续使用冻结的
-`visualizations/scene_default_v5/...` 产物协议。
+并存式重评使用该 variant 内的
+`reevaluations/.../<evaluation_id>/evaluation/visualizations/`，不能写回 canonical
+evaluation。六个场景使用相同文件名、目录层级、identity、渲染策略和 hashed manifest
+契约；路径中不出现 `open_world_v2`、`collision_v5` 或 `scene_default_v8` 等 evaluator
+版本信息。evaluator/protocol 版本仍在 JSON provenance 内保留，因为它们是分数可复现
+性的一部分。identity 由 run、Case、prediction 和 evaluator config 的规范化内容构造；
+完全相同的审计会稳定落入同一目录。
+
+保存视频是 AtomicRun 的可选运行策略，默认关闭。只有明确需要人工查看时才添加：
+
+```bash
+python3 -m physbench atomic-run ... --save-visualizations
+python3 -m physbench matrix-run ... --save-visualizations
+python3 -m physbench evaluate ... --save-visualizations
+```
+
+不加该参数时，评估器仍正常评分并保存本地逐帧表、曲线和审计数据，但不会创建过程
+视频目录；本地 `visualization_manifest.json` 记录
+`status=disabled` 与 `runtime_save_visualizations_false`。该策略不改变 Case score、
+coverage 或 evaluator fingerprint。
+
+默认 `layout=quad` 的四宫格为：
+
+```text
+reference/condition | prediction
+完整主体 mask 差异 | 得分和 scene-specific 诊断
+```
+
+参考实体与其匹配 prediction 使用同一颜色；extra、ambiguous candidate 和 rejected
+track 使用互不混淆的颜色。主体差异面板计算完整 reference/prediction union，而不是
+只显示已匹配实体，因此漏球、额外球和 replacement 不会被可视化隐藏。右下角同时显示
+Case 总分、主要分项、missing/extra、ID switch，以及摆角、竖直/斜面/圆周/平抛轨迹或
+碰撞速度和接触图等场景诊断。
+
+同 Case GT 显示 `REFERENCE`；OOD parent-reference 按能力边界显示
+`CONDITION ANCHOR` 或 `PHYSICS REFERENCE`。后二者不会展示误导性的逐帧直接 pixel
+IoU。所有面板保持原视频宽高比并 letterbox，不拉伸画面。
+
+启用保存后，`visualization.mode` 进一步支持：
+
+| mode | 行为 |
+| --- | --- |
+| `all` | 为所有可评估 Case 生成过程视频 |
+| `issues_only` | 只生成有诊断问题或低于阈值的 Case |
+| `sampled` | 问题 Case 全部生成，其余按稳定 hash 抽样 |
+| `off` | 不生成过程视频 |
+
+Case artifact 仍保存曲线、逐帧表和 hashed manifest。manifest 记录 run-owned 绝对与
+evaluation 相对路径、SHA-256、大小、artifact protocol 与 evaluator config digest；
+重评的 artifact manifest 还会覆盖这些文件。渲染失败只写 `status=failed`，绝不能改变
+Case score、状态或 `quality.degraded`。平抛也遵守该边界，artifact 编码失败不归责给
+Baseline。禁止用 symlink 将 visualization bundle 逃逸到 AtomicRun 外部。
+
+输出 MP4 统一采用 H.264/AVC、`yuv420p` 和 MP4 fast-start。旧 OpenCV `mp4v` 文件虽然
+可被 FFmpeg 解码，但浏览器常不支持 MPEG-4 Part 2，且尾置 `moov` 会导致流式加载
+报错；不得继续用于新可视化。
 
 四个新 scene 可用统一审计入口；v7 必须显式传入 `--protocol`：
 
@@ -1478,12 +1560,14 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
   scripts/audit_open_world_evaluator_v6.py \
   --protocol scene_default_v7 \
   --case-id freefall_r2_l_h060cm --self-check \
+  --run-id RUN_ID \
   --output /mnt/nvme1/physics_video_benchmark/evaluation_audits/my_v7_audit
 ```
 
 实际 prediction 使用可重复的
 `--prediction CASE_ID=/absolute/prediction.mp4`。collision 2.2 仍由
-`scripts/audit_collision_evaluator_v5.py` 审计，避免修改冻结链路。
+`scripts/audit_collision_evaluator_v5.py` 审计，避免修改冻结链路。独立审计入口不生成
+过程视频；需要可视化 Baseline 任务结果时必须通过 AtomicRun CLI。
 
 ## 13. 产物
 
@@ -1494,26 +1578,27 @@ runs_v2/<run_id>/evaluation/
 ├── task_result.json
 ├── case_metrics.jsonl              # compatibility projection
 ├── summary.json                    # compatibility projection
-└── cases/<job_id>/
+├── cases/<job_id>/
     ├── result.json
     ├── per_frame.csv
     ├── subject_components.csv       # v3
     ├── physical_subject_iou_curve.png
     ├── subject_similarity_curve.png # v3
-    ├── collision_visualization_manifest.json # v4 collision
+    ├── visualization_manifest.json # optional video policy/manifest
     ├── entity_position_curve.png     # v5 collision
     ├── object_cardinality_timeline.png # v5 collision
-    ├── collision_v5_visualization_manifest.json # v5 collision
     ├── open_world_audit.json          # v6 scene audit
     ├── entity_tracks.json             # v6 pendulum
-    ├── open_world_v2_artifact_manifest.json # v6 external bundle manifest
     └── <scene_state_curve>.png
+└── visualizations/                    # only with --save-visualizations
+    └── <scene>/<case>/<seed-or-evaluation>-<hash>/
+        ├── visualization.mp4
+        └── audit.json
 ```
 
-v4/v5 碰撞以及 v6/v7 的大型过程视频和审计 JSON 不放入上述 run 目录；本地 manifest
-通过 SHA-256 分别把它们关联到 `visualizations/scene_default_v4/...`、
-`visualizations/scene_default_v5/...`、`visualizations/scene_default_v6/...` 和
-`visualizations/scene_default_v7/...`。
+大型过程视频和审计 JSON 与它们所属的 evaluation 一起位于 AtomicRun 内；并存式重评
+使用各自 variant 的同构目录。表中带 v3–v6 的旧字段只用于解释历史结果，不是当前
+路径协议。
 
 不是每个 scene 都有额外 state curve。当前精确映射为：
 
@@ -1824,7 +1909,7 @@ CUDA_VISIBLE_DEVICES=1 HF_HUB_OFFLINE=1 PYTHONPATH=src \
   /root/miniconda3/envs/phybench/bin/python \
   scripts/audit_collision_evaluator_v4.py \
   --device cuda \
-  --output visualizations/scene_default_v4/\
+  --output /mnt/nvme1/physics_video_benchmark/evaluation_audits/\
 collision_reference_observability_audit.json
 ```
 

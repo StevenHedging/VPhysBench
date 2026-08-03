@@ -70,7 +70,7 @@ scene adapter:
 ```
 
 因此 observation 的召回优化不能修改完整性公式，scene physics 的调参也不能删掉
-未匹配实体。v7 的定向反例、真实 GT-self 校准和外置 overlay 记录见
+未匹配实体。v7 的定向反例、真实 GT-self 校准和历史 overlay 记录见
 [`experiments/OPEN_WORLD_V7_20260730.md`](experiments/OPEN_WORLD_V7_20260730.md)。
 
 ## 2. 对象契约
@@ -690,12 +690,13 @@ fingerprint 完全等于 v5。v6 仍需在形成 leaderboard 前对所有 baseli
 protocol 重评，并扩大真实视频的 extra/missing、遮挡与 OOD 审计；合成反例通过不等于
 真实 observer 已完全校准。
 
-每个非碰撞 v6 Case 本地保存 `per_frame.csv`、完整主体 IoU 曲线、实体位置曲线、
-对象基数时间线和 JSON audit。大型并列 overlay 与逐 ID/lifecycle 审计外置到
-`/mnt/nvme1/physics_video_benchmark/evaluation_visualizations/scene_default_v6/...`，
-仓库 `visualizations` 链接可直接访问；本地
-`open_world_v2_artifact_manifest.json` 保存路径、SHA-256 和失败状态。渲染失败永远
-不改变已经计算的 Case 分数。
+每个非碰撞 Case 本地保存 `per_frame.csv`、完整主体 IoU 曲线、实体位置曲线、对象基数
+时间线和 JSON audit。启用 `--save-visualizations` 后，大型并列 overlay 与逐
+ID/lifecycle 审计写入所属 evaluation 的
+`visualizations/<scene>/<case>/...`，因此 canonical 结果位于
+`runs_v2/<run_id>/evaluation/visualizations/...`，并存式重评位于对应 variant 内；本地
+`visualization_manifest.json` 保存路径、SHA-256 和失败状态。该开关默认关闭，渲染失败
+永远不改变已经计算的 Case 分数。
 
 四个新 scene 的定向真实/反例审计统一使用
 `scripts/audit_open_world_evaluator_v6.py`；collision 2.2 继续使用冻结的

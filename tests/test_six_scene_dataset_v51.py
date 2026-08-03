@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections import Counter
+import hashlib
 import json
 import math
-import os
 from pathlib import Path
 import re
 import unittest
@@ -41,6 +41,18 @@ SPECS = {
         "prompt": "glass ball (13.5 mm diameter, 3.46 g)",
     },
 }
+RETIRED_SYNTHETIC_PENDULUM_OOD_CASE_IDS = {
+    "pendulum_ltot0110mm_lrope0100mm_r010mm_a010deg_ood01",
+    "pendulum_ltot0130mm_lrope0120mm_r010mm_a030deg_ood02",
+    "pendulum_ltot0130mm_lrope0120mm_r010mm_a030deg_ood03",
+    "pendulum_ltot0155mm_lrope0145mm_r010mm_a020deg_ood04",
+    "pendulum_ltot0155mm_lrope0145mm_r010mm_a020deg_ood05",
+}
+RETAINED_PENDULUM_PARENT_CASE_IDS = {
+    "pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a010deg",
+    "pendulum_r2_ltot0130mm_lrope0120mm_r010mm_a030deg",
+    "pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a020deg",
+}
 
 
 class SixSceneDatasetV51Tests(unittest.TestCase):
@@ -56,24 +68,31 @@ class SixSceneDatasetV51Tests(unittest.TestCase):
             for case in cls.v51.cases
         }
 
-    def test_v51_is_latest_and_preserves_case_identity(self) -> None:
-        self.assertEqual(V51_DATASET, LATEST_DATASET)
+    def test_v51_retires_only_invalid_synthetic_cases(
+        self,
+    ) -> None:
+        self.assertNotEqual(V51_DATASET, LATEST_DATASET)
         self.assertEqual(
             "physics_video_six_scene_v5p1",
             self.v51.descriptor["dataset_id"],
         )
         self.assertEqual("5.1.0", self.v51.descriptor["release"])
-        self.assertEqual(609, len(self.v51.cases))
+        self.assertEqual(604, len(self.v51.cases))
         self.assertEqual(
-            {case["case_id"] for case in self.v5.cases},
+            {
+                case["case_id"]
+                for case in self.v5.cases
+            } - RETIRED_SYNTHETIC_PENDULUM_OOD_CASE_IDS,
             set(self.by_id),
         )
-        self.assertEqual(
-            Counter(case["scene_id"] for case in self.v5.cases),
-            Counter(case["scene_id"] for case in self.v51.cases),
+        self.assertFalse(
+            RETIRED_SYNTHETIC_PENDULUM_OOD_CASE_IDS & self.by_id.keys()
+        )
+        self.assertTrue(
+            RETAINED_PENDULUM_PARENT_CASE_IDS <= self.by_id.keys()
         )
 
-    def test_collision_ball_specs_are_canonical_and_prompts_are_case_local(
+    def test_collision_ball_specs_are_canonical_and_prompts_describe_process(
         self,
     ) -> None:
         collisions = [
@@ -87,12 +106,25 @@ class SixSceneDatasetV51Tests(unittest.TestCase):
             seen.update(sequence)
             prompt = case["text"]["prompt"]
             self.assertEqual(
-                "collision_case_prompt_v2",
+                "collision_process_prompt_v3",
                 case["text"]["annotation_source"],
             )
-            self.assertIn("From left to right", prompt)
-            count_word = {2: "two", 3: "three"}[len(sequence)]
-            self.assertIn(f"all {count_word} balls are fully visible", prompt)
+            self.assertIsNone(re.search(r"\d", prompt), prompt)
+            structure = case["appearance"]["collision_structure"]
+            expected_process = {
+                "three_ball_single_incident": (
+                    "left ball moves right toward two initially stationary "
+                    "balls"
+                ),
+                "two_ball_single_incident": (
+                    "left ball is initially stationary while the right ball "
+                    "moves left"
+                ),
+                "two_ball_opposed_incident": (
+                    "left ball moves right while the right ball moves left"
+                ),
+            }[structure]
+            self.assertIn(expected_process, prompt)
             for index, spec_id in enumerate(sequence, 1):
                 spec = SPECS[spec_id]
                 self.assertEqual(
@@ -103,27 +135,93 @@ class SixSceneDatasetV51Tests(unittest.TestCase):
                     spec["radius"],
                     case["physics"][f"ball_{index}_radius"]["value"],
                 )
-                self.assertIn(spec["prompt"], prompt)
-                velocity = case["physics"][
-                    f"ball_{index}_initial_velocity"
-                ]["value"]
-                if velocity > 0:
-                    self.assertIn(
-                        f"moves right at {abs(velocity):.4f} m/s",
-                        prompt,
-                    )
-                elif velocity < 0:
-                    self.assertIn(
-                        f"moves left at {abs(velocity):.4f} m/s",
-                        prompt,
-                    )
-                else:
-                    self.assertIn(
-                        f"ball {index} is a {spec['prompt']} and is "
-                        "initially stationary",
-                        prompt,
-                    )
+                self.assertNotIn(spec["prompt"], prompt)
         self.assertEqual(set(SPECS), seen)
+
+    def test_process_prompts_do_not_leak_values_or_visual_hints(self) -> None:
+        forbidden = re.compile(
+            r"\d|diameter|mass|m/s|shiny|steel|wooden|green|blue|pink|"
+            r"background|outside the crop|side of the image",
+            re.IGNORECASE,
+        )
+        for case in self.v51.cases:
+            if case["scene_id"] == "free_fall":
+                continue
+            prompt = case["text"]["prompt"]
+            self.assertIsNone(forbidden.search(prompt), case["case_id"])
+        expected_sources = {
+            "collision_1d": "collision_process_prompt_v3",
+            "parabolic_motion": "scene_process_prompt_v2",
+            "inclined_plane_slide": "scene_process_prompt_v2",
+            "uniform_circular_motion": "scene_process_prompt_v2",
+        }
+        for case in self.v51.cases:
+            source = expected_sources.get(case["scene_id"])
+            if source is not None:
+                self.assertEqual(source, case["text"]["annotation_source"])
+
+    def test_dataset_assets_preserve_native_timing(self) -> None:
+        audit_path = (
+            ROOT
+            / "datasets/physics_video/provenance/alignment"
+            / "native_timing_20260731_v1/audit.jsonl"
+        )
+        records = [
+            json.loads(line)
+            for line in audit_path.read_text(encoding="utf-8").splitlines()
+        ]
+        self.assertEqual(406, len(records))
+        self.assertEqual(
+            {
+                "collision_1d": 298,
+                "free_fall": 11,
+                "parabolic_motion": 97,
+            },
+            dict(Counter(record["scene_id"] for record in records)),
+        )
+        for record in records:
+            self.assertTrue(record["frame_count_verified"])
+            self.assertTrue(record["nominal_frame_rate_verified"])
+            self.assertEqual(
+                record["expected_reference_frames"],
+                record["reference_probe"]["frames"],
+            )
+            self.assertEqual(
+                record["source_probe"]["nominal_frame_rate"],
+                record["reference_probe"]["nominal_frame_rate"],
+            )
+            case = self.by_id[record["case_id"]]
+            self.assertEqual(
+                "source_timing",
+                case["temporal"]["time_scale"],
+            )
+            if record["kind"] == "byte_identical_source_timing_hardlink":
+                source = DATA_ROOT / case["assets"]["source_video"]
+                reference = DATA_ROOT / case["assets"]["reference_video"]
+                self.assertTrue(source.samefile(reference))
+            else:
+                alignment = case["alignment"]
+                self.assertEqual(
+                    alignment["source_end_frame_exclusive"]
+                    - alignment["source_start_frame"],
+                    alignment["output_frames"],
+                )
+                self.assertEqual(
+                    "preserve_source_fps_and_all_trimmed_frames",
+                    alignment["timing_policy"],
+                )
+        self.assertEqual(
+            8.0,
+            self.by_id["parabolic_img_0539"]["temporal"][
+                "encoded_to_physical_speed"
+            ],
+        )
+        self.assertTrue(all(
+            self.by_id[case_id]["temporal"]["encoded_to_physical_speed"]
+            == 8.0
+            for case_id in self.by_id
+            if self.by_id[case_id]["scene_id"] == "free_fall"
+        ))
 
     def test_parabolic_specs_velocities_and_conditionable_fields(self) -> None:
         for case in self.v51.cases:
@@ -190,7 +288,7 @@ class SixSceneDatasetV51Tests(unittest.TestCase):
             }
             self.assertEqual(1, len(directories), case["case_id"])
             directory = next(iter(directories))
-            self.assertIn("/v51_", directory)
+            self.assertNotIn("/v51_", directory)
             self.assertIsNone(
                 BACKGROUND_TERMS.search(directory),
                 directory,
@@ -200,19 +298,19 @@ class SixSceneDatasetV51Tests(unittest.TestCase):
                 for key in case["physics"]
             ))
 
-    def test_new_asset_paths_are_hard_links_to_v5_assets(self) -> None:
+    def test_descriptive_asset_paths_match_mapping(self) -> None:
         mapping = json.loads(
             (RELEASE_ROOT / "asset_directory_mapping.json").read_text(
                 encoding="utf-8"
             )
         )
-        self.assertEqual(609, len(mapping["records"]))
+        self.assertEqual(604, len(mapping["records"]))
         self.assertEqual(0, mapping["media_payload_copied_bytes"])
         directories = {
             record["corrected_case_directory"]
             for record in mapping["records"]
         }
-        self.assertEqual(609, len(directories))
+        self.assertEqual(604, len(directories))
         for record in mapping["records"]:
             self.assertTrue(record["physical_tokens"])
             for token in record["physical_tokens"]:
@@ -220,7 +318,12 @@ class SixSceneDatasetV51Tests(unittest.TestCase):
             for path_record in record["paths"].values():
                 previous = DATA_ROOT / path_record["previous"]
                 corrected = DATA_ROOT / path_record["corrected"]
-                self.assertTrue(os.path.samefile(previous, corrected))
+                self.assertFalse(previous.exists())
+                self.assertTrue(corrected.is_file())
+                self.assertEqual(
+                    path_record["sha256"],
+                    hashlib.sha256(corrected.read_bytes()).hexdigest(),
+                )
 
     def test_migration_audit_records_frozen_base_and_zero_leakage(self) -> None:
         audit = json.loads(

@@ -2,6 +2,9 @@
 
 日期：2026-07-30
 
+> 历史快照：文中的全局外置可视化路径记录当时实现。当前实现统一写入所属
+> AtomicRun/reevaluation 的 `evaluation/visualizations/`，不要照搬旧路径。
+
 ## 1. 状态
 
 `scene_default_v7` 是建立在 `open_world_v2` 公共内核上的 shadow protocol。它针对

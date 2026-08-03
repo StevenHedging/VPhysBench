@@ -2,6 +2,9 @@
 
 日期：2026-07-30
 
+> 历史快照：文中的全局外置可视化路径记录当时实现。当前实现统一写入所属
+> AtomicRun/reevaluation 的 `evaluation/visualizations/`，不要照搬旧路径。
+
 ## 1. 结论
 
 `scene_default_v4` 将一维碰撞 evaluator 从 `1.3` 升级到 `1.4`，其余四个 scene

@@ -1,19 +1,19 @@
 # Physics Video Dataset
 
-当前 Dataset `physics_video_six_scene_v5p1` 包含 609 个 Case 和 1,660 个锁定资产：
+当前Dataset `physics_video_five_scene_v7`包含593个Case和1,617个锁定资产：
 
 ```text
 assets/          权威 source/canonical 媒体
 provenance/      来源、标注、导入和对齐证据
-releases/4.0.0/  冻结的五场景 release
-releases/5.0.0/  冻结的六场景首次导入 release
-releases/5.1.0/  当前 descriptor、Case、View、scene 和 asset lock
+releases/1.0.0/…6.0.0/  仅用于解释既有结果的历史元数据快照
+releases/7.0.0/  当前train/test descriptor、Case、View、scene和asset lock
 ```
 
-运行时必须从 `releases/5.1.0/dataset.json` 加载，不能绕过 descriptor 直接拼接
-`cases.jsonl` 与资产目录。
+运行时必须从`releases/7.0.0/dataset.json`加载，不能绕过descriptor直接拼接
+`cases.jsonl` 与资产目录，也不能按目录版本号扫描或自动回退到历史release。历史快照
+只有在复现一份明确记录了旧Dataset ID/digest的结果时才能显式使用。
 
-Case schema 3.0 将原始文本固定在 `text.prompt`，将可信物理量固定在
+Case schema 4.0将原始文本固定在`text.prompt`，将可信物理量固定在
 `physics.<parameter>`（`annotated=true`）。Dataset 只声明事实；物理信息的使用方式由
 各 Baseline 自己的 `input_policy` 与 adapter 决定。
 
@@ -37,3 +37,5 @@ scripts/normalize_dataset_v51.py
 ```
 
 详细字段、数量和划分见 [数据集文档](../../docs/DATASET.md)。
+新数据的逐步导入流程见
+[原始视频与XLSX标注导入规范](../../docs/DATASET_INGESTION.md)。

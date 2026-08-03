@@ -174,6 +174,15 @@ def _standard_adapter_config() -> dict:
     }
 
 
+def _sealed_standard_adapter_config() -> dict:
+    config = _standard_adapter_config()
+    config["spatial"].update({
+        "conditioning_transform": "aspect_preserving_contain",
+        "conditioning_margin_fill": "edge_replicate",
+    })
+    return config
+
+
 def _input_policy(
     usage: str = "ignored",
     representations: list[str] | None = None,
@@ -440,6 +449,34 @@ def _record_with_structured_physics() -> dict:
 
 
 class AdapterFactoryTests(unittest.TestCase):
+    def test_standard_i2v_adapter_seals_full_content_spatial_contract(
+        self,
+    ) -> None:
+        adapter = StandardDataAdapter(
+            _sealed_standard_adapter_config(),
+            _input_policy(),
+        )
+        record = adapter.adapt_case(_case(), role="eval")
+
+        self.assertEqual(
+            {
+                "schema_version": "1.0",
+                "policy": "i2v_conditioning_content_v1",
+                "conditioning_asset": "assets/first.png",
+                "conditioning_transform": "aspect_preserving_contain",
+                "model_canvas": {"width": 64, "height": 64},
+                "model_canvas_margin_fill": "edge_replicate",
+                "evaluation_view": "exclude_model_canvas_padding",
+            },
+            record["native_inputs"]["spatial_alignment"],
+        )
+
+    def test_sealed_i2v_adapter_rejects_black_canvas_margin(self) -> None:
+        config = _sealed_standard_adapter_config()
+        config["spatial"]["conditioning_margin_fill"] = "black"
+        with self.assertRaisesRegex(ValueError, "edge_replicate"):
+            StandardDataAdapter(config, _input_policy())
+
     def test_standard_v5_adapter_without_kind_loads(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = _create_bundle(
@@ -1076,6 +1113,50 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                 "source_video",
             ):
                 self.assertNotIn(forbidden, received["assets"])
+
+    def test_driver_cannot_override_compiler_sealed_spatial_contract(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle_root = _create_bundle(
+                root,
+                adapter_source=None,
+                adapter=_sealed_standard_adapter_config(),
+            )
+            plugin = load_baseline_plugin(load_baseline_bundle(bundle_root))
+            instance = plugin.task_builder.build(_dataset(root), _task(root))
+            job = instance.value["inference"]["jobs"][0]
+            expected = job["native_inputs"]["spatial_alignment"]
+            tampered = copy.deepcopy(expected)
+            tampered["model_canvas"] = {"width": 832, "height": 480}
+
+            plugin.driver.run_task = mock.Mock(return_value=(
+                {
+                    "operation_id": "train",
+                    "status": "not_requested",
+                },
+                [{
+                    "job_id": job["job_id"],
+                    "case_id": job["case_id"],
+                    "baseline_id": plugin.bundle.baseline_id,
+                    "evaluation_partition": job["evaluation_partition"],
+                    "seed": job["seed"],
+                    "status": "planned",
+                    "video_path": None,
+                    "spatial_alignment": tampered,
+                }],
+            ))
+            with self.assertRaisesRegex(
+                ValueError,
+                "driver spatial alignment differs",
+            ):
+                plugin.run_task(
+                    instance=instance,
+                    run_dir=root / "run",
+                    execute=False,
+                    stop_after_training=False,
+                )
 
     def test_adapter_receives_only_annotated_physics_and_driver_hides_raw_case(
         self,

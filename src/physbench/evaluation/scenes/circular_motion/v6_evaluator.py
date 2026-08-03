@@ -605,6 +605,28 @@ class CircularMotionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
             prediction_union_masks=prediction_union,
             full_subject_ious=union_ious,
             prediction_available=prediction_available,
+            reference_role=(
+                "CONDITION ANCHOR"
+                if reference_mode == "parent_physics_reference"
+                else "REFERENCE"
+            ),
+            score_summary={
+                "score": score,
+                "components": {
+                    "physics": float(orbit_score["score"]),
+                    "subject": float(subject.score),
+                    "integrity": float(comparison.integrity.score),
+                },
+            },
+            per_frame_diagnostics=[
+                {
+                    "polar position": row["polar_position_similarity"],
+                    "matched": row["matched_count"],
+                    "phase policy": orbit_score.get("phase_policy", "unknown"),
+                }
+                for row in rows
+            ],
+            has_issues=bool(prediction_failures or comparison.failed),
         )
 
         integrity = comparison.integrity.to_dict()

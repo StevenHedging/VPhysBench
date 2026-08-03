@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
-"""Run targeted collision-v5 prediction and GT self-consistency audits."""
+"""Run targeted collision-v5 prediction and GT self-consistency audits.
+
+This standalone audit intentionally does not write process videos; those
+belong to an AtomicRun evaluation and are enabled through the main CLI.
+"""
 
 from __future__ import annotations
 
 import argparse
 import copy
 from datetime import datetime, timezone
+import hashlib
 from pathlib import Path
+import subprocess
 from typing import Any
 
 from physbench.data_layout import LATEST_DATASET
@@ -16,6 +22,9 @@ from physbench.evaluation.contracts import CaseEvaluationRequest
 from physbench.evaluation.protocols import load_evaluation_protocol
 from physbench.evaluation.registry import SceneEvaluatorRegistry
 from physbench.io import write_json
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _arguments() -> argparse.Namespace:
@@ -37,6 +46,7 @@ def _arguments() -> argparse.Namespace:
     )
     parser.add_argument("--self-check", action="store_true")
     parser.add_argument("--device", default="auto")
+    parser.add_argument("--run-id")
     parser.add_argument("--output", type=Path, required=True)
     return parser.parse_args()
 
@@ -152,6 +162,87 @@ def _collision_v5_config(
     return config
 
 
+def _digest_files(root: Path, paths: list[Path]) -> dict[str, Any]:
+    root = root.resolve()
+    unique = sorted({path.resolve() for path in paths})
+    digest = hashlib.sha256()
+    records: list[dict[str, Any]] = []
+    for path in unique:
+        try:
+            relative = path.relative_to(root)
+        except ValueError as exc:
+            raise ValueError(
+                f"source snapshot path escapes project root: {path}"
+            ) from exc
+        payload = path.read_bytes()
+        file_digest = hashlib.sha256(payload).hexdigest()
+        relative_text = relative.as_posix()
+        digest.update(relative_text.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(bytes.fromhex(file_digest))
+        digest.update(b"\0")
+        records.append(
+            {
+                "path": relative_text,
+                "sha256": file_digest,
+                "size_bytes": len(payload),
+            }
+        )
+    return {
+        "algorithm": "sha256(path_nul_file_sha256_nul)",
+        "digest": digest.hexdigest(),
+        "file_count": len(records),
+        "files": records,
+    }
+
+
+def _implementation_snapshot(protocol_path: Path) -> dict[str, Any]:
+    source_paths = sorted(
+        (PROJECT_ROOT / "src" / "physbench").rglob("*.py")
+    )
+    source_paths.extend(
+        [
+            Path(__file__).resolve(),
+            protocol_path.resolve(),
+            (
+                PROJECT_ROOT
+                / "schemas"
+                / "v2"
+                / "evaluation_protocol.schema.json"
+            ).resolve(),
+        ]
+    )
+    snapshot = _digest_files(PROJECT_ROOT, source_paths)
+    git: dict[str, Any] = {
+        "head": None,
+        "dirty": None,
+        "status_entries": None,
+    }
+    try:
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        status = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+        git = {
+            "head": head,
+            "dirty": bool(status),
+            "status_entries": len(status),
+        }
+    except (OSError, subprocess.CalledProcessError):
+        pass
+    return {"source_tree": snapshot, "git": git}
+
+
 def _evaluate(
     evaluator: Any,
     *,
@@ -162,6 +253,7 @@ def _evaluate(
     output: Path,
     variant: str,
     evaluator_config: dict[str, Any],
+    run_id: str,
 ) -> dict[str, Any]:
     job_id = _job_id(case["case_id"], variant)
     artifact_dir = output / "cases" / job_id
@@ -183,6 +275,8 @@ def _evaluate(
         asset_root=asset_root,
         artifact_dir=artifact_dir,
         evaluator_config=evaluator_config,
+        run_id=run_id,
+        save_visualizations=False,
     )
     result = evaluator.evaluate(request).to_dict()
     result["audit_variant"] = variant
@@ -207,10 +301,12 @@ def main() -> None:
             raise ValueError(f"case is not collision_1d: {case_id}")
 
     protocol = copy.deepcopy(load_evaluation_protocol(args.protocol))
+    implementation = _implementation_snapshot(Path(protocol["path"]))
     collision_config = _collision_v5_config(protocol)
     collision_config["sam2"]["device"] = args.device
     evaluator = SceneEvaluatorRegistry(protocol).resolve("collision_1d")
     output = args.output.expanduser().resolve()
+    run_id = args.run_id or output.name
     output.mkdir(parents=True, exist_ok=True)
     records: list[dict[str, Any]] = []
 
@@ -261,6 +357,7 @@ def main() -> None:
                     output=output,
                     variant=variant,
                     evaluator_config=collision_config,
+                    run_id=run_id,
                 )
             except Exception as exc:
                 result = _failure_record(
@@ -282,6 +379,15 @@ def main() -> None:
                 flush=True,
             )
 
+    implementation_end = _implementation_snapshot(Path(protocol["path"]))
+    implementation["stable_during_run"] = (
+        implementation["source_tree"]["digest"]
+        == implementation_end["source_tree"]["digest"]
+    )
+    implementation["end_source_tree_digest"] = implementation_end[
+        "source_tree"
+    ]["digest"]
+    implementation["git_at_end"] = implementation_end["git"]
     report = {
         "schema_version": "1.0",
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -293,7 +399,12 @@ def main() -> None:
         "protocol": {
             "id": protocol["protocol_id"],
             "fingerprint": protocol["fingerprint"],
+            "runtime_overrides": {
+                "sam2.device": args.device,
+                "save_visualizations": False,
+            },
         },
+        "implementation": implementation,
         "evaluator": evaluator.describe(),
         "records": records,
         "summary": {

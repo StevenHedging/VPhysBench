@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Conditionable physical-video case independent of Dataset views",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "case_id",
+    "scene_id",
+    "text",
+    "assets",
+    "physics",
+    "appearance",
+    "temporal",
+    "provenance",
+    "has_real_reference_video"
+  ],
+  "properties": {
+    "schema_version": {"const": "4.0"},
+    "case_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "scene_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "text": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "prompt",
+        "language",
+        "annotation_source"
+      ],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "prompt": {"type": "string", "minLength": 1},
+        "language": {"type": "string", "minLength": 1},
+        "annotation_source": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "assets": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          {"type": "null"},
+          {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+"
+          }
+        ]
+      }
+    },
+    "physics": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/quantity"}
+    },
+    "appearance": {
+      "type": "object",
+      "description": "Non-physics scenario, appearance, environment, setup-form and acquisition metadata."
+    },
+    "temporal": {"type": "object"},
+    "alignment": {"type": ["object", "null"]},
+    "provenance": {"type": "object"},
+    "has_real_reference_video": {"type": "boolean"}
+  },
+  "not": {
+    "anyOf": [
+      {"required": ["ood"]},
+      {"required": ["prompt"]},
+      {"required": ["input_views"]},
+      {"required": ["physical_parameters"]},
+      {"required": ["view_a_split"]}
+    ]
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "quantity": {
+      "type": "object",
+      "required": ["value", "unit", "annotated"],
+      "properties": {
+        "value": {"type": "number"},
+        "unit": {"type": "string", "minLength": 1},
+        "annotated": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

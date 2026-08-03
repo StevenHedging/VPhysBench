@@ -12,6 +12,7 @@ from .compiler import ManagedTaskBuilder
 from .plugin import (
     _merge_dependency_paths,
     _runtime_dependencies,
+    _seal_prediction_spatial_alignment,
     verify_managed_instance,
 )
 
@@ -107,7 +108,7 @@ class SubmissionBaselinePlugin(BaselinePlugin):
         }
         if stop_after_training or not execute:
             status = "staged" if stop_after_training else "planned"
-            return training, [
+            predictions = [
                 {
                     "job_id": job["job_id"],
                     "case_id": job["case_id"],
@@ -120,6 +121,8 @@ class SubmissionBaselinePlugin(BaselinePlugin):
                 }
                 for job in value["inference"]["jobs"]
             ]
+            _seal_prediction_spatial_alignment(instance, predictions)
+            return training, predictions
 
         submitted = self._submission_records()
         expected_ids = {
@@ -173,4 +176,5 @@ class SubmissionBaselinePlugin(BaselinePlugin):
                 "seed": int(job["seed"]),
                 "import_provenance": imported["manifest_path"],
             })
+        _seal_prediction_spatial_alignment(instance, predictions)
         return training, predictions

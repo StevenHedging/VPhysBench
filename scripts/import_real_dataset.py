@@ -186,59 +186,26 @@ def materialize_case(
     }
 
 
-def materialize_time_restored_case(
+def materialize_source_timing_case(
     case: dict[str, Any],
     source: Path,
     *,
     source_locator: dict[str, Any],
     speed_factor: float,
 ) -> dict[str, Any]:
-    """Keep the slow-motion source and create a lossless timestamp-restored reference."""
+    """Keep source bytes/timing and defer physical-time adaptation to baselines."""
     if speed_factor <= 0:
         raise ValueError("speed_factor must be positive")
     destination = (MANIFEST.parent / case["assets"]["reference_video"]).resolve()
     source_asset = (MANIFEST.parent / case["assets"]["source_video"]).resolve()
     stable_copy(source, source_asset)
+    stable_copy(source, destination)
     source_probe = probe(source_asset)
-
-    if source_probe["duration_s"] is None:
-        raise RuntimeError("source video has no duration")
-    expected_duration = float(source_probe["duration_s"]) / speed_factor
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    intermediate = destination.with_name(f".{destination.stem}.restore_pass1{destination.suffix}")
-    temporary = destination.with_name(f".{destination.stem}.restore_pass2{destination.suffix}")
-    timestamp_expression = f"setts=pts=PTS/{speed_factor:g}:dts=DTS/{speed_factor:g}"
-    commands = [
-        [
-            "ffmpeg", "-v", "error", "-y", "-i", str(source_asset),
-            "-map", "0:v:0", "-an", "-c", "copy", "-bsf:v", timestamp_expression,
-            "-video_track_timescale", "240000", str(intermediate),
-        ],
-        [
-            "ffmpeg", "-v", "error", "-y", "-i", str(intermediate),
-            "-map", "0:v:0", "-an", "-c", "copy", "-t", f"{expected_duration:.9f}",
-            "-video_track_timescale", "240000", "-movflags", "+faststart", str(temporary),
-        ],
-    ]
-    try:
-        for command in commands:
-            subprocess.run(command, check=True)
-        restored_probe = probe(temporary)
-        if restored_probe["width"] != source_probe["width"] or restored_probe["height"] != source_probe["height"]:
-            raise RuntimeError("time restoration changed spatial dimensions")
-        if restored_probe["frames"] != source_probe["frames"]:
-            raise RuntimeError("time restoration changed the number of encoded frames")
-        duration_tolerance = 0.002
-        if abs(float(restored_probe["duration_s"]) - expected_duration) > duration_tolerance:
-            raise RuntimeError(
-                f"restored duration mismatch: expected {expected_duration}, got "
-                f"{restored_probe['duration_s']} (tolerance {duration_tolerance})"
-            )
-        os.replace(temporary, destination)
-    finally:
-        for path in (intermediate, temporary):
-            if path.exists():
-                path.unlink()
+    destination_probe = probe(destination)
+    if sha256(source_asset) != sha256(destination):
+        raise RuntimeError("source-timing reference is not byte-identical")
+    if destination_probe != source_probe:
+        raise RuntimeError("source-timing reference probe changed")
 
     frame = (MANIFEST.parent / case["assets"]["first_frame"]).resolve()
     first_frame(destination, frame)
@@ -253,17 +220,19 @@ def materialize_time_restored_case(
         "source_probe": source_probe,
         "destination": str(destination.relative_to(ROOT)),
         "destination_sha256": sha256(destination),
-        "probe": probe(destination),
+        "probe": destination_probe,
         "first_frame": str(frame.relative_to(ROOT)),
         "temporal": case["temporal"],
         "transformation": {
-            "kind": "data_side_timestamp_restoration",
+            "kind": "preserve_source_timing",
             "encoded_to_physical_speed": speed_factor,
-            "codec_policy": "stream_copy_without_reencoding",
+            "codec_policy": "byte_identical_copy_without_reencoding",
             "frame_policy": "preserve_all_encoded_frames",
-            "commands": commands,
         },
-        "copy_policy": "source_slowmo_is_byte_preserving; reference_has_timestamps_compressed",
+        "copy_policy": (
+            "source and canonical reference are byte-identical; baseline "
+            "adapter handles physical-time restoration"
+        ),
     }
 
 
@@ -427,15 +396,18 @@ def import_free_fall() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             description=f"自由落体：{size} 球从 {height_cm} cm 高度静止释放。",
             extension=".mp4",
             temporal={
-                "encoded_to_physical_speed": 1.0,
-                "time_scale": "real_time",
-                "annotation_source": "data-side restoration from user-confirmed 8x slow-motion source",
+                "encoded_to_physical_speed": 8.0,
+                "time_scale": "source_timing",
+                "annotation_source": (
+                    "original 8x slow-motion timing is preserved; baseline "
+                    "adapters handle physical-time restoration"
+                ),
             },
         )
         case["assets"]["source_video"] = asset_path(
             "free_fall", case_id, "source_slowmo.mp4", group="source"
         )
-        audit.append(materialize_time_restored_case(
+        audit.append(materialize_source_timing_case(
             case,
             source,
             source_locator={"archive": str(COLLISION_FALL_ARCHIVE), "member": member},

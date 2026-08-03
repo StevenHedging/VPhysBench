@@ -1,5 +1,5 @@
 {
-  "case_set_sha256": "072864e8c0e772ba51262e2275abe19c3ecdc48117367f0b7d345cd3edb4079f",
+  "case_set_sha256": "b494909a9499bafb3153a9577b60c44705916398d21c96553193fb0824ec8b29",
   "coverage": "subset",
   "scenes": {
     "collision_1d": {
@@ -421,13 +421,7 @@
         "pendulum_r2_ltot0155mm_lrope0145mm_r010mm_a020deg",
         "pendulum_r2_ltot0180mm_lrope0170mm_r010mm_a020deg"
       ],
-      "test_ood1": [
-        "pendulum_ltot0110mm_lrope0100mm_r010mm_a010deg_ood01",
-        "pendulum_ltot0130mm_lrope0120mm_r010mm_a030deg_ood02",
-        "pendulum_ltot0130mm_lrope0120mm_r010mm_a030deg_ood03",
-        "pendulum_ltot0155mm_lrope0145mm_r010mm_a020deg_ood04",
-        "pendulum_ltot0155mm_lrope0145mm_r010mm_a020deg_ood05"
-      ],
+      "test_ood1": [],
       "train": [
         "pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a005deg",
         "pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a010deg",

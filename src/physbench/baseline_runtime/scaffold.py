@@ -9,10 +9,10 @@ from ..io import write_json
 
 SCENES = [
     "pendulum",
-    "free_fall",
     "collision_1d",
     "inclined_plane_slide",
     "uniform_circular_motion",
+    "parabolic_motion",
 ]
 
 

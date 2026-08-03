@@ -33,6 +33,7 @@ def evaluate_cases(
         partition = item.get(
             "evaluation_partition", case.get("view_a_split", "unspecified")
         )
+        legacy_ood = case.get("ood", {"level": "id", "factors": []})
         results.append({
             "job_id": item["job_id"],
             "case_id": case["case_id"],
@@ -41,8 +42,8 @@ def evaluate_cases(
             "prompt_profile_id": item.get("prompt_profile_id", conditioning),
             "view_a_split": case.get("view_a_split", partition),
             "evaluation_partition": partition,
-            "ood_level": case["ood"]["level"],
-            "ood_factors": case["ood"]["factors"],
+            "ood_level": legacy_ood["level"],
+            "ood_factors": legacy_ood["factors"],
             "metrics": metrics,
             "final_score": score,
             "metric_coverage": coverage,

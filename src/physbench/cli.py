@@ -86,6 +86,7 @@ def _evaluate(args: argparse.Namespace) -> int:
             directory,
             protocol_id=args.protocol_id,
             evaluation_id=args.evaluation_id,
+            save_visualizations=args.save_visualizations,
         )
     else:
         if schema_version != "1.0":
@@ -93,10 +94,10 @@ def _evaluate(args: argparse.Namespace) -> int:
                 "evaluate requires either a schema_version=2.0 AtomicRun or "
                 "a schema_version=1.0 legacy run"
             )
-        if args.protocol_id or args.evaluation_id:
+        if args.protocol_id or args.evaluation_id or args.save_visualizations:
             raise ValueError(
-                "--protocol-id and --evaluation-id are only valid for "
-                "AtomicRun directories"
+                "--protocol-id, --evaluation-id and --save-visualizations "
+                "are only valid for AtomicRun directories"
             )
         result = reevaluate_run(directory, args.scene_config_dir)
     print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -141,6 +142,7 @@ def _atomic_run(args: argparse.Namespace) -> int:
         scene_ids=args.scene_id,
         groups=args.group,
         case_ids=args.case_id,
+        save_visualizations=args.save_visualizations,
     )
     print(directory)
     return 0
@@ -170,6 +172,7 @@ def _matrix_run(args: argparse.Namespace) -> int:
         matrix_id=args.matrix_id,
         execute=args.execute,
         stop_after_training=args.stop_after_training,
+        save_visualizations=args.save_visualizations,
     )
     for directory in directories:
         print(directory)
@@ -278,6 +281,11 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--run-dir", required=True)
     evaluate.add_argument("--protocol-id")
     evaluate.add_argument("--evaluation-id")
+    evaluate.add_argument(
+        "--save-visualizations",
+        action="store_true",
+        help="save external per-Case visualization videos (default: off)",
+    )
     evaluate.add_argument("--scene-config-dir", default=str(DEFAULT_SCENES))
     evaluate.set_defaults(func=_evaluate)
 
@@ -318,6 +326,11 @@ def build_parser() -> argparse.ArgumentParser:
     atomic.add_argument("--case-id", action="append")
     atomic.add_argument("--execute", action="store_true")
     atomic.add_argument("--stop-after-training", action="store_true")
+    atomic.add_argument(
+        "--save-visualizations",
+        action="store_true",
+        help="save external per-Case visualization videos (default: off)",
+    )
     atomic.set_defaults(func=_atomic_run)
 
     task_build = sub.add_parser(
@@ -342,6 +355,11 @@ def build_parser() -> argparse.ArgumentParser:
     matrix.add_argument("--matrix-id", required=True)
     matrix.add_argument("--execute", action="store_true")
     matrix.add_argument("--stop-after-training", action="store_true")
+    matrix.add_argument(
+        "--save-visualizations",
+        action="store_true",
+        help="save external per-Case visualization videos (default: off)",
+    )
     matrix.set_defaults(func=_matrix_run)
 
     baseline = sub.add_parser(

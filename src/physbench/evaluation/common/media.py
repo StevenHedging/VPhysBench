@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from math import gcd
 from pathlib import Path
+from typing import Any
 
 import cv2
 import numpy as np
@@ -57,6 +59,15 @@ class SampledVideo:
         )
 
 
+@dataclass(frozen=True)
+class SharedSpatialPlan:
+    width: int
+    height: int
+    reference_crop_xywh: tuple[int, int, int, int]
+    prediction_crop_xywh: tuple[int, int, int, int]
+    provenance: dict[str, Any]
+
+
 def probe_video(path: Path) -> VideoInfo:
     capture = cv2.VideoCapture(str(path))
     if not capture.isOpened():
@@ -78,6 +89,228 @@ def probe_video(path: Path) -> VideoInfo:
         width=width,
         height=height,
         last_frame_time_s=(count - 1) / fps,
+    )
+
+
+def probe_image_size(path: Path) -> tuple[int, int]:
+    source = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+    if source is None or source.ndim < 2:
+        raise VideoProtocolError(
+            "conditioning_image_unreadable",
+            f"cannot read conditioning image: {path}",
+        )
+    height, width = source.shape[:2]
+    if width <= 0 or height <= 0:
+        raise VideoProtocolError(
+            "conditioning_image_invalid",
+            f"conditioning image has invalid size: {path}",
+        )
+    return int(width), int(height)
+
+
+def _largest_exact_aspect_size(
+    source_width: int,
+    source_height: int,
+    *,
+    maximum_width: int,
+    maximum_height: int,
+) -> tuple[int, int]:
+    divisor = gcd(source_width, source_height)
+    unit_width = source_width // divisor
+    unit_height = source_height // divisor
+    multiplier = min(
+        maximum_width // unit_width,
+        maximum_height // unit_height,
+    )
+    if multiplier <= 0:
+        raise VideoProtocolError(
+            "spatial_target_too_small",
+            "protocol bounds cannot represent the reference aspect ratio "
+            f"without distortion: reference={source_width}x{source_height}, "
+            f"bounds={maximum_width}x{maximum_height}",
+        )
+    return unit_width * multiplier, unit_height * multiplier
+
+
+def _centered_contain_rect(
+    source_width: int,
+    source_height: int,
+    *,
+    canvas_width: int,
+    canvas_height: int,
+) -> tuple[int, int, int, int]:
+    scale = min(
+        canvas_width / source_width,
+        canvas_height / source_height,
+    )
+    width = max(1, int(round(source_width * scale)))
+    height = max(1, int(round(source_height * scale)))
+    if width * source_height != height * source_width:
+        raise VideoProtocolError(
+            "conditioning_aspect_not_exact",
+            "model canvas cannot contain this conditioning view at an exact "
+            "integer aspect ratio; choose a compatible output bucket: "
+            f"source={source_width}x{source_height}, "
+            f"canvas={canvas_width}x{canvas_height}, "
+            f"contained={width}x{height}",
+        )
+    return (
+        (canvas_width - width) // 2,
+        (canvas_height - height) // 2,
+        width,
+        height,
+    )
+
+
+def resolve_shared_spatial_plan(
+    *,
+    reference_info: VideoInfo,
+    prediction_info: VideoInfo,
+    maximum_width: int,
+    maximum_height: int,
+    alignment_contract: dict[str, Any] | None,
+    expected_conditioning_asset: str | None,
+) -> SharedSpatialPlan:
+    """Resolve one no-padding coordinate system for reference and prediction.
+
+    An I2V prediction may use a model canvas whose unused margin came from an
+    aspect-preserving contain transform.  Only that declared margin is removed;
+    physical reference content is never cropped.  With no contract, the two
+    videos must already have exactly the same aspect ratio.
+    """
+    target_width, target_height = _largest_exact_aspect_size(
+        reference_info.width,
+        reference_info.height,
+        maximum_width=maximum_width,
+        maximum_height=maximum_height,
+    )
+    reference_crop = (
+        0,
+        0,
+        reference_info.width,
+        reference_info.height,
+    )
+    if alignment_contract is None:
+        if (
+            reference_info.width * prediction_info.height
+            != reference_info.height * prediction_info.width
+        ):
+            raise VideoProtocolError(
+                "prediction_spatial_contract_missing",
+                "reference and prediction aspect ratios differ and the "
+                "prediction has no sealed I2V spatial-alignment contract",
+            )
+        prediction_crop = (
+            0,
+            0,
+            prediction_info.width,
+            prediction_info.height,
+        )
+        mode = "already_exact_full_frame"
+        contract_value = None
+    else:
+        required = {
+            "schema_version",
+            "policy",
+            "conditioning_asset",
+            "conditioning_transform",
+            "model_canvas",
+            "model_canvas_margin_fill",
+            "evaluation_view",
+        }
+        if set(alignment_contract) != required:
+            raise VideoProtocolError(
+                "prediction_spatial_contract_invalid",
+                "I2V spatial-alignment contract fields are invalid",
+            )
+        if (
+            alignment_contract.get("schema_version") != "1.0"
+            or alignment_contract.get("policy")
+            != "i2v_conditioning_content_v1"
+            or alignment_contract.get("conditioning_transform")
+            != "aspect_preserving_contain"
+            or alignment_contract.get("model_canvas_margin_fill")
+            != "edge_replicate"
+            or alignment_contract.get("evaluation_view")
+            != "exclude_model_canvas_padding"
+        ):
+            raise VideoProtocolError(
+                "prediction_spatial_contract_unsupported",
+                "prediction does not declare the supported full-content "
+                "I2V contain-and-crop alignment policy",
+            )
+        if (
+            expected_conditioning_asset is None
+            or alignment_contract.get("conditioning_asset")
+            != expected_conditioning_asset
+        ):
+            raise VideoProtocolError(
+                "prediction_conditioning_asset_mismatch",
+                "prediction spatial contract is not bound to this Case's "
+                "first-frame asset",
+            )
+        canvas = alignment_contract.get("model_canvas")
+        if not isinstance(canvas, dict) or set(canvas) != {"width", "height"}:
+            raise VideoProtocolError(
+                "prediction_spatial_contract_invalid",
+                "model_canvas must contain exactly width and height",
+            )
+        if (
+            not isinstance(canvas["width"], int)
+            or isinstance(canvas["width"], bool)
+            or not isinstance(canvas["height"], int)
+            or isinstance(canvas["height"], bool)
+            or canvas["width"] <= 0
+            or canvas["height"] <= 0
+        ):
+            raise VideoProtocolError(
+                "prediction_spatial_contract_invalid",
+                "model_canvas width and height must be positive integers",
+            )
+        canvas_width = canvas["width"]
+        canvas_height = canvas["height"]
+        if (
+            canvas_width != prediction_info.width
+            or canvas_height != prediction_info.height
+        ):
+            raise VideoProtocolError(
+                "prediction_model_canvas_mismatch",
+                "prediction video dimensions differ from its sealed model "
+                f"canvas: video={prediction_info.width}x{prediction_info.height}, "
+                f"contract={canvas_width}x{canvas_height}",
+            )
+        prediction_crop = _centered_contain_rect(
+            reference_info.width,
+            reference_info.height,
+            canvas_width=canvas_width,
+            canvas_height=canvas_height,
+        )
+        mode = "sealed_i2v_conditioning_content"
+        contract_value = alignment_contract
+    return SharedSpatialPlan(
+        width=target_width,
+        height=target_height,
+        reference_crop_xywh=reference_crop,
+        prediction_crop_xywh=prediction_crop,
+        provenance={
+            "policy": "shared_reference_content_no_pad_v1",
+            "mode": mode,
+            "reference_source_size": [
+                reference_info.width,
+                reference_info.height,
+            ],
+            "prediction_source_size": [
+                prediction_info.width,
+                prediction_info.height,
+            ],
+            "reference_crop_xywh": list(reference_crop),
+            "prediction_crop_xywh": list(prediction_crop),
+            "target_size": [target_width, target_height],
+            "padding_used_for_evaluation": False,
+            "aspect_ratio_distortion": False,
+            "physical_reference_content_cropped": False,
+            "alignment_contract": contract_value,
+        },
     )
 
 
@@ -109,6 +342,87 @@ def _letterbox(
     }
 
 
+def _crop_resize_no_pad(
+    frame: np.ndarray,
+    *,
+    width: int,
+    height: int,
+    crop_xywh: tuple[int, int, int, int],
+) -> tuple[np.ndarray, dict]:
+    """Crop a declared physical view and resize it without padding/distortion."""
+    source_height, source_width = frame.shape[:2]
+    x, y, crop_width, crop_height = crop_xywh
+    if (
+        x < 0
+        or y < 0
+        or crop_width <= 0
+        or crop_height <= 0
+        or x + crop_width > source_width
+        or y + crop_height > source_height
+    ):
+        raise VideoProtocolError(
+            "invalid_spatial_crop",
+            "spatial crop lies outside decoded frame: "
+            f"crop={crop_xywh}, frame={source_width}x{source_height}",
+        )
+    if crop_width * height != crop_height * width:
+        raise VideoProtocolError(
+            "spatial_aspect_ratio_mismatch",
+            "crop and target must have exactly the same aspect ratio: "
+            f"crop={crop_width}x{crop_height}, target={width}x{height}",
+        )
+    cropped = frame[y : y + crop_height, x : x + crop_width]
+    scale = width / crop_width
+    interpolation = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
+    resized = cv2.resize(
+        cropped,
+        (width, height),
+        interpolation=interpolation,
+    )
+    return resized, {
+        "policy": "reference_content_crop_resize_no_pad",
+        "crop_xywh": [x, y, crop_width, crop_height],
+        "scale": scale,
+        "source_size": [source_width, source_height],
+        "target_size": [width, height],
+        "padding": None,
+    }
+
+
+def _normalize_frame(
+    frame: np.ndarray,
+    *,
+    width: int,
+    height: int,
+    pad_value: int,
+    spatial_policy: str,
+    crop_xywh: tuple[int, int, int, int] | None,
+) -> tuple[np.ndarray, dict]:
+    if spatial_policy == "preserve_aspect_ratio_letterbox":
+        return _letterbox(
+            frame,
+            width=width,
+            height=height,
+            pad_value=pad_value,
+        )
+    if spatial_policy == "reference_content_crop_resize_no_pad":
+        if crop_xywh is None:
+            raise VideoProtocolError(
+                "spatial_crop_missing",
+                "no-pad spatial normalization requires crop_xywh",
+            )
+        return _crop_resize_no_pad(
+            frame,
+            width=width,
+            height=height,
+            crop_xywh=crop_xywh,
+        )
+    raise VideoProtocolError(
+        "invalid_spatial_policy",
+        f"unsupported spatial normalization policy: {spatial_policy!r}",
+    )
+
+
 def sample_video(
     path: Path,
     *,
@@ -120,6 +434,8 @@ def sample_video(
     duration_tolerance_s: float = 0.02,
     decode_policy: str = "legacy_random_seek",
     allow_partial: bool = False,
+    spatial_policy: str = "preserve_aspect_ratio_letterbox",
+    crop_xywh: tuple[int, int, int, int] | None = None,
 ) -> SampledVideo:
     if not sample_times_s:
         raise VideoProtocolError("empty_timeline", "sample timeline is empty")
@@ -210,8 +526,13 @@ def sample_video(
                     "video_decode_failed",
                     f"failed to decode frame {index} from {path}",
                 )
-            normalized, current_transform = _letterbox(
-                frame, width=width, height=height, pad_value=pad_value
+            normalized, current_transform = _normalize_frame(
+                frame,
+                width=width,
+                height=height,
+                pad_value=pad_value,
+                spatial_policy=spatial_policy,
+                crop_xywh=crop_xywh,
             )
             transform = transform or current_transform
             frames.append(normalized)
@@ -227,6 +548,8 @@ def sample_video(
                 info,
                 width=width,
                 height=height,
+                spatial_policy=spatial_policy,
+                crop_xywh=crop_xywh,
             ),
             available=available,
         )
@@ -259,8 +582,13 @@ def sample_video(
                 )
             if decoded_index not in requested:
                 continue
-            normalized, current_transform = _letterbox(
-                frame, width=width, height=height, pad_value=pad_value
+            normalized, current_transform = _normalize_frame(
+                frame,
+                width=width,
+                height=height,
+                pad_value=pad_value,
+                spatial_policy=spatial_policy,
+                crop_xywh=crop_xywh,
             )
             normalized_by_index[decoded_index] = normalized
             transform_by_index[decoded_index] = current_transform
@@ -319,6 +647,8 @@ def sample_video(
                 info,
                 width=width,
                 height=height,
+                spatial_policy=spatial_policy,
+                crop_xywh=crop_xywh,
             )
         ),
         available=available,
@@ -340,7 +670,42 @@ def _spatial_transform_from_info(
     *,
     width: int,
     height: int,
+    spatial_policy: str = "preserve_aspect_ratio_letterbox",
+    crop_xywh: tuple[int, int, int, int] | None = None,
 ) -> dict:
+    if spatial_policy == "reference_content_crop_resize_no_pad":
+        if crop_xywh is None:
+            raise VideoProtocolError(
+                "spatial_crop_missing",
+                "no-pad spatial normalization requires crop_xywh",
+            )
+        x, y, crop_width, crop_height = crop_xywh
+        if (
+            x < 0
+            or y < 0
+            or crop_width <= 0
+            or crop_height <= 0
+            or x + crop_width > info.width
+            or y + crop_height > info.height
+            or crop_width * height != crop_height * width
+        ):
+            raise VideoProtocolError(
+                "invalid_spatial_crop",
+                "no-pad crop is incompatible with source/target metadata",
+            )
+        return {
+            "policy": spatial_policy,
+            "crop_xywh": list(crop_xywh),
+            "scale": width / crop_width,
+            "source_size": [info.width, info.height],
+            "target_size": [width, height],
+            "padding": None,
+        }
+    if spatial_policy != "preserve_aspect_ratio_letterbox":
+        raise VideoProtocolError(
+            "invalid_spatial_policy",
+            f"unsupported spatial normalization policy: {spatial_policy!r}",
+        )
     scale = min(width / info.width, height / info.height)
     resized_width = max(1, int(round(info.width * scale)))
     resized_height = max(1, int(round(info.height * scale)))

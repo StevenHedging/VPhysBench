@@ -83,6 +83,7 @@ def _render_atomic_report(
         f"- Training seed：`{run['training_seed']}`\n",
         f"- Train cases：`{len(plan['train_case_ids'])}`\n",
         f"- Inference jobs：`{len(plan['jobs'])}`\n",
+        f"- Visualization videos：`{run['save_visualizations']}`\n",
         f"- Status：`{run['status']}`\n\n",
         "## Evaluation\n\n",
         f"- Evaluation status：`{summary['status']}`\n",
@@ -121,6 +122,7 @@ def run_atomic(
     scene_ids: list[str] | None = None,
     groups: list[str] | None = None,
     case_ids: list[str] | None = None,
+    save_visualizations: bool = False,
 ) -> Path:
     dataset = load_dataset(dataset_path, check_assets=check_assets)
     task = load_task(task_path)
@@ -261,6 +263,8 @@ def run_atomic(
         asset_root=dataset.asset_root,
         protocol=evaluation_protocol,
         output_dir=run_dir / "evaluation",
+        run_id=identifier,
+        save_visualizations=save_visualizations,
     )
     # Compatibility projections for consumers of the original v2 scaffold.
     write_jsonl(run_dir / "evaluation" / "case_metrics.jsonl", case_metrics)
@@ -296,6 +300,7 @@ def run_atomic(
         "evaluation_status": summary["status"],
         "evaluation_coverage": summary["coverage"],
         "evaluation_score": summary["score"],
+        "save_visualizations": bool(save_visualizations),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     write_json(run_dir / "run.json", run)
@@ -349,6 +354,7 @@ def run_matrix(
     matrix_id: str,
     execute: bool = False,
     stop_after_training: bool = False,
+    save_visualizations: bool = False,
 ) -> list[Path]:
     if len(baseline_paths) < 2:
         raise ValueError("a task matrix requires at least two Baselines")
@@ -404,6 +410,7 @@ def run_matrix(
         "status": "running",
         "orchestration_status": "running",
         "atomic_run_statuses": {},
+        "save_visualizations": bool(save_visualizations),
     }
     write_json(index_path, index)
     run_dirs = []
@@ -421,6 +428,7 @@ def run_matrix(
                 run_id=f"{matrix_id}__{baseline.baseline_id}",
                 execute=execute,
                 stop_after_training=stop_after_training,
+                save_visualizations=save_visualizations,
             )
             actual_run = load_json(run_dir / "run.json")
             if (

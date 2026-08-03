@@ -731,6 +731,7 @@ def _git_metadata(project_root: Path) -> dict[str, Any]:
                 "src/physbench/orchestration/evaluation_variants.py",
                 "configs/evaluation/protocols",
                 "schemas/v2/evaluation_protocol.schema.json",
+                "schemas/v3/evaluation_protocol.schema.json",
             ],
             check=True,
             capture_output=True,
@@ -765,6 +766,10 @@ def _evaluator_source_manifest(project_root: Path) -> dict[str, Any]:
         project_root
         / "schemas"
         / "v2"
+        / "evaluation_protocol.schema.json",
+        project_root
+        / "schemas"
+        / "v3"
         / "evaluation_protocol.schema.json",
     ])
     records = [
@@ -1054,6 +1059,7 @@ def reevaluate_atomic_variant(
     protocol_id: str,
     evaluation_id: str,
     protocol_root: str | Path | None = None,
+    save_visualizations: bool = False,
 ) -> dict[str, Any]:
     """Create an immutable, coexisting evaluation of a sealed AtomicRun."""
     root = Path(run_dir).resolve(strict=True)
@@ -1191,6 +1197,7 @@ def reevaluate_atomic_variant(
         "run_path": str(root),
         "variant_path": str(destination),
         "workflow_status": "running",
+        "save_visualizations": bool(save_visualizations),
         "created_at": _utc_now(),
         "native_protocol": {
             "id": native_protocol["protocol_id"],
@@ -1215,6 +1222,8 @@ def reevaluate_atomic_variant(
             asset_root=instance["source"]["asset_root"],
             protocol=protocol_snapshot,
             output_dir=destination / "evaluation",
+            run_id=run["run_id"],
+            save_visualizations=save_visualizations,
         )
         record.update({
             "workflow_status": "complete",

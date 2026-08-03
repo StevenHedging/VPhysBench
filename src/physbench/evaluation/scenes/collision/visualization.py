@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import os
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +8,8 @@ import numpy as np
 
 from ....io import canonical_sha256, sha256_file, write_json
 from ...common.artifacts import write_rows_csv
+from ...common.artifacts.layout import visualization_bundle_directory
+from ...common.artifacts.video import CompatibleMp4Writer
 
 
 _ROLE_NAMES = ("striker", "target_1", "target_2")
@@ -22,22 +22,19 @@ _ROLE_COLORS = (
 
 def _artifact_directory(
     request: Any, *, config: dict[str, Any]
-) -> tuple[Path, str]:
-    environment_name = str(
-        config.get("external_root_env", "PHYSBENCH_VISUALIZATION_ROOT")
+) -> tuple[Path, Path, Path]:
+    del config
+    return visualization_bundle_directory(
+        request,
+        fallback_scene="collision_1d",
+        identity_payload={
+            "run_id": getattr(request, "run_id", None),
+            "job_id": request.job.get("job_id"),
+            "case": request.case,
+            "prediction": getattr(request, "prediction", None),
+            "evaluator_config": request.evaluator_config,
+        },
     )
-    root_value = os.environ.get(environment_name) or config["external_root"]
-    root = Path(root_value).expanduser()
-    namespace = str(config.get("namespace", "collision"))
-    identity = hashlib.sha256(
-        str(request.artifact_dir.resolve()).encode("utf-8")
-    ).hexdigest()[:16]
-    relative = (
-        Path(namespace)
-        / request.case["case_id"]
-        / f"{request.job['job_id']}-{identity}"
-    )
-    return root / relative, relative.as_posix()
 
 
 def _overlay_instances(
@@ -231,14 +228,12 @@ def _write_video(
     panel_width = int(config.get("panel_width", 640))
     panel_height = int(config.get("panel_height", 360))
     fps = float(config.get("fps", 16.0))
-    writer = cv2.VideoWriter(
-        str(path),
-        cv2.VideoWriter_fourcc(*"mp4v"),
-        fps,
-        (2 * panel_width, 2 * panel_height),
+    writer = CompatibleMp4Writer(
+        path,
+        fps=fps,
+        size=(2 * panel_width, 2 * panel_height),
+        codec=str(config.get("codec", "h264")),
     )
-    if not writer.isOpened():
-        raise RuntimeError(f"cannot create collision visualization: {path}")
     try:
         reference_seed = reference_observation["prompt_builder"].get(
             "seed_frame"
@@ -306,8 +301,11 @@ def _write_video(
                     ]
                 )
             )
-    finally:
-        writer.release()
+    except BaseException:
+        writer.abort()
+        raise
+    else:
+        writer.close()
 
 
 def _save_similarity_plot(
@@ -433,30 +431,43 @@ def write_collision_visualization(
     reference_event_frame: int | None,
     prediction_event_frame: int | None,
 ) -> dict[str, Any]:
-    """Write a best-effort external diagnostic and a sealed local manifest."""
-    local_manifest = (
-        request.artifact_dir / "collision_visualization_manifest.json"
-    )
+    """Write a best-effort run-owned diagnostic and local manifest."""
+    local_manifest = request.artifact_dir / "visualization_manifest.json"
+    if not bool(getattr(request, "save_visualizations", False)):
+        manifest = {
+            "schema_version": "1.0",
+            "status": "disabled",
+            "reason": "runtime_save_visualizations_false",
+            "storage_policy": "run_owned_video_disabled_by_run_policy",
+        }
+        write_json(local_manifest, manifest)
+        return {
+            "collision_visualization_manifest": str(local_manifest),
+            "collision_visualization": manifest,
+        }
     if not config.get("enabled", True):
         manifest = {
             "schema_version": "1.0",
             "status": "disabled",
-            "storage_policy": "external_unsealed_diagnostic",
+            "storage_policy": "run_owned_visualization_disabled_by_protocol",
         }
         write_json(local_manifest, manifest)
         return {"collision_visualization_manifest": str(local_manifest)}
 
     try:
-        directory, relative = _artifact_directory(request, config=config)
+        directory, relative, visualization_root = _artifact_directory(
+            request,
+            config=config,
+        )
         directory.mkdir(parents=True, exist_ok=True)
         paths = {
-            "observation_video": directory / "collision_observation.mp4",
+            "observation_video": directory / "visualization.mp4",
             "instance_similarity": (
                 directory / "collision_instance_similarity.png"
             ),
             "event_timeline": directory / "collision_event_timeline.png",
             "tracks_csv": directory / "collision_tracks.csv",
-            "observation_json": directory / "collision_observation.json",
+            "observation_json": directory / "audit.json",
         }
         _write_video(
             paths["observation_video"],
@@ -507,13 +518,10 @@ def write_collision_visualization(
                 "prediction_observation": prediction_observation,
             },
         )
-        repository_link = str(config.get("repository_link", "visualizations"))
         files = {
             name: {
                 "path": str(path.resolve()),
-                "repository_path": (
-                    Path(repository_link) / relative / path.name
-                ).as_posix(),
+                "visualization_path": (relative / path.name).as_posix(),
                 "sha256": sha256_file(path),
                 "size_bytes": path.stat().st_size,
             }
@@ -526,12 +534,12 @@ def write_collision_visualization(
                 request.evaluator_config
             ),
             "storage_policy": (
-                "external_unsealed_diagnostic_with_local_hashed_manifest"
+                "run_owned_evaluation_artifact_with_local_hashed_manifest"
             ),
-            "external_directory": str(directory.resolve()),
-            "repository_directory": (
-                Path(repository_link) / relative
-            ).as_posix(),
+            "run_id": getattr(request, "run_id", None),
+            "visualization_root": str(visualization_root),
+            "visualization_directory": str(directory.resolve()),
+            "visualization_relative_directory": relative.as_posix(),
             "files": files,
         }
     except Exception as exc:

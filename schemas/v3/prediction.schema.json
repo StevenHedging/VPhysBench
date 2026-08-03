@@ -18,6 +18,41 @@
     "evaluation_partition": {"type": "string", "minLength": 1},
     "status": {"type": "string", "minLength": 1},
     "video_path": {"type": ["string", "null"]},
-    "seed": {"type": "integer"}
+    "seed": {"type": "integer"},
+    "spatial_alignment": {"$ref": "#/$defs/spatialAlignment"}
+  },
+  "$defs": {
+    "spatialAlignment": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "policy",
+        "conditioning_asset",
+        "conditioning_transform",
+        "model_canvas",
+        "model_canvas_margin_fill",
+        "evaluation_view"
+      ],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "policy": {"const": "i2v_conditioning_content_v1"},
+        "conditioning_asset": {"type": "string", "minLength": 1},
+        "conditioning_transform": {
+          "const": "aspect_preserving_contain"
+        },
+        "model_canvas": {
+          "type": "object",
+          "required": ["width", "height"],
+          "properties": {
+            "width": {"type": "integer", "minimum": 1},
+            "height": {"type": "integer", "minimum": 1}
+          },
+          "additionalProperties": false
+        },
+        "model_canvas_margin_fill": {"const": "edge_replicate"},
+        "evaluation_view": {"const": "exclude_model_canvas_padding"}
+      },
+      "additionalProperties": false
+    }
   }
 }

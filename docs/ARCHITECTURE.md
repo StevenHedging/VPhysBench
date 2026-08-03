@@ -7,7 +7,7 @@
 | 对象 | 所有者 | 负责 | 不负责 |
 | --- | --- | --- | --- |
 | DatasetSnapshot / Case | Dataset | 原始 prompt、媒体、物理/环境标注、View、来源与哈希 | 模型输入格式、推理参数 |
-| TaskSpec | Benchmark | family、选择、seed、OOD2、评估协议 | 是否使用物理信息、prompt 拼接、模型路径 |
+| TaskSpec | Benchmark | family、选择、seed、报告策略、评估协议 | 是否使用物理信息、prompt拼接、模型路径 |
 | CanonicalTaskPlan | Benchmark | 训练 case、评测 job、partition 与 seed 主表 | native model input |
 | Baseline Bundle | Baseline | 模型身份、能力、input policy、adapter、trainer、runner/driver | 改写数据划分和正式评分 |
 | BaselineTaskInstance | Compiler | 适配结果、执行图、cache binding、身份 seal | 重新抽样或换 seed |
@@ -36,23 +36,24 @@ Dataset 不认识具体模型；Task 不携带模型输入策略；Baseline 不�
 当前入口：
 
 ```text
-datasets/physics_video/releases/4.0.0/dataset.json
+datasets/physics_video/releases/6.0.0/dataset.json
 ```
 
-Dataset 和 Case 使用 schema 3.0。每个 Case 同时拥有：
+Dataset和Case使用schema 4.0。每个Case同时拥有：
 
 - `text.prompt`：模型无关、未注入结构化物理量的原始文本描述；
 - `assets.first_frame` 等媒体；
 - `physics`：带 `value`、`unit`、`annotated` 的结构化物理量；
-- `appearance`、`temporal`、`ood`；
+- `appearance`、`temporal`；
 - evaluator-only reference 与 provenance。
 
-原始 prompt 与物理标注并列保存，不由 Task 或 Baseline 配置临时生成。Release 4.0.0
-相对 3.0.0 只迁移了该数据契约，没有改变 214 个 case、View 或媒体字节。
+ID/OOD不再是Case字段，而是View A中相对于冻结train的test annotation。原始prompt与
+物理标注并列保存，不由Task或Baseline配置临时生成。Release 6.0.0是5.1.0的元数据
+迁移，没有改变604个Case对应的媒体字节。
 
 ## 3. Task 是模型无关的评测定义
 
-Task schema 3.0 只允许：
+当前Task schema 4.0只允许：
 
 ```text
 schema_version
@@ -60,7 +61,6 @@ task_id
 family
 dataset_id / dataset_view
 selection
-ood2
 seeds
 evaluation
 ```
@@ -69,10 +69,10 @@ evaluation
 
 | 文件 | family | View |
 | --- | --- | --- |
-| `tasks/official/five_scene_finetune_eval.json` | `finetune_eval` | A |
-| `tasks/official/five_scene_direct_eval.json` | `direct_eval` | B |
+| `tasks/official/six_scene_finetune_eval.json` | `finetune_eval` | A |
+| `tasks/official/six_scene_direct_eval.json` | `direct_eval` | B |
 
-Task 中没有物理使用开关。Planner 只依赖 Dataset 与 Task，生成 schema 3.0
+Task中没有物理使用开关。Planner只依赖Dataset与Task，生成schema 4.0
 `CanonicalTaskPlan`：
 
 ```text
@@ -84,7 +84,12 @@ jobs[]
   ├── case_id / scene_id
   ├── evaluation_partition
   └── seed
+evaluation_annotations[job_id]
+reporting_policy
 ```
+
+finetune job的主partition统一为`test`。`evaluation_annotations`携带ID/OOD/mixed和因素，
+只控制诊断汇总；总体Test仍是官方主分。
 
 Job ID 也不包含模型输入策略。不同 Baseline 编译同一 Dataset + Task 时，上述 plan
 必须完全一致。
@@ -281,6 +286,10 @@ AtomicRun 已成功创建并核对 TaskInstance digest；`status` 才汇总子�
 
 Run 冻结 Dataset/Task/Baseline、TaskInstance、job、预测、日志、评估和所有关键
 fingerprint。除模型代码、权重与可重建 cache 外，输出必须位于当前 run。
+
+可选过程视频也遵守这一所有权边界：canonical 结果写入
+`evaluation/visualizations/`，并存式重评写入各 variant 自己的
+`evaluation/visualizations/`；禁止使用机器级全局目录或逃逸 symlink。
 
 ## 10. Evaluation
 

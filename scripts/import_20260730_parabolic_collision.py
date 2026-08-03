@@ -387,11 +387,13 @@ def parabolic_case(
         "physics": physics,
         "appearance": appearance,
         "temporal": {
-            "encoded_to_physical_speed": 1.0,
-            "time_scale": "real_time",
+            "encoded_to_physical_speed": record["alignment"][
+                "physical_playback_speedup"
+            ],
+            "time_scale": "source_timing",
             "annotation_source": (
-                "native high-frame-rate capture normalized to 24 fps while "
-                "preserving physical time"
+                "source frame rate and every frame in the cleaned source "
+                "window are preserved; baseline adapters handle timing"
             ),
         },
         "alignment": {
@@ -403,6 +405,9 @@ def parabolic_case(
                 record["alignment"]["source_end_frame_exclusive"]
             ),
             "source_fps": record["alignment"]["source_fps"],
+            "physical_playback_speedup": record["alignment"][
+                "physical_playback_speedup"
+            ],
             "source_crop": record["alignment"]["crop"],
             "output_size": {
                 "width": record["alignment"]["output_width"],
@@ -565,10 +570,10 @@ def collision_case(
         "appearance": appearance,
         "temporal": {
             "encoded_to_physical_speed": 1.0,
-            "time_scale": "real_time",
+            "time_scale": "source_timing",
             "annotation_source": (
-                "native approximately 240 fps capture normalized to 24 fps "
-                "while preserving physical time"
+                "source frame rate and every frame in the cleaned source "
+                "window are preserved; baseline adapters handle timing"
             ),
         },
         "alignment": {

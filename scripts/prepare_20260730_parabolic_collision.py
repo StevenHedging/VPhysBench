@@ -60,9 +60,10 @@ PARABOLIC_SCAN_WIDTH = 216
 PARABOLIC_SCAN_HEIGHT = 384
 COLLISION_SCAN_WIDTH = 480
 COLLISION_SCAN_HEIGHT = 270
-TARGET_FPS = 24
-MAX_OUTPUT_FRAMES = 121
-MIN_OUTPUT_FRAMES = 5
+# Used only to interpret the legacy 24 fps collision endpoints while
+# reconstructing their source-frame windows. Dataset assets themselves retain
+# every frame in the selected source window at the source timing.
+LEGACY_ALIGNMENT_FPS = 24
 
 
 @dataclass(frozen=True)
@@ -679,7 +680,7 @@ def align_collision() -> list[dict[str, Any]]:
         approximate = round(
             int(record["alignment"]["output_start_frame"])
             * source_fps
-            / TARGET_FPS
+            / LEGACY_ALIGNMENT_FPS
         )
         old_end_24 = (
             int(record["alignment"]["output_start_frame"])
@@ -687,7 +688,7 @@ def align_collision() -> list[dict[str, Any]]:
         )
         end = min(
             int(raw["media"]["frames"]),
-            round(old_end_24 * source_fps / TARGET_FPS),
+            round(old_end_24 * source_fps / LEGACY_ALIGNMENT_FPS),
         )
         start, circles = collision_start_frame(
             source,
@@ -767,23 +768,15 @@ def align_collision() -> list[dict[str, Any]]:
 
 def output_frame_count(record: dict[str, Any]) -> int:
     alignment = record["alignment"]
-    source_frames = (
+    frames = (
         int(alignment["source_end_frame_exclusive"])
         - int(alignment["source_start_frame"])
     )
-    physical_seconds = source_frames / float(alignment["source_fps"])
-    physical_seconds /= float(alignment["physical_playback_speedup"])
-    # ffmpeg's fps filter emits only timestamps strictly covered by the
-    # trimmed interval. Use the conservative floor so the requested 4n+1
-    # prefix never requires cloning or inventing a terminal frame.
-    available = max(1, int(math.floor(physical_seconds * TARGET_FPS + 1e-6)))
-    maximum = min(MAX_OUTPUT_FRAMES, available)
-    result = ((maximum - 1) // 4) * 4 + 1
-    if result < MIN_OUTPUT_FRAMES:
+    if frames < 1:
         raise ValueError(
-            f"cleaned clip has only {result} usable frames: {record['case_id']}"
+            f"cleaned clip has no usable frames: {record['case_id']}"
         )
-    return result
+    return frames
 
 
 def encode_one(record: dict[str, Any]) -> dict[str, Any]:
@@ -796,14 +789,11 @@ def encode_one(record: dict[str, Any]) -> dict[str, Any]:
     video = root / "reference.mp4"
     first = root / "first_frame.png"
     frames = output_frame_count(record)
-    speedup = float(alignment["physical_playback_speedup"])
-    setpts = "PTS-STARTPTS" if speedup == 1 else f"(PTS-STARTPTS)/{speedup:g}"
     filters = (
         f"trim=start_frame={alignment['source_start_frame']}:"
         f"end_frame={alignment['source_end_frame_exclusive']},"
-        f"setpts={setpts},"
+        "setpts=PTS-STARTPTS,"
         f"crop={crop['width']}:{crop['height']}:{crop['x']}:{crop['y']},"
-        f"fps={TARGET_FPS},"
         f"scale={alignment['output_width']}:{alignment['output_height']}:"
         "flags=lanczos"
     )
@@ -818,8 +808,6 @@ def encode_one(record: dict[str, Any]) -> dict[str, Any]:
             record["source_video"],
             "-vf",
             filters,
-            "-frames:v",
-            str(frames),
             "-an",
             "-c:v",
             "libx264",
@@ -829,6 +817,8 @@ def encode_one(record: dict[str, Any]) -> dict[str, Any]:
             "18",
             "-pix_fmt",
             "yuv420p",
+            "-vsync",
+            "0",
             "-movflags",
             "+faststart",
             str(temporary),

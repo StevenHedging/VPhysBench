@@ -206,6 +206,35 @@ class StandardDataAdapter(DataAdapter):
                 raise ValueError(
                     "managed I2V first_frame_policy must be require_asset"
                 )
+            conditioning_transform = spatial.get("conditioning_transform")
+            if conditioning_transform not in {
+                None,
+                "aspect_preserving_contain",
+            }:
+                raise ValueError(
+                    "managed I2V spatial.conditioning_transform must be "
+                    "aspect_preserving_contain when declared"
+                )
+            if conditioning_transform is not None:
+                if (
+                    spatial.get("conditioning_margin_fill")
+                    != "edge_replicate"
+                ):
+                    raise ValueError(
+                        "sealed I2V spatial alignment requires "
+                        "spatial.conditioning_margin_fill=edge_replicate"
+                    )
+                for scene_id, profile in profiles.items():
+                    if (
+                        not isinstance(profile.get("width"), int)
+                        or not isinstance(profile.get("height"), int)
+                        or int(profile["width"]) <= 0
+                        or int(profile["height"]) <= 0
+                    ):
+                        raise ValueError(
+                            "sealed I2V spatial alignment requires explicit "
+                            f"positive width/height for scene {scene_id}"
+                        )
         if preset == "standard_v2v_v1":
             asset_key = self.config.get("video_asset_key")
             if not isinstance(asset_key, str) or not asset_key:
@@ -480,6 +509,23 @@ class StandardDataAdapter(DataAdapter):
             "text": {"prompt": prompt},
             "generation_shape": generation_shape,
         }
+        if (
+            preset == "standard_i2v_v1"
+            and self.config["spatial"].get("conditioning_transform")
+            == "aspect_preserving_contain"
+        ):
+            native_inputs["spatial_alignment"] = {
+                "schema_version": "1.0",
+                "policy": "i2v_conditioning_content_v1",
+                "conditioning_asset": first_frame,
+                "conditioning_transform": "aspect_preserving_contain",
+                "model_canvas": {
+                    "width": int(profile["width"]),
+                    "height": int(profile["height"]),
+                },
+                "model_canvas_margin_fill": "edge_replicate",
+                "evaluation_view": "exclude_model_canvas_padding",
+            }
         physics_channels = (
             [{
                 "id": "structured_physics_text",
