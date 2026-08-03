@@ -8,7 +8,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
-from physbench.baseline_runtime import DirectManagedDriver
+from physbench.baseline_runtime import (
+    DirectManagedDriver,
+    materialize_i2v_conditioning,
+)
 from physbench.io import sha256_file, write_json
 
 
@@ -198,6 +201,19 @@ class Driver(DirectManagedDriver):
             raise ValueError(
                 f"Causal Forcing expects 81 pixel frames, got {frames}"
             )
+        media_contract = native.get("media_contract")
+        if not isinstance(media_contract, dict):
+            raise ValueError(
+                "Causal Forcing I2V requires a sealed media_contract"
+            )
+        conditioned_first_frame = (
+            run_dir / "conditioning" / f"{job['job_id']}.png"
+        ).resolve()
+        conditioning_audit = materialize_i2v_conditioning(
+            first_frame,
+            conditioned_first_frame,
+            media_contract,
+        )
         worker_index = self._worker_index(job["job_id"])
         output_video = (
             run_dir / "predictions" / f"{job['job_id']}.mp4"
@@ -208,7 +224,10 @@ class Driver(DirectManagedDriver):
             "scene_id": case["scene_id"],
             "seed": int(job["seed"]),
             "prompt": native["text"]["prompt"],
-            "first_frame": str(first_frame),
+            "first_frame": str(conditioned_first_frame),
+            "source_first_frame": str(first_frame),
+            "media_contract": media_contract,
+            "conditioning_audit": conditioning_audit,
             "output_video": str(output_video),
             "width": width,
             "height": height,

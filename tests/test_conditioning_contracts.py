@@ -13,6 +13,7 @@ from physbench.baseline_api import (
     load_baseline_plugin,
 )
 from physbench.baseline_runtime import (
+    build_i2v_media_contract,
     create_baseline_scaffold,
     load_data_adapter,
     validate_adaptation_record,
@@ -58,6 +59,7 @@ class Driver(DirectManagedDriver):
 
 ADAPTER_SOURCE = """\
 from physbench.baseline_api.interfaces import DataAdapter
+from physbench.baseline_runtime import build_i2v_media_contract
 
 
 class FixtureAdapter(DataAdapter):
@@ -147,6 +149,16 @@ class FixtureAdapter(DataAdapter):
             "native_inputs": {
                 "text": {"prompt": prompt},
                 "vision": {"first_frame_asset": first_frame},
+                "media_contract": build_i2v_media_contract(
+                    conditioning_asset=first_frame,
+                    width=64,
+                    height=64,
+                    temporal={
+                        "fps": 8,
+                        "num_frames": 9,
+                        "valid_frame_rule": "4n+1",
+                    },
+                ),
                 "custom_adapter": True,
             },
         }
@@ -398,7 +410,7 @@ def _base_record(*, mode: str, kind: str, asset_key: str) -> dict:
     media_field = (
         "first_frame_asset" if kind == "image" else "input_video_asset"
     )
-    return {
+    record = {
         "used_parameters": {},
         "native_inputs": {
             "text": {"prompt": "A text-conditioned physical scene."},
@@ -421,6 +433,20 @@ def _base_record(*, mode: str, kind: str, asset_key: str) -> dict:
             "asset_access": [asset_key],
         },
     }
+    if mode == "i2v":
+        record["native_inputs"]["media_contract"] = (
+            build_i2v_media_contract(
+                conditioning_asset=f"assets/{asset_key}",
+                width=64,
+                height=64,
+                temporal={
+                    "fps": 8,
+                    "num_frames": 9,
+                    "valid_frame_rule": "4n+1",
+                },
+            )
+        )
+    return record
 
 
 def _record_with_structured_physics() -> dict:
@@ -459,16 +485,17 @@ class AdapterFactoryTests(unittest.TestCase):
         record = adapter.adapt_case(_case(), role="eval")
 
         self.assertEqual(
-            {
-                "schema_version": "1.0",
-                "policy": "i2v_conditioning_content_v1",
-                "conditioning_asset": "assets/first.png",
-                "conditioning_transform": "aspect_preserving_contain",
-                "model_canvas": {"width": 64, "height": 64},
-                "model_canvas_margin_fill": "edge_replicate",
-                "evaluation_view": "exclude_model_canvas_padding",
-            },
-            record["native_inputs"]["spatial_alignment"],
+            build_i2v_media_contract(
+                conditioning_asset="assets/first.png",
+                width=64,
+                height=64,
+                temporal={
+                    "fps": 8,
+                    "num_frames": 9,
+                    "valid_frame_rule": "4n+1",
+                },
+            ),
+            record["native_inputs"]["media_contract"],
         )
 
     def test_sealed_i2v_adapter_rejects_black_canvas_margin(self) -> None:
@@ -1114,7 +1141,7 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
             ):
                 self.assertNotIn(forbidden, received["assets"])
 
-    def test_driver_cannot_override_compiler_sealed_spatial_contract(
+    def test_driver_cannot_override_compiler_sealed_media_contract(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1127,9 +1154,12 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
             plugin = load_baseline_plugin(load_baseline_bundle(bundle_root))
             instance = plugin.task_builder.build(_dataset(root), _task(root))
             job = instance.value["inference"]["jobs"][0]
-            expected = job["native_inputs"]["spatial_alignment"]
+            expected = job["native_inputs"]["media_contract"]
             tampered = copy.deepcopy(expected)
-            tampered["model_canvas"] = {"width": 832, "height": 480}
+            tampered["output"]["canvas"] = {
+                "width": 832,
+                "height": 480,
+            }
 
             plugin.driver.run_task = mock.Mock(return_value=(
                 {
@@ -1144,12 +1174,12 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                     "seed": job["seed"],
                     "status": "planned",
                     "video_path": None,
-                    "spatial_alignment": tampered,
+                    "media_contract": tampered,
                 }],
             ))
             with self.assertRaisesRegex(
                 ValueError,
-                "driver spatial alignment differs",
+                "driver media contract differs",
             ):
                 plugin.run_task(
                     instance=instance,
@@ -1338,6 +1368,9 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
             adaptation = value["adaptations"][0]
             adaptation["native_inputs"]["vision"][
                 "first_frame_asset"
+            ] = "../outside.png"
+            adaptation["native_inputs"]["media_contract"]["conditioning"][
+                "asset"
             ] = "../outside.png"
             value["inference"]["jobs"][0][
                 "native_inputs"

@@ -16,41 +16,154 @@
     "case_id": {"type": "string", "minLength": 1},
     "baseline_id": {"type": "string", "minLength": 1},
     "evaluation_partition": {"type": "string", "minLength": 1},
-    "status": {"type": "string", "minLength": 1},
-    "video_path": {"type": ["string", "null"]},
+    "status": {
+      "enum": [
+        "planned",
+        "staged",
+        "complete",
+        "failed",
+        "protocol_error"
+      ]
+    },
+    "video_path": {
+      "anyOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "null"}
+      ]
+    },
     "seed": {"type": "integer"},
-    "spatial_alignment": {"$ref": "#/$defs/spatialAlignment"}
+    "media_contract": {"$ref": "#/$defs/mediaContract"},
+    "media_contract_audit": {"type": "object"},
+    "protocol_error": {
+      "type": "object",
+      "required": ["code", "reason", "boundary"],
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "boundary": {"const": "managed_prediction_media"}
+      },
+      "additionalProperties": false
+    }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"status": {"const": "protocol_error"}},
+        "required": ["status"]
+      },
+      "then": {"required": ["protocol_error"]}
+    }
+  ],
   "$defs": {
-    "spatialAlignment": {
+    "frameCount": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["rule", "value"],
+          "properties": {
+            "rule": {"const": "fixed"},
+            "value": {"type": "integer", "minimum": 1}
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["rule", "value", "modulus", "remainder"],
+          "properties": {
+            "rule": {"const": "fixed"},
+            "value": {"type": "integer", "minimum": 1},
+            "modulus": {"type": "integer", "minimum": 1},
+            "remainder": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["rule", "minimum", "maximum"],
+          "properties": {
+            "rule": {"const": "bounded"},
+            "minimum": {"type": "integer", "minimum": 1},
+            "maximum": {"type": "integer", "minimum": 1}
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "rule",
+            "minimum",
+            "maximum",
+            "modulus",
+            "remainder"
+          ],
+          "properties": {
+            "rule": {"const": "bounded"},
+            "minimum": {"type": "integer", "minimum": 1},
+            "maximum": {"type": "integer", "minimum": 1},
+            "modulus": {"type": "integer", "minimum": 1},
+            "remainder": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "mediaContract": {
       "type": "object",
       "required": [
         "schema_version",
         "policy",
-        "conditioning_asset",
-        "conditioning_transform",
-        "model_canvas",
-        "model_canvas_margin_fill",
-        "evaluation_view"
+        "conditioning",
+        "output",
+        "evaluation"
       ],
       "properties": {
         "schema_version": {"const": "1.0"},
-        "policy": {"const": "i2v_conditioning_content_v1"},
-        "conditioning_asset": {"type": "string", "minLength": 1},
-        "conditioning_transform": {
-          "const": "aspect_preserving_contain"
-        },
-        "model_canvas": {
+        "policy": {"const": "standard_i2v_media_v1"},
+        "conditioning": {
           "type": "object",
-          "required": ["width", "height"],
+          "required": ["asset", "transform", "margin_fill"],
           "properties": {
-            "width": {"type": "integer", "minimum": 1},
-            "height": {"type": "integer", "minimum": 1}
+            "asset": {"type": "string", "minLength": 1},
+            "transform": {"const": "centered_contain"},
+            "margin_fill": {"const": "edge_replicate"}
           },
           "additionalProperties": false
         },
-        "model_canvas_margin_fill": {"const": "edge_replicate"},
-        "evaluation_view": {"const": "exclude_model_canvas_padding"}
+        "output": {
+          "type": "object",
+          "required": ["canvas", "timeline"],
+          "properties": {
+            "canvas": {
+              "type": "object",
+              "required": ["width", "height"],
+              "properties": {
+                "width": {"type": "integer", "minimum": 1},
+                "height": {"type": "integer", "minimum": 1}
+              },
+              "additionalProperties": false
+            },
+            "timeline": {
+              "type": "object",
+              "required": ["fps", "start_time_s", "frame_count"],
+              "properties": {
+                "fps": {"type": "number", "exclusiveMinimum": 0},
+                "start_time_s": {"const": 0.0},
+                "frame_count": {"$ref": "#/$defs/frameCount"}
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "evaluation": {
+          "type": "object",
+          "required": ["spatial_view", "temporal_view"],
+          "properties": {
+            "spatial_view": {"const": "conditioning_content"},
+            "temporal_view": {"const": "physical_time_from_frame_zero"}
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     }

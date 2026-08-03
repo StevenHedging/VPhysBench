@@ -14,8 +14,9 @@ from physbench.baseline_api import (
     load_baseline_bundle,
 )
 from physbench.baseline_runtime.adapter_loader import load_data_adapter
+from physbench.baseline_runtime import build_i2v_media_contract
 from physbench.baseline_runtime.compiler import ManagedTaskBuilder
-from physbench.data_layout import V6_DATASET
+from physbench.data_layout import V7_DATASET
 from physbench.datasets import load_dataset
 from physbench.io import load_json
 from physbench.tasks import load_task
@@ -32,7 +33,7 @@ PHYSICS_TEMPLATE = (
     / "resources"
     / "six_scene_physics_clauses_v1.json"
 )
-DIRECT_TASK = ROOT / "tasks" / "official" / "six_scene_direct_eval.json"
+DIRECT_TASK = ROOT / "tasks" / "official" / "five_scene_direct_eval.json"
 SCENES = {
     "pendulum",
     "free_fall",
@@ -41,6 +42,7 @@ SCENES = {
     "parabolic_motion",
     "uniform_circular_motion",
 }
+CURRENT_DATASET_SCENES = SCENES - {"free_fall"}
 SHAPES = {
     "pendulum": (480, 832),
     "free_fall": (480, 832),
@@ -67,7 +69,7 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
         cls.manifest = load_json(BASELINE)
         cls.physics_bundle = load_baseline_bundle(PHYSICS_BASELINE)
         cls.physics_manifest = load_json(PHYSICS_BASELINE)
-        cls.dataset = load_dataset(V6_DATASET, check_assets=False)
+        cls.dataset = load_dataset(V7_DATASET, check_assets=False)
         cls.task = load_task(DIRECT_TASK)
         cls.adapter = load_data_adapter(cls.bundle)
         cls.physics_adapter = load_data_adapter(cls.physics_bundle)
@@ -184,7 +186,7 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
         by_scene = {}
         for case in self.dataset.cases:
             by_scene.setdefault(case["scene_id"], case)
-        self.assertEqual(SCENES, set(by_scene))
+        self.assertEqual(CURRENT_DATASET_SCENES, set(by_scene))
         for scene_id, case in by_scene.items():
             adaptation = self.adapter.adapt_case(case, role="eval")
             native = adaptation["native_inputs"]
@@ -207,7 +209,9 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
             )
             self.assertEqual([], adaptation["input_contract"]["physics_channels"])
 
-    def test_physics_adapter_fuses_audited_text_for_all_604_cases(self) -> None:
+    def test_physics_adapter_fuses_audited_text_for_all_current_cases(
+        self,
+    ) -> None:
         seen_scenes = set()
         self.assertEqual(
             self.adapter.materialization_fingerprint,
@@ -252,7 +256,7 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
                 physics["prompt"],
                 physics["native_inputs"]["text"]["prompt"],
             )
-        self.assertEqual(SCENES, seen_scenes)
+        self.assertEqual(CURRENT_DATASET_SCENES, seen_scenes)
 
     def test_six_scene_template_preserves_multi_incident_collision_physics(
         self,
@@ -331,7 +335,7 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
             dependencies,
         )
 
-    def test_current_direct_task_compiles_exactly_604_jobs(self) -> None:
+    def test_current_direct_task_compiles_exactly_593_jobs(self) -> None:
         variants = (
             (self.bundle, self.adapter),
             (self.physics_bundle, self.physics_adapter),
@@ -343,9 +347,9 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
                 instance = builder.build(self.dataset, self.task)
                 instance.verify()
                 self.assertEqual(
-                    604, len(instance.value["inference"]["jobs"])
+                    593, len(instance.value["inference"]["jobs"])
                 )
-                self.assertEqual(604, len(instance.value["adaptations"]))
+                self.assertEqual(593, len(instance.value["adaptations"]))
                 for job in instance.value["inference"]["jobs"]:
                     native = job["native_inputs"]
                     self.assertEqual(
@@ -408,6 +412,16 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
                             "fps": 16,
                             "num_frames": 81,
                         },
+                        "media_contract": build_i2v_media_contract(
+                            conditioning_asset="first.png",
+                            width=832,
+                            height=480,
+                            temporal={
+                                "fps": 16,
+                                "num_frames": 81,
+                                "valid_frame_rule": "4n+1",
+                            },
+                        ),
                     },
                 },
                 case={
@@ -429,7 +443,12 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
                 "visual_reference_video",
             }
             self.assertFalse(forbidden & set(spec))
-            self.assertEqual(str((source / "first.png").resolve()), spec["first_frame"])
+            self.assertEqual(
+                str((source / "first.png").resolve()),
+                spec["source_first_frame"],
+            )
+            with Image.open(spec["first_frame"]) as conditioned:
+                self.assertEqual((832, 480), conditioned.size)
             self.assertTrue(Path(spec["output_video"]).is_relative_to(run_dir))
 
     def test_prepare_job_forwards_fused_prompt_without_raw_physics(self) -> None:
@@ -456,6 +475,9 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
             Image.new("RGB", (64, 64), "white").save(source / "first.png")
             native = adaptation["native_inputs"]
             native["vision"]["first_frame_asset"] = "first.png"
+            native["media_contract"]["conditioning"]["asset"] = (
+                "first.png"
+            )
             spec = driver.prepare_job(
                 job={
                     "job_id": "job-physics",
@@ -480,12 +502,29 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
         )
 
     def test_portrait_resize_preserves_orientation_and_does_not_crop(self) -> None:
-        module = _load_module("test_causal_forcing_worker", BASELINE_ROOT / "worker.py")
-        source = Image.new("RGB", (400, 800), (10, 20, 30))
-        output = module._contain_edge_pad(source, width=480, height=832)
-        self.assertEqual((480, 832), output.size)
-        self.assertEqual((10, 20, 30), output.getpixel((0, 0)))
-        self.assertEqual((10, 20, 30), output.getpixel((479, 831)))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source.png"
+            output = root / "conditioned.png"
+            Image.new("RGB", (400, 800), (10, 20, 30)).save(source)
+            contract = build_i2v_media_contract(
+                conditioning_asset="source.png",
+                width=480,
+                height=832,
+                temporal={"fps": 16, "num_frames": 81},
+            )
+            from physbench.baseline_runtime import (
+                materialize_i2v_conditioning,
+            )
+
+            materialize_i2v_conditioning(source, output, contract)
+            with Image.open(output) as conditioned:
+                self.assertEqual((480, 832), conditioned.size)
+                self.assertEqual((10, 20, 30), conditioned.getpixel((0, 0)))
+                self.assertEqual(
+                    (10, 20, 30),
+                    conditioned.getpixel((479, 831)),
+                )
 
 
 if __name__ == "__main__":

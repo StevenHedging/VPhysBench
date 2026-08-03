@@ -267,25 +267,29 @@ Cosmos I2V：
 Cosmos 固定 24 FPS、121 帧。生成与 GT 不要求相同分辨率或帧数；统一 timeline 与几何
 对齐属于 evaluator。
 
-### 9.1 I2V 无填边空间契约
+### 9.1 统一 I2V 媒体契约
 
-正式 I2V Adapter 必须在 `native_inputs.spatial_alignment` 中封印：
+所有 managed I2V Baseline 只声明每个 scene 的 `width`、`height`，以及 `fps` 和
+固定/可变帧数。`StandardDataAdapter` 自动生成一份
+`native_inputs.media_contract`；Baseline 不再分别声明 contain、margin fill 或 evaluator
+裁剪策略。
 
-```text
-policy                 = i2v_conditioning_content_v1
-conditioning_transform = aspect_preserving_contain
-model_canvas            = {width, height}
-model_canvas_margin_fill = edge_replicate
-evaluation_view         = exclude_model_canvas_padding
-conditioning_asset      = assets.first_frame
-```
+公共 I2V Driver 使用同一个实现完成以下操作：
 
-Prediction record 由 managed runtime 绑定同一份契约，Driver 不能覆盖。模型输入可以
-在固定 canvas 中使用 edge-replicated contain margin，但禁止黑边、crop-to-fill 和
-非等比拉伸；评估器会在
-内存中排除该 margin，并以 reference 的完整视野建立共同无填边画布。没有 sealed
-contract 且输出长宽比不同的 prediction 不允许通过事后 letterbox、拉伸或内容配准
-进入正式评分。
+1. 将 Dataset 首帧等比、居中 contain 到模型 canvas；
+2. 使用边缘像素延展临时 margin；
+3. 在模型调用前验证 conditioning image 已精确等于 canvas，保证模型内部 resize 为
+   same-size no-op；
+4. 生成后验证 prediction 的 canvas、起始时间、FPS 和帧数规则；
+5. 将不合格输出标为 `protocol_error`，不交给 scene evaluator。
+
+Prediction record 由 managed runtime 绑定编译时封印的同一份 `media_contract`，Driver
+不能覆盖。评估器只移除可由 centered contain 唯一确定的 prediction margin，保留 GT
+完整物理视野；不允许事后 letterbox、非等比拉伸、crop-to-fill 或内容配准。
+
+新增普通 I2V 模型时，优先使用 scaffold 生成的 `StandardI2VCLIDriver`。模型脚本只需
+接收公共 Driver 生成的 `--image`、按 job spec 的 canvas/FPS/帧数输出视频；不需要为
+该模型增加 evaluator 分支。
 
 ## 10. 审计输出
 

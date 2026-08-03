@@ -7,6 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from physbench.baselines.wan22_lora import Wan22LoraAdapter
+from physbench.baseline_runtime.media_contract import (
+    probe_media,
+    validate_media_contract,
+)
 from physbench.domain import BaselineBundle, BaselineTaskInstance
 from physbench.io import load_jsonl, write_json, write_jsonl
 
@@ -49,6 +53,54 @@ class Wan22ExecutionEngine:
         # Standard WAN Baselines consume physics only through rendered text.
         # No parallel structured side channel reaches their model boundary.
         prepared["model_input"].pop("physical_parameters", None)
+
+    @staticmethod
+    def _validate_prepared_media(
+        prepared: dict[str, Any],
+        raw_job: dict[str, Any],
+        *,
+        materialized: bool,
+    ) -> None:
+        """Ensure WAN's native resize remains a same-size no-op."""
+
+        contract = validate_media_contract(
+            raw_job["native_inputs"].get("media_contract")
+        )
+        canvas = contract["output"]["canvas"]
+        timeline = contract["output"]["timeline"]
+        generation = prepared["wan22"]["generation"]
+        actual = {
+            "width": int(generation["width"]),
+            "height": int(generation["height"]),
+            "fps": float(generation["fps"]),
+        }
+        expected = {
+            "width": int(canvas["width"]),
+            "height": int(canvas["height"]),
+            "fps": float(timeline["fps"]),
+        }
+        if actual != expected:
+            raise AssertionError(
+                "WAN generation shape differs from the sealed media "
+                f"contract: actual={actual}, expected={expected}"
+            )
+        first_frame = Path(prepared["model_input"]["first_frame"])
+        if materialized:
+            probe = probe_media(first_frame, count_frames=False)
+            if (
+                probe["width"] != expected["width"]
+                or probe["height"] != expected["height"]
+            ):
+                raise AssertionError(
+                    "WAN conditioning image changed before the model "
+                    f"boundary: probe={probe}, expected={expected}"
+                )
+            prepared["conditioning_media_audit"] = {
+                "status": "valid",
+                "probe": probe,
+                "native_resize": "same_size_no_op",
+            }
+        prepared["media_contract"] = contract
 
     def _legacy_config(
         self, instance_value: dict[str, Any]
@@ -308,6 +360,11 @@ class Wan22ExecutionEngine:
                     f"{raw_job['job_id']}"
                 )
             self._finalize_prepared_job(prepared, raw_job)
+            self._validate_prepared_media(
+                prepared,
+                raw_job,
+                materialized=execute,
+            )
             job_path = run_dir / "jobs" / f"{raw_job['job_id']}.json"
             write_json(job_path, prepared)
             if stop_after_training:

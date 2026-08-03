@@ -64,6 +64,12 @@ def main() -> int:
         pipe.load_lora(pipe.dit, str(checkpoint), alpha=float(generation.get("lora_alpha", 1.0)))
     first_frame_path = job["model_input"].get("first_frame")
     first_frame = Image.open(first_frame_path).convert("RGB") if first_frame_path else None
+    expected_size = (int(generation["width"]), int(generation["height"]))
+    if first_frame is not None and first_frame.size != expected_size:
+        raise ValueError(
+            "WAN conditioning image must already match the native canvas; "
+            f"image={first_frame.size}, expected={expected_size}"
+        )
     video = pipe(
         prompt=job["model_input"]["prompt"],
         negative_prompt=generation.get("negative_prompt", ""),

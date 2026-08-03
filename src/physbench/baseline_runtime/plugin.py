@@ -10,6 +10,7 @@ from ..io import sha256_file
 from .adapter_loader import load_data_adapter
 from .compiler import ManagedTaskBuilder
 from .driver import load_managed_driver
+from .media_contract import MediaContractError, validate_prediction_video
 
 
 def _validate_managed_outputs(
@@ -60,7 +61,13 @@ def _validate_managed_outputs(
         "reference_video",
         "physics_reference_video",
     }
-    statuses = {"planned", "staged", "complete", "failed"}
+    statuses = {
+        "planned",
+        "staged",
+        "complete",
+        "failed",
+        "protocol_error",
+    }
     for job_id, job in expected.items():
         prediction = by_job[job_id]
         leaked = sorted(forbidden & set(prediction))
@@ -98,32 +105,58 @@ def _validate_managed_outputs(
             )
 
 
-def _seal_prediction_spatial_alignment(
+def _seal_prediction_media_contract(
     instance: BaselineTaskInstance,
     predictions: list[dict[str, Any]],
 ) -> None:
-    """Bind driver output to the compiler-sealed I2V spatial contract."""
+    """Bind driver output to the compiler-sealed I2V media contract."""
     jobs = {
         job["job_id"]: job
         for job in instance.value["inference"]["jobs"]
     }
     for prediction in predictions:
         job = jobs[prediction["job_id"]]
-        expected = job["native_inputs"].get("spatial_alignment")
-        observed = prediction.get("spatial_alignment")
+        expected = job["native_inputs"].get("media_contract")
+        observed = prediction.get("media_contract")
         if expected is None:
             if observed is not None:
                 raise ValueError(
-                    "driver advertised an unsealed spatial alignment for "
+                    "driver advertised an unsealed media contract for "
                     f"{prediction['job_id']}"
                 )
             continue
         if observed is not None and observed != expected:
             raise ValueError(
-                "driver spatial alignment differs from the compiled contract "
+                "driver media contract differs from the compiled contract "
                 f"for {prediction['job_id']}"
             )
-        prediction["spatial_alignment"] = copy.deepcopy(expected)
+        prediction["media_contract"] = copy.deepcopy(expected)
+
+
+def _audit_prediction_media_contract(
+    predictions: list[dict[str, Any]],
+) -> None:
+    """Keep malformed Baseline output out of every scene evaluator."""
+
+    for prediction in predictions:
+        if prediction.get("status") != "complete":
+            continue
+        contract = prediction.get("media_contract")
+        if contract is None:
+            continue
+        video_path = prediction.get("video_path")
+        try:
+            prediction["media_contract_audit"] = validate_prediction_video(
+                video_path,
+                contract,
+            )
+        except MediaContractError as exc:
+            prediction["status"] = "protocol_error"
+            prediction["protocol_error"] = {
+                "code": exc.code,
+                "reason": str(exc),
+                "boundary": "managed_prediction_media",
+            }
 
 
 def _merge_dependency_paths(
@@ -175,6 +208,9 @@ def _runtime_dependencies(
         "src/physbench/baseline_runtime/driver.py": root / "driver.py",
         "src/physbench/baseline_runtime/input_contract.py": (
             root / "input_contract.py"
+        ),
+        "src/physbench/baseline_runtime/media_contract.py": (
+            root / "media_contract.py"
         ),
         "src/physbench/baseline_runtime/plugin.py": root / "plugin.py",
         "src/physbench/baseline_runtime/task_instance_validation.py": (
@@ -284,5 +320,6 @@ class ManagedBaselinePlugin(BaselinePlugin):
             training,
             predictions,
         )
-        _seal_prediction_spatial_alignment(instance, predictions)
+        _seal_prediction_media_contract(instance, predictions)
+        _audit_prediction_media_contract(predictions)
         return training, predictions

@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import numpy as np
 
+from physbench.baseline_runtime import build_i2v_media_contract
 from physbench.evaluation.common import base, media
 from physbench.evaluation.common.base import (
     ReferenceCaseEvaluator,
@@ -424,15 +425,12 @@ class ReferenceEvaluatorNoPadTests(unittest.TestCase):
 
     @staticmethod
     def _contract() -> dict:
-        return {
-            "schema_version": "1.0",
-            "policy": "i2v_conditioning_content_v1",
-            "conditioning_asset": "first.png",
-            "conditioning_transform": "aspect_preserving_contain",
-            "model_canvas": {"width": 480, "height": 832},
-            "model_canvas_margin_fill": "edge_replicate",
-            "evaluation_view": "exclude_model_canvas_padding",
-        }
+        return build_i2v_media_contract(
+            conditioning_asset="first.png",
+            width=480,
+            height=832,
+            temporal={"fps": 24, "num_frames": 121},
+        )
 
     @staticmethod
     def _request(
@@ -460,7 +458,7 @@ class ReferenceEvaluatorNoPadTests(unittest.TestCase):
                 "status": "complete",
                 "video_path": str(prediction),
                 **(
-                    {"spatial_alignment": contract}
+                    {"media_contract": contract}
                     if contract is not None
                     else {}
                 ),
@@ -470,7 +468,7 @@ class ReferenceEvaluatorNoPadTests(unittest.TestCase):
             evaluator_config={},
         )
 
-    def test_missing_contract_with_different_aspect_is_conservative_zero(
+    def test_missing_contract_with_different_aspect_is_protocol_error(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -495,14 +493,14 @@ class ReferenceEvaluatorNoPadTests(unittest.TestCase):
             ):
                 result = _SamplingEvaluator(self._config()).evaluate(request)
 
-        self.assertEqual("evaluated", result.status)
-        self.assertEqual(0.0, result.score)
+        self.assertEqual("protocol_error", result.status)
+        self.assertIsNone(result.score)
         self.assertEqual(
-            "prediction_spatial_contract_missing",
+            "prediction_media_contract_missing",
             result.reason_code,
         )
 
-    def test_prediction_canvas_mismatch_is_conservative_zero(self) -> None:
+    def test_prediction_canvas_mismatch_is_protocol_error(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             request = self._request(root, contract=self._contract())
@@ -530,10 +528,10 @@ class ReferenceEvaluatorNoPadTests(unittest.TestCase):
             ):
                 result = _SamplingEvaluator(self._config()).evaluate(request)
 
-        self.assertEqual("evaluated", result.status)
-        self.assertEqual(0.0, result.score)
+        self.assertEqual("protocol_error", result.status)
+        self.assertIsNone(result.score)
         self.assertEqual(
-            "prediction_model_canvas_mismatch",
+            "prediction_canvas_mismatch",
             result.reason_code,
         )
 
@@ -604,7 +602,7 @@ class ReferenceEvaluatorNoPadTests(unittest.TestCase):
         self.assertEqual("unavailable", result.status)
         self.assertIsNone(result.score)
         self.assertEqual(
-            "reference_parent_spatial_alignment_unsupported",
+            "reference_parent_media_contract_unsupported",
             result.reason_code,
         )
 

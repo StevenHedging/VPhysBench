@@ -341,6 +341,9 @@ def aggregate_task_results(
             "reference_or_media_unavailable_jobs": statuses.get(
                 "unavailable", 0
             ),
+            "prediction_protocol_error_jobs": statuses.get(
+                "protocol_error", 0
+            ),
             "evaluator_error_jobs": statuses.get("error", 0),
             "degradation_reason_counts": dict(
                 sorted(
@@ -401,6 +404,24 @@ def evaluate_task(
         artifact_dir.mkdir(parents=True, exist_ok=True)
         case = by_case.get(job["case_id"])
         records = predictions_by_job.get(job["job_id"], [])
+        media_protocol_error: tuple[str, str] | None = None
+        if (
+            len(records) == 1
+            and records[0].get("status") == "complete"
+            and records[0].get("media_contract") is not None
+        ):
+            from ..baseline_runtime.media_contract import (
+                MediaContractError,
+                validate_prediction_video,
+            )
+
+            try:
+                validate_prediction_video(
+                    records[0].get("video_path"),
+                    records[0]["media_contract"],
+                )
+            except MediaContractError as exc:
+                media_protocol_error = (exc.code, str(exc))
         if case is None:
             outcome = _failure_result(
                 job,
@@ -414,6 +435,33 @@ def evaluate_task(
                 status="error",
                 code="duplicate_prediction_records",
                 reason=f"job has {len(records)} prediction records",
+            )
+        elif media_protocol_error is not None:
+            outcome = _failure_result(
+                job,
+                status="protocol_error",
+                code=media_protocol_error[0],
+                reason=media_protocol_error[1],
+            )
+        elif (
+            records
+            and protocol["scenes"]
+            .get(job["scene_id"], {"type": "unsupported"})
+            .get("type")
+            != "unsupported"
+            and records[0].get("status") == "protocol_error"
+        ):
+            error = records[0].get("protocol_error", {})
+            outcome = _failure_result(
+                job,
+                status="protocol_error",
+                code=str(error.get("code", "prediction_protocol_error")),
+                reason=str(
+                    error.get(
+                        "reason",
+                        "prediction violates the sealed media contract",
+                    )
+                ),
             )
         elif (
             protocol["scenes"]

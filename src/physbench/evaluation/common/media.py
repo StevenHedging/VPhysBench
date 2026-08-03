@@ -8,6 +8,11 @@ from typing import Any
 import cv2
 import numpy as np
 
+from ...baseline_runtime.media_contract import (
+    MediaContractError,
+    centered_contain_rect,
+    validate_media_contract,
+)
 
 class VideoProtocolError(RuntimeError):
     def __init__(self, code: str, message: str):
@@ -132,43 +137,13 @@ def _largest_exact_aspect_size(
     return unit_width * multiplier, unit_height * multiplier
 
 
-def _centered_contain_rect(
-    source_width: int,
-    source_height: int,
-    *,
-    canvas_width: int,
-    canvas_height: int,
-) -> tuple[int, int, int, int]:
-    scale = min(
-        canvas_width / source_width,
-        canvas_height / source_height,
-    )
-    width = max(1, int(round(source_width * scale)))
-    height = max(1, int(round(source_height * scale)))
-    if width * source_height != height * source_width:
-        raise VideoProtocolError(
-            "conditioning_aspect_not_exact",
-            "model canvas cannot contain this conditioning view at an exact "
-            "integer aspect ratio; choose a compatible output bucket: "
-            f"source={source_width}x{source_height}, "
-            f"canvas={canvas_width}x{canvas_height}, "
-            f"contained={width}x{height}",
-        )
-    return (
-        (canvas_width - width) // 2,
-        (canvas_height - height) // 2,
-        width,
-        height,
-    )
-
-
 def resolve_shared_spatial_plan(
     *,
     reference_info: VideoInfo,
     prediction_info: VideoInfo,
     maximum_width: int,
     maximum_height: int,
-    alignment_contract: dict[str, Any] | None,
+    media_contract: dict[str, Any] | None,
     expected_conditioning_asset: str | None,
 ) -> SharedSpatialPlan:
     """Resolve one no-padding coordinate system for reference and prediction.
@@ -190,15 +165,15 @@ def resolve_shared_spatial_plan(
         reference_info.width,
         reference_info.height,
     )
-    if alignment_contract is None:
+    if media_contract is None:
         if (
             reference_info.width * prediction_info.height
             != reference_info.height * prediction_info.width
         ):
             raise VideoProtocolError(
-                "prediction_spatial_contract_missing",
+                "prediction_media_contract_missing",
                 "reference and prediction aspect ratios differ and the "
-                "prediction has no sealed I2V spatial-alignment contract",
+                "prediction has no sealed I2V media contract",
             )
         prediction_crop = (
             0,
@@ -209,39 +184,13 @@ def resolve_shared_spatial_plan(
         mode = "already_exact_full_frame"
         contract_value = None
     else:
-        required = {
-            "schema_version",
-            "policy",
-            "conditioning_asset",
-            "conditioning_transform",
-            "model_canvas",
-            "model_canvas_margin_fill",
-            "evaluation_view",
-        }
-        if set(alignment_contract) != required:
-            raise VideoProtocolError(
-                "prediction_spatial_contract_invalid",
-                "I2V spatial-alignment contract fields are invalid",
-            )
-        if (
-            alignment_contract.get("schema_version") != "1.0"
-            or alignment_contract.get("policy")
-            != "i2v_conditioning_content_v1"
-            or alignment_contract.get("conditioning_transform")
-            != "aspect_preserving_contain"
-            or alignment_contract.get("model_canvas_margin_fill")
-            != "edge_replicate"
-            or alignment_contract.get("evaluation_view")
-            != "exclude_model_canvas_padding"
-        ):
-            raise VideoProtocolError(
-                "prediction_spatial_contract_unsupported",
-                "prediction does not declare the supported full-content "
-                "I2V contain-and-crop alignment policy",
-            )
+        try:
+            contract = validate_media_contract(media_contract)
+        except MediaContractError as exc:
+            raise VideoProtocolError(exc.code, str(exc)) from exc
         if (
             expected_conditioning_asset is None
-            or alignment_contract.get("conditioning_asset")
+            or contract["conditioning"]["asset"]
             != expected_conditioning_asset
         ):
             raise VideoProtocolError(
@@ -249,24 +198,7 @@ def resolve_shared_spatial_plan(
                 "prediction spatial contract is not bound to this Case's "
                 "first-frame asset",
             )
-        canvas = alignment_contract.get("model_canvas")
-        if not isinstance(canvas, dict) or set(canvas) != {"width", "height"}:
-            raise VideoProtocolError(
-                "prediction_spatial_contract_invalid",
-                "model_canvas must contain exactly width and height",
-            )
-        if (
-            not isinstance(canvas["width"], int)
-            or isinstance(canvas["width"], bool)
-            or not isinstance(canvas["height"], int)
-            or isinstance(canvas["height"], bool)
-            or canvas["width"] <= 0
-            or canvas["height"] <= 0
-        ):
-            raise VideoProtocolError(
-                "prediction_spatial_contract_invalid",
-                "model_canvas width and height must be positive integers",
-            )
+        canvas = contract["output"]["canvas"]
         canvas_width = canvas["width"]
         canvas_height = canvas["height"]
         if (
@@ -274,19 +206,22 @@ def resolve_shared_spatial_plan(
             or canvas_height != prediction_info.height
         ):
             raise VideoProtocolError(
-                "prediction_model_canvas_mismatch",
-                "prediction video dimensions differ from its sealed model "
+                "prediction_canvas_mismatch",
+                "prediction video dimensions differ from its sealed "
                 f"canvas: video={prediction_info.width}x{prediction_info.height}, "
                 f"contract={canvas_width}x{canvas_height}",
             )
-        prediction_crop = _centered_contain_rect(
-            reference_info.width,
-            reference_info.height,
-            canvas_width=canvas_width,
-            canvas_height=canvas_height,
-        )
+        try:
+            prediction_crop = centered_contain_rect(
+                reference_info.width,
+                reference_info.height,
+                canvas_width=canvas_width,
+                canvas_height=canvas_height,
+            )
+        except MediaContractError as exc:
+            raise VideoProtocolError(exc.code, str(exc)) from exc
         mode = "sealed_i2v_conditioning_content"
-        contract_value = alignment_contract
+        contract_value = contract
     return SharedSpatialPlan(
         width=target_width,
         height=target_height,
@@ -309,7 +244,7 @@ def resolve_shared_spatial_plan(
             "padding_used_for_evaluation": False,
             "aspect_ratio_distortion": False,
             "physical_reference_content_cropped": False,
-            "alignment_contract": contract_value,
+            "media_contract": contract_value,
         },
     )
 

@@ -68,10 +68,6 @@
     },
     "spatial": {
       "type": "wan22_spatial_v1",
-      "conditioning_transform": "aspect_preserving_contain",
-      "conditioning_margin_fill": "edge_replicate",
-      "policy": "scene_aspect_ratio_bucket_then_fit_and_pad",
-      "pad_mode": "edge",
       "scene_profiles": {
         "pendulum": {
           "name": "portrait",

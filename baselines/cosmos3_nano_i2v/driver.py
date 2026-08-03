@@ -8,49 +8,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
-from physbench.baseline_runtime import DirectManagedDriver
+from physbench.baseline_runtime import (
+    DirectManagedDriver,
+    materialize_i2v_conditioning,
+)
 from physbench.io import sha256_file, write_json
-
-
-def _materialize_contain_condition(
-    source: Path,
-    output: Path,
-    *,
-    width: int,
-    height: int,
-) -> None:
-    """Preserve the full Case view before Cosmos' same-size native loader."""
-    import cv2
-
-    frame = cv2.imread(str(source), cv2.IMREAD_COLOR)
-    if frame is None:
-        raise ValueError(f"cannot read Cosmos3 first frame: {source}")
-    source_height, source_width = frame.shape[:2]
-    scale = min(width / source_width, height / source_height)
-    resized_width = max(1, int(round(source_width * scale)))
-    resized_height = max(1, int(round(source_height * scale)))
-    resized = cv2.resize(
-        frame,
-        (resized_width, resized_height),
-        interpolation=(
-            cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
-        ),
-    )
-    left = (width - resized_width) // 2
-    right = width - resized_width - left
-    top = (height - resized_height) // 2
-    bottom = height - resized_height - top
-    materialized = cv2.copyMakeBorder(
-        resized,
-        top,
-        bottom,
-        left,
-        right,
-        borderType=cv2.BORDER_REPLICATE,
-    )
-    output.parent.mkdir(parents=True, exist_ok=True)
-    if not cv2.imwrite(str(output), materialized):
-        raise RuntimeError(f"cannot write Cosmos3 condition image: {output}")
 
 
 def _free_port() -> int:
@@ -176,20 +138,19 @@ class Driver(DirectManagedDriver):
             )
         predictor = self.bundle.value["runner"]["config"]
         shape = native["generation_shape"]
-        alignment = native.get("spatial_alignment")
-        if not isinstance(alignment, dict):
+        media_contract = native.get("media_contract")
+        if not isinstance(media_contract, dict):
             raise ValueError(
-                "Cosmos3 I2V requires a sealed spatial_alignment contract"
+                "Cosmos3 I2V requires a sealed media_contract"
             )
-        canvas = alignment["model_canvas"]
+        canvas = media_contract["output"]["canvas"]
         conditioned_first_frame = (
             run_dir / "conditioning" / f"{job['job_id']}.png"
         ).resolve()
-        _materialize_contain_condition(
+        conditioning_audit = materialize_i2v_conditioning(
             first_frame,
             conditioned_first_frame,
-            width=int(canvas["width"]),
-            height=int(canvas["height"]),
+            media_contract,
         )
         worker_index = self._worker_index(job["job_id"])
         output_root = (
@@ -226,7 +187,8 @@ class Driver(DirectManagedDriver):
             "output_video": str(output_video),
             "first_frame": str(conditioned_first_frame),
             "source_first_frame": str(first_frame),
-            "spatial_alignment": alignment,
+            "media_contract": media_contract,
+            "conditioning_audit": conditioning_audit,
             "worker_index": worker_index,
         }
 

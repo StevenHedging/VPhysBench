@@ -1,20 +1,15 @@
 from __future__ import annotations
 
-import json
 import math
-import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
 
-
-def _fraction(value: str | None) -> float | None:
-    if not value or value in {"0/0", "N/A"}:
-        return None
-    if "/" in value:
-        numerator, denominator = value.split("/", 1)
-        return float(numerator) / float(denominator) if float(denominator) else None
-    return float(value)
+from ..baseline_runtime.media_contract import (
+    edge_replicated_contain_filter,
+    probe_media,
+    require_media_tools,
+)
 
 
 class Wan22MediaAdapter:
@@ -78,35 +73,11 @@ class Wan22MediaAdapter:
 
     @staticmethod
     def require_tools() -> None:
-        missing = [name for name in ("ffmpeg", "ffprobe") if shutil.which(name) is None]
-        if missing:
-            raise FileNotFoundError(f"missing media tools: {missing}")
+        require_media_tools()
 
     @staticmethod
     def probe(path: str | Path, *, count_frames: bool = True) -> dict[str, Any]:
-        count_args = ["-count_frames"] if count_frames else []
-        result = subprocess.run(
-            [
-                "ffprobe", "-v", "error", "-select_streams", "v:0",
-                *count_args, "-show_entries",
-                "stream=width,height,avg_frame_rate,r_frame_rate,nb_frames,nb_read_frames,duration:format=duration",
-                "-of", "json", str(path),
-            ],
-            check=True, text=True, capture_output=True,
-        )
-        payload = json.loads(result.stdout)
-        if not payload.get("streams"):
-            raise ValueError(f"no video/image stream: {path}")
-        stream = payload["streams"][0]
-        duration_value = stream.get("duration") or payload.get("format", {}).get("duration")
-        frame_value = stream.get("nb_read_frames") or stream.get("nb_frames")
-        return {
-            "width": int(stream["width"]),
-            "height": int(stream["height"]),
-            "fps": _fraction(stream.get("avg_frame_rate") or stream.get("r_frame_rate")),
-            "frames": int(frame_value) if frame_value not in {None, "N/A"} else None,
-            "duration_s": float(duration_value) if duration_value not in {None, "N/A"} else None,
-        }
+        return probe_media(path, count_frames=count_frames)
 
     def frame_count(self, source_probe: dict[str, Any], *, speed_factor: float = 1.0) -> int:
         if speed_factor <= 0:
@@ -164,22 +135,6 @@ class Wan22MediaAdapter:
             frames = self.min_frames
         return frames
 
-    @staticmethod
-    def _contain_geometry(
-        source_width: int,
-        source_height: int,
-        width: int,
-        height: int,
-    ) -> tuple[int, int, int, int, int, int]:
-        scale = min(width / source_width, height / source_height)
-        resized_width = max(1, int(round(source_width * scale)))
-        resized_height = max(1, int(round(source_height * scale)))
-        left = (width - resized_width) // 2
-        right = width - resized_width - left
-        top = (height - resized_height) // 2
-        bottom = height - resized_height - top
-        return resized_width, resized_height, left, right, top, bottom
-
     def _spatial_filter(
         self,
         width: int,
@@ -198,25 +153,13 @@ class Wan22MediaAdapter:
             raise ValueError(
                 "edge-replicated WAN contain requires source dimensions"
             )
-        (
-            resized_width,
-            resized_height,
-            left,
-            right,
-            top,
-            bottom,
-        ) = self._contain_geometry(
+        media_filter, _ = edge_replicated_contain_filter(
             source_width,
             source_height,
-            width,
-            height,
+            canvas_width=width,
+            canvas_height=height,
         )
-        return (
-            f"scale={resized_width}:{resized_height},"
-            f"pad={width}:{height}:{left}:{top}:color=black,"
-            f"fillborders=left={left}:right={right}:top={top}:"
-            f"bottom={bottom}:mode=smear,setsar=1"
-        )
+        return media_filter
 
     def normalize_video(
         self,

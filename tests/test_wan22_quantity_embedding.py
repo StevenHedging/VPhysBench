@@ -60,16 +60,11 @@ from physbench.io import (
     sha256_file,
     write_json,
 )
-from physbench.tasks import load_task
 
 
 BASELINE = (
     ROOT / "baselines" / "wan22_quantity_embedding" / "baseline.json"
 )
-FINETUNE_TASK = (
-    ROOT / "tasks" / "official" / "five_scene_finetune_eval.json"
-)
-
 QUANTITY_FIELDS = {
     "name",
     "raw_value",
@@ -360,7 +355,6 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
         cls.bundle = load_baseline_bundle(BASELINE)
         cls.plugin = load_baseline_plugin(cls.bundle)
         cls.adapter = cls.plugin.task_builder.data_adapter
-        cls.finetune_task = load_task(FINETUNE_TASK)
 
     def test_all_214_cases_adapt_without_task_compilation(self) -> None:
         self.assertEqual("1.0.1", self.bundle.value["baseline_version"])
@@ -425,7 +419,7 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
                         "text",
                         "generation_shape",
                         "physics",
-                        "spatial_alignment",
+                        "media_contract",
                     },
                     set(native),
                 )
@@ -1363,12 +1357,22 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
     def test_finetune_dry_run_preserves_only_the_sealed_quantity_channel(
         self,
     ) -> None:
-        value = copy.deepcopy(self.finetune_task.value)
-        value["task_id"] = "free_fall_quantity_embedding_dry_run"
-        value["selection"]["scene_ids"] = ["free_fall"]
-        value["selection"]["eval_partitions"] = ["test_id"]
+        value = {
+            "schema_version": "3.0",
+            "task_id": "free_fall_quantity_embedding_dry_run",
+            "family": "finetune_eval",
+            "dataset_id": self.dataset.dataset_id,
+            "dataset_view": "view_a",
+            "selection": {
+                "scene_ids": ["free_fall"],
+                "eval_partitions": ["test_id"],
+            },
+            "ood2": {"enabled": False},
+            "seeds": {"training": [42], "inference": [42]},
+            "evaluation": {"protocol": "scene_default_v3"},
+        }
         task = TaskSpec(
-            self.finetune_task.path,
+            ROOT / "tests" / "fixtures" / "legacy_v4_finetune_task.json",
             value,
             canonical_sha256(value),
         )

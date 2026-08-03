@@ -69,9 +69,6 @@
     },
     "spatial": {
       "type": "cosmos3_resolution_aspect_token_v1",
-      "conditioning_transform": "aspect_preserving_contain",
-      "conditioning_margin_fill": "edge_replicate",
-      "policy": "scene_profile_then_native_cosmos_preprocessor",
       "scene_profiles": {
         "pendulum": {
           "resolution": 480,

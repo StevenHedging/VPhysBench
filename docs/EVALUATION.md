@@ -143,11 +143,12 @@ v3 的状态按故障责任划分：
 | 状态 | 含义 | score |
 | --- | --- | --- |
 | `evaluated` | 得到正常分数，或 prediction 侧失败的保守退化分数 | `[0,1]` |
+| `protocol_error` | Prediction 违反统一媒体提交协议，未进入 scene evaluator | `null` |
 | `unavailable` | GT/reference 资产、时长或 reference 观测不可用 | `null` |
 | `unsupported` | 协议未实现该 scene | `null` |
 | `error` | 数据契约冲突、重复记录或真正的 evaluator 内部异常 | `null` |
 
-prediction 缺记录、生成失败、视频缺失/损坏/过短、分割或跟踪失败均返回：
+prediction 缺记录、生成失败以及进入 scene observer 后的分割或跟踪失败返回：
 
 ```text
 status = evaluated
@@ -156,7 +157,9 @@ quality.degraded = true
 reason_code = 稳定原因码
 ```
 
-这类 Case 进入 coverage，不能靠评估失败逃避难例。reference 侧问题则为
+这类 Case 进入 coverage，不能靠评估失败逃避难例。画布、起始时间、FPS、帧数或 sealed
+`media_contract` 不一致属于更早的 `protocol_error`，不会混入 scene evaluator 的 N/A。
+reference 侧问题则为
 `unavailable`，不惩罚 Baseline；未知内部异常保留为 `error`，不会被低分掩盖。v1/v2
 仍保持原先的历史状态语义。
 
@@ -214,7 +217,7 @@ mask 缺失或错误会得到保守低分。由于不存在真实 continuation�
 这条 parent-reference 评分仅用于复现旧协议。`scene_default_v10` 的无填边空间协议
 要求真实 same-Case GT；在尚未定义一个不依赖 padding、裁剪或 prediction 内容配准的
 parent-to-Case 坐标映射前，parent-reference Case 会明确返回
-`reference_parent_spatial_alignment_unsupported`，不会静默走旧 letterbox 分支。
+`reference_parent_media_contract_unsupported`，不会静默走旧 letterbox 分支。
 
 v6 不再把对象完整性作为普通加权项，而使用不可稀释的两层组合：
 
@@ -290,7 +293,7 @@ Reference 与 prediction 可以有不同分辨率、FPS 和帧数，但必须覆
 7. 保存 source indices 和空间变换。
 
 正式五场景 Task 从 `scene_default_v10` 起不再使用第 5–6 步的独立
-letterbox。I2V Adapter 必须封印 `spatial_alignment`：首帧只能等比 contain
+letterbox。I2V Adapter 自动封印统一 `media_contract`：首帧只能等比、居中 contain
 到模型画布，不得裁剪或拉伸。评估器按该不可变契约裁掉 prediction 的模型画布
 边缘区域，保留完整物理首帧视野；随后把 GT 与 prediction 分别等比 resize 到
 由 Case reference 长宽比决定的同一无填边画布。最终送入 Scene observer 的两路
@@ -301,12 +304,12 @@ letterbox。I2V Adapter 必须封印 `spatial_alignment`：首帧只能等比 co
 - 不裁剪 GT 的物理内容；
 - 不按 prediction 内容进行配准或动态取景；
 - 模型画布临时 margin 统一使用边缘像素复制，不允许黑边；
-- prediction 尺寸、conditioning asset 或契约不匹配时按 prediction failure
-  保守计零；
+- prediction 尺寸、起始时间、FPS、帧数、conditioning asset 或契约不匹配时返回明确的
+  `protocol_error`，不启动 scene evaluator；
 - 无契约的 T2V/旧 prediction 只有在源长宽比已与 reference 精确相同时才可评估。
 
 模型内部可为了满足 VAE/patch 尺寸使用临时 contain margin，但该区域不属于评估
-画面，也不会进入 Scene 指标。Provenance 的 `shared_spatial_alignment` 记录双方原始
+画面，也不会进入 Scene 指标。Provenance 的 `shared_media_contract` 记录双方原始
 尺寸、固定 crop、共同目标尺寸，以及
 `padding_used_for_evaluation=false`、`aspect_ratio_distortion=false` 和
 `physical_reference_content_cropped=false`。

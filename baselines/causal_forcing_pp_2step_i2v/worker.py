@@ -20,31 +20,6 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _contain_edge_pad(image, *, width: int, height: int):
-    import numpy as np
-    from PIL import Image
-
-    source_width, source_height = image.size
-    scale = min(width / source_width, height / source_height)
-    resized_width = max(1, round(source_width * scale))
-    resized_height = max(1, round(source_height * scale))
-    resized = image.resize(
-        (resized_width, resized_height),
-        resample=Image.Resampling.LANCZOS,
-    )
-    array = np.asarray(resized)
-    left = (width - resized_width) // 2
-    right = width - resized_width - left
-    top = (height - resized_height) // 2
-    bottom = height - resized_height - top
-    padded = np.pad(
-        array,
-        ((top, bottom), (left, right), (0, 0)),
-        mode="edge",
-    )
-    return Image.fromarray(padded)
-
-
 def _load_pipeline(args: argparse.Namespace):
     framework_root = Path(args.framework_root).resolve()
     sys.path.insert(0, str(framework_root))
@@ -105,7 +80,11 @@ def _generate(pipeline, spec: dict) -> dict:
             f"{expected_frames}, expected {spec['num_frames']}"
         )
     image = Image.open(spec["first_frame"]).convert("RGB")
-    image = _contain_edge_pad(image, width=width, height=height)
+    if image.size != (width, height):
+        raise ValueError(
+            "canonical conditioning canvas changed before the model "
+            f"boundary: image={image.size}, expected={(width, height)}"
+        )
     tensor = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize([0.5], [0.5]),
@@ -198,4 +177,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

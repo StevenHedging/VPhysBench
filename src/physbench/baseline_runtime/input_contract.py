@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from ..baseline_api.input_policy import validate_input_policy
+from .media_contract import validate_media_contract
 
 INPUT_CONTRACT_SCHEMA_VERSION = "1.0"
 GENERATION_MODES = frozenset({"t2v", "i2v", "v2v", "hybrid"})
@@ -263,7 +264,7 @@ def validate_adaptation_record(
     physics_policy = policy["physics"]
     physics_usage = physics_policy["usage"]
 
-    _require_object(
+    native_inputs = _require_object(
         record.get("native_inputs"),
         label="adaptation record.native_inputs",
     )
@@ -457,6 +458,19 @@ def validate_adaptation_record(
             "input_contract for generation_mode 'i2v' requires one or more "
             "image channels and no video channels"
         )
+    if generation_mode == "i2v":
+        media_contract = validate_media_contract(
+            native_inputs.get("media_contract")
+        )
+        conditioning_assets = {
+            resolve_binding(record, channel["binding"])
+            for channel in media_channels
+        }
+        if media_contract["conditioning"]["asset"] not in conditioning_assets:
+            raise ValueError(
+                "native_inputs.media_contract conditioning asset is not "
+                "bound by an I2V media channel"
+            )
     if generation_mode == "v2v" and media_kinds != {"video"}:
         raise ValueError(
             "input_contract for generation_mode 'v2v' requires one or more "

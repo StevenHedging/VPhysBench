@@ -10,9 +10,10 @@ from ..io import load_jsonl, sha256_file
 from .adapter_loader import load_data_adapter
 from .compiler import ManagedTaskBuilder
 from .plugin import (
+    _audit_prediction_media_contract,
     _merge_dependency_paths,
     _runtime_dependencies,
-    _seal_prediction_spatial_alignment,
+    _seal_prediction_media_contract,
     verify_managed_instance,
 )
 
@@ -121,7 +122,7 @@ class SubmissionBaselinePlugin(BaselinePlugin):
                 }
                 for job in value["inference"]["jobs"]
             ]
-            _seal_prediction_spatial_alignment(instance, predictions)
+            _seal_prediction_media_contract(instance, predictions)
             return training, predictions
 
         submitted = self._submission_records()
@@ -176,5 +177,6 @@ class SubmissionBaselinePlugin(BaselinePlugin):
                 "seed": int(job["seed"]),
                 "import_provenance": imported["manifest_path"],
             })
-        _seal_prediction_spatial_alignment(instance, predictions)
+        _seal_prediction_media_contract(instance, predictions)
+        _audit_prediction_media_contract(predictions)
         return training, predictions

@@ -6,7 +6,13 @@ from pathlib import Path
 from typing import Any, Protocol
 
 
-CASE_STATUSES = {"evaluated", "unavailable", "unsupported", "error"}
+CASE_STATUSES = {
+    "evaluated",
+    "protocol_error",
+    "unavailable",
+    "unsupported",
+    "error",
+}
 
 
 @dataclass(frozen=True)

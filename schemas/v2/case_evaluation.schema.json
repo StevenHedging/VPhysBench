@@ -27,7 +27,13 @@
       "required": ["id", "version", "scene_id"]
     },
     "status": {
-      "enum": ["evaluated", "unavailable", "unsupported", "error"]
+      "enum": [
+        "evaluated",
+        "protocol_error",
+        "unavailable",
+        "unsupported",
+        "error"
+      ]
     },
     "score": {
       "type": ["number", "null"],

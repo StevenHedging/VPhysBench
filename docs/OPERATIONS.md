@@ -503,6 +503,13 @@ Driver 把视频写到了模型工程或 `/tmp`。改为
 
 Prediction 标记 complete 但文件缺失或路径错误。修复模型输出；不要把该 case 静默记零。
 
+### `protocol_error`
+
+Prediction 在进入 scene evaluator 前没有通过统一媒体边界。查看 prediction record 的
+`protocol_error.code`：常见原因是 canvas、起始时间、FPS、帧数规则或 sealed `media_contract`
+不一致。修复 Baseline 输出或模型内部的二次 resize/crop；不要在 evaluator 中新增
+模型专用兼容分支。
+
 ### `insufficient_duration`
 
 生成视频没有覆盖评估物理区间。修正生成帧数、FPS 或容器时间戳；不要补 GT 首帧、

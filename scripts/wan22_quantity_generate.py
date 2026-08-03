@@ -118,6 +118,12 @@ def main() -> int:
     first_frame = Image.open(
         job["model_input"]["first_frame"]
     ).convert("RGB")
+    expected_size = (int(generation["width"]), int(generation["height"]))
+    if first_frame.size != expected_size:
+        raise ValueError(
+            "WAN conditioning image must already match the native canvas; "
+            f"image={first_frame.size}, expected={expected_size}"
+        )
     with (
         quantity_inference_conditioning(
             pipe,

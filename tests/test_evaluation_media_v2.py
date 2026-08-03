@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import numpy as np
 
+from physbench.baseline_runtime import build_i2v_media_contract
 from physbench.evaluation.common import media
 from physbench.evaluation.common.media import (
     VideoInfo,
@@ -109,7 +110,7 @@ class ForwardVideoSamplingTests(unittest.TestCase):
         )
         self.assertEqual(first_transform, sampled.spatial_transform)
 
-    def test_shared_i2v_plan_removes_only_declared_model_canvas_margin(
+    def test_shared_i2v_plan_removes_only_declared_canvas_margin(
         self,
     ) -> None:
         reference = VideoInfo(
@@ -126,21 +127,18 @@ class ForwardVideoSamplingTests(unittest.TestCase):
             height=832,
             last_frame_time_s=5.0,
         )
-        contract = {
-            "schema_version": "1.0",
-            "policy": "i2v_conditioning_content_v1",
-            "conditioning_asset": "case/first_frame.png",
-            "conditioning_transform": "aspect_preserving_contain",
-            "model_canvas": {"width": 480, "height": 832},
-            "model_canvas_margin_fill": "edge_replicate",
-            "evaluation_view": "exclude_model_canvas_padding",
-        }
+        contract = build_i2v_media_contract(
+            conditioning_asset="case/first_frame.png",
+            width=480,
+            height=832,
+            temporal={"fps": 16, "num_frames": 81},
+        )
         plan = media.resolve_shared_spatial_plan(
             reference_info=reference,
             prediction_info=prediction,
             maximum_width=640,
             maximum_height=480,
-            alignment_contract=contract,
+            media_contract=contract,
             expected_conditioning_asset="case/first_frame.png",
         )
 
@@ -192,11 +190,11 @@ class ForwardVideoSamplingTests(unittest.TestCase):
                 prediction_info=VideoInfo(10, 10.0, 4, 3, 0.9),
                 maximum_width=160,
                 maximum_height=90,
-                alignment_contract=None,
+                media_contract=None,
                 expected_conditioning_asset=None,
             )
         self.assertEqual(
-            "prediction_spatial_contract_missing",
+            "prediction_media_contract_missing",
             raised.exception.code,
         )
 

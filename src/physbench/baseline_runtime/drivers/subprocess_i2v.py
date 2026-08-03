@@ -6,6 +6,7 @@ from typing import Any
 
 from ..driver import DirectManagedDriver
 from ..input_contract import resolve_dataset_asset_path
+from ..media_contract import materialize_i2v_conditioning
 
 
 class StandardI2VCLIDriver(DirectManagedDriver):
@@ -62,15 +63,27 @@ class StandardI2VCLIDriver(DirectManagedDriver):
         job_spec = (
             run_dir / "jobs" / f"{job['job_id']}.json"
         ).resolve()
+        conditioned = (
+            run_dir / "conditioning" / f"{job['job_id']}.png"
+        ).resolve()
+        media_contract = native.get("media_contract")
+        conditioning_audit = materialize_i2v_conditioning(
+            first_frame,
+            conditioned,
+            media_contract,
+        )
         return {
             "job_id": job["job_id"],
             "case_id": job["case_id"],
             "seed": int(job["seed"]),
             "prompt": native["text"]["prompt"],
-            "first_frame": str(first_frame),
+            "first_frame": str(conditioned),
+            "source_first_frame": str(first_frame),
             "output_video": str(output),
             "job_spec": str(job_spec),
             "generation_shape": native["generation_shape"],
+            "media_contract": media_contract,
+            "conditioning_audit": conditioning_audit,
         }
 
     def execute_job(

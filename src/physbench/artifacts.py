@@ -21,7 +21,13 @@ ARTIFACT_POLICY = {
     ],
 }
 
-PREDICTION_STATUSES = {"planned", "staged", "complete", "failed"}
+PREDICTION_STATUSES = {
+    "planned",
+    "staged",
+    "complete",
+    "failed",
+    "protocol_error",
+}
 FORBIDDEN_PREDICTION_FIELDS = {
     "conditioning",
     "prompt_profile_id",
@@ -169,14 +175,14 @@ def validate_prediction_records(
                 f"prediction {job_id} has invalid status "
                 f"{prediction.get('status')!r}"
             )
-        expected_spatial_alignment = job.get("native_inputs", {}).get(
-            "spatial_alignment"
+        expected_media_contract = job.get("native_inputs", {}).get(
+            "media_contract"
         )
-        observed_spatial_alignment = prediction.get("spatial_alignment")
-        if observed_spatial_alignment != expected_spatial_alignment:
+        observed_media_contract = prediction.get("media_contract")
+        if observed_media_contract != expected_media_contract:
             raise ValueError(
-                f"prediction {job_id} spatial_alignment differs from the "
-                "compiled I2V contract"
+                f"prediction {job_id} media_contract differs from the "
+                "compiled media contract"
             )
         video_path = prediction.get("video_path")
         if video_path is not None and (
@@ -186,6 +192,15 @@ def validate_prediction_records(
                 f"prediction {job_id} video_path must be null or a "
                 "non-empty string"
             )
+        if (
+            prediction.get("status") == "complete"
+            and observed_media_contract is not None
+        ):
+            from .baseline_runtime.media_contract import (
+                validate_prediction_video,
+            )
+
+            validate_prediction_video(video_path, observed_media_contract)
 
     manifest = prediction_artifact_manifest(predictions, run_dir)
     artifacts_by_job = {

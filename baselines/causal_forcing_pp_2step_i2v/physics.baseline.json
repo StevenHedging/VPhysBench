@@ -90,9 +90,6 @@
     },
     "spatial": {
       "type": "causal_forcing_fixed_token_budget_v1",
-      "conditioning_transform": "aspect_preserving_contain",
-      "conditioning_margin_fill": "edge_replicate",
-      "policy": "aspect_preserving contain resize with edge padding; portrait and landscape use the same 399360-pixel token budget",
       "scene_profiles": {
         "pendulum": {"width": 480, "height": 832},
         "free_fall": {"width": 480, "height": 832},

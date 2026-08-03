@@ -278,7 +278,7 @@ class ReferenceCaseEvaluator(ABC):
         reference_video: SampledVideo | None = None
         reference_path: Path | None = None
         times_s: list[float] = []
-        shared_spatial_provenance: dict[str, Any] | None = None
+        shared_media_provenance: dict[str, Any] | None = None
         try:
             reference_path, reference_mode, parent_id = (
                 resolve_physics_reference(request)
@@ -328,7 +328,7 @@ class ReferenceCaseEvaluator(ABC):
             try:
                 if reference_mode == "parent_physics_reference":
                     raise VideoProtocolError(
-                        "reference_parent_spatial_alignment_unsupported",
+                        "reference_parent_media_contract_unsupported",
                         "the no-padding protocol requires a same-Case physical "
                         "reference; parent-reference coordinate mapping is not "
                         "yet defined without cropping, padding, or content-based "
@@ -344,11 +344,11 @@ class ReferenceCaseEvaluator(ABC):
                 first_frame_asset = request.case.get("assets", {}).get(
                     "first_frame"
                 )
-                contract = prediction.get("spatial_alignment")
+                contract = prediction.get("media_contract")
                 if contract is not None and not isinstance(contract, dict):
                     raise VideoProtocolError(
-                        "prediction_spatial_contract_invalid",
-                        "prediction spatial_alignment must be an object",
+                        "media_contract_invalid",
+                        "prediction media_contract must be an object",
                     )
                 if contract is not None:
                     if not isinstance(first_frame_asset, str) or not first_frame_asset:
@@ -389,14 +389,14 @@ class ReferenceCaseEvaluator(ABC):
                     prediction_info=prediction_info,
                     maximum_width=int(spatial["width"]),
                     maximum_height=int(spatial["height"]),
-                    alignment_contract=contract,
+                    media_contract=contract,
                     expected_conditioning_asset=(
                         first_frame_asset
                         if isinstance(first_frame_asset, str)
                         else None
                     ),
                 )
-                shared_spatial_provenance = spatial_plan.provenance
+                shared_media_provenance = spatial_plan.provenance
                 reference_sampling = {
                     **common_sampling,
                     "width": spatial_plan.width,
@@ -420,20 +420,10 @@ class ReferenceCaseEvaluator(ABC):
                         code=exc.code,
                         reason=str(exc),
                     )
-                if self.robust_subject:
-                    return self._degraded_output(
-                        request,
-                        evaluator,
-                        code=exc.code,
-                        reason=str(exc),
-                        times_s=times_s,
-                        reference_path=reference_path,
-                        prediction_path=prediction_path,
-                    )
                 return self._outcome(
                     request,
                     evaluator,
-                    status="unavailable",
+                    status="protocol_error",
                     code=exc.code,
                     reason=str(exc),
                 )
@@ -467,20 +457,10 @@ class ReferenceCaseEvaluator(ABC):
                 allow_partial=self.allow_partial_prediction,
             )
         except VideoProtocolError as exc:
-            if self.robust_subject:
-                return self._degraded_output(
-                    request,
-                    evaluator,
-                    code=exc.code,
-                    reason=str(exc),
-                    times_s=times_s,
-                    reference_path=reference_path,
-                    prediction_path=prediction_path,
-                )
             return self._outcome(
                 request,
                 evaluator,
-                status="unavailable",
+                status="protocol_error",
                 code=exc.code,
                 reason=str(exc),
             )
@@ -574,8 +554,8 @@ class ReferenceCaseEvaluator(ABC):
                 },
             },
             **(
-                {"shared_spatial_alignment": shared_spatial_provenance}
-                if shared_spatial_provenance is not None
+                {"shared_media_contract": shared_media_provenance}
+                if shared_media_provenance is not None
                 else {}
             ),
             **analysis.provenance,
