@@ -37,6 +37,10 @@ physics[annotated=true]
 - `annotated=false` 的派生量；
 - evaluator reference。
 
+`case.temporal.target_physical_duration_s`是例外：它是从reference冻结得到的单一时长
+标量，属于生成输出规格，不是可用于重建GT运动的监督内容。Compiler不会同时暴露
+reference路径、帧或轨迹。
+
 Adapter 本身不接收训练 target。Compiler 只在 sealed runtime source 的训练 case 中
 另加 `supervised_targets` 供 trainer 使用；eval adapter 与 predictor 看不到该 target。
 
@@ -126,6 +130,24 @@ src/physbench/baseline_plugins/resources/five_scene_physics_clauses_v1.json
 Renderer 按 scene 白名单读取 quantity，验证单位，按声明精度格式化，并追加到
 `case.text.prompt` 后。它同时记录原 prompt digest、最终 prompt digest、字段、原值、
 单位和渲染值。Driver 只消费已经封印的 `native_inputs.text.prompt`，不得再次拼接。
+
+### 4.1 时间适配
+
+Standard adapter不把GT转成模型FPS，而是在模型自己的FPS上解析逐Case帧数：
+
+```text
+目标末帧时间戳 T = case.temporal.target_physical_duration_s
+候选帧数 N 满足 (N - 1) / model_fps >= T
+```
+
+bounded模型取满足范围和模数规则的最小`N`；若达不到`T`则取最大合法`N`。fixed模型
+不改变帧数。解析值写入`native_inputs.generation_shape.requested_num_frames`，Driver
+必须以它为准，不能继续无条件使用manifest的`max_frames`。FPS始终保留manifest中
+模型推荐值，不要求与GT一致。
+
+I2V的duration-aware media contract使用schema 1.1，把解析后的帧数封印为fixed，
+并记录目标时长、请求时长和对齐状态。无目标标量的旧快照仍可产生1.0契约，仅用于
+兼容；当前Dataset正式运行应使用1.1。
 
 ## 5. 自定义 Python adapter
 
@@ -264,8 +286,8 @@ Cosmos I2V：
 | collision_1d, inclined_plane_slide | 480 | `16,9` |
 | parabolic_motion | 480 | `9,16`（完整 `1:2` 内容 contain） |
 
-Cosmos 固定 24 FPS、121 帧。生成与 GT 不要求相同分辨率或帧数；统一 timeline 与几何
-对齐属于 evaluator。
+Cosmos 固定24 FPS、121帧，因此短GT会产生原生长尾；评估器只比较GT物理时间范围。
+生成与GT不要求相同分辨率、FPS或帧数；统一timeline与几何对齐属于evaluator。
 
 ### 9.1 统一 I2V 媒体契约
 

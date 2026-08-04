@@ -7,7 +7,7 @@
   "in_place_repair_audit": "text_video_alignment_repair.json",
   "media_files_copied": 0,
   "media_files_modified": 1,
-  "output_dataset_digest": "9c89d2a2848253ffcc7dafeba9f7fb1b230db78c0fa09c7efc3045306aa2014f",
+  "output_dataset_digest": "b56c1cb4adad2a1e2fd1e4876688e6eff72954322b7b2e769fe9d0ef3eebdc61",
   "output_dataset_id": "physics_video_five_scene_v7",
   "output_release": "7.0.0",
   "remaining_partition_membership_changed": false,
@@ -31,6 +31,13 @@
     "free_fall"
   ],
   "schema_version": "1.0",
+  "temporal_duration_contract": {
+    "case_count": 593,
+    "field": "temporal.target_physical_duration_s",
+    "formula": "(frame_count - 1) / encoded_fps / encoded_to_physical_speed",
+    "previous_dataset_digest": "9c89d2a2848253ffcc7dafeba9f7fb1b230db78c0fa09c7efc3045306aa2014f",
+    "script": "scripts/freeze_target_physical_durations.py"
+  },
   "text_records_modified": 185,
   "view_a_counts": {
     "collision_1d": {

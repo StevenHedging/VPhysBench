@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import math
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from .input_contract import (
     resolve_dataset_asset_path,
     validate_adaptation_record,
 )
+from .media_contract import probe_media
 
 
 _NON_RUNTIME_ASSET_KEYS = {
@@ -111,6 +113,8 @@ class ManagedTaskBuilder(TaskBuilder):
     @staticmethod
     def _adapter_case(
         case: dict[str, Any],
+        *,
+        target_physical_duration_s: float | None = None,
     ) -> dict[str, Any]:
         """Project a Case onto assets and facts available to an adapter."""
         projected = {
@@ -136,9 +140,14 @@ class ManagedTaskBuilder(TaskBuilder):
             for name, quantity in case["physics"].items()
             if quantity.get("annotated") is True
         }
+        if target_physical_duration_s is not None:
+            projected.setdefault("temporal", {})[
+                "target_physical_duration_s"
+            ] = target_physical_duration_s
         # Every Baseline sees the same conditionable Case. None receives
         # provenance, source locators, alignment evidence, non-annotated
-        # derived quantities, or evaluator-only assets.
+        # derived quantities, or evaluator-only assets.  The target physical
+        # duration is an explicit output requirement, not a reference asset.
         return projected
 
     @staticmethod
@@ -146,9 +155,13 @@ class ManagedTaskBuilder(TaskBuilder):
         case: dict[str, Any],
         *,
         training_target: bool,
+        target_physical_duration_s: float | None = None,
     ) -> dict[str, Any]:
         """Project source data embedded in the runnable TaskInstance."""
-        projected = ManagedTaskBuilder._adapter_case(case)
+        projected = ManagedTaskBuilder._adapter_case(
+            case,
+            target_physical_duration_s=target_physical_duration_s,
+        )
         if training_target:
             target_key = (
                 "reference_video"
@@ -169,6 +182,81 @@ class ManagedTaskBuilder(TaskBuilder):
                 }
             }
         return projected
+
+    @staticmethod
+    def _target_physical_duration(
+        case: dict[str, Any],
+        *,
+        catalog: dict[str, dict[str, Any]],
+        asset_root: Path,
+    ) -> float | None:
+        """Resolve the frozen reference duration exposed as an output target.
+
+        Current datasets store the value in ``case.temporal``.  Probing is a
+        compatibility fallback for older snapshots that still have their
+        reference media locally available; no reference path or pixels enter
+        the compiled Baseline task.
+        """
+
+        declared = case.get("temporal", {}).get(
+            "target_physical_duration_s"
+        )
+        if declared is not None:
+            if (
+                isinstance(declared, bool)
+                or not isinstance(declared, (int, float))
+                or not math.isfinite(float(declared))
+                or float(declared) <= 0.0
+            ):
+                raise ValueError(
+                    f"case {case['case_id']} has invalid "
+                    "temporal.target_physical_duration_s"
+                )
+            return float(declared)
+
+        reference_case = case
+        value = case.get("assets", {}).get("physics_reference_video")
+        if not value or not case.get("has_real_reference_video", False):
+            parent_id = case.get("provenance", {}).get("parent_case_id")
+            reference_case = catalog.get(parent_id) if parent_id else None
+            if reference_case is None:
+                return None
+            if reference_case.get("physics") != case.get("physics"):
+                raise ValueError(
+                    f"case {case['case_id']} has a physics-mismatched "
+                    "reference parent"
+                )
+            value = reference_case.get("assets", {}).get(
+                "physics_reference_video"
+            )
+        if not isinstance(value, str) or not value:
+            return None
+        path = resolve_dataset_asset_path(
+            asset_root,
+            value,
+            label=f"case {case['case_id']} physics reference",
+        )
+        if not path.is_file():
+            return None
+        probe = probe_media(path, count_frames=False)
+        if probe.get("frames") is None:
+            probe = probe_media(path, count_frames=True)
+        frames, fps = probe.get("frames"), probe.get("fps")
+        if frames is None or int(frames) < 2 or fps is None:
+            raise ValueError(
+                f"case {case['case_id']} reference duration cannot be "
+                "resolved from frames and FPS"
+            )
+        scale = float(
+            reference_case.get("temporal", {}).get(
+                "encoded_to_physical_speed", 1.0
+            )
+        )
+        if not math.isfinite(scale) or scale <= 0.0:
+            raise ValueError(
+                f"case {case['case_id']} reference time scale is invalid"
+            )
+        return float((int(frames) - 1) / float(fps) / scale)
 
     @staticmethod
     def _validate_asset_access(
@@ -574,11 +662,24 @@ class ManagedTaskBuilder(TaskBuilder):
                 f"evaluation cases: {sorted(overlap)}"
             )
         selected_ids = sorted(set(train_ids) | set(eval_ids))
+        target_duration_by_case = {
+            case_id: self._target_physical_duration(
+                by_id[case_id],
+                catalog=by_id,
+                asset_root=dataset.asset_root,
+            )
+            for case_id in selected_ids
+        }
         adaptations: list[dict[str, Any]] = []
         adaptation_by_key: dict[tuple[str, str], dict[str, Any]] = {}
         for role, case_ids in (("train", train_ids), ("eval", eval_ids)):
             for case_id in case_ids:
-                case = self._adapter_case(by_id[case_id])
+                case = self._adapter_case(
+                    by_id[case_id],
+                    target_physical_duration_s=(
+                        target_duration_by_case[case_id]
+                    ),
+                )
                 adapter_case = copy.deepcopy(case)
                 adaptation = self.data_adapter.adapt_case(
                     adapter_case, role=role
@@ -741,6 +842,9 @@ class ManagedTaskBuilder(TaskBuilder):
                     self._runtime_case(
                         by_id[case_id],
                         training_target=case_id in train_id_set,
+                        target_physical_duration_s=(
+                            target_duration_by_case[case_id]
+                        ),
                     )
                     for case_id in selected_ids
                 ],

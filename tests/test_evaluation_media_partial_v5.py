@@ -404,6 +404,93 @@ class ReferenceEvaluatorPartialSamplingTests(unittest.TestCase):
             partial.provenance["sampling"]["prediction"]["available"],
         )
 
+    def test_overlap_duration_is_reported_but_does_not_scale_score(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            reference_path = root / "reference.mp4"
+            prediction_path = root / "prediction.mp4"
+            reference_path.touch()
+            prediction_path.touch()
+            request = CaseEvaluationRequest(
+                job={"job_id": "job"},
+                case={
+                    "case_id": "case",
+                    "scene_id": "collision_1d",
+                    "temporal": {"encoded_to_physical_speed": 1.0},
+                },
+                case_catalog={},
+                prediction={
+                    "status": "complete",
+                    "video_path": str(prediction_path),
+                },
+                asset_root=root,
+                artifact_dir=root / "artifacts",
+                evaluator_config={},
+            )
+            reference_info = VideoInfo(21, 10.0, 4, 2, 2.0)
+            prediction_info = VideoInfo(6, 10.0, 4, 2, 0.5)
+
+            def fake_probe(path):
+                return (
+                    reference_info
+                    if Path(path) == reference_path
+                    else prediction_info
+                )
+
+            def fake_sample(path, **kwargs):
+                times = list(kwargs["sample_times_s"])
+                info = (
+                    reference_info
+                    if Path(path) == reference_path
+                    else prediction_info
+                )
+                return SampledVideo(
+                    frames=[
+                        np.zeros((2, 4, 3), dtype=np.uint8)
+                        for _ in times
+                    ],
+                    info=info,
+                    sample_times_s=times,
+                    source_indices=list(range(len(times))),
+                    spatial_transform={},
+                    available=[True] * len(times),
+                )
+
+            config = {
+                "timeline": {
+                    "policy": "physical_overlap_common_fps_v1",
+                    "fps": 10.0,
+                    "minimum_evaluation_fps": 1.0,
+                    "minimum_source_fps": 1.0,
+                },
+                "spatial": {"width": 4, "height": 2},
+            }
+            with (
+                patch.object(
+                    base,
+                    "resolve_physics_reference",
+                    return_value=(
+                        reference_path,
+                        "same_case_gt",
+                        None,
+                    ),
+                ),
+                patch.object(base, "probe_video", side_effect=fake_probe),
+                patch.object(base, "sample_video", side_effect=fake_sample),
+            ):
+                result = _SamplingEvaluator(config).evaluate(request)
+
+        self.assertEqual("evaluated", result.status)
+        self.assertEqual(0.5, result.score)
+        self.assertEqual(0.25, result.quality["temporal_coverage"])
+        self.assertEqual(
+            0.5,
+            result.quality["evaluated_physical_duration_s"],
+        )
+        self.assertFalse(result.quality["duration_mismatch_penalized"])
+
 
 class ReferenceEvaluatorNoPadTests(unittest.TestCase):
     @staticmethod

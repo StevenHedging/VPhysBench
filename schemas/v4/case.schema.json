@@ -62,7 +62,20 @@
       "type": "object",
       "description": "Non-physics scenario, appearance, environment, setup-form and acquisition metadata."
     },
-    "temporal": {"type": "object"},
+    "temporal": {
+      "type": "object",
+      "properties": {
+        "encoded_to_physical_speed": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "target_physical_duration_s": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Physical timestamp of the canonical reference video's last frame, in seconds from frame zero."
+        }
+      }
+    },
     "alignment": {"type": ["object", "null"]},
     "provenance": {"type": "object"},
     "has_real_reference_video": {"type": "boolean"}

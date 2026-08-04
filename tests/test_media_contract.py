@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import subprocess
 import tempfile
 import unittest
@@ -9,6 +10,7 @@ from physbench.baseline_runtime.media_contract import (
     MediaContractError,
     build_i2v_media_contract,
     materialize_i2v_conditioning,
+    plan_generation_timeline,
     validate_prediction_video,
 )
 from physbench.baseline_runtime.plugin import (
@@ -25,6 +27,68 @@ def _ffmpeg(*arguments: str) -> None:
 
 
 class ManagedI2VMediaContractTests(unittest.TestCase):
+    def test_bounded_timeline_uses_shortest_legal_sequence_covering_target(
+        self,
+    ) -> None:
+        plan = plan_generation_timeline(
+            {
+                "fps": 16,
+                "min_frames": 5,
+                "max_frames": 81,
+                "valid_frame_rule": "4n+1",
+            },
+            target_physical_duration_s=0.325,
+        )
+
+        self.assertEqual(9, plan["requested_num_frames"])
+        self.assertEqual(0.5, plan["requested_physical_duration_s"])
+        self.assertEqual(
+            "covers_target_with_native_tail",
+            plan["duration_alignment"],
+        )
+
+    def test_fixed_timeline_keeps_model_native_length(self) -> None:
+        plan = plan_generation_timeline(
+            {"fps": 24, "num_frames": 121},
+            target_physical_duration_s=0.5,
+        )
+
+        self.assertEqual(121, plan["requested_num_frames"])
+        self.assertEqual(5.0, plan["requested_physical_duration_s"])
+        self.assertEqual(
+            "covers_target_with_native_tail",
+            plan["duration_alignment"],
+        )
+
+    def test_duration_aware_contract_seals_requested_frame_count(self) -> None:
+        contract = build_i2v_media_contract(
+            conditioning_asset="first.png",
+            width=64,
+            height=64,
+            temporal={
+                "fps": 16,
+                "min_frames": 5,
+                "max_frames": 81,
+                "valid_frame_rule": "4n+1",
+            },
+            target_physical_duration_s=0.325,
+        )
+
+        self.assertEqual("1.1", contract["schema_version"])
+        self.assertEqual(
+            {"rule": "fixed", "value": 9},
+            contract["output"]["timeline"]["frame_count"],
+        )
+        self.assertEqual(
+            0.325,
+            contract["evaluation"]["target_physical_duration_s"],
+        )
+
+        tampered = copy.deepcopy(contract)
+        tampered["evaluation"]["duration_alignment"] = "exact"
+        with self.assertRaises(MediaContractError):
+            validate_prediction_video(Path("missing.mp4"), tampered)
+
     def test_temporal_contract_has_one_supported_frame_count_rule(self) -> None:
         with self.assertRaises(MediaContractError):
             build_i2v_media_contract(

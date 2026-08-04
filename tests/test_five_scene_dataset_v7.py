@@ -43,6 +43,10 @@ class FiveSceneDatasetV7Tests(unittest.TestCase):
         for case in self.v7.cases:
             self.assertEqual("4.0", case["schema_version"])
             self.assertNotIn("ood", case)
+            self.assertGreater(
+                case["temporal"]["target_physical_duration_s"],
+                0.0,
+            )
 
     def test_view_a_has_complete_train_test_partitions(self) -> None:
         self.assertEqual("3.0", self.view["schema_version"])
@@ -97,6 +101,11 @@ class FiveSceneDatasetV7Tests(unittest.TestCase):
         ])
 
     def test_v4_tasks_plan_current_release(self) -> None:
+        for task_path in (FINETUNE_TASK, DIRECT_TASK):
+            self.assertEqual(
+                "scene_default_v10",
+                load_task(task_path).value["evaluation"]["protocol"],
+            )
         finetune = plan_atomic_task(load_task(FINETUNE_TASK), self.v7).value
         self.assertEqual("4.0", finetune["schema_version"])
         self.assertEqual(403, len(finetune["train_case_ids"]))
@@ -114,6 +123,33 @@ class FiveSceneDatasetV7Tests(unittest.TestCase):
             {"group_1", "group_2", "group_3", "group_4", "group_5"},
             {job["evaluation_partition"] for job in direct["jobs"]},
         )
+
+    def test_v10_uses_physical_overlap_for_every_scene(self) -> None:
+        protocol = json.loads(
+            (
+                ROOT
+                / "configs/evaluation/protocols/scene_default_v10.json"
+            ).read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(
+            {
+                "pendulum",
+                "collision_1d",
+                "inclined_plane_slide",
+                "uniform_circular_motion",
+                "parabolic_motion",
+            },
+            set(protocol["scenes"]),
+        )
+        for scene in protocol["scenes"].values():
+            timeline = scene["timeline"]
+            self.assertEqual(
+                "physical_overlap_common_fps_v1",
+                timeline["policy"],
+            )
+            self.assertNotIn("minimum_duration_s", timeline)
+            self.assertNotIn("maximum_duration_s", timeline)
 
     def test_overall_score_and_breakdowns_remain_well_defined(self) -> None:
         plan = plan_atomic_task(load_task(FINETUNE_TASK), self.v7).value

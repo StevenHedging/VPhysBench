@@ -8,6 +8,7 @@ from .media_contract import (
     MediaContractError,
     build_i2v_media_contract,
     materialize_i2v_conditioning,
+    plan_generation_timeline,
     validate_media_contract,
     validate_prediction_video,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "MediaContractError",
     "build_i2v_media_contract",
     "materialize_i2v_conditioning",
+    "plan_generation_timeline",
     "resolve_dataset_asset_path",
     "SubmissionBaselinePlugin",
     "create_baseline_scaffold",

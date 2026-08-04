@@ -193,6 +193,16 @@ factor只作为必须报告的诊断维度。
 慢动作素材的encoded time与physical time关系写入`temporal`，不能通过改FPS偷偷修正。
 模型侧的帧率、帧数和分辨率适配只能进入Baseline adapter/cache/run。
 
+最终canonical reference确定后，还必须冻结：
+
+```text
+temporal.target_physical_duration_s
+= (frame_count - 1) / encoded_fps / encoded_to_physical_speed
+```
+
+它是Baseline的输出时长目标，不是新的物理参数标注，也不能通过更改canonical视频FPS
+或抽帧来凑整。reference、裁剪窗口或慢动作比例发生变化时必须重新计算并复核该值。
+
 每条视频至少视觉检查首帧、中间运动、末帧；事件对齐要求高的scene应逐条检查。复核状态
 只有在本次真正看过最终媒体后才能写`visually_verified`。
 
@@ -361,6 +371,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 - train/test媒体hash与近重复泄漏检查；
 - first frame与reference第0帧一致性检查；
 - reference与source窗口的FPS、帧数、duration关系检查；
+- `temporal.target_physical_duration_s`与reference最后一帧物理时间一致；
 - prompt数值/单位/背景/颜色/视角禁词检查；
 - `physics`中背景/颜色/环境字段检查；
 - View A完整覆盖、互斥、annotation完整性和factor类别检查；

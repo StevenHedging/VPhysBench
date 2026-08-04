@@ -7,7 +7,10 @@ from typing import Any
 from ..baseline_api.input_policy import validate_input_policy
 from ..baseline_api.interfaces import DataAdapter
 from ..io import canonical_sha256, load_json, sha256_file
-from .media_contract import build_i2v_media_contract
+from .media_contract import (
+    build_i2v_media_contract,
+    plan_generation_timeline,
+)
 
 
 RESOURCE_ROOT = (
@@ -426,6 +429,13 @@ class StandardDataAdapter(DataAdapter):
 
         profile = self._spatial_profile(case["scene_id"])
         temporal = copy.deepcopy(self.config["temporal"])
+        target_physical_duration_s = case.get("temporal", {}).get(
+            "target_physical_duration_s"
+        )
+        timeline_plan = plan_generation_timeline(
+            temporal,
+            target_physical_duration_s=target_physical_duration_s,
+        )
         preset = self.config["preset"]
         generation_mode = {
             "standard_t2v_v1": "t2v",
@@ -499,6 +509,24 @@ class StandardDataAdapter(DataAdapter):
                     "valid_frame_rule",
                 }
             },
+            **(
+                {
+                    "target_physical_duration_s": timeline_plan[
+                        "target_physical_duration_s"
+                    ],
+                    "requested_num_frames": timeline_plan[
+                        "requested_num_frames"
+                    ],
+                    "requested_physical_duration_s": timeline_plan[
+                        "requested_physical_duration_s"
+                    ],
+                    "duration_alignment": timeline_plan[
+                        "duration_alignment"
+                    ],
+                }
+                if target_physical_duration_s is not None
+                else {}
+            ),
         }
         if "resolution" in generation_shape:
             generation_shape["resolution"] = str(
@@ -515,6 +543,7 @@ class StandardDataAdapter(DataAdapter):
                 width=int(profile["width"]),
                 height=int(profile["height"]),
                 temporal=temporal,
+                target_physical_duration_s=target_physical_duration_s,
             )
         physics_channels = (
             [{
@@ -550,6 +579,24 @@ class StandardDataAdapter(DataAdapter):
                 "temporal": {
                     "type": "managed_temporal_recipe_v1",
                     **temporal,
+                    **(
+                        {
+                            "target_physical_duration_s": timeline_plan[
+                                "target_physical_duration_s"
+                            ],
+                            "requested_num_frames": timeline_plan[
+                                "requested_num_frames"
+                            ],
+                            "requested_physical_duration_s": timeline_plan[
+                                "requested_physical_duration_s"
+                            ],
+                            "duration_alignment": timeline_plan[
+                                "duration_alignment"
+                            ],
+                        }
+                        if target_physical_duration_s is not None
+                        else {}
+                    ),
                     "materialization": "deferred_to_managed_driver",
                 },
                 "paradigm": {
