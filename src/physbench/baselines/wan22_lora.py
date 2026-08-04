@@ -431,11 +431,9 @@ class Wan22LoraAdapter(BaselineAdapter):
                     scene_id=case["scene_id"],
                 )
 
-        num_frames = (
-            reference_record["generation_target_frames"]
-            if reference_record
-            else self.media.max_frames
-        )
+        # Inference length belongs to the Baseline recipe, not to the GT.
+        # Evaluation later compares only the physical-time overlap.
+        num_frames = self.media.max_frames
         output = (
             run_dir
             / "predictions"

@@ -106,7 +106,7 @@
       "max_frames": 121,
       "min_frames": 5,
       "valid_frame_rule": "4n+1",
-      "policy": "physical-time prefix; preserve valid 4n+1 frame counts"
+      "policy": "baseline-native maximum length; preserve valid 4n+1 frame counts"
     }
   },
   "runner": {

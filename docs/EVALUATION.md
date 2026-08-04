@@ -8,14 +8,14 @@
 CanonicalTaskPlan + frozen cases + predictions.jsonl + evaluation protocol
 ```
 
-当前官方协议：
+当前官方五场景Task使用：
 
 ```text
-configs/evaluation/protocols/scene_default_v3.json
+configs/evaluation/protocols/scene_default_v10.json
 ```
 
-官方 v6 Task 使用 `scene_default_v3`，五个 scene evaluator 都使用实现版本 `1.3`。
-v3 是独立协议，不覆盖 v5 run 的 canonical v2 结果。历史协议继续冻结：
+v10同时冻结无填边空间对齐和物理时间重叠协议。旧run必须继续读取它自身冻结的协议，
+不得用v10语义覆盖既有分数。`scene_default_v3`及其它旧协议只用于复现历史结果：
 
 - v2：v5 Task，evaluator `1.2`，reference-bounded 时间轴与顺序前向解码；
 - v1：v4 Task，evaluator `1.1`，random-seek；单摆使用固定 0–5 秒时间轴。
@@ -280,7 +280,37 @@ prediction：
 
 ## 4. 媒体归一化
 
-Reference 与 prediction 可以有不同分辨率、FPS 和帧数，但必须覆盖相同物理区间。
+Reference 与 prediction 可以有不同分辨率、FPS、帧数和物理时长。v10只比较双方共同
+存在的物理时间前缀：
+
+```text
+T_gt   = (N_gt - 1) / FPS_gt / encoded_to_physical_speed
+T_pred = (N_pred - 1) / FPS_pred
+T_eval = min(T_gt, T_pred)
+```
+
+因此prediction较长时，`T_gt`之后的尾段不评分；prediction较短时，只评估到
+`T_pred`，不会复制末帧、补中性帧或把GT后半段纳入本次分数。两路都从物理时刻0开始。
+这里的时长按“最后一帧时间戳”定义，所以是`(N-1)/FPS`，不是容器常见的`N/FPS`。
+
+公共评估FPS取不高于GT物理FPS、prediction FPS和scene上限的共同采样率，并遵守协议
+最低评估FPS；若规则网格没有精确落在`T_eval`，会额外加入精确末端时间戳。该过程不
+对任一路做时间拉伸、压缩或运动插帧。
+
+短prediction不对scene score额外乘时长系数，这是“只评价实际共同区间”的明确语义。
+但每条结果必须公开：
+
+```text
+quality.temporal_coverage = min(T_pred / T_gt, 1)
+quality.reference_physical_duration_s
+quality.prediction_physical_duration_s
+quality.evaluated_physical_duration_s
+quality.duration_mismatch_penalized = false
+```
+
+`temporal_coverage`是审计量，不是得分项。Benchmark不向Baseline下发GT目标时长，
+也不要求Baseline改变自己的原生输出长度；每个Baseline按自身冻结的FPS与帧数策略
+生成，评估器只负责解析双方实际物理时长并建立共同时间前缀。
 
 各版共有的步骤：
 
@@ -314,7 +344,7 @@ letterbox。I2V Adapter 自动封印统一 `media_contract`：首帧只能等比
 `padding_used_for_evaluation=false`、`aspect_ratio_distortion=false` 和
 `physical_reference_content_cropped=false`。
 
-不会补 GT 首帧，不会重复末帧掩盖时长不足。
+不会补GT首帧，也不会重复末帧掩盖时长不足。
 
 - v1 `legacy_random_seek`：按请求顺序对每个 index 执行一次
   `CAP_PROP_POS_FRAMES` seek，保留历史 decoder 行为。

@@ -254,7 +254,8 @@ WAN I2V：
 | pendulum, free_fall, parabolic_motion, uniform_circular_motion | 480 × 832 |
 | collision_1d, inclined_plane_slide | 832 × 480 |
 
-WAN 时间规格为 24 FPS、5–121 帧、合法 `4n+1`，按物理时间前缀适配。
+WAN时间规格为24 FPS、5–121帧、合法`4n+1`；当前推理recipe固定选择Baseline原生
+最大长度121帧，不读取GT时长决定输出长度。
 
 Cosmos I2V：
 
@@ -264,8 +265,8 @@ Cosmos I2V：
 | collision_1d, inclined_plane_slide | 480 | `16,9` |
 | parabolic_motion | 480 | `9,16`（完整 `1:2` 内容 contain） |
 
-Cosmos 固定 24 FPS、121 帧。生成与 GT 不要求相同分辨率或帧数；统一 timeline 与几何
-对齐属于 evaluator。
+Cosmos固定24 FPS、121帧。生成与GT不要求相同分辨率、FPS、帧数或物理时长；统一
+timeline与几何对齐属于evaluator。
 
 ### 9.1 统一 I2V 媒体契约
 

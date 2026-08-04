@@ -160,14 +160,15 @@ materialization fingerprint；文本/物理阶段与完整 adapter fingerprint �
 - 24 FPS；
 - 5–121 帧；
 - 帧数满足 `4n+1`；
-- 按物理时间前缀生成；
+- 当前推理固定使用Baseline原生最大长度121帧，不读取GT时长；
 - 不把 GT 首帧或末帧补进 prediction。
 
 I2V 只使用显式 `assets.first_frame`。Dataset 原件只读，resize/pad/抽帧等派生物进入
 内容寻址 cache 或当前 run。
 
-Reference 解码、统一 timeline 与分辨率归一化属于 evaluator。生成视频不要求与 GT
-具有相同像素尺寸或帧数，但必须覆盖协议要求的物理时间区间。
+Reference解码、共同物理时间前缀、统一采样率与分辨率归一化属于evaluator。生成视频
+不要求与GT具有相同像素尺寸、FPS、帧数或物理时长；评估区间取双方实际物理时长的
+较短者。
 
 ## 5. View A fine-tuning
 

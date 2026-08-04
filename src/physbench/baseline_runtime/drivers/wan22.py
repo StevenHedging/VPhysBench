@@ -137,7 +137,8 @@ class Wan22ManagedDriver(ManagedDriver):
             "min_frames": int(temporal.get("min_frames", 5)),
             "temporal_policy": temporal.get(
                 "policy",
-                "physical-time prefix; preserve valid 4n+1 frame counts",
+                "baseline-native maximum length; preserve valid 4n+1 "
+                "frame counts",
             ),
             "cache_policy": adapter.get(
                 "cache_policy",

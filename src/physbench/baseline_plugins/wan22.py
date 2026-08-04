@@ -73,11 +73,18 @@ class Wan22ExecutionEngine:
             "width": int(generation["width"]),
             "height": int(generation["height"]),
             "fps": float(generation["fps"]),
+            "num_frames": int(generation["num_frames"]),
         }
+        frame_count = timeline["frame_count"]
         expected = {
             "width": int(canvas["width"]),
             "height": int(canvas["height"]),
             "fps": float(timeline["fps"]),
+            "num_frames": int(
+                frame_count["value"]
+                if frame_count["rule"] == "fixed"
+                else frame_count["maximum"]
+            ),
         }
         if actual != expected:
             raise AssertionError(
