@@ -1,0 +1,19 @@
+{
+  "asset_lock": "assets.lock.json",
+  "asset_root": "../..",
+  "cases": "cases.jsonl",
+  "dataset_id": "physics_video_six_scene_v9",
+  "mask_annotations": {
+    "path": "masks.jsonl",
+    "schema_version": "1.0",
+    "sha256": "e526ad74e727096bc0d4429e49eabc2f20c0da158f11496626190765520cf644"
+  },
+  "release": "9.0.0",
+  "release_manifest": "release.json",
+  "scene_catalog": "scenes",
+  "schema_version": "4.0",
+  "views": {
+    "view_a": "views/view_a.json",
+    "view_b": "views/view_b.json"
+  }
+}

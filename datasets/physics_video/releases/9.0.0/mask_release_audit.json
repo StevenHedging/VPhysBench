@@ -1,0 +1,38 @@
+{
+  "base_dataset_digest": "08eb448fe9d02ad0593be4ab50db1b0741e8f77798e3d02df45962e9e857ea8e",
+  "base_dataset_id": "physics_video_six_scene_v8",
+  "base_release": "8.0.0",
+  "case_count": 799,
+  "checkpoint_sha256": "7402e0d864fa82708a20fbd15bc84245c2f26dff0eb43a4b5b93452deb34be69",
+  "complete_case_count": 797,
+  "frame_scope": "first_frame_only",
+  "generator": "sam2.1_hiera_tiny_first_frame_physical_subject_v1",
+  "mask_file_count": 1205,
+  "mask_index_sha256": "e526ad74e727096bc0d4429e49eabc2f20c0da158f11496626190765520cf644",
+  "old_case_and_media_policy": "8.0.0 Case facts and pre-existing media are copied or referenced without modification",
+  "ordering": "row-major scan order: top-to-bottom, then left-to-right within a row",
+  "output_dataset_id": "physics_video_six_scene_v9",
+  "output_release": "9.0.0",
+  "schema_version": "1.0",
+  "skipped_case_count": 2,
+  "skipped_cases": [
+    {
+      "case_id": "incline_r1_a41deg_bgoil_img_0332",
+      "reason": "inclined block SAM mask is not centered on its recess pair",
+      "scene_id": "inclined_plane_slide"
+    },
+    {
+      "case_id": "incline_r1_a44deg_bgblack_img_0394",
+      "reason": "inclined block SAM mask has implausible area ratio: 0.0406",
+      "scene_id": "inclined_plane_slide"
+    }
+  ],
+  "subject_policy": {
+    "collision_1d": "every visible collision ball",
+    "inclined_plane_slide": "sliding block only; exclude incline",
+    "parabolic_motion": "projectile ball only",
+    "pendulum": "bob only; exclude cord",
+    "push_bottle": "bottle only; exclude hand",
+    "uniform_circular_motion": "every orbiting block"
+  }
+}

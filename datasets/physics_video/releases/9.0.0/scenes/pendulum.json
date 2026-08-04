@@ -1,0 +1,55 @@
+{
+  "constraints": [
+    "Canonical frame zero is the Dataset-defined initial release point",
+    "Supplementary-video trimming is only for removing the person's hand"
+  ],
+  "display_name": "单摆",
+  "generalization_factors": [
+    {
+      "category": "environment",
+      "name": "background",
+      "source": "appearance.background"
+    },
+    {
+      "category": "object_composition",
+      "name": "bob_material",
+      "source": "appearance.bob_material"
+    },
+    {
+      "category": "environment",
+      "name": "support",
+      "source": "appearance.support"
+    }
+  ],
+  "metric_spec": {
+    "common_sense_checks": [
+      "fixed pivot",
+      "continuous periodic swing",
+      "no spontaneous topology change"
+    ],
+    "prediction_quantities": [
+      "bob trajectory",
+      "period",
+      "amplitude decay"
+    ],
+    "prediction_subjects": [
+      "bob",
+      "string"
+    ],
+    "visual_attributes": [
+      "bob reflectance",
+      "string visibility",
+      "support stability"
+    ]
+  },
+  "non_conditionable_physics_parameters": [],
+  "scene_id": "pendulum",
+  "schema_version": "2.0",
+  "structured_physics_parameters": [
+    "bob_mass",
+    "bob_radius",
+    "initial_angle",
+    "pendulum_length",
+    "string_length"
+  ]
+}

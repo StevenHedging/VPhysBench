@@ -1,0 +1,22 @@
+{
+  "all_test_annotations_id": true,
+  "base_dataset_digest": "9c89d2a2848253ffcc7dafeba9f7fb1b230db78c0fa09c7efc3045306aa2014f",
+  "base_dataset_id": "physics_video_five_scene_v7",
+  "base_release": "7.0.0",
+  "media_policy": {
+    "old_assets_modified": 0,
+    "pendulum_supplement": "trimmed prefix only to remove hand; retained frames and source FPS preserved",
+    "push_bottle": "byte-preserving source video; no trim, crop, resampling, or re-encode"
+  },
+  "old_case_count": 593,
+  "output_case_count": 799,
+  "output_dataset_digest": "08eb448fe9d02ad0593be4ab50db1b0741e8f77798e3d02df45962e9e857ea8e",
+  "output_dataset_id": "physics_video_six_scene_v8",
+  "output_release": "8.0.0",
+  "pendulum_supplement_cases_added": 65,
+  "pendulum_text_records_unified": 100,
+  "push_bottle_cases_added": 141,
+  "scene_count": 6,
+  "schema_version": "1.0",
+  "view_a_policy": "global_train_id_test_only_stratified_v1"
+}
