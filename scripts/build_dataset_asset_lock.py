@@ -216,10 +216,8 @@ def rebuild_asset_lock(descriptor_path: Path) -> tuple[Path, dict[str, Any]]:
     descriptor_path = Path(descriptor_path).resolve()
     root = descriptor_path.parent
     descriptor = load_json(descriptor_path)
-    if descriptor.get("schema_version") not in {"3.0", "4.0"}:
-        raise ValueError(
-            "asset-lock builder requires Dataset schema_version=3.0 or 4.0"
-        )
+    if descriptor.get("schema_version") != "3.0":
+        raise ValueError("asset-lock builder requires Dataset schema_version=3.0")
 
     cases_relative, cases_path = _release_path(
         root, descriptor.get("cases"), label="dataset.cases"

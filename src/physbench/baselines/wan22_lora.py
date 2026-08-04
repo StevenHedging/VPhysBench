@@ -431,28 +431,11 @@ class Wan22LoraAdapter(BaselineAdapter):
                     scene_id=case["scene_id"],
                 )
 
-        requested_num_frames = (
-            job.get("native_inputs", {})
-            .get("generation_shape", {})
-            .get("requested_num_frames")
+        num_frames = (
+            reference_record["generation_target_frames"]
+            if reference_record
+            else self.media.max_frames
         )
-        if requested_num_frames is not None:
-            num_frames = int(requested_num_frames)
-            if (
-                num_frames < self.media.min_frames
-                or num_frames > self.media.max_frames
-                or (num_frames - 1) % 4
-            ):
-                raise ValueError(
-                    "compiled WAN requested_num_frames violates the model "
-                    f"timeline: {num_frames}"
-                )
-        else:
-            num_frames = (
-                reference_record["generation_target_frames"]
-                if reference_record
-                else self.media.max_frames
-            )
         output = (
             run_dir
             / "predictions"

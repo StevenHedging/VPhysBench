@@ -15,8 +15,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 
-MEDIA_CONTRACT_SCHEMA_VERSION = "1.1"
-LEGACY_MEDIA_CONTRACT_SCHEMA_VERSION = "1.0"
+MEDIA_CONTRACT_SCHEMA_VERSION = "1.0"
 MEDIA_CONTRACT_POLICY = "standard_i2v_media_v1"
 
 
@@ -51,19 +50,22 @@ def _positive_number(value: Any, *, label: str) -> float:
     return float(value)
 
 
-def plan_generation_timeline(
-    temporal: Mapping[str, Any],
+def build_i2v_media_contract(
     *,
-    target_physical_duration_s: float | None = None,
+    conditioning_asset: str,
+    width: int,
+    height: int,
+    temporal: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Resolve one model-native frame count for a requested duration.
+    """Build the only supported managed-I2V submission contract."""
 
-    The Baseline keeps its declared FPS.  For a bounded frame-count model we
-    choose the shortest legal sequence whose last timestamp covers the target;
-    if the model cannot reach the target, its maximum legal length is used.
-    Fixed-length models retain their native frame count.
-    """
-
+    if not isinstance(conditioning_asset, str) or not conditioning_asset:
+        raise MediaContractError(
+            "media_contract_invalid",
+            "conditioning_asset must be a non-empty string",
+        )
+    width = _positive_int(width, label="output.canvas.width")
+    height = _positive_int(height, label="output.canvas.height")
     fps = _positive_number(temporal.get("fps"), label="output.timeline.fps")
     has_fixed_count = "num_frames" in temporal
     has_bounded_count = "max_frames" in temporal
@@ -80,11 +82,13 @@ def plan_generation_timeline(
             f"unsupported I2V frame-count rule: {valid_frame_rule!r}",
         )
     if has_fixed_count:
-        minimum = maximum = _positive_int(
-            temporal["num_frames"],
-            label="output.timeline.frame_count.value",
-        )
-        capability = {"rule": "fixed", "value": minimum}
+        frame_count = {
+            "rule": "fixed",
+            "value": _positive_int(
+                temporal["num_frames"],
+                label="output.timeline.frame_count.value",
+            ),
+        }
     else:
         minimum = _positive_int(
             temporal.get("min_frames", 1),
@@ -99,121 +103,16 @@ def plan_generation_timeline(
                 "media_contract_invalid",
                 "output.timeline frame-count minimum exceeds maximum",
             )
-        capability = {
+        frame_count = {
             "rule": "bounded",
             "minimum": minimum,
             "maximum": maximum,
         }
-    modulus = remainder = None
     if valid_frame_rule == "4n+1":
-        modulus, remainder = 4, 1
-        if minimum % modulus != remainder or maximum % modulus != remainder:
-            raise MediaContractError(
-                "media_contract_invalid",
-                "frame-count bounds violate their modular rule",
-            )
-        capability.update({"modulus": modulus, "remainder": remainder})
-
-    if target_physical_duration_s is None:
-        requested = minimum if has_fixed_count else maximum
-        target = None
-    else:
-        target = _positive_number(
-            target_physical_duration_s,
-            label="evaluation.target_physical_duration_s",
-        )
-        if has_fixed_count:
-            requested = minimum
-        else:
-            requested = int(math.ceil(target * fps - 1e-9)) + 1
-            if modulus is not None:
-                requested += (remainder - requested) % modulus
-            requested = min(maximum, max(minimum, requested))
-
-    requested_duration = (requested - 1) / fps
-    if target is None:
-        alignment = "target_not_declared"
-    elif abs(requested_duration - target) <= 1e-9:
-        alignment = "exact"
-    elif requested_duration > target:
-        alignment = "covers_target_with_native_tail"
-    else:
-        alignment = "model_maximum_shorter_than_target"
-    return {
-        "fps": fps,
-        "frame_count_capability": capability,
-        "requested_num_frames": requested,
-        "requested_physical_duration_s": requested_duration,
-        "target_physical_duration_s": target,
-        "duration_alignment": alignment,
-    }
-
-
-def build_i2v_media_contract(
-    *,
-    conditioning_asset: str,
-    width: int,
-    height: int,
-    temporal: Mapping[str, Any],
-    target_physical_duration_s: float | None = None,
-) -> dict[str, Any]:
-    """Build the only supported managed-I2V submission contract."""
-
-    if not isinstance(conditioning_asset, str) or not conditioning_asset:
-        raise MediaContractError(
-            "media_contract_invalid",
-            "conditioning_asset must be a non-empty string",
-        )
-    width = _positive_int(width, label="output.canvas.width")
-    height = _positive_int(height, label="output.canvas.height")
-    timeline_plan = plan_generation_timeline(
-        temporal,
-        target_physical_duration_s=target_physical_duration_s,
-    )
-    fps = timeline_plan["fps"]
-    if target_physical_duration_s is None:
-        schema_version = LEGACY_MEDIA_CONTRACT_SCHEMA_VERSION
-        frame_count = timeline_plan["frame_count_capability"]
-        output_timeline = {
-            "fps": fps,
-            "start_time_s": 0.0,
-            "frame_count": frame_count,
-        }
-        evaluation = {
-            "spatial_view": "conditioning_content",
-            "temporal_view": "physical_time_from_frame_zero",
-        }
-    else:
-        schema_version = MEDIA_CONTRACT_SCHEMA_VERSION
-        frame_count = {
-            "rule": "fixed",
-            "value": timeline_plan["requested_num_frames"],
-        }
-        output_timeline = {
-            "fps": fps,
-            "start_time_s": 0.0,
-            "frame_count": frame_count,
-            "requested_physical_duration_s": timeline_plan[
-                "requested_physical_duration_s"
-            ],
-        }
-        evaluation = {
-            "spatial_view": "conditioning_content",
-            "temporal_view": "physical_time_from_frame_zero",
-            "target_physical_duration_s": timeline_plan[
-                "target_physical_duration_s"
-            ],
-            "duration_alignment": timeline_plan["duration_alignment"],
-            "long_prediction_policy": (
-                "evaluate_reference_physical_duration"
-            ),
-            "short_prediction_policy": (
-                "evaluate_prediction_physical_duration"
-            ),
-        }
+        frame_count.update({"modulus": 4, "remainder": 1})
 
     contract = {
-        "schema_version": schema_version,
+        "schema_version": MEDIA_CONTRACT_SCHEMA_VERSION,
         "policy": MEDIA_CONTRACT_POLICY,
         "conditioning": {
             "asset": conditioning_asset,
@@ -222,9 +121,16 @@ def build_i2v_media_contract(
         },
         "output": {
             "canvas": {"width": width, "height": height},
-            "timeline": output_timeline,
+            "timeline": {
+                "fps": fps,
+                "start_time_s": 0.0,
+                "frame_count": frame_count,
+            },
         },
-        "evaluation": evaluation,
+        "evaluation": {
+            "spatial_view": "conditioning_content",
+            "temporal_view": "physical_time_from_frame_zero",
+        },
     }
     validate_media_contract(contract)
     return contract
@@ -250,13 +156,8 @@ def validate_media_contract(value: Any) -> dict[str, Any]:
             "media_contract_invalid",
             "media_contract fields must be exactly " + repr(sorted(required)),
         )
-    schema_version = value.get("schema_version")
     if (
-        schema_version
-        not in {
-            LEGACY_MEDIA_CONTRACT_SCHEMA_VERSION,
-            MEDIA_CONTRACT_SCHEMA_VERSION,
-        }
+        value.get("schema_version") != MEDIA_CONTRACT_SCHEMA_VERSION
         or value.get("policy") != MEDIA_CONTRACT_POLICY
     ):
         raise MediaContractError(
@@ -304,17 +205,16 @@ def validate_media_contract(value: Any) -> dict[str, Any]:
     _positive_int(canvas.get("height"), label="output.canvas.height")
 
     timeline = output.get("timeline")
-    timeline_fields = {"fps", "start_time_s", "frame_count"}
-    if schema_version == MEDIA_CONTRACT_SCHEMA_VERSION:
-        timeline_fields.add("requested_physical_duration_s")
-    if not isinstance(timeline, Mapping) or set(timeline) != timeline_fields:
+    if not isinstance(timeline, Mapping) or set(timeline) != {
+        "fps",
+        "start_time_s",
+        "frame_count",
+    }:
         raise MediaContractError(
             "media_contract_invalid",
             "media_contract.output.timeline fields are invalid",
         )
-    timeline_fps = _positive_number(
-        timeline.get("fps"), label="output.timeline.fps"
-    )
+    _positive_number(timeline.get("fps"), label="output.timeline.fps")
     if timeline.get("start_time_s") != 0.0:
         raise MediaContractError(
             "media_contract_unsupported",
@@ -388,29 +288,11 @@ def validate_media_contract(value: Any) -> dict[str, Any]:
                 "frame-count bounds violate their modular rule",
             )
 
-    if schema_version == MEDIA_CONTRACT_SCHEMA_VERSION:
-        requested_duration = _positive_number(
-            timeline.get("requested_physical_duration_s"),
-            label="output.timeline.requested_physical_duration_s",
-        )
-        expected_duration = (minimum - 1) / timeline_fps
-        if maximum != minimum or abs(requested_duration - expected_duration) > 1e-9:
-            raise MediaContractError(
-                "media_contract_invalid",
-                "requested physical duration must equal the fixed output "
-                "timeline's last-frame timestamp",
-            )
-
     evaluation = value.get("evaluation")
-    evaluation_fields = {"spatial_view", "temporal_view"}
-    if schema_version == MEDIA_CONTRACT_SCHEMA_VERSION:
-        evaluation_fields |= {
-            "target_physical_duration_s",
-            "duration_alignment",
-            "long_prediction_policy",
-            "short_prediction_policy",
-        }
-    if not isinstance(evaluation, Mapping) or set(evaluation) != evaluation_fields:
+    if not isinstance(evaluation, Mapping) or set(evaluation) != {
+        "spatial_view",
+        "temporal_view",
+    }:
         raise MediaContractError(
             "media_contract_invalid",
             "media_contract.evaluation fields are invalid",
@@ -424,33 +306,6 @@ def validate_media_contract(value: Any) -> dict[str, Any]:
             "media_contract_unsupported",
             "unsupported I2V evaluation view",
         )
-    if schema_version == MEDIA_CONTRACT_SCHEMA_VERSION:
-        target_duration = _positive_number(
-            evaluation.get("target_physical_duration_s"),
-            label="evaluation.target_physical_duration_s",
-        )
-        if abs(requested_duration - target_duration) <= 1e-9:
-            expected_alignment = "exact"
-        elif requested_duration > target_duration:
-            expected_alignment = "covers_target_with_native_tail"
-        else:
-            expected_alignment = "model_maximum_shorter_than_target"
-        if evaluation.get("duration_alignment") != expected_alignment:
-            raise MediaContractError(
-                "media_contract_invalid",
-                "evaluation.duration_alignment does not describe the "
-                "requested and target physical durations",
-            )
-        if (
-            evaluation.get("long_prediction_policy")
-            != "evaluate_reference_physical_duration"
-            or evaluation.get("short_prediction_policy")
-            != "evaluate_prediction_physical_duration"
-        ):
-            raise MediaContractError(
-                "media_contract_unsupported",
-                "unsupported prediction/reference duration policy",
-            )
     return json.loads(json.dumps(value))
 
 
@@ -784,7 +639,6 @@ __all__ = [
     "centered_contain_rect",
     "edge_replicated_contain_filter",
     "materialize_i2v_conditioning",
-    "plan_generation_timeline",
     "probe_media",
     "require_media_tools",
     "validate_media_contract",

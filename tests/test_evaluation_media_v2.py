@@ -148,9 +148,7 @@ class ForwardVideoSamplingTests(unittest.TestCase):
         )
         self.assertEqual(240.0, plan.provenance["reference_physical_fps"])
 
-    def test_legacy_full_reference_timeline_ignores_prediction_duration(
-        self,
-    ) -> None:
+    def test_physical_timeline_uses_prediction_fps_without_its_duration(self) -> None:
         reference = VideoInfo(121, 60.0, 640, 480, 2.0)
         short_prediction = VideoInfo(13, 24.0, 640, 480, 0.5)
         plan = resolve_evaluation_timeline(
@@ -168,87 +166,7 @@ class ForwardVideoSamplingTests(unittest.TestCase):
 
         self.assertEqual(24.0, plan.fps)
         self.assertEqual(2.0, plan.duration_s)
-        self.assertEqual(
-            0.5,
-            plan.provenance["prediction_physical_duration_s"],
-        )
-        self.assertFalse(
-            plan.provenance["prediction_duration_can_shorten_timeline"]
-        )
-
-    def test_overlap_timeline_ends_at_short_prediction(self) -> None:
-        reference = VideoInfo(121, 60.0, 640, 480, 2.0)
-        prediction = VideoInfo(13, 24.0, 640, 480, 0.5)
-
-        plan = resolve_evaluation_timeline(
-            reference_info=reference,
-            prediction_info=prediction,
-            config={
-                "policy": "physical_overlap_common_fps_v1",
-                "fps": 32.0,
-                "minimum_evaluation_fps": 8.0,
-                "minimum_source_fps": 8.0,
-            },
-        )
-
-        self.assertEqual(24.0, plan.fps)
-        self.assertEqual(0.5, plan.duration_s)
-        self.assertEqual(0.5, plan.sample_times_s[-1])
-        self.assertEqual(
-            "prediction_physical_duration",
-            plan.provenance["duration_source"],
-        )
-        self.assertEqual(
-            0.25,
-            plan.provenance["prediction_temporal_coverage"],
-        )
-
-    def test_overlap_timeline_ignores_long_prediction_tail(self) -> None:
-        reference = VideoInfo(31, 20.0, 640, 480, 1.5)
-        prediction = VideoInfo(121, 40.0, 640, 480, 3.0)
-
-        plan = resolve_evaluation_timeline(
-            reference_info=reference,
-            prediction_info=prediction,
-            config={
-                "policy": "physical_overlap_common_fps_v1",
-                "fps": 32.0,
-                "minimum_evaluation_fps": 8.0,
-                "minimum_source_fps": 8.0,
-            },
-        )
-
-        self.assertEqual(20.0, plan.fps)
-        self.assertEqual(1.5, plan.duration_s)
-        self.assertEqual(1.5, plan.sample_times_s[-1])
-        self.assertEqual(
-            "reference_physical_duration",
-            plan.provenance["duration_source"],
-        )
-        self.assertEqual(
-            1.0,
-            plan.provenance["prediction_temporal_coverage"],
-        )
-
-    def test_overlap_rejects_one_frame_prediction_as_prediction_error(
-        self,
-    ) -> None:
-        with self.assertRaises(VideoProtocolError) as raised:
-            resolve_evaluation_timeline(
-                reference_info=VideoInfo(31, 20.0, 640, 480, 1.5),
-                prediction_info=VideoInfo(1, 24.0, 640, 480, 0.0),
-                config={
-                    "policy": "physical_overlap_common_fps_v1",
-                    "fps": 32.0,
-                    "minimum_evaluation_fps": 8.0,
-                    "minimum_source_fps": 8.0,
-                },
-            )
-
-        self.assertEqual(
-            "prediction_too_short_for_common_timeline",
-            raised.exception.code,
-        )
+        self.assertEqual(0.5, plan.provenance["prediction_duration_s"])
 
     def test_source_time_scale_maps_physical_endpoint_to_last_frame(self) -> None:
         frames = [

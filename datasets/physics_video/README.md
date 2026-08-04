@@ -17,34 +17,15 @@ Case schema 4.0将原始文本固定在`text.prompt`，将可信物理量固定�
 `physics.<parameter>`（`annotated=true`）。Dataset 只声明事实；物理信息的使用方式由
 各 Baseline 自己的 `input_policy` 与 adapter 决定。
 
-当前release还为每条Case冻结：
-
-```text
-temporal.target_physical_duration_s
-```
-
-它表示从物理时刻0到canonical physics reference最后一帧的时间，计算为
-`(frame_count - 1) / encoded_fps / encoded_to_physical_speed`。该标量只用于要求Baseline
-尽量生成相同物理时长，不改变Dataset视频的FPS、帧数或字节。新增或更换canonical
-reference后必须运行：
-
-```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
-  scripts/freeze_target_physical_durations.py
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
-  scripts/freeze_target_physical_durations.py --check
-```
-
 发布流程：
 
 1. 把新来源放入 `_incoming` 或明确的 source archive；
 2. 校验原始标注与视频成员对应关系；
 3. materialize canonical asset；
 4. 生成 case、scene 和 View metadata；
-5. 冻结并检查每条Case的目标物理时长；
-6. 生成 `assets.lock.json`；
-7. 运行 `validate-dataset --check-asset-hashes`；
-8. 冻结 release digest。
+5. 生成 `assets.lock.json`；
+6. 运行 `validate-dataset --check-asset-hashes`；
+7. 冻结 release digest。
 
 主要数据维护脚本：
 

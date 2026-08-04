@@ -2,7 +2,7 @@
   "$schema": "../../../schemas/v3/evaluation_protocol.schema.json",
   "schema_version": "1.0",
   "protocol_id": "scene_default_v10",
-  "description": "Five-scene protocol with sealed I2V full-content spatial alignment, no-padding evaluation views, and physical-time overlap scoring.",
+  "description": "Five-scene protocol with sealed I2V full-content spatial alignment and no-padding evaluation views.",
   "robustness": {
     "prediction_record_failure_policy": "evaluated_zero",
     "prediction_media_failure_policy": "evaluated_zero",
@@ -17,9 +17,9 @@
       "evaluator_contract": "robust_subject_v3",
       "reference_observation_policy": "condition_causal_symmetric",
       "timeline": {
-        "policy": "physical_overlap_common_fps_v1",
         "fps": 16.0,
-        "minimum_evaluation_fps": 8.0,
+        "maximum_duration_s": 5.0,
+        "minimum_duration_s": 4.8,
         "minimum_source_fps": 8.0,
         "duration_tolerance_s": 0.02,
         "decode_policy": "sequential_forward"
@@ -215,9 +215,9 @@
       "type": "collision_1d_state_v5",
       "evaluator_contract": "robust_subject_v3",
       "timeline": {
-        "policy": "physical_overlap_common_fps_v1",
         "fps": 16.0,
-        "minimum_evaluation_fps": 8.0,
+        "maximum_duration_s": 5.0,
+        "minimum_duration_s": 1.5,
         "minimum_source_fps": 8.0,
         "duration_tolerance_s": 0.02,
         "decode_policy": "sequential_forward"
@@ -359,9 +359,9 @@
       "evaluator_contract": "robust_subject_v3",
       "reference_observation_policy": "condition_causal_symmetric",
       "timeline": {
-        "policy": "physical_overlap_common_fps_v1",
         "fps": 16.0,
-        "minimum_evaluation_fps": 8.0,
+        "maximum_duration_s": 5.0,
+        "minimum_duration_s": 1.0,
         "minimum_source_fps": 8.0,
         "duration_tolerance_s": 0.02,
         "decode_policy": "sequential_forward"
@@ -572,9 +572,9 @@
       "evaluator_contract": "robust_subject_v3",
       "reference_observation_policy": "apparatus_geometry_symmetric",
       "timeline": {
-        "policy": "physical_overlap_common_fps_v1",
         "fps": 8.0,
-        "minimum_evaluation_fps": 8.0,
+        "maximum_duration_s": 5.0,
+        "minimum_duration_s": 3.0,
         "minimum_source_fps": 8.0,
         "duration_tolerance_s": 0.02,
         "decode_policy": "sequential_forward"
@@ -698,9 +698,11 @@
       "evaluator_contract": "robust_subject_v3",
       "reference_observation_policy": "condition_causal_symmetric",
       "timeline": {
-        "policy": "physical_overlap_common_fps_v1",
+        "policy": "physical_reference_full_common_fps_v1",
         "fps": 32.0,
         "minimum_evaluation_fps": 8.0,
+        "maximum_duration_s": 5.0,
+        "minimum_duration_s": 0.25,
         "minimum_source_fps": 8.0,
         "duration_tolerance_s": 0.02,
         "decode_policy": "sequential_forward"

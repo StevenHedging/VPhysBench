@@ -244,29 +244,6 @@ Adapter audit 中的 `conditioning_video` 表示 V2V 输入媒体角色，并非
 分组。该资产必须独立于 GT/reference/source。当前 Dataset 4.0.0 没有正式
 `assets.input_video`，所以 V2V 脚手架不能直接运行官方 Task。
 
-### 生成物理时长
-
-Compiler会把每个Case冻结的GT目标物理时长作为输出规格公开给Baseline，但不会公开
-evaluation reference的路径或像素。Standard adapter在以下位置给出解析结果：
-
-```text
-case.temporal.target_physical_duration_s
-native_inputs.generation_shape.target_physical_duration_s
-native_inputs.generation_shape.requested_num_frames
-native_inputs.generation_shape.requested_physical_duration_s
-native_inputs.generation_shape.duration_alignment
-```
-
-Baseline必须保持模型推荐/原生FPS，并优先使用`requested_num_frames`执行逐Case生成。
-可变帧数模型选择能够覆盖目标末帧时间戳的最短合法帧数，同时遵守最小/最大帧数和
-`4n+1`等约束；固定帧数模型保留其固定长度。不得通过改变播放速度、复制帧或插帧来
-伪造目标物理时长。
-
-若模型最大长度短于GT，使用其最大合法长度；若固定长度或离散帧规则使prediction长于
-GT，保留原生输出，评估器会忽略GT时间范围之后的尾段。模型输出FPS无须等于GT FPS。
-自定义Python adapter也会在`case.temporal`收到目标值，必须自行产生等价的可审计输出
-规格，并在无法满足时明确记录能力限制。
-
 ## 7. Python adapter
 
 Manifest：

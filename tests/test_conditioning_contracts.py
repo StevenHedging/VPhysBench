@@ -475,36 +475,6 @@ def _record_with_structured_physics() -> dict:
 
 
 class AdapterFactoryTests(unittest.TestCase):
-    def test_standard_adapter_uses_case_duration_without_changing_fps(
-        self,
-    ) -> None:
-        config = _sealed_standard_adapter_config()
-        config["temporal"] = {
-            "fps": 16,
-            "min_frames": 5,
-            "max_frames": 81,
-            "valid_frame_rule": "4n+1",
-        }
-        case = _case()
-        case["temporal"]["target_physical_duration_s"] = 0.325
-        adapter = StandardDataAdapter(config, _input_policy())
-
-        record = adapter.adapt_case(case, role="eval")
-        shape = record["native_inputs"]["generation_shape"]
-
-        self.assertEqual(16, shape["fps"])
-        self.assertEqual(9, shape["requested_num_frames"])
-        self.assertEqual(0.5, shape["requested_physical_duration_s"])
-        self.assertEqual(
-            0.325,
-            shape["target_physical_duration_s"],
-        )
-        self.assertEqual(
-            {"rule": "fixed", "value": 9},
-            record["native_inputs"]["media_contract"]["output"]
-            ["timeline"]["frame_count"],
-        )
-
     def test_standard_i2v_adapter_seals_full_content_spatial_contract(
         self,
     ) -> None:
@@ -1081,51 +1051,6 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
             self.assertNotIn("conditioning", value["semantics"])
             self.assertIn("physics", value["source"]["cases"][0])
             self.assertIn("text", value["source"]["cases"][0])
-
-    def test_compiler_propagates_frozen_duration_to_standard_job(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            config = _sealed_standard_adapter_config()
-            config["temporal"] = {
-                "fps": 16,
-                "min_frames": 5,
-                "max_frames": 81,
-                "valid_frame_rule": "4n+1",
-            }
-            plugin = load_baseline_plugin(
-                load_baseline_bundle(
-                    _create_bundle(
-                        root,
-                        adapter_source=None,
-                        adapter=config,
-                    )
-                )
-            )
-            dataset = _dataset(root)
-            dataset.cases[0]["temporal"][
-                "target_physical_duration_s"
-            ] = 0.325
-
-            instance = plugin.task_builder.build(
-                dataset,
-                _task(root),
-            ).value
-            job = instance["inference"]["jobs"][0]
-            source_case = instance["source"]["cases"][0]
-            shape = job["native_inputs"]["generation_shape"]
-
-            self.assertEqual(
-                0.325,
-                source_case["temporal"]["target_physical_duration_s"],
-            )
-            self.assertEqual(16, shape["fps"])
-            self.assertEqual(9, shape["requested_num_frames"])
-            self.assertEqual(
-                0.325,
-                shape["target_physical_duration_s"],
-            )
 
     def test_physics_ignored_baseline_is_counterfactually_invariant(
         self,

@@ -825,20 +825,12 @@
       "type": "object",
       "required": [
         "fps",
+        "maximum_duration_s",
+        "minimum_duration_s",
         "minimum_source_fps"
       ],
       "properties": {
-        "policy": {
-          "enum": [
-            "physical_reference_full_common_fps_v1",
-            "physical_overlap_common_fps_v1"
-          ]
-        },
         "fps": {
-          "type": "number",
-          "exclusiveMinimum": 0
-        },
-        "minimum_evaluation_fps": {
           "type": "number",
           "exclusiveMinimum": 0
         },

@@ -292,10 +292,7 @@ class ReferenceCaseEvaluator(ABC):
             timeline_policy = str(
                 timeline.get("policy", "fixed_reference_cap_v1")
             )
-            if timeline_policy in {
-                "physical_reference_full_common_fps_v1",
-                "physical_overlap_common_fps_v1",
-            }:
+            if timeline_policy == "physical_reference_full_common_fps_v1":
                 try:
                     reference_info = probe_video(reference_path)
                 except VideoProtocolError as exc:
@@ -587,24 +584,6 @@ class ReferenceCaseEvaluator(ABC):
             )
         else:
             analysis.quality.setdefault("temporal_coverage", 1.0)
-        if (
-            timeline_plan is not None
-            and timeline_plan.policy == "physical_overlap_common_fps_v1"
-        ):
-            resolution = timeline_plan.provenance
-            analysis.quality["temporal_coverage"] = float(
-                resolution["prediction_temporal_coverage"]
-            )
-            analysis.quality["reference_physical_duration_s"] = float(
-                resolution["reference_physical_duration_s"]
-            )
-            analysis.quality["prediction_physical_duration_s"] = float(
-                resolution["prediction_physical_duration_s"]
-            )
-            analysis.quality["evaluated_physical_duration_s"] = float(
-                timeline_plan.duration_s
-            )
-            analysis.quality["duration_mismatch_penalized"] = False
         analysis.quality["reference_mode"] = reference_mode
         provenance = {
             "reference_video": str(reference_path),

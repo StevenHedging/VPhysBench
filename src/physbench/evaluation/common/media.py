@@ -125,21 +125,18 @@ def resolve_evaluation_timeline(
     config: dict[str, Any],
     reference_source_time_scale: float = 1.0,
 ) -> EvaluationTimelinePlan:
-    """Resolve an adaptive physical-time grid for reference and prediction.
+    """Resolve an adaptive physical-time grid without shortening to prediction.
 
-    The current overlap policy evaluates exactly the physical interval shared
-    by both videos.  A longer prediction tail is ignored; a shorter prediction
-    defines the endpoint.  Sampling still uses the common native temporal
-    resolution so the evaluator never fabricates higher-frequency evidence.
-    The previous full-reference policy remains readable for frozen runs.
+    The policy is intentionally narrow.  Duration is determined only by the
+    reference's physical duration (optionally bounded by a protocol safety
+    cap), so a short prediction cannot evade later reference motion.  The
+    sample rate uses the common native temporal resolution, bounded by the
+    protocol, to avoid manufacturing duplicate frames when both sources
+    already expose a lower native rate.
     """
 
     policy = str(config.get("policy", "fixed_reference_cap_v1"))
-    supported = {
-        "physical_reference_full_common_fps_v1",
-        "physical_overlap_common_fps_v1",
-    }
-    if policy not in supported:
+    if policy != "physical_reference_full_common_fps_v1":
         raise VideoProtocolError(
             "invalid_timeline_policy",
             f"unsupported adaptive timeline policy: {policy!r}",
@@ -176,46 +173,27 @@ def resolve_evaluation_timeline(
     resolved_fps = max(minimum_fps, common_native_fps)
 
     reference_physical_duration = reference_info.last_frame_time_s / scale
-    prediction_physical_duration = prediction_info.last_frame_time_s
-    if policy == "physical_reference_full_common_fps_v1":
-        maximum_duration = float(config["maximum_duration_s"])
-        minimum_duration = float(config["minimum_duration_s"])
-        if (
-            not math.isfinite(maximum_duration)
-            or not math.isfinite(minimum_duration)
-            or maximum_duration <= 0.0
-            or minimum_duration < 0.0
-            or minimum_duration > maximum_duration
-        ):
-            raise VideoProtocolError(
-                "invalid_timeline_duration_bounds",
-                "adaptive timeline duration bounds must be finite and ordered",
-            )
-        duration = min(reference_physical_duration, maximum_duration)
-        if duration < minimum_duration:
-            raise VideoProtocolError(
-                "reference_too_short",
-                "reference covers "
-                f"{reference_physical_duration:.6f}s of physical time; minimum is "
-                f"{minimum_duration:g}s",
-            )
-        duration_source = "reference_physical_duration"
-        duration_capped = bool(
-            maximum_duration + 1e-12 < reference_physical_duration
+    maximum_duration = float(config["maximum_duration_s"])
+    minimum_duration = float(config["minimum_duration_s"])
+    if (
+        not math.isfinite(maximum_duration)
+        or not math.isfinite(minimum_duration)
+        or maximum_duration <= 0.0
+        or minimum_duration < 0.0
+        or minimum_duration > maximum_duration
+    ):
+        raise VideoProtocolError(
+            "invalid_timeline_duration_bounds",
+            "adaptive timeline duration bounds must be finite and ordered",
         )
-    else:
-        duration = min(
-            reference_physical_duration,
-            prediction_physical_duration,
+    duration = min(reference_physical_duration, maximum_duration)
+    if duration < minimum_duration:
+        raise VideoProtocolError(
+            "reference_too_short",
+            "reference covers "
+            f"{reference_physical_duration:.6f}s of physical time; minimum is "
+            f"{minimum_duration:g}s",
         )
-        maximum_duration = None
-        duration_capped = False
-        if prediction_physical_duration + 1e-12 < reference_physical_duration:
-            duration_source = "prediction_physical_duration"
-        elif reference_physical_duration + 1e-12 < prediction_physical_duration:
-            duration_source = "reference_physical_duration"
-        else:
-            duration_source = "equal_physical_duration"
 
     regular_count = int(math.floor(duration * resolved_fps + 1e-9)) + 1
     times = (np.arange(regular_count, dtype=np.float64) / resolved_fps).tolist()
@@ -223,20 +201,12 @@ def resolve_evaluation_timeline(
     if endpoint_appended:
         times.append(float(duration))
     if len(times) < 2:
-        if duration_source == "prediction_physical_duration":
-            code = "prediction_too_short_for_common_timeline"
-        elif duration_source == "reference_physical_duration":
-            code = "reference_too_short_for_common_timeline"
-        else:
-            code = "common_timeline_too_short"
         raise VideoProtocolError(
-            code,
-            "shared physical timeline yields fewer than two samples",
+            "reference_too_short",
+            "adaptive physical timeline yields fewer than two samples",
         )
-    prediction_coverage = min(
-        prediction_physical_duration
-        / max(reference_physical_duration, 1e-12),
-        1.0,
+    duration_capped = bool(
+        maximum_duration + 1e-12 < reference_physical_duration
     )
     return EvaluationTimelinePlan(
         sample_times_s=times,
@@ -246,34 +216,23 @@ def resolve_evaluation_timeline(
         policy=policy,
         provenance={
             "policy": policy,
-            "duration_source": duration_source,
-            "prediction_duration_can_shorten_timeline": (
-                policy == "physical_overlap_common_fps_v1"
-            ),
+            "duration_source": "reference_physical_duration",
+            "prediction_duration_can_shorten_timeline": False,
             "reference_encoded_fps": reference_info.fps,
             "reference_source_time_scale": scale,
             "reference_physical_fps": reference_physical_fps,
             "reference_encoded_duration_s": reference_info.last_frame_time_s,
             "reference_physical_duration_s": reference_physical_duration,
             "prediction_physical_fps": prediction_physical_fps,
-            # Keep the pre-overlap provenance key readable for frozen runs.
-            "prediction_duration_s": prediction_physical_duration,
-            "prediction_physical_duration_s": prediction_physical_duration,
-            "prediction_temporal_coverage": prediction_coverage,
+            "prediction_duration_s": prediction_info.last_frame_time_s,
             "common_native_fps": common_native_fps,
             "minimum_evaluation_fps": minimum_fps,
             "maximum_evaluation_fps": maximum_fps,
             "resolved_fps": resolved_fps,
-            **(
-                {"maximum_duration_s": maximum_duration}
-                if maximum_duration is not None
-                else {}
-            ),
+            "maximum_duration_s": maximum_duration,
             "duration_capped": duration_capped,
             "resolved_duration_s": duration,
-            # Keep the legacy name in addition to the policy-neutral name.
             "reference_endpoint_appended": endpoint_appended,
-            "evaluation_endpoint_appended": endpoint_appended,
         },
     )
 
