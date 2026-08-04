@@ -18,7 +18,7 @@
 + 一个清洗并人工/视觉复核的视频
 + 一条不泄露数值的过程描述
 + 可追溯的来源记录
-+ 一份相对于当前 View A train 的泛化标签
++ 一份无泄漏的 train/ID-test 划分归属
 ```
 
 任何一项不能可靠建立时，不得猜测。无法找到对应物理标注的视频必须舍弃；完全无法
@@ -36,20 +36,18 @@ Case只记录与该试次本身有关的事实：
 - `assets`、`temporal`、`alignment`和`provenance`：媒体与来源；
 - `has_real_reference_video`：是否存在同一试次的真实参考视频。
 
-Case不得记录`train/test`或ID/OOD。ID/OOD永远相对于某个训练集定义，不是样本的固有
-属性。
+Case不得记录`train/test`。划分属于View，不是样本的固有属性。
 
-### 2.2 View：划分与泛化解释层
+### 2.2 View：划分层
 
 - View A用于`finetune_eval`，主划分只有`train/test`；
-- View A的每条test Case另有`id/ood/mixed`和因素列表；
-- View B用于`direct_eval`，完整覆盖Case并按冻结seed分组，不表达ID/OOD。
+- 当前约定所有test都是训练分布内的独立ID试次，不再构造OOD或mixed测试子集；
+- View B用于`direct_eval`，完整覆盖Case并按冻结seed分组。
 
 ### 2.3 Task：运行与计分层
 
 Task选择Dataset、View、scene、test范围、seed和评估协议。Task不决定如何使用物理量，
-也不重新解释XLSX字段。官方finetune Task以全部test为主评测集；ID/OOD/mixed和具体
-factor只作为必须报告的诊断维度。
+也不重新解释XLSX字段。官方finetune Task只运行当前View A中的ID test。
 
 ## 3. 不可违反的导入原则
 
@@ -91,8 +89,8 @@ factor只作为必须报告的诊断维度。
 | 小球直径/cm | 2.0 | 直接物理量 | `physics.ball_radius` | 除以2并转为m |
 | 遮光时间/ms | 8.2 | 辅助测量 | `physics.photogate_block_time` | 转为s，通常`annotated=false` |
 | 初速度 | 由直径/时间计算 | 派生物理量 | `physics.initial_velocity` | 记录公式和来源可信度 |
-| 背景颜色 | 黑色 | 环境 | `appearance.background` | 可作View factor |
-| 球数 | 3 | 实验形式 | `appearance.object_count` | 可作结构OOD factor |
+| 背景颜色 | 黑色 | 环境 | `appearance.background` | 可作划分分层字段 |
+| 球数 | 3 | 实验形式 | `appearance.object_count` | 可作划分分层字段 |
 | 有初速度球数 | 2 | 实验形式 | `appearance.collision_structure` | 规范枚举 |
 | 视频文件名 | IMG_0123.MOV | 来源键 | `provenance.source_locator` | 用于确定映射 |
 | 备注 | “本次碰歪” | 质量信息 | ingest audit | 决定排除或复核 |
@@ -180,6 +178,8 @@ factor只作为必须报告的诊断维度。
 - **平抛**：第0帧对应球刚穿过光电门且球可见；裁去光电门，必要时同步裁去上方空画面
   以维持合理长宽比；保留完整可见抛物轨迹，不能只剩几帧；
 - **斜面**：第0帧为经过视觉复核的即将开始或刚开始下滑时刻；
+- **单摆**：canonical第0帧按Dataset语义定义为初始释放点；若为去除人手而裁掉源视频
+  前缀，裁剪目的只能记录为去除人手，不能把Case语义改写为“对侧转折点”；
 - 其它scene以其scene config和已有清洗约定为准。
 
 时间处理的硬规则：
@@ -242,47 +242,32 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 - 多主体字段的编号必须与首帧从左到右/scene定义一致，并在provenance中记录映射依据；
 - 规格球等复用对象必须先查权威catalog，不能为同一规格创建多个别名。
 
-### 阶段7：设计View A的train/test与泛化标签
+### 阶段7：设计View A的train/ID test
 
 先确定不可拆分的数据组：完全重复、同一原始试次的多片段、同一事件的多机位，以及会
-造成目标泄漏的近重复必须整体进入train或test。物理signature是否必须成组取决于评测
-目标：
+造成目标泄漏的近重复必须整体进入train或test。
 
-- 数值ID测试中，相同完整物理signature通常整体划分，避免把同条件复刻当泛化；
-- 环境/外观OOD控制实验可以有意让train/test共享物理signature，以隔离OOD因素；
-- 无论哪种设计，同一媒体或同一试次都不能跨界。
+- 同一媒体、同一试次和经审核认定的近重复组件绝不能跨界；
+- 相同完整物理signature若来自独立重复试次，可用于ID测试，但必须确认不是重复媒体；
+- test中的实验形式、对象域、环境域和物理参数支持域必须在train中有代表；
+- 每个scene的test应小而稳定，通常不超过20条，其余有效Case进入train。
 
-Test标签定义：
-
-| regime | 判定 |
-| --- | --- |
-| `id` | 情景因素位于train已覆盖域；可以是独立试次和分布内连续数值holdout |
-| `ood` | 一个或多个明确因素未在train出现，且控制因素由train覆盖 |
-| `mixed` | OOD因素和其它held-out因素共同变化，无法隔离归因 |
-
-OOD factor记录`name/category`，category只能是：
-
-- `physical_parameter`：超出训练支持域的物理参数或组合；
-- `object_composition`：新对象类型、材质标签或组成；
-- `interaction_structure`：球数、入射角色数、碰撞/交互结构；
-- `appearance`：颜色、纹理等视觉变化；
-- `environment`：背景、光照、轨道/支撑环境；
-- `acquisition`：机位、视角或采集方式。
-
-`appearance/environment/acquisition`的OOD分数是视觉鲁棒性诊断，不应包装成物理泛化。
+当前release兼容沿用View A schema 3.0，所以test annotation仍显式写
+`generalization_regime=id`，且`ood_factors=[]`、`co_varying_factors=[]`。这只是schema
+兼容字段，不表示还存在OOD测试集。
 
 #### 已有scene的新数据
 
 1. 旧release只作为历史结果的不可变证据，不得直接覆盖；但它的train/test成员身份不
    自动约束新release；
-2. 合并全部有效旧Case和新增Case后，重新统计每个replicate group、stratum与factor的
+2. 合并全部有效旧Case和新增Case后，重新统计每个replicate group与stratum的
    数量，先判断旧比例是否仍然合理；
 3. 先处理重复/replicate group，同组样本不得跨train/test；
-4. 若新增批次使旧Train过窄、Test严重失衡或OOD因素失去可归因性，应在新Dataset ID/
+4. 若新增批次使旧Train过窄或Test严重失衡，应在新Dataset ID/
    digest下重新划分全部Case，不能把所有新增数据机械地塞入Test；
-5. 为test优先构造可归因的OOD，同时保留数量足够且覆盖训练支持域的Test-ID；无法隔离
-   的样本标为mixed，不再排除；
-6. 记录从旧release到新release的每条划分变化、比例、因素支持域和理由；历史结果不得
+5. test只选训练支持域内的独立ID试次，并按物理条件与实验形式分层；通常每个scene不
+   超过20条；
+6. 记录从旧release到新release的每条划分变化、比例、支持域和理由；历史结果不得
    与新划分结果直接混报。
 
 #### 全新scene
@@ -291,11 +276,12 @@ OOD factor记录`name/category`，category只能是：
 
 - 物理主体、过程边界和canonical首帧事件；
 - 必需/可选物理量、单位、编号规则和约束；
-- 非物理情景字段与候选generalization factors；
+- 非物理情景字段与划分分层字段；
 - prompt应描述的过程信息；
 - evaluator所需reference和验收条件。
 
-若数据量或factor覆盖不足，允许该scene暂时只有test-ID；不得合成或误标OOD来填表。
+若数据量不足以同时形成有代表性的train与ID test，应暂缓正式finetune划分，不能用合成
+样本或未覆盖情景勉强填充test。
 
 ### 阶段8：构建View B、asset lock与新release
 
@@ -319,7 +305,7 @@ OOD factor记录`name/category`，category只能是：
 | duplicate audit | 与当前Dataset和本批次的查重结果 |
 | alignment audit | 源起止帧、crop、probe和视觉复核状态 |
 | prompt audit | 自动禁词检查与语义复核 |
-| split audit | group、train/test、regime、factor和理由 |
+| split audit | group、train/test、ID支持域和理由 |
 | migration audit | 基础release、数量变化、digest与媒体改动量 |
 
 推荐排除原因码：
@@ -363,7 +349,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 - reference与source窗口的FPS、帧数、duration关系检查；
 - prompt数值/单位/背景/颜色/视角禁词检查；
 - `physics`中背景/颜色/环境字段检查；
-- View A完整覆盖、互斥、annotation完整性和factor类别检查；
+- View A完整覆盖、互斥、全部test为ID且每scene不超过约定上限；
 - release和asset digest复算。
 
 ### 6.2 视觉验收
@@ -389,11 +375,10 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 3. 导入、排除、重复各多少，逐原因统计；
 4. 哪些标注经过单位换算、catalog修正或人工澄清；
 5. 视频清洗和视觉复核覆盖率；
-6. 各scene的train/test及ID/OOD/mixed数量；
-7. 新增OOD factor及类别；
-8. Dataset、asset和Task digest；
-9. 是否修改或复制过媒体字节；
-10. 尚未解决的风险和需要数据提供者回答的问题。
+6. 各scene的train和ID test数量；
+7. Dataset、asset和Task digest；
+8. 是否修改或复制过媒体字节；
+9. 尚未解决的风险和需要数据提供者回答的问题。
 
 如果仍有不理解的物理标注，最终状态只能是“部分完成/等待澄清”，不能把猜测包装成
 已完成导入。

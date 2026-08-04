@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Materialize visually accepted 2026-08-04 pendulum supplement assets.
 
-This script consumes the staging analysis, frame-accurately removes the first
-half-cycle, preserves every remaining source frame at the source nominal FPS,
-generates canonical first frames, and writes auditable Case drafts.  It does
-not publish a Dataset release; publication remains a separate atomic step.
+This script consumes the staging analysis, frame-accurately removes the
+hand-contaminated prefix, preserves every remaining source frame at the source
+nominal FPS, generates canonical first frames, and writes auditable Case
+drafts.  In Dataset semantics the resulting frame zero is the initial release
+point; the trim exists only to remove the person's hand.  This script does not
+publish a Dataset release; publication remains a separate atomic step.
 """
 
 from __future__ import annotations
@@ -31,9 +33,8 @@ ARCHIVE = Path("/root/Steven/补充_小球单摆实验.zip")
 WORKBOOK_MEMBER = "补充_小球单摆实验/钟摆实验.xlsx"
 IMPORT_ID = "pendulum_supplement_20260804"
 PROMPT = (
-    "A pendulum bob starts at a turning point, swings down through the lowest "
-    "point to the opposite side, and continues oscillating back and forth about "
-    "the fixed pivot."
+    "A pendulum bob is released from rest at the first frame and swings back "
+    "and forth about the fixed pivot."
 )
 BACKGROUND_IDS = {"白色卡纸": "white_card", "绿色卡纸": "green_card"}
 
@@ -295,9 +296,8 @@ def _materialize_one(arguments: tuple[dict[str, Any], str]) -> dict[str, Any]:
             "frame_count_policy": "all source frames from the selected start through EOF",
         },
         "alignment": {
-            "canonical_first_frame_event": record["alignment"][
-                "canonical_first_frame_event"
-            ],
+            "canonical_first_frame_event": "initial release point",
+            "trim_purpose": "remove_person_hand_only",
             "source_start_frame": source_start,
             "source_end_frame_exclusive": record["alignment"][
                 "source_end_frame_exclusive"
@@ -327,7 +327,7 @@ def _materialize_one(arguments: tuple[dict[str, Any], str]) -> dict[str, Any]:
         "frame_count_preserved_after_trim": True,
         "fps_preserved": True,
         "spatial_crop": None,
-        "visual_review": "accepted_start_turning_triptych_and_full_span_five_frame_sheet",
+        "visual_review": "accepted_initial_release_triptych_and_full_span_five_frame_sheet",
         "status": "staged_accepted_not_yet_published",
     }
 

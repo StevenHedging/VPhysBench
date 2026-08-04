@@ -36,7 +36,7 @@ Dataset 不认识具体模型；Task 不携带模型输入策略；Baseline 不�
 当前入口：
 
 ```text
-datasets/physics_video/releases/6.0.0/dataset.json
+datasets/physics_video/releases/8.0.0/dataset.json
 ```
 
 Dataset和Case使用schema 4.0。每个Case同时拥有：
@@ -47,9 +47,8 @@ Dataset和Case使用schema 4.0。每个Case同时拥有：
 - `appearance`、`temporal`；
 - evaluator-only reference 与 provenance。
 
-ID/OOD不再是Case字段，而是View A中相对于冻结train的test annotation。原始prompt与
-物理标注并列保存，不由Task或Baseline配置临时生成。Release 6.0.0是5.1.0的元数据
-迁移，没有改变604个Case对应的媒体字节。
+划分不属于Case字段；当前View A只包含train和ID test。原始prompt与物理标注并列保存，
+不由Task或Baseline配置临时生成。Release 8.0.0包含799条Case和六个scene。
 
 ## 3. Task 是模型无关的评测定义
 
@@ -69,8 +68,8 @@ evaluation
 
 | 文件 | family | View |
 | --- | --- | --- |
-| `tasks/official/six_scene_finetune_eval.json` | `finetune_eval` | A |
-| `tasks/official/six_scene_direct_eval.json` | `direct_eval` | B |
+| `tasks/official/five_scene_finetune_eval.json` | `finetune_eval` | A |
+| `tasks/official/five_scene_direct_eval.json` | `direct_eval` | B |
 
 Task中没有物理使用开关。Planner只依赖Dataset与Task，生成schema 4.0
 `CanonicalTaskPlan`：

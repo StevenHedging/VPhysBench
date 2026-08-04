@@ -247,8 +247,8 @@ tests/test_<scene>_evaluator.py
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
   scripts/audit_open_world_evaluator_v6.py \
-  --dataset datasets/physics_video/releases/6.0.0/dataset.json \
-  --protocol scene_default_v8 \
+  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
+  --protocol scene_default_v10 \
   --scene parabolic_motion \
   --self-check \
   --output /mnt/nvme1/physics_video_benchmark/audits/<audit_id>

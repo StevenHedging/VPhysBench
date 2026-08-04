@@ -20,7 +20,7 @@ The selection was refreshed on 2026-08-01 rather than being limited to the
 | Candidate | Autoregressive unit | Native I2V in released code/weights | License | Integration decision |
 |---|---|---:|---|---|
 | [Causal Forcing++](https://github.com/thu-ml/Causal-Forcing) ([paper](https://arxiv.org/abs/2605.15141)) | one latent frame | yes | Apache-2.0 | selected: newest high-quality two-step checkpoint, 1.3B Wan backbone, practical 8× single-GPU throughput |
-| [MAGI-1](https://github.com/SandAI-org/MAGI-1) ([paper](https://arxiv.org/abs/2505.13211)) | 24-pixel-frame chunks | yes | Apache-2.0 | strong physics-oriented alternative, but 4.5B plus a separate T5-XXL stack is slower/heavier for 604 cases |
+| [MAGI-1](https://github.com/SandAI-org/MAGI-1) ([paper](https://arxiv.org/abs/2505.13211)) | 24-pixel-frame chunks | yes | Apache-2.0 | strong physics-oriented alternative, but 4.5B plus a separate T5-XXL stack is slower/heavier for 658 official direct-eval cases |
 | [SkyReels-V2](https://github.com/SkyworkAI/SkyReels-V2) ([paper](https://arxiv.org/abs/2504.13074)) | diffusion-forcing chunks | yes | custom model license | not selected because redistribution/use terms are less permissive |
 | [Self-Forcing](https://github.com/guandeh17/Self-Forcing) ([paper](https://arxiv.org/abs/2506.08009)) | causal chunks | no native released I2V baseline | Apache-2.0 | superseded by Causal Forcing on the same inference budget |
 | [NOVA](https://github.com/baaivision/NOVA) ([paper](https://arxiv.org/abs/2409.11305)) | individual non-quantized frames | yes | Apache-2.0 | much lighter, but the released 0.6B model is not competitive with current few-step causal diffusion quality |
@@ -60,7 +60,7 @@ using aspect-preserving contain resize and edge padding.
 Jobs are deterministically assigned by job-ID hash. One process is started per
 visible GPU, the transformer/text encoder/VAE are loaded once in that process,
 and all assigned cases are then generated sequentially. Thus an eight-GPU run
-has eight persistent model workers rather than reloading the model 604 times.
+has eight persistent model workers rather than reloading the model 658 times.
 
 ## Physics prompt fusion
 
@@ -98,20 +98,20 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   causal_forcing_pp_2step_i2v_physics
 ```
 
-Compile or dry-run the current six-scene task:
+Compile or dry-run the current five-evaluator-scene task:
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
-  --dataset datasets/physics_video/releases/6.0.0/dataset.json \
-  --task tasks/official/six_scene_direct_eval.json \
+  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
   --baseline causal_forcing_pp_2step_i2v_physics \
   --output /tmp/causal_forcing_pp_physics.task.json
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/physics_video/releases/6.0.0/dataset.json \
-  --task tasks/official/six_scene_direct_eval.json \
+  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
   --baseline causal_forcing_pp_2step_i2v_physics \
   --output-root runs_v2
 ```

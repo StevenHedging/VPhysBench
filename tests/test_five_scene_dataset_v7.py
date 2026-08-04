@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import unittest
 
-from physbench.data_layout import LATEST_DATASET, V6_DATASET, V7_DATASET
+from physbench.data_layout import LATEST_DATASET, V6_DATASET, V7_DATASET, V8_DATASET
 from physbench.datasets import load_dataset
 from physbench.evaluation.task_evaluator import aggregate_task_results
 from physbench.tasks import load_task, plan_atomic_task
@@ -21,10 +21,12 @@ class FiveSceneDatasetV7Tests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.v6 = load_dataset(V6_DATASET)
         cls.v7 = load_dataset(V7_DATASET, check_assets=True)
+        cls.v8 = load_dataset(V8_DATASET, check_assets=True)
         cls.view = cls.v7.views["view_a"]
 
     def test_v7_is_latest_five_scene_release(self) -> None:
-        self.assertEqual(V7_DATASET, LATEST_DATASET)
+        self.assertNotEqual(V7_DATASET, LATEST_DATASET)
+        self.assertEqual(V8_DATASET, LATEST_DATASET)
         self.assertEqual("4.0", self.v7.descriptor["schema_version"])
         self.assertEqual("physics_video_five_scene_v7", self.v7.dataset_id)
         self.assertEqual("7.0.0", self.v7.descriptor["release"])
@@ -97,26 +99,26 @@ class FiveSceneDatasetV7Tests(unittest.TestCase):
         ])
 
     def test_v4_tasks_plan_current_release(self) -> None:
-        finetune = plan_atomic_task(load_task(FINETUNE_TASK), self.v7).value
+        finetune = plan_atomic_task(load_task(FINETUNE_TASK), self.v8).value
         self.assertEqual("4.0", finetune["schema_version"])
-        self.assertEqual(403, len(finetune["train_case_ids"]))
-        self.assertEqual(190, len(finetune["jobs"]))
+        self.assertEqual(582, len(finetune["train_case_ids"]))
+        self.assertEqual(76, len(finetune["jobs"]))
         self.assertEqual(
             {"test"},
             {job["evaluation_partition"] for job in finetune["jobs"]},
         )
-        self.assertEqual(190, len(finetune["evaluation_annotations"]))
+        self.assertEqual(76, len(finetune["evaluation_annotations"]))
 
-        direct = plan_atomic_task(load_task(DIRECT_TASK), self.v7).value
+        direct = plan_atomic_task(load_task(DIRECT_TASK), self.v8).value
         self.assertEqual([], direct["train_case_ids"])
-        self.assertEqual(593, len(direct["jobs"]))
+        self.assertEqual(658, len(direct["jobs"]))
         self.assertEqual(
             {"group_1", "group_2", "group_3", "group_4", "group_5"},
             {job["evaluation_partition"] for job in direct["jobs"]},
         )
 
     def test_overall_score_and_breakdowns_remain_well_defined(self) -> None:
-        plan = plan_atomic_task(load_task(FINETUNE_TASK), self.v7).value
+        plan = plan_atomic_task(load_task(FINETUNE_TASK), self.v8).value
         results = [{
             **job,
             "status": "evaluated",
@@ -125,17 +127,12 @@ class FiveSceneDatasetV7Tests(unittest.TestCase):
         summary = aggregate_task_results(plan=plan, case_results=results)
         self.assertEqual(1.0, summary["score"])
         diagnostics = summary["generalization_breakdown"]
-        self.assertEqual(1.0, diagnostics["by_regime"]["ood"]["score"])
+        self.assertEqual(1.0, diagnostics["by_regime"]["id"]["score"])
         self.assertEqual(
             "not_applicable",
             diagnostics["by_scene_regime"]["pendulum/ood"]["status"],
         )
-        self.assertEqual(
-            42,
-            diagnostics["by_ood_factor"][
-                "object_composition/ball_spec_composition"
-            ]["expected_jobs"],
-        )
+        self.assertEqual({}, diagnostics["by_ood_factor"])
 
     def test_collision_split_remains_replicate_safe(self) -> None:
         collision = self.view["scenes"]["collision_1d"]

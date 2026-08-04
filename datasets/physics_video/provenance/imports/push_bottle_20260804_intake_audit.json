@@ -2,13 +2,20 @@
   "annotation_member_count": 0,
   "annotation_members": [],
   "archive_file_count": 142,
-  "decision": "No Dataset Case or scene was created because the archive contains no table that can establish a video-to-physics-annotation mapping.",
+  "decision": "The initial video-only intake block was resolved by the separately supplied physics-annotation archive; 141 videos were mapped and IMG_0076 was excluded for missing annotation.",
+  "followup_annotation_archive": "/root/Steven/推水瓶实验物理标注.zip",
+  "followup_annotation_archive_sha256": "6c89cf701cd431f32bbcdbf82cc4840b5e407b8e838c2529bf5189fbcb5186d4",
+  "followup_annotation_workbooks": 7,
+  "followup_matched_videos": 141,
+  "followup_videos_missing_annotation": [
+    "IMG_0076"
+  ],
   "intake_id": "push_bottle_20260804",
   "schema_version": "1.0",
   "source_archive": "/root/Steven/推水瓶.zip",
   "source_archive_sha256": "3939db1e6f8352b364ef5e2f66d5140db09db4f9b1c98c2ee9a690f28e4bfdea",
   "source_archive_size": 3788499793,
-  "status": "blocked_missing_annotation_table",
+  "status": "resolved_by_followup_annotation_archive",
   "unsafe_members": [],
   "video_count": 142,
   "video_members": [

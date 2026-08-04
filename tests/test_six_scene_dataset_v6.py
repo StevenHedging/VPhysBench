@@ -24,7 +24,7 @@ class SixSceneDatasetV6Tests(unittest.TestCase):
         cls.view = cls.v6.views["view_a"]
 
     def test_v6_is_metadata_only_latest_release(self) -> None:
-        self.assertEqual(V6_DATASET, LATEST_DATASET)
+        self.assertNotEqual(V6_DATASET, LATEST_DATASET)
         self.assertEqual("4.0", self.v6.descriptor["schema_version"])
         self.assertEqual("physics_video_six_scene_v6", self.v6.dataset_id)
         self.assertEqual("6.0.0", self.v6.descriptor["release"])

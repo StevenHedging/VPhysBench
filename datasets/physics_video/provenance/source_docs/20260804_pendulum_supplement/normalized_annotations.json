@@ -58,7 +58,7 @@
   "records": [
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4597,
         "post_start_hand_audit": {
           "accepted": true,
@@ -326,7 +326,8 @@
               "y_px": 1046.800048828125
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -372,7 +373,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1362.MOV",
       "source_probe": {
         "average_frame_rate": "3106/13",
@@ -391,7 +392,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 2856,
         "post_start_hand_audit": {
           "accepted": true,
@@ -659,7 +660,8 @@
               "y_px": 1049.199951171875
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -705,7 +707,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1366.MOV",
       "source_probe": {
         "average_frame_rate": "2330400/9769",
@@ -724,7 +726,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3221,
         "post_start_hand_audit": {
           "accepted": true,
@@ -992,7 +994,8 @@
               "y_px": 1046.800048828125
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -1038,7 +1041,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1367.MOV",
       "source_probe": {
         "average_frame_rate": "78864/331",
@@ -1057,7 +1060,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 2565,
         "post_start_hand_audit": {
           "accepted": true,
@@ -1325,7 +1328,8 @@
               "y_px": 1042.0
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -1371,7 +1375,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1368.MOV",
       "source_probe": {
         "average_frame_rate": "3147600/13217",
@@ -1390,7 +1394,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3915,
         "post_start_hand_audit": {
           "accepted": true,
@@ -1658,7 +1662,8 @@
               "y_px": 1044.4000244140625
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -1704,7 +1709,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1369.MOV",
       "source_probe": {
         "average_frame_rate": "3193600/13377",
@@ -1723,7 +1728,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4511,
         "post_start_hand_audit": {
           "accepted": true,
@@ -1991,7 +1996,8 @@
               "y_px": 1046.800048828125
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -2037,7 +2043,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1370.MOV",
       "source_probe": {
         "average_frame_rate": "3648800/15293",
@@ -2056,7 +2062,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 2177,
         "post_start_hand_audit": {
           "accepted": true,
@@ -2324,7 +2330,8 @@
               "y_px": 1054.0
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -2370,7 +2377,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1371.MOV",
       "source_probe": {
         "average_frame_rate": "221800/929",
@@ -2389,7 +2396,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3266,
         "post_start_hand_audit": {
           "accepted": true,
@@ -2661,7 +2668,8 @@
               "y_px": 998.800048828125
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -2707,7 +2715,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1375.MOV",
       "source_probe": {
         "average_frame_rate": "8052000/33643",
@@ -2726,7 +2734,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3401,
         "post_start_hand_audit": {
           "accepted": true,
@@ -2994,7 +3002,8 @@
               "y_px": 996.4000244140625
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -3040,7 +3049,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1377.MOV",
       "source_probe": {
         "average_frame_rate": "259950/1087",
@@ -3059,7 +3068,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3687,
         "post_start_hand_audit": {
           "accepted": true,
@@ -3331,7 +3340,8 @@
               "y_px": 979.5999755859375
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -3377,7 +3387,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1381.MOV",
       "source_probe": {
         "average_frame_rate": "93650/391",
@@ -3396,7 +3406,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3732,
         "post_start_hand_audit": {
           "accepted": true,
@@ -3664,7 +3674,8 @@
               "y_px": 982.0
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -3710,7 +3721,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1383.MOV",
       "source_probe": {
         "average_frame_rate": "2300400/9637",
@@ -3729,7 +3740,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3939,
         "post_start_hand_audit": {
           "accepted": true,
@@ -4001,7 +4012,8 @@
               "y_px": 984.4000244140625
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -4047,7 +4059,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1384.MOV",
       "source_probe": {
         "average_frame_rate": "240120/1003",
@@ -4066,7 +4078,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4352,
         "post_start_hand_audit": {
           "accepted": true,
@@ -4334,7 +4346,8 @@
               "y_px": 979.5999755859375
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -4380,7 +4393,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1385.MOV",
       "source_probe": {
         "average_frame_rate": "3535200/14809",
@@ -4399,7 +4412,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3735,
         "post_start_hand_audit": {
           "accepted": true,
@@ -4667,7 +4680,8 @@
               "y_px": 967.5999755859375
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -4713,7 +4727,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1386.MOV",
       "source_probe": {
         "average_frame_rate": "3040000/12723",
@@ -4732,7 +4746,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3973,
         "post_start_hand_audit": {
           "accepted": true,
@@ -5004,7 +5018,8 @@
               "y_px": 972.4000244140625
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -5050,7 +5065,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1387.MOV",
       "source_probe": {
         "average_frame_rate": "811800/3391",
@@ -5069,7 +5084,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3992,
         "post_start_hand_audit": {
           "accepted": true,
@@ -5337,7 +5352,8 @@
               "y_px": 972.4000244140625
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -5383,7 +5399,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1388.MOV",
       "source_probe": {
         "average_frame_rate": "610650/2557",
@@ -5402,7 +5418,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4055,
         "post_start_hand_audit": {
           "accepted": true,
@@ -5670,7 +5686,8 @@
               "y_px": 970.0
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -5716,7 +5733,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1389.MOV",
       "source_probe": {
         "average_frame_rate": "826800/3461",
@@ -5735,7 +5752,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4135,
         "post_start_hand_audit": {
           "accepted": true,
@@ -6003,7 +6020,8 @@
               "y_px": 1013.2000122070312
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -6049,7 +6067,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1391.MOV",
       "source_probe": {
         "average_frame_rate": "840600/3517",
@@ -6068,7 +6086,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4246,
         "post_start_hand_audit": {
           "accepted": true,
@@ -6336,7 +6354,8 @@
               "y_px": 1003.5999755859375
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -6382,7 +6401,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1392.MOV",
       "source_probe": {
         "average_frame_rate": "1729600/7241",
@@ -6401,7 +6420,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4062,
         "post_start_hand_audit": {
           "accepted": true,
@@ -6661,7 +6680,8 @@
               "y_px": 994.0
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -6707,7 +6727,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1393.MOV",
       "source_probe": {
         "average_frame_rate": "3324800/13911",
@@ -6726,7 +6746,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4044,
         "post_start_hand_audit": {
           "accepted": true,
@@ -6994,7 +7014,8 @@
               "y_px": 1018.0
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -7040,7 +7061,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1394.MOV",
       "source_probe": {
         "average_frame_rate": "4904400/20501",
@@ -7059,7 +7080,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3878,
         "post_start_hand_audit": {
           "accepted": true,
@@ -7319,7 +7340,8 @@
               "y_px": 991.5999755859375
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -7365,7 +7387,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1395.MOV",
       "source_probe": {
         "average_frame_rate": "9564000/40021",
@@ -7384,7 +7406,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4016,
         "post_start_hand_audit": {
           "accepted": true,
@@ -7652,7 +7674,8 @@
               "y_px": 998.800048828125
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -7698,7 +7721,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1396.MOV",
       "source_probe": {
         "average_frame_rate": "9837600/41203",
@@ -7717,7 +7740,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4152,
         "post_start_hand_audit": {
           "accepted": true,
@@ -7977,7 +8000,8 @@
               "y_px": 979.5999755859375
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -8023,7 +8047,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1397.MOV",
       "source_probe": {
         "average_frame_rate": "2037120/8531",
@@ -8042,7 +8066,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4044,
         "post_start_hand_audit": {
           "accepted": true,
@@ -8310,7 +8334,8 @@
               "y_px": 986.800048828125
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -8356,7 +8381,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1398.MOV",
       "source_probe": {
         "average_frame_rate": "9840000/41183",
@@ -8375,7 +8400,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4547,
         "post_start_hand_audit": {
           "accepted": true,
@@ -8635,7 +8660,8 @@
               "y_px": 982.0
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -8681,7 +8707,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1399.MOV",
       "source_probe": {
         "average_frame_rate": "371120/1557",
@@ -8700,7 +8726,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4900,
         "post_start_hand_audit": {
           "accepted": true,
@@ -8968,7 +8994,8 @@
               "y_px": 989.2000122070312
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -9014,7 +9041,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1400.MOV",
       "source_probe": {
         "average_frame_rate": "955/4",
@@ -9033,7 +9060,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3962,
         "post_start_hand_audit": {
           "accepted": true,
@@ -9301,7 +9328,8 @@
               "y_px": 924.4000244140625
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -9347,7 +9375,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1401.MOV",
       "source_probe": {
         "average_frame_rate": "1607600/6737",
@@ -9366,7 +9394,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4747,
         "post_start_hand_audit": {
           "accepted": true,
@@ -9630,7 +9658,8 @@
               "y_px": 919.5999755859375
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -9676,7 +9705,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1403.MOV",
       "source_probe": {
         "average_frame_rate": "726900/3037",
@@ -9695,7 +9724,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4073,
         "post_start_hand_audit": {
           "accepted": true,
@@ -9955,7 +9984,8 @@
               "y_px": 914.7999877929688
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -10001,7 +10031,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1404.MOV",
       "source_probe": {
         "average_frame_rate": "2511000/10511",
@@ -10020,7 +10050,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4146,
         "post_start_hand_audit": {
           "accepted": true,
@@ -10280,7 +10310,8 @@
               "y_px": 907.5999755859375
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -10326,7 +10357,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1405.MOV",
       "source_probe": {
         "average_frame_rate": "226560/947",
@@ -10345,7 +10376,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3693,
         "post_start_hand_audit": {
           "accepted": true,
@@ -10597,7 +10628,8 @@
               "y_px": 1522.0
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -10643,7 +10675,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1406.MOV",
       "source_probe": {
         "average_frame_rate": "1133400/4751",
@@ -10662,7 +10694,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 5970,
         "post_start_hand_audit": {
           "accepted": true,
@@ -10906,7 +10938,8 @@
               "y_px": 1507.60009765625
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -10952,7 +10985,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1407.MOV",
       "source_probe": {
         "average_frame_rate": "3640200/15227",
@@ -10971,7 +11004,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 6323,
         "post_start_hand_audit": {
           "accepted": true,
@@ -11215,7 +11248,8 @@
               "y_px": 1529.199951171875
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -11261,7 +11295,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1408.MOV",
       "source_probe": {
         "average_frame_rate": "242325/1013",
@@ -11280,7 +11314,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 5424,
         "post_start_hand_audit": {
           "accepted": true,
@@ -11524,7 +11558,8 @@
               "y_px": 1534.0
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -11570,7 +11605,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1409.MOV",
       "source_probe": {
         "average_frame_rate": "1680300/7039",
@@ -11589,7 +11624,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 5420,
         "post_start_hand_audit": {
           "accepted": true,
@@ -11837,7 +11872,8 @@
               "y_px": 1517.199951171875
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -11883,7 +11919,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1410.MOV",
       "source_probe": {
         "average_frame_rate": "4458400/18627",
@@ -11902,7 +11938,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 5467,
         "post_start_hand_audit": {
           "accepted": true,
@@ -12146,7 +12182,8 @@
               "y_px": 1567.60009765625
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -12192,7 +12229,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1411.MOV",
       "source_probe": {
         "average_frame_rate": "3345600/13993",
@@ -12211,7 +12248,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 6700,
         "post_start_hand_audit": {
           "accepted": true,
@@ -12463,7 +12500,8 @@
               "y_px": 1565.199951171875
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -12509,7 +12547,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1412.MOV",
       "source_probe": {
         "average_frame_rate": "1352400/5657",
@@ -12528,7 +12566,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 6006,
         "post_start_hand_audit": {
           "accepted": true,
@@ -12772,7 +12810,8 @@
               "y_px": 1548.4000244140625
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -12818,7 +12857,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1413.MOV",
       "source_probe": {
         "average_frame_rate": "14786400/61939",
@@ -12837,7 +12876,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 6438,
         "post_start_hand_audit": {
           "accepted": true,
@@ -13081,7 +13120,8 @@
               "y_px": 1538.800048828125
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -13127,7 +13167,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1414.MOV",
       "source_probe": {
         "average_frame_rate": "3924600/16411",
@@ -13146,7 +13186,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 7521,
         "post_start_hand_audit": {
           "accepted": true,
@@ -13398,7 +13438,8 @@
               "y_px": 1538.800048828125
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -13444,7 +13485,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1415.MOV",
       "source_probe": {
         "average_frame_rate": "18115200/75937",
@@ -13463,7 +13504,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 7117,
         "post_start_hand_audit": {
           "accepted": true,
@@ -13715,7 +13756,8 @@
               "y_px": 1514.800048828125
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -13761,7 +13803,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1416.MOV",
       "source_probe": {
         "average_frame_rate": "2856400/11947",
@@ -13780,7 +13822,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 5921,
         "post_start_hand_audit": {
           "accepted": true,
@@ -14024,7 +14066,8 @@
               "y_px": 1505.199951171875
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -14070,7 +14113,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1417.MOV",
       "source_probe": {
         "average_frame_rate": "2424000/10163",
@@ -14089,7 +14132,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 6598,
         "post_start_hand_audit": {
           "accepted": true,
@@ -14341,7 +14384,8 @@
               "y_px": 1514.800048828125
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -14387,7 +14431,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1418.MOV",
       "source_probe": {
         "average_frame_rate": "3970800/16633",
@@ -14406,7 +14450,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 6894,
         "post_start_hand_audit": {
           "accepted": true,
@@ -14650,7 +14694,8 @@
               "y_px": 1493.199951171875
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -14696,7 +14741,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1419.MOV",
       "source_probe": {
         "average_frame_rate": "35150/147",
@@ -14715,7 +14760,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 6665,
         "post_start_hand_audit": {
           "accepted": true,
@@ -14959,7 +15004,8 @@
               "y_px": 1495.60009765625
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -15005,7 +15051,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1420.MOV",
       "source_probe": {
         "average_frame_rate": "16346400/68407",
@@ -15024,7 +15070,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 5757,
         "post_start_hand_audit": {
           "accepted": true,
@@ -15268,7 +15314,8 @@
               "y_px": 1450.0
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "白色卡纸",
@@ -15314,7 +15361,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1422.MOV",
       "source_probe": {
         "average_frame_rate": "7069200/29573",
@@ -15333,7 +15380,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3165,
         "post_start_hand_audit": {
           "accepted": true,
@@ -15601,7 +15648,8 @@
               "y_px": 1022.800048828125
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -15647,7 +15695,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1448.MOV",
       "source_probe": {
         "average_frame_rate": "7725600/32441",
@@ -15666,7 +15714,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 2873,
         "post_start_hand_audit": {
           "accepted": true,
@@ -15934,7 +15982,8 @@
               "y_px": 1063.5999755859375
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -15980,7 +16029,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1449.MOV",
       "source_probe": {
         "average_frame_rate": "219600/919",
@@ -15999,7 +16048,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 2631,
         "post_start_hand_audit": {
           "accepted": true,
@@ -16267,7 +16316,8 @@
               "y_px": 1066.0
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -16313,7 +16363,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1450.MOV",
       "source_probe": {
         "average_frame_rate": "1306080/5461",
@@ -16332,7 +16382,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 2644,
         "post_start_hand_audit": {
           "accepted": true,
@@ -16600,7 +16650,8 @@
               "y_px": 1073.199951171875
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -16646,7 +16697,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1451.MOV",
       "source_probe": {
         "average_frame_rate": "436000/1823",
@@ -16665,7 +16716,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 2718,
         "post_start_hand_audit": {
           "accepted": true,
@@ -16933,7 +16984,8 @@
               "y_px": 1068.4000244140625
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -16979,7 +17031,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1452.MOV",
       "source_probe": {
         "average_frame_rate": "441440/1849",
@@ -16998,7 +17050,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4384,
         "post_start_hand_audit": {
           "accepted": true,
@@ -17258,7 +17310,8 @@
               "y_px": 967.5999755859375
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -17304,7 +17357,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1488.MOV",
       "source_probe": {
         "average_frame_rate": "2694000/11281",
@@ -17323,7 +17376,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4236,
         "post_start_hand_audit": {
           "accepted": true,
@@ -17583,7 +17636,8 @@
               "y_px": 958.0
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -17629,7 +17683,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1489.MOV",
       "source_probe": {
         "average_frame_rate": "2602800/10891",
@@ -17648,7 +17702,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4090,
         "post_start_hand_audit": {
           "accepted": true,
@@ -17908,7 +17962,8 @@
               "y_px": 972.4000244140625
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -17954,7 +18009,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1492.MOV",
       "source_probe": {
         "average_frame_rate": "853200/3571",
@@ -17973,7 +18028,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4062,
         "post_start_hand_audit": {
           "accepted": true,
@@ -18233,7 +18288,8 @@
               "y_px": 953.2000122070312
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -18279,7 +18335,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1493.MOV",
       "source_probe": {
         "average_frame_rate": "3326400/13921",
@@ -18298,7 +18354,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3992,
         "post_start_hand_audit": {
           "accepted": true,
@@ -18558,7 +18614,8 @@
               "y_px": 974.800048828125
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -18604,7 +18661,7 @@
           "value": 0.05
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1494.MOV",
       "source_probe": {
         "average_frame_rate": "102050/427",
@@ -18623,7 +18680,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 5115,
         "post_start_hand_audit": {
           "accepted": true,
@@ -18867,7 +18924,8 @@
               "y_px": 1594.0
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -18913,7 +18971,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1495.MOV",
       "source_probe": {
         "average_frame_rate": "1795200/7511",
@@ -18932,7 +18990,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4122,
         "post_start_hand_audit": {
           "accepted": true,
@@ -19176,7 +19234,8 @@
               "y_px": 1469.199951171875
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -19222,7 +19281,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1505.MOV",
       "source_probe": {
         "average_frame_rate": "2056320/8599",
@@ -19241,7 +19300,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3797,
         "post_start_hand_audit": {
           "accepted": true,
@@ -19485,7 +19544,8 @@
               "y_px": 1474.0
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -19531,7 +19591,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1506.MOV",
       "source_probe": {
         "average_frame_rate": "1179900/4939",
@@ -19550,7 +19610,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4062,
         "post_start_hand_audit": {
           "accepted": true,
@@ -19794,7 +19854,8 @@
               "y_px": 1478.800048828125
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -19840,7 +19901,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1507.MOV",
       "source_probe": {
         "average_frame_rate": "2513400/10531",
@@ -19859,7 +19920,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 4136,
         "post_start_hand_audit": {
           "accepted": true,
@@ -20103,7 +20164,8 @@
               "y_px": 1474.0
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -20149,7 +20211,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1508.MOV",
       "source_probe": {
         "average_frame_rate": "641700/2687",
@@ -20168,7 +20230,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3936,
         "post_start_hand_audit": {
           "accepted": true,
@@ -20412,7 +20474,8 @@
               "y_px": 1476.4000244140625
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -20458,7 +20521,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1509.MOV",
       "source_probe": {
         "average_frame_rate": "48984/205",
@@ -20477,7 +20540,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 5842,
         "post_start_hand_audit": {
           "accepted": true,
@@ -20721,7 +20784,8 @@
               "y_px": 1418.800048828125
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -20767,7 +20831,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1510.MOV",
       "source_probe": {
         "average_frame_rate": "14306400/59927",
@@ -20786,7 +20850,7 @@
     },
     {
       "alignment": {
-        "canonical_first_frame_event": "first opposite-side turning point after release",
+        "canonical_first_frame_event": "initial release point",
         "output_frame_count": 3954,
         "post_start_hand_audit": {
           "accepted": true,
@@ -21034,7 +21098,8 @@
               "y_px": 1426.0
             }
           ]
-        }
+        },
+        "trim_purpose": "remove_person_hand_only"
       },
       "annotation": {
         "background": "绿色卡纸",
@@ -21080,7 +21145,7 @@
           "value": 0.165
         }
       },
-      "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+      "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
       "source_path": "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/pendulum/补充_小球单摆实验/IMG_1511.MOV",
       "source_probe": {
         "average_frame_rate": "9976800/41683",

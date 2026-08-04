@@ -5,12 +5,12 @@
 当前 DatasetSnapshot：
 
 ```text
-dataset_id:     physics_video_six_scene_v6
-release:        6.0.0
-descriptor:     datasets/physics_video/releases/6.0.0/dataset.json
-cases:          604
-locked assets:  1650
-dataset digest: bb7b4a0d5292cf669e39a030b1ece3ef24515cb7b43b2d6ff9320597c1003fcd
+dataset_id:     physics_video_six_scene_v8
+release:        8.0.0
+descriptor:     datasets/physics_video/releases/8.0.0/dataset.json
+cases:          799
+locked assets:  2032
+dataset digest: 08eb448fe9d02ad0593be4ab50db1b0741e8f77798e3d02df45962e9e857ea8e
 ```
 
 `datasets/` 是唯一权威数据根。Baseline、cache 和 run 不能回写或覆盖这里的资产。
@@ -24,18 +24,18 @@ datasets/
 └── physics_video/
     ├── assets/
     │   ├── pendulum/
-    │   ├── free_fall/
     │   ├── collision_1d/
     │   ├── inclined_plane_slide/
     │   ├── uniform_circular_motion/
     │   ├── parabolic_motion/
+    │   ├── push_bottle/
     │   └── source_archives/
     ├── provenance/
     │   ├── imports/
     │   └── source_docs/
     └── releases/
-        ├── 1.0.0/…5.1.0/            # 历史结果引用的只读元数据
-        └── 6.0.0/
+        ├── 1.0.0/…7.0.0/            # 历史结果引用的只读元数据
+        └── 8.0.0/
             ├── dataset.json          # 唯一加载入口
             ├── release.json          # Dataset 与资产集合 digest
             ├── cases.jsonl           # Case schema 4.0
@@ -70,13 +70,12 @@ datasets/
 | `alignment` | 可选的时间对齐审核 |
 | `has_real_reference_video` | 是否有真实 reference |
 
-Case 不包含 Task partition、ID/OOD、模型分辨率、runner 参数或模型原生输入。
-ID/OOD 必须相对于一份具体训练集定义，因此属于 View A 的 test annotation，不能作为
-Case 的固有属性。5.1.0 的 `case.ood` 只保留用于历史结果复现。
+Case 不包含 Task partition、模型分辨率、runner 参数或模型原生输入。当前View A只包含
+train和ID test；历史release中的OOD字段仅用于复现旧结果，不能重新带入当前划分。
 
 `appearance` 沿用历史字段名，但它的语义比视觉外观更宽：背景、颜色、材质、机位、
 采集批次，以及球数、初始运动球数、碰撞结构等非数值实验形式都放在这里。它们可以
-作为 View A 的泛化因素，但不能混入 `physics`。
+作为分层和覆盖检查字段，但不能混入 `physics`。
 
 ## 4. 原始 prompt
 
@@ -91,15 +90,16 @@ case.text.prompt
 ```json
 {
   "schema_version": "1.0",
-  "prompt": "A fixed-camera real-world laboratory video ...",
+  "prompt": "A pendulum bob is released from rest ...",
   "language": "en",
   "annotation_source": "five_scene_prompt_v1"
 }
 ```
 
-该 prompt 描述 scene 与可见运动。碰撞 scene 的 5.1.0 prompt 逐 case 明确主体数量、
-初始运动/静止角色和运动方向，避免用一个模板模糊不同情景；其它 scene
-继续使用各自冻结的 scene 文本。所有 Baseline 都以它为文本源；是否原样使用、
+该 prompt 只描述可见物理过程，不包含数值、背景、颜色、视角或采集提示。碰撞scene
+逐case明确主体数量、初始运动/静止角色和运动方向，避免用一个模板模糊不同情景；
+8.0.0中的100条单摆统一采用“首帧静止释放并绕固定点往复摆动”的语义。所有Baseline
+都以它为文本源；是否原样使用、
 追加结构化物理文本或转换成其它模型表示，由 Baseline 的 `input_policy` 与 adapter
 决定。Task 不生成或选择 prompt。
 
@@ -128,12 +128,12 @@ conditionable Case 中。数据导入时无法建立可靠标注对应关系的�
 
 主要物理量：
 
-- 单摆：摆长、绳长、摆球半径、初始角度；
-- 自由落体：初始高度、球半径、质量、初速度；
+- 单摆：摆长、绳长、摆球半径、摆球质量（新增批次）与初始角度；
 - 一维碰撞：球质量、半径、初速度；
 - 斜面下滑：斜面角度、质量、摩擦系数、理论加速度；
 - 匀速圆周运动：角速度、一个或两个物体的轨道半径；
 - 平抛运动：出门初速度、竖直落差、球质量与半径。
+- 推水瓶：水瓶质量、高度、最大施力和平均施力。
 
 ## 6. 资产角色
 
@@ -151,9 +151,8 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 
 - Case 中的路径相对 `dataset.asset_root`；
 - `assets.lock.json` 封印所有引用文件的大小和 SHA-256；
-- 6.0.0 沿用的目录名只编码 scene 的主要结构化物理量与唯一身份后缀，不使用背景、
+- 8.0.0 的目录名只编码 scene 的主要结构化物理量与唯一身份后缀，不使用背景、
   颜色或采集环境；
-- 6.0.0 是元数据迁移，与5.1.0引用完全相同的冻结媒体，没有复制或修改视频 payload；
 - I2V 使用显式 `assets.first_frame`，不在运行时从 GT 临时补首帧；
 - reference/source/provenance 属于 evaluator 或数据审计，不交给生成 driver；
 - 尺寸、FPS、帧数、抽帧和特征派生物只能进入 immutable cache 或 run。
@@ -163,69 +162,69 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 画幅。首尾帧视觉复核结论、裁剪框和源帧范围均随 Dataset provenance 冻结。生成阶段
 不再重复裁剪。
 
+补充单摆裁掉了带人手的源视频前缀，但canonical第0帧在Dataset语义中就是初始释放点；
+不能在prompt或Case alignment中称为“释放后的对侧转折点”。推水瓶无需清洗，canonical
+reference与源MOV逐字节一致，首帧由该reference第0帧解码得到。
+
 V2V 必须另外登记独立输入视频资产，例如 `assets.input_video`。其中
 `conditioning_video` 只是 adapter 对该输入媒体 channel 的角色名，不表示 Task
 层的物理信息分组；reference、physics reference 和 source video 均禁止充当 V2V 输入。
-当前 6.0.0 release 没有正式 `assets.input_video`，因此 V2V Bundle 只是接口能力，
+当前 8.0.0 release 没有正式 `assets.input_video`，因此 V2V Bundle 只是接口能力，
 不能直接运行官方数据。
 
 ## 7. View A：finetune_eval
 
-View A schema 3.0 只使用两个互斥主划分：`train` 和 `test`。两者完整覆盖604条Case，
-不再为了构造纯ID/OOD而排除有效数据。ID/OOD/mixed是每条test Case相对于
-`view_a.train`的分析标签：
-
-- `id`：测试情景处于训练集已覆盖的因素域，允许独立试次和分布内连续数值变化；
-- `ood`：至少一个明确因素在训练中未出现，且控制因素仍处于训练支持域；
-- `mixed`：OOD因素与另一个 held-out 因素同时变化，无法把误差归因于单一因素。
+View A schema 3.0 只使用两个互斥主划分：`train` 和 `test`。两者完整覆盖799条Case。
+当前release不再构造OOD或mixed测试集；所有test都是训练支持域内的独立ID试次，每个
+scene的test不超过20条。兼容schema中的`generalization_regime`固定为`id`，两个factor
+列表固定为空。
 
 当前数量：
 
-| scene | 全部 | train | test | test-ID | test-OOD | test-mixed |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| pendulum | 35 | 27 | 8 | 8 | 0 | 0 |
-| free_fall | 11 | 7 | 4 | 4 | 0 | 0 |
-| collision_1d | 330 | 230 | 100 | 58 | 42 | 0 |
-| inclined_plane_slide | 95 | 58 | 37 | 15 | 16 | 6 |
-| uniform_circular_motion | 36 | 18 | 18 | 6 | 12 | 0 |
-| parabolic_motion | 97 | 70 | 27 | 27 | 0 | 0 |
-| **合计** | **604** | **410** | **194** | **118** | **70** | **6** |
+| scene | 全部 | train | ID test |
+| --- | ---: | ---: | ---: |
+| pendulum | 100 | 80 | 20 |
+| collision_1d | 330 | 310 | 20 |
+| inclined_plane_slide | 95 | 80 | 15 |
+| uniform_circular_motion | 36 | 30 | 6 |
+| parabolic_motion | 97 | 82 | 15 |
+| push_bottle | 141 | 127 | 14 |
+| **合计** | **799** | **709** | **90** |
 
-OOD因素同时记录类别：`physical_parameter`、`object_composition`、
-`interaction_structure`、`appearance`、`environment`、`acquisition`。例如背景属于
-`environment`，不属于物理OOD；榜单可把它单独报告为视觉/环境鲁棒性。当前6条mixed
-均为斜面角度holdout与新背景共同变化的样本。
-
-当前实际出现的OOD因素：
-
-| factor | category | test数量 | 含义 |
-| --- | --- | ---: | --- |
-| `ball_spec_composition` | `object_composition` | 42 | 训练未见的碰撞球规格组合 |
-| `collision_structure` | `interaction_structure` | 34 | 双球相向入射；与训练中的单入射结构不同 |
-| `ball_material` | `object_composition` | 8 | 上述碰撞OOD中含玻璃球的新材质组成子集 |
-| `moving_object_composition` | `object_composition` | 12 | 训练未见的圆周运动物体组成 |
-| `background` | `environment` | 22 | 新背景；其中6条还与角度holdout共同变化 |
-
-碰撞scene按replicate-safe组件划分：相同近重复簇、审核重复对或完全相同结构化物理
-signature不会跨train/test。钢球单入射数据在每个“球规格序列×碰撞结构”stratum内按
-80/20划为train和test-ID，并强制速度范围端点留在train；34条双球相向入射和8条含
-玻璃球数据进入test-OOD。由于这42条的精确球规格组成也未在train出现，它们同时带有
-`ball_spec_composition`因素；factor子组不是互斥计数。
-
-平抛仍使用按球规格、发射高度和初速度组成的物理signature成组划分，train/test没有
-完全相同signature泄漏。对环境OOD，test与train具有相同物理signature可以是刻意的
-控制变量设计，不应误判为泄漏；真正禁止的是同一原始试次、重复媒体或近重复片段跨界。
+碰撞test覆盖全部13个“碰撞结构×球材质×球规格序列”stratum，并把人工审核近重复簇、
+重复组件和完全相同结构化物理signature作为不可拆分组件；速度范围端点强制留在train。
+平抛按完整物理signature成组抽取。补充单摆按摆长—角度分层抽取，推水瓶的7个质量组
+各抽2条，其余均进入train。
 
 ## 8. View B：direct_eval
 
 View B：
 
-- 完整覆盖 604 个 case；
+- 完整覆盖 799 个 case；
 - scene 内按冻结 seed 确定性分组；
 - group 尽量均衡；
 - group 是报告/抽样维度，不表达模型的物理使用方式，也不等同于 ID/OOD 层级。
 
-## 9. Release 6.0.0 的划分迁移
+## 9. Release 8.0.0 的新增数据与划分
+
+8.0.0基于7.0.0新增两批数据，并重新划分全部scene：
+
+- 新增65条有唯一物理标注、已去除人手的补充单摆；另有42条缺视频标注按用户要求忽略，
+  35条因首个可用帧仍有人手或球不完整而排除；
+- 单摆canonical第0帧统一定义为“初始释放点”，裁掉源视频前缀仅用于去除人手；
+- 新增141条有唯一XLSX标注的推水瓶；`IMG_0076`因缺物理标注排除；
+- 推水瓶reference按源MOV原字节保留，不裁剪、不剪辑、不改FPS和帧数、不重编码；
+- View A全局改为train与ID test，不再设置OOD/mixed测试子集；
+- 完整审计见`8.0.0/split_audit.json`、`8.0.0/migration_audit.json`和
+  `datasets/physics_video/provenance/imports/`。
+
+可复现脚本：
+
+```bash
+PYTHONPATH=src:. python3 scripts/build_dataset_v8.py
+```
+
+## 10. Release 6.0.0 的划分迁移（历史）
 
 6.0.0 从5.1.0元数据生成，媒体字节和资产digest不变。5.1.0只提供Case事实和历史
 审计，不再约束碰撞scene的新划分：
@@ -250,7 +249,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
 
 逐scene数量、digest与零媒体改动声明见`6.0.0/migration_audit.json`。
 
-## 10. Release 5.1.0 的规范化语义（历史）
+## 11. Release 5.1.0 的规范化语义（历史）
 
 5.1.0 从不可变的 5.0.0 派生：
 
@@ -307,14 +306,14 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
 接受。正式 release 一旦发布应视为不可变。4.0.0 从 3.0.0 固化 Case schema 3.0 与
 canonical prompt 的历史迁移语义保持不变。
 
-## 11. 验收
+## 12. 验收
 
 快速 metadata 与资产存在性检查：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/6.0.0/dataset.json \
+  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
   --check-assets
 ```
 
@@ -323,7 +322,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/6.0.0/dataset.json \
+  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
   --check-asset-hashes
 ```
 

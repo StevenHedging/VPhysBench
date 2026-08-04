@@ -22,67 +22,64 @@ adaptation ID 都必须匹配 `^[A-Za-z0-9][A-Za-z0-9_.-]*$`。路径分隔符�
 
 ## 2. 官方 Task
 
-当前六场景Dataset对应两份官方Task；两份五场景Task只用于4.0.0历史结果：
+当前Dataset有六个scene，但推水瓶评估器尚未定义。两份官方Task因此继续选择已有评估器
+的五个scene，并已切换到8.0.0 Dataset：
 
 | 文件 | family | View | 训练 |
 | --- | --- | --- | --- |
-| `tasks/official/six_scene_finetune_eval.json` | `finetune_eval` | A | 是 |
-| `tasks/official/six_scene_direct_eval.json` | `direct_eval` | B | 否 |
-| `tasks/official/five_scene_finetune_eval.json` | 历史`finetune_eval` | A | 是 |
-| `tasks/official/five_scene_direct_eval.json` | 历史`direct_eval` | B | 否 |
+| `tasks/official/five_scene_finetune_eval.json` | `finetune_eval` | A | 是 |
+| `tasks/official/five_scene_direct_eval.json` | `direct_eval` | B | 否 |
 
-现有五场景Baseline在当前6.0.0上的工程检查使用
-`tasks/smoke/five_scene_direct_eval_v6.json`。它不是正式榜单Task，但可以避免为了smoke
-回退到旧Dataset；完整六场景评测仍必须使用上述`six_scene_*`官方Task。
+推水瓶可以进入Dataset训练和基线数据适配，但在专用评估器及协议完成前不能计入官方
+物理分数。不得用其它scene的评估器代替。
 
 Fine-tune + eval 示例：
 
 ```json
 {
   "schema_version": "4.0",
-  "task_id": "six_scene_finetune_eval_v1",
+  "task_id": "five_scene_finetune_eval_v8",
   "family": "finetune_eval",
-  "dataset_id": "physics_video_six_scene_v6",
+  "dataset_id": "physics_video_six_scene_v8",
   "dataset_view": "view_a",
   "selection": {
     "scene_ids": [
       "pendulum",
-      "free_fall",
       "collision_1d",
       "inclined_plane_slide",
       "uniform_circular_motion",
       "parabolic_motion"
     ],
-    "test_regimes": "all"
+    "test_regimes": ["id"]
   },
   "seeds": {
     "training": [42],
     "inference": [42]
   },
   "evaluation": {
-    "protocol": "scene_default_v8",
+    "protocol": "scene_default_v10",
     "reporting": {
       "primary_score": "overall_test",
-      "breakdowns": ["generalization_regime", "ood_factor"],
+      "breakdowns": [],
       "minimum_subgroup_jobs": 5
     }
   }
 }
 ```
 
-两份六场景官方 Task 固定 `scene_default_v8`；五场景历史 Task 和兼容性 smoke 继续固定
-其原协议，不能把不同 protocol identity 的分数混合。
+两份官方Task固定`scene_default_v10`。不同Dataset digest或protocol identity的分数不能
+混合。
 
 `finetune_eval` 必须使用 View A，且一个 AtomicRun 恰好有一个 training seed；
 `direct_eval` 必须使用 View B，且没有 training seed。多个 seed 应展开成多个独立
 AtomicRun，不能在同一模型产物中混合。
 
 schema 4.0不再选择`test_id/test_ood1` partition。finetune Task只运行`test`，总体Test
-分是主分；`test_regimes`仅用于完整Task的诊断筛选。官方Task固定为`all`，并要求报告
-ID/OOD/mixed与OOD factor。少于5个job的子组显示`N/A`，但不影响完整总体Test主分。
+分是主分；当前View A的test全部为ID，官方Task固定选择`["id"]`，不再报告OOD/mixed或
+OOD factor分组。
 
-现有部分Baseline manifest仍只声明支持五个scene，因此不能直接运行六场景Task；需要先
-为Baseline实现平抛适配并更新其`supported_scenes`。Task不会绕过这一能力检查。
+Baseline仍必须显式声明支持这五个scene。新增推水瓶支持后，还需等推水瓶评估协议完成
+再扩展官方Task；Task不会绕过Baseline能力检查。
 
 ## 3. CanonicalTaskPlan
 
@@ -130,7 +127,7 @@ one Dataset × one Task × many Baseline identities
 ```
 
 例如 `cosmos3_nano_i2v_generic` 和 `cosmos3_nano_i2v_physics` 都编译
-`six_scene_direct_eval.json`。两者接收同一Case prompt、首帧与annotated物理标注；
+`five_scene_direct_eval.json`。两者接收同一Case prompt、首帧与annotated物理标注；
 前者通过 `input_policy.physics.usage=ignored` 明确不消费物理字段，后者通过
 `usage=required` 与 `structured_text` adapter 追加物理信息。
 
@@ -197,8 +194,8 @@ binding 都会改变或破坏 digest。
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
-  --dataset datasets/physics_video/releases/6.0.0/dataset.json \
-  --task tasks/official/six_scene_finetune_eval.json \
+  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
+  --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
   --output /tmp/wan22_physics_task_instance.json
 ```
@@ -214,8 +211,8 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/physics_video/releases/6.0.0/dataset.json \
-  --task tasks/official/six_scene_direct_eval.json \
+  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --output-root runs_v2 \
   --run-id wan22_generic_dryrun
@@ -253,8 +250,8 @@ Direct-eval 工程 smoke 可加：
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   matrix-run \
-  --dataset datasets/physics_video/releases/6.0.0/dataset.json \
-  --task tasks/official/six_scene_direct_eval.json \
+  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
   --matrix-id wan22_prompt_injection_ablation \
@@ -294,6 +291,6 @@ TaskInstance digest。`orchestration_status=complete` 表示所有 AtomicRun 已
 
 ## 11. 历史兼容
 
-旧任务文件曾把generic/physics作为Task字段或文件名的一部分。schema 3.0与五场景Task
-继续用于历史run复现；六场景新实验必须使用schema 4.0的当前两份官方Task。schema 4.0
+旧任务文件曾把generic/physics作为Task字段或文件名的一部分。schema 3.0与旧Dataset
+Task只用于历史run复现；新实验必须使用schema 4.0的当前两份官方Task。schema 4.0
 loader会拒绝`ood2`和`eval_partitions`等旧字段，避免把旧三分法重新带入新结果。

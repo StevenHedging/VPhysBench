@@ -19,7 +19,7 @@
     "pendulum_length": "derived as string_length + bob_radius",
     "string_length": "workbook 线长 converted from cm to m"
   },
-  "prompt": "A pendulum bob starts at a turning point, swings down through the lowest point to the opposite side, and continues oscillating back and forth about the fixed pivot.",
+  "prompt": "A pendulum bob is released from rest at the first frame and swings back and forth about the fixed pivot.",
   "release_status": "staged_not_published_pending_atomic_release_with_new push-bottle scene",
   "review_evidence": [
     {

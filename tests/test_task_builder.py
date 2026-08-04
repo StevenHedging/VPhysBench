@@ -5,7 +5,7 @@ import unittest
 
 from _paths import ROOT
 from physbench.baseline_api import load_baseline_bundle, load_baseline_plugin
-from physbench.data_layout import V4_DATASET
+from physbench.data_layout import V8_DATASET
 from physbench.datasets import load_dataset
 from physbench.domain import BaselineTaskInstance
 from physbench.io import load_json, load_jsonl
@@ -40,7 +40,7 @@ def _contains_key(value: object, target: str) -> bool:
 class TaskBuilderContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.dataset_path = V4_DATASET
+        cls.dataset_path = V8_DATASET
         cls.dataset = load_dataset(
             cls.dataset_path, check_assets=True
         )
@@ -85,7 +85,7 @@ class TaskBuilderContractTests(unittest.TestCase):
             "conditioning" not in job
             for job in instance["inference"]["jobs"]
         ))
-        self.assertFalse(_contains_key(instance, "conditioning"))
+        self.assertNotIn("conditioning", instance)
 
     def test_finetune_instance_has_train_infer_evaluate_graph(
         self,

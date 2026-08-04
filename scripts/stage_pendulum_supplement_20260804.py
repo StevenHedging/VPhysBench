@@ -39,9 +39,8 @@ DEFAULT_MEDIA_ROOT = Path(
 BOB_RADIUS_M = 0.01
 BOB_MASS_KG = 0.0315
 PROMPT = (
-    "A pendulum bob starts at a turning point, swings down through the lowest "
-    "point to the opposite side, and continues oscillating back and forth about "
-    "the fixed pivot."
+    "A pendulum bob is released from rest at the first frame and swings back "
+    "and forth about the fixed pivot."
 )
 
 MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -567,7 +566,8 @@ def analyze_one(arguments: tuple[Annotation, str]) -> dict[str, Any]:
         "source_sha256": sha256(source),
         "source_probe": probe,
         "alignment": {
-            "canonical_first_frame_event": "first opposite-side turning point after release",
+            "canonical_first_frame_event": "initial release point",
+            "trim_purpose": "remove_person_hand_only",
             "source_start_frame": selected_frame,
             "source_end_frame_exclusive": probe["frame_count"],
             "output_frame_count": probe["frame_count"] - selected_frame,

@@ -2,19 +2,19 @@
 
 Physics Video Benchmark 是一个面向物理视频生成模型的六场景、训推一体评测框架。当前
 Dataset release 是
-`datasets/physics_video/releases/6.0.0/dataset.json`，包含604个case和1,650个
+`datasets/physics_video/releases/8.0.0/dataset.json`，包含799个case和2,032个
 锁定资产：
 
 - 单摆 `pendulum`
-- 自由落体 `free_fall`
 - 一维对心碰撞 `collision_1d`
 - 斜面下滑 `inclined_plane_slide`
 - 匀速圆周运动 `uniform_circular_motion`
 - 平抛运动 `parabolic_motion`
+- 推水瓶 `push_bottle`
 
-当前六场景Task为`six_scene_finetune_eval.json`和`six_scene_direct_eval.json`。现有
-`five_scene_*` Task与4.0.0元数据只用于解释明确引用旧Dataset ID/digest的历史结果，
-不会被当前运行入口自动选择。
+当前官方Task为`five_scene_finetune_eval.json`和`five_scene_direct_eval.json`，均指向
+8.0.0 Dataset。推水瓶已进入Dataset，但专用评估器尚未完成，因此暂不进入这两份正式
+计分Task。
 
 ## 设计原则
 
@@ -83,17 +83,17 @@ Benchmark 环境：
 ```bash
 cd /root/Steven/physics_video_benchmark
 
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
-  -m unittest tests.test_six_scene_dataset_v6 -v
+PYTHONPATH=src:tests:. /root/miniconda3/envs/phybench/bin/python \
+  -m unittest tests.test_six_scene_dataset_v8 -v
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/6.0.0/dataset.json \
+  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
   --check-asset-hashes
 ```
 
 这是当前release的正式数据/Task回归入口。`make legacy-test`会额外运行历史Dataset测试；
-其中部分测试需要已经退出当前资产布局的旧路径，不属于6.0.0发布门槛。
+其中部分测试需要已经退出当前资产布局的旧路径，不属于8.0.0发布门槛。
 
 Scene evaluator 需要额外安装：
 
@@ -104,9 +104,8 @@ Scene evaluator 需要额外安装：
 
 ## 快速开始
 
-下面三条命令是现有五场景Baseline在当前6.0.0 Dataset上的兼容性smoke，使用
-`tasks/smoke/five_scene_direct_eval_v6.json`排除尚未支持的平抛scene。要运行完整六场景
-Task，Baseline必须先声明并实现`parabolic_motion`支持。
+下面三条命令使用当前8.0.0 Dataset和已有评估器的五场景官方Task。推水瓶需等专用
+评估器和协议接入后再加入正式Task。
 
 发现并验证 Baseline：
 
@@ -123,8 +122,8 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
-  --dataset datasets/physics_video/releases/6.0.0/dataset.json \
-  --task tasks/smoke/five_scene_direct_eval_v6.json \
+  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --output /tmp/wan22_generic_task_instance.json
 ```
@@ -134,8 +133,8 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/physics_video/releases/6.0.0/dataset.json \
-  --task tasks/smoke/five_scene_direct_eval_v6.json \
+  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
   --output-root runs_v2
 ```
@@ -145,8 +144,8 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   matrix-run \
-  --dataset datasets/physics_video/releases/6.0.0/dataset.json \
-  --task tasks/smoke/five_scene_direct_eval_v6.json \
+  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
+  --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
   --baseline cosmos3_nano_i2v_physics \
   --matrix-id cosmos3_generic_vs_physics \
