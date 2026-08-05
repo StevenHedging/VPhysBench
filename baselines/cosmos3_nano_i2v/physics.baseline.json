@@ -66,7 +66,7 @@
     "first_frame_policy": "require_asset",
     "physics_transform": {
       "type": "append_structured_text_v1",
-      "template_set": "five_scene_physics_clauses_v1"
+      "template_set": "six_scene_physics_clauses_v2"
     },
     "spatial": {
       "type": "cosmos3_resolution_aspect_token_v1",

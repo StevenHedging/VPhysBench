@@ -3,8 +3,9 @@
 > 审阅范围：`/root/Steven/physics_video_benchmark/datasets/` 及其直接引用的数据规范  
 > 审阅日期：2026-08-04（UTC）  
 > 本文主体是 7.0.0 历史审阅快照；当前目录入口见 `README.md`，路径已迁移到
-> `releases/10.0.0/dataset.json`。10.0.0的799条Case均有Case-local
-> `physics.json`，且7.0.0时代遗留的32个无引用碰撞目录已在V10迁移中删除；本文后文
+> `releases/11.0.0/dataset.json`。11.0.0的799条Case均有Case-local
+> `physics.v11.json`和符号化非负物理量；10.0.0的`physics.json`保持为历史证据。
+> 7.0.0时代遗留的32个无引用碰撞目录已在V10迁移中删除；本文后文
 > 对旧目录和旧数量的描述只用于解释历史快照。
 
 ## 1. 一页概览
@@ -342,6 +343,10 @@ circular_w54p55dps_r1-20mm_img0370
 | 5.1.0 | `physics_video_six_scene_v5p1` | 3.0 | 604 | 六场景 | 1,650 | 移除 5 条首帧不匹配的合成单摆 OOD；统一球规格、物理目录和划分 |
 | 6.0.0 | `physics_video_six_scene_v6` | 4.0 | 604 | 六场景 | 1,650 | 元数据迁移；View A 改为完整 Train/Test，ID/OOD/Mixed 下沉到 Test annotation |
 | 7.0.0 | `physics_video_five_scene_v7` | 4.0 | 593 | 当前五场景 | 1,617 | 移除自由落体 11 条，其余五场景的 View 成员身份保持 |
+| 8.0.0 | `physics_video_six_scene_v8` | 4.0 | 799 | 六场景 | 2,032 | 新增补充单摆和推水瓶，View A 全局改为 Train/ID-Test |
+| 9.0.0 | `physics_video_six_scene_v9` | 4.0 | 799 | 六场景 | 5,239 | 新增逐Case主体mask资产与清单 |
+| 10.0.0 | `physics_video_six_scene_v10` | 4.0 | 799 | 六场景 | 6,038 | 新增Case-local `physics.json`并精简运行时Release边界 |
+| 11.0.0 | `physics_video_six_scene_v11` | 5.0 | 799 | 六场景 | 6,038 | 当前默认；新增symbol、非负大小语义、符号prompt与`physics.v11.json` |
 
 7.0.0 在 2026-08-03 又做过一次同版本号内修复：
 
@@ -371,7 +376,7 @@ circular_w54p55dps_r1-20mm_img0370
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/releases/7.0.0/dataset.json \
+  --dataset datasets/releases/11.0.0/dataset.json \
   --check-assets
 ```
 
@@ -380,11 +385,11 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/releases/7.0.0/dataset.json \
+  --dataset datasets/releases/11.0.0/dataset.json \
   --check-asset-hashes
 ```
 
-后者需要完整读取约 38 GiB 锁定资产，耗时明显更长。
+后者会完整读取当前6,038个锁定资产，耗时明显更长。
 
 ## 12. 主要依据
 

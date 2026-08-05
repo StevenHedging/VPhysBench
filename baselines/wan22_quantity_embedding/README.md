@@ -11,8 +11,8 @@ Bundle version: `1.0.1`.
 The completed 2026-07-28 source experiment is a historical AtomicRun whose
 bundle `1.0.0` and baseline digest are sealed. The repository HEAD at execution
 was `918e9f7`; that commit is known provenance but is not separately sealed in
-the run manifest. The current commands create the current `1.0.1` / Task v5 /
-protocol v2 identities. Its full training evidence, canonical v1 result,
+the run manifest. The current commands create the current `1.0.1` Baseline with
+the official schema-4 Task and current protocol identity. Its full training evidence, canonical v1 result,
 alternate v2 reevaluation, and all 66 per-Case outcomes are recorded in
 [`docs/experiments/WAN22_QUANTITY_EMBEDDING_20260728.md`](../../docs/experiments/WAN22_QUANTITY_EMBEDDING_20260728.md).
 
@@ -24,11 +24,11 @@ and unit from ordinary subword tokens.
 
 ## Model input
 
-`adapter.py` selects scene-specific fields from `quantity_registry.json`.
+`adapter.py` selects scene-specific fields from `quantity_registry_v2.json`.
 It never extracts quantities from arbitrary prose with a regular expression.
 For every selected annotation it:
 
-1. validates the field, unit, and finite numeric value;
+1. validates the field, unit, stable symbol, `annotated=true` role, and finite non-negative value;
 2. renders an `audited_prompt` containing the literal quantity;
 3. converts the value to SI and records its seven-dimensional SI exponent;
 4. replaces that literal in the model prompt with one unique native T5
@@ -55,7 +55,8 @@ context together with `z_phys`.
 
 This Baseline currently supports the `finetune_eval` family only. The official
 multi-scene experiment is View A fine-tune/eval: it trains on all five scenes
-jointly, then generates every frozen ID and OOD1 job:
+jointly, then generates every frozen ID-test job; the current Dataset no longer
+defines OOD or mixed test subsets:
 
 ```bash
 cd /root/Steven/physics_video_benchmark
@@ -70,7 +71,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/11.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_quantity_embedding_v1 \
   --run-id wan22_quantity_embedding_v1_viewa_seed42 \
@@ -194,7 +195,7 @@ quantity-embedding identities on the same frozen View A Task:
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   matrix-run \
-  --dataset datasets/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/11.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
@@ -212,9 +213,11 @@ quantity Baseline necessarily adds trainable encoder parameters;
 report its parameter inventory rather than claiming an exactly
 parameter-matched ablation.
 
-The selected fields match the structured-text comparison arm. The registry
-also records whether a selected field is primary or derived; it intentionally
-does not imply that every selected field is independent.
+The selected fields match the structured-text comparison arm. The V2 registry
+selects only V11 independent quantities marked `annotated=true`; derived,
+calibration, auxiliary and duplicate-alias fields remain evaluator/audit data
+and are never injected. Each selected audit record preserves value, unit and
+symbol.
 
 The current View A design, limitations, and result summary are documented in
 [`docs/WAN22_QUANTITY_EMBEDDING.md`](../../docs/WAN22_QUANTITY_EMBEDDING.md).

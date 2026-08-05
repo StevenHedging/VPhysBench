@@ -113,19 +113,22 @@ standard_v2v_v1
 ```json
 {
   "type": "append_structured_text_v1",
-  "template_set": "five_scene_physics_clauses_v1"
+  "template_set": "six_scene_physics_clauses_v2"
 }
 ```
 
 模板位于：
 
 ```text
-src/physbench/baseline_plugins/resources/five_scene_physics_clauses_v1.json
+src/physbench/baseline_plugins/resources/six_scene_physics_clauses_v2.json
 ```
 
-Renderer 按 scene 白名单读取 quantity，验证单位，按声明精度格式化，并追加到
-`case.text.prompt` 后。它同时记录原 prompt digest、最终 prompt digest、字段、原值、
-单位和渲染值。Driver 只消费已经封印的 `native_inputs.text.prompt`，不得再次拼接。
+Renderer 按scene白名单读取`annotated=true`独立quantity，验证单位和稳定symbol，按声明
+精度格式化，并追加到`case.text.prompt`后。它同时记录原prompt digest、最终prompt
+digest、字段、原值、单位、symbol和渲染值。V11速度值是非负大小，运动方向来自原始
+Case prompt。Driver只消费已经封印的`native_inputs.text.prompt`，不得再次拼接。
+
+V1模板保留用于历史Bundle复现；当前active manifest全部指向V2资源，不能静默回退。
 
 ## 5. 自定义 Python adapter
 

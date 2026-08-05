@@ -492,10 +492,16 @@ def _view_b_plan(
 
 def plan_atomic_task(task: TaskSpec, dataset: DatasetSnapshot) -> AtomicPlan:
     _validate_task_document(task.value)
-    if task.value["schema_version"] != dataset.descriptor["schema_version"]:
+    task_schema = task.value["schema_version"]
+    dataset_schema = dataset.descriptor["schema_version"]
+    compatible = (
+        task_schema == dataset_schema
+        or (task_schema == "4.0" and dataset_schema == "5.0")
+    )
+    if not compatible:
         raise ValueError(
-            f"task schema {task.value['schema_version']} requires a matching "
-            f"dataset schema, got {dataset.descriptor['schema_version']}"
+            f"task schema {task_schema} is incompatible with dataset schema "
+            f"{dataset_schema}"
         )
     if task.value["dataset_id"] != dataset.dataset_id:
         raise ValueError(

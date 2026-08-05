@@ -6,7 +6,8 @@ the same `nvidia/Cosmos3-Nano` checkpoint and managed driver:
 - `cosmos3_nano_i2v_generic` uses the Case's canonical `text.prompt` and
   explicitly ignores structured physics.
 - `cosmos3_nano_i2v_physics` appends the Case's annotated structured physics
-  to that same prompt with `five_scene_physics_clauses_v1`.
+  to that same prompt with `six_scene_physics_clauses_v2`, selecting only
+  independent quantities and preserving value, unit and symbol.
 
 The distinction is Baseline-owned through `input_policy` and
 `adapter.physics_transform`; Tasks no longer select a generic/physics arm.
@@ -56,7 +57,7 @@ Choose the desired Baseline ID when running the same Task:
 
 ```bash
 /root/miniconda3/envs/phybench/bin/physbench atomic-run \
-  --dataset datasets/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/11.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
   --scene-id collision_1d \

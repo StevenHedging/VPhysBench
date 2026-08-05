@@ -51,8 +51,8 @@ denoising steps; the first generated latent uses the checkpoint's official
 four-step stabilization schedule.
 
 The official demo fixes 832×480 landscape output. Physics Video Benchmark
-also contains portrait pendulum, free-fall, parabolic-motion and
-uniform-circular-motion captures, so the worker supports 480×832 portrait
+also contains portrait pendulum, parabolic-motion and uniform-circular-motion
+captures, so the worker supports 480×832 portrait
 output. Both orientations have the same pixel/token budget and the same 1,560
 spatial tokens per latent frame. First frames are resized without cropping
 using aspect-preserving contain resize and edge padding.
@@ -65,17 +65,18 @@ has eight persistent model workers rather than reloading the model 658 times.
 ## Physics prompt fusion
 
 The physics identity uses the standard `append_structured_text_v1` adapter and
-the audited `six_scene_physics_clauses_v1` template. The adapter reads only
+the audited `six_scene_physics_clauses_v2` template. The adapter reads only
 `case.physics` values marked `annotated=true`, validates every unit, renders a
 deterministic English clause and records the exact values in
-`used_parameters`. Appearance, background, capture setup, OOD labels and all
+`used_parameters` together with their stable symbols. Appearance, background, capture setup and all
 parameters marked non-conditionable remain excluded.
 
 For collision cases, balls are mapped from left to right in the initial frame
-and signed velocities explicitly use rightward as the positive direction.
-Per-ball initial velocities are used instead of the redundant
-`striker_initial_velocity` alias, so opposed two-ball incidents retain both
-velocity magnitudes. The final fused prompt is sealed in
+and every velocity quantity is a non-negative magnitude. Leftward, rightward
+and stationary roles come from the canonical Case prompt rather than a numeric
+sign convention. Per-ball initial velocities are used instead of the redundant
+audit-only `striker_initial_velocity` alias, so opposed two-ball incidents retain
+both velocity magnitudes. The final fused prompt is sealed in
 `native_inputs.text.prompt`; the shared driver forwards it unchanged to the
 model's text encoder.
 
@@ -103,14 +104,14 @@ Compile or dry-run the current five-evaluator-scene task:
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
-  --dataset datasets/releases/10.0.0/dataset.json \
+  --dataset datasets/releases/11.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline causal_forcing_pp_2step_i2v_physics \
   --output /tmp/causal_forcing_pp_physics.task.json
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/releases/10.0.0/dataset.json \
+  --dataset datasets/releases/11.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline causal_forcing_pp_2step_i2v_physics \
   --output-root runs_v2

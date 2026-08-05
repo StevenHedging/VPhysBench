@@ -11,6 +11,7 @@ from physbench.data_layout import (
     V7_DATASET,
     V8_DATASET,
     V10_DATASET,
+    V11_DATASET,
 )
 from physbench.datasets import load_dataset
 from physbench.evaluation.task_evaluator import aggregate_task_results
@@ -29,12 +30,14 @@ class FiveSceneDatasetV7Tests(unittest.TestCase):
         cls.v7 = load_dataset(V7_DATASET, check_assets=True)
         cls.v8 = load_dataset(V8_DATASET, check_assets=True)
         cls.v10 = load_dataset(V10_DATASET, check_assets=True)
+        cls.v11 = load_dataset(V11_DATASET, check_assets=True)
         cls.view = cls.v7.views["view_a"]
 
     def test_v7_is_latest_five_scene_release(self) -> None:
         self.assertNotEqual(V7_DATASET, LATEST_DATASET)
         self.assertNotEqual(V8_DATASET, LATEST_DATASET)
-        self.assertEqual(V10_DATASET, LATEST_DATASET)
+        self.assertNotEqual(V10_DATASET, LATEST_DATASET)
+        self.assertEqual(V11_DATASET, LATEST_DATASET)
         self.assertEqual("4.0", self.v7.descriptor["schema_version"])
         self.assertEqual("physics_video_five_scene_v7", self.v7.dataset_id)
         self.assertEqual("7.0.0", self.v7.descriptor["release"])
@@ -107,7 +110,7 @@ class FiveSceneDatasetV7Tests(unittest.TestCase):
         ])
 
     def test_v4_tasks_plan_current_release(self) -> None:
-        finetune = plan_atomic_task(load_task(FINETUNE_TASK), self.v10).value
+        finetune = plan_atomic_task(load_task(FINETUNE_TASK), self.v11).value
         self.assertEqual("4.0", finetune["schema_version"])
         self.assertEqual(582, len(finetune["train_case_ids"]))
         self.assertEqual(76, len(finetune["jobs"]))
@@ -117,7 +120,7 @@ class FiveSceneDatasetV7Tests(unittest.TestCase):
         )
         self.assertEqual(76, len(finetune["evaluation_annotations"]))
 
-        direct = plan_atomic_task(load_task(DIRECT_TASK), self.v10).value
+        direct = plan_atomic_task(load_task(DIRECT_TASK), self.v11).value
         self.assertEqual([], direct["train_case_ids"])
         self.assertEqual(658, len(direct["jobs"]))
         self.assertEqual(
@@ -126,7 +129,7 @@ class FiveSceneDatasetV7Tests(unittest.TestCase):
         )
 
     def test_overall_score_and_breakdowns_remain_well_defined(self) -> None:
-        plan = plan_atomic_task(load_task(FINETUNE_TASK), self.v10).value
+        plan = plan_atomic_task(load_task(FINETUNE_TASK), self.v11).value
         results = [{
             **job,
             "status": "evaluated",

@@ -26,7 +26,8 @@ baselines/wan22_quantity_embedding/
 ├── baseline.local.json           # 本机部署，Git ignored
 ├── adapter.py
 ├── driver.py
-└── quantity_registry.json
+├── quantity_registry.json             # 历史V1资源
+└── quantity_registry_v2.json          # 当前V11独立量资源
 ```
 
 | Baseline ID | Task family | 物理策略 | 用途 |
@@ -136,10 +137,11 @@ native prompt                         = case.text.prompt + audited clauses
 物理模板：
 
 ```text
-src/physbench/baseline_plugins/resources/five_scene_physics_clauses_v1.json
+src/physbench/baseline_plugins/resources/six_scene_physics_clauses_v2.json
 ```
 
-Renderer 只读取 scene 白名单内 `annotated=true` 的量，验证单位并记录渲染值。WAN
+Renderer只读取scene白名单内`annotated=true`的独立量，验证单位与symbol，并记录
+value/unit/symbol和渲染值。速度为非负大小，方向由原始Case prompt表达。WAN
 driver 只消费 TaskInstance 中已封印的最终 prompt，不再自行选择 prompt profile 或读取
 raw physics side channel。
 
@@ -269,7 +271,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
-  --dataset datasets/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/11.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
   --output /tmp/wan22_physics_finetune_task.json
@@ -280,7 +282,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   matrix-run \
-  --dataset datasets/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/11.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \

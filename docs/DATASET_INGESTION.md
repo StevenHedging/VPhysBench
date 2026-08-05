@@ -60,6 +60,10 @@ Task选择Dataset、View、scene、test范围、seed和评估协议。Task不决
 7. 对已有scene先查重；确定重复的数据不得再次导入。
 8. 发布前必须同时通过机器校验和视觉验收，不能用旧日志替代本次检查。
 9. 导入脚本、标准化中间表、排除列表和复核结果都要进入provenance。
+10. 每个物理quantity必须分配稳定、非空且在同一Case内唯一的`symbol`；独立量的symbol
+    必须进入prompt。
+11. 结构化标量只保存有限、非负的大小。速度等有方向量的方向由prompt表达，不能依赖
+    正负号或屏幕坐标系暗示。
 
 ## 4. 标准工作流与停机点
 
@@ -196,23 +200,30 @@ Task选择Dataset、View、scene、test范围、seed和评估协议。Task不决
 每条视频至少视觉检查首帧、中间运动、末帧；事件对齐要求高的scene应逐条检查。复核状态
 只有在本次真正看过最终媒体后才能写`visually_verified`。
 
-### 阶段5：编写文本描述
+### 阶段5：分配符号并编写文本描述
 
 `case.text.prompt`与首帧共同说明“接下来发生什么”。文本必须：
 
 - 无歧义地描述可见物理过程；
 - 在需要时说明主体数量、哪个主体初始运动/静止、运动方向和交互顺序；
 - 足够简洁，不写实验报告或物理结论；
-- 不包含任何具体数值、单位、公式或结构化物理参数；
+- 包含该Case全部`annotated=true`独立物理量的`symbol`，并明确符号对应的主体和物理
+  含义；`annotated=false`审计量的symbol不得进入prompt；
+- 不包含任何具体数值、单位、代数计算式或评测结论；
 - 不提背景、颜色、材质外观、机位、视角、裁剪、光电门、分辨率和采集设备；
 - 不描述视频中不可见、也无法由标注可靠确定的结果。
 
 碰撞不能用一个模板掩盖所有情景。例如“两球中右球向左运动、左球初始静止”和“两球
 相向运动”是不同过程，必须分别准确描述。描述实验形式不等于泄露物理数值；它用于消除
-过程歧义。
+过程歧义。速度quantity只保存大小，prompt则必须说清每个运动主体向左、向右或静止。
+
+符号必须来自scene级稳定注册表，而不是逐Case临时发明。对象量使用与对象编号一致的
+下标，例如`m_1`、`r_1`和`v_1`；环境量和关系量使用scene约定的唯一符号。符号是
+自然语言prompt与结构化quantity之间的绑定键，不是数值替身。
 
 发布前自动扫描数字、单位和禁用视觉词，再由人工/AI逐条结合首帧与视频复核。自动扫描
-不能代替语义检查。
+还必须证明每个独立量symbol作为完整token出现、没有审计量symbol，并检查速度方向与
+视频和来源标注一致；这些检查不能代替语义复核。
 
 ### 阶段6：生成Case与资产目录
 
@@ -220,7 +231,7 @@ Task选择Dataset、View、scene、test范围、seed和评估协议。Task不决
 
 ```text
 assets/<scene_id>/<descriptive_physical_case_directory>/
-├── physics.json            # 与Case绑定的结构化物理标注
+├── physics.v11.json        # 与当前Case绑定的符号化结构化物理标注
 ├── source/                 # 可选的原始成员硬链接/副本
 └── canonical/
     ├── reference.mp4
@@ -233,30 +244,37 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 每个物理量使用：
 
 ```json
-{"value": 0.03313, "unit": "kg", "annotated": true}
+{"value": 0.03313, "unit": "kg", "annotated": true, "symbol": "m_1"}
 ```
 
 - 统一使用scene约定单位，优先SI；
-- `annotated=true`仅用于可信、可作为模型条件的物理量；
+- `value`必须是有限且非负的标量大小；方向单独写入prompt；
+- `symbol`必须是非空字符串、在同一Case内唯一，并与scene级注册表一致；
+- `annotated=true`仅用于可信、独立、可作为模型条件的物理量，其symbol必须进入prompt；
 - 派生量、辅助装置量或可信度不足但仍值得审计的量设为`annotated=false`；
+- 重复别名即使数值可信也应为`annotated=false`，避免同一独立自由度被重复注入；
 - 不确定的值不能用`0`代替缺失；若scene要求该量而无法得到，整条Case不进入正式集；
 - 多主体字段的编号必须与首帧从左到右/scene定义一致，并在provenance中记录映射依据；
 - 规格球等复用对象必须先查权威catalog，不能为同一规格创建多个别名。
 
-`physics.json`使用以下自描述包裹格式：
+当前Case-local文件名为`physics.v11.json`，使用以下自描述包裹格式：
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "case_id": "<case_id>",
   "scene_id": "<scene_id>",
   "physics": {}
 }
 ```
 
-Case必须增加`assets.physics_annotation`指向该文件，且内联`case.physics`必须与文件中的
+Case schema必须为`5.0`，并增加`assets.physics_annotation`指向该文件；内联
+`case.physics`必须与文件中的
 `physics`深度相等。二者不能分别手工维护：导入脚本应从同一个标准化记录确定性生成，
 发布Loader会在任何资产检查模式下强制校验一致性。
+
+V10的`physics.json`、文档schema 1.0和三字段quantity仅用于加载不可变历史Release。
+新导入不能继续生成或覆盖这些历史文件。
 
 ### 阶段7：设计View A的train/ID test
 
@@ -303,12 +321,12 @@ Case必须增加`assets.physics_annotation`指向该文件，且内联`case.phys
 
 - View B完整覆盖所有Case，使用冻结seed确定性分组；
 - `assets.lock.json`包含所有Case引用资产的相对路径、大小和SHA-256；
-- 每个有效Case的`physics.json`必须作为`physics_annotation`进入资产锁；
+- 每个有效Case的`physics.v11.json`必须作为`physics_annotation`进入资产锁；
 - `release.json`冻结Dataset digest和资产集合digest；
 - 新release目录在全部校验通过前由staging原子生成；
 - 旧release、旧Case和旧媒体不得就地覆盖。
 
-当前10.0.0采用精简运行时Release边界，只在Release目录放置`README.md`、
+当前11.0.0采用精简运行时Release边界，只在Release目录放置`README.md`、
 `dataset.json`、`release.json`、`cases.jsonl`、`assets.lock.json`、`scenes/`和`views/`。
 导入清单、排除表、迁移审核、验证报告及构建脚本应分别放在仓库`scripts/`和
 `datasets/provenance/`，不要复制进新Release。全局mask索引只有存在明确运行时消费者
@@ -374,7 +392,10 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 - `physics`中背景/颜色/环境字段检查；
 - View A完整覆盖、互斥、全部test为ID且每scene不超过约定上限；
 - release和asset digest复算。
-- Case-local`physics.json`身份、字段集合及其与内联`case.physics`的一致性检查。
+- Case-local`physics.v11.json`身份、文档schema 2.0、四字段quantity及其与内联
+  `case.physics`的一致性检查；
+- 所有quantity值有限且非负，symbol非空且Case内唯一；全部独立量symbol出现在prompt，
+  审计量symbol不出现在prompt，速度方向由prompt无歧义表达。
 
 ### 6.2 视觉验收
 

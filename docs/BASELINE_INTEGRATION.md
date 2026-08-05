@@ -3,9 +3,11 @@
 本文面向新增模型或算法。当前新实验只使用 schema 5.0 Baseline；Task 不再为物理信息
 使用方式复制实验臂。
 
-当前Dataset 10.0.0在每条Case中同时提供内联`case.physics`和锁定的
-`assets.physics_annotation`。Loader已保证两者完全一致；Baseline仍应使用
+当前Dataset 11.0.0在每条Case中同时提供内联`case.physics`和锁定的
+`assets.physics_annotation`（`physics.v11.json`）。Loader已保证两者完全一致；Baseline仍应使用
 `case.physics[annotated=true]`这一稳定运行时API，不应绕过Loader直接解释文件格式。
+每个独立quantity都保留非负`value`、`unit`和稳定`symbol`；方向来自Case prompt，不能
+再从数值正负号推断。`annotated=false`字段只供Evaluator和审计使用。
 
 ## 1. 先确定 Baseline identity
 
@@ -177,7 +179,7 @@ baselines/*/*.baseline.json
     "first_frame_policy": "require_asset",
     "physics_transform": {
       "type": "append_structured_text_v1",
-      "template_set": "five_scene_physics_clauses_v1"
+      "template_set": "six_scene_physics_clauses_v2"
     }
   }
 }
@@ -245,7 +247,7 @@ Case 资产。
 ```
 
 Adapter audit 中的 `conditioning_video` 表示 V2V 输入媒体角色，并非 Task 的物理信息
-分组。该资产必须独立于 GT/reference/source。当前 Dataset 4.0.0 没有正式
+分组。该资产必须独立于 GT/reference/source。当前 Dataset 11.0.0 没有正式
 `assets.input_video`，所以 V2V 脚手架不能直接运行官方 Task。
 
 ## 7. Python adapter
@@ -282,7 +284,7 @@ Adapter 必须：
 - 实现 `adapt_case(case, *, role)`；
 - 输出 JSON-serializable `native_inputs` 和 `input_contract`；
 - 精确登记 `used_parameters`；
-- 只使用 `annotated=true` 数值并保持值/单位一致；
+- 只使用`annotated=true`独立量并保持值、单位和symbol一致；
 - 给出完整与 media-materialization 两种 SHA-256 fingerprint；
 - 通过 `dependency_paths()` 登记 Bundle 外的输出相关实现。
 
@@ -457,7 +459,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
-  --dataset datasets/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/11.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline my_i2v_generic \
   --output /tmp/my_i2v_generic_task.json
@@ -468,7 +470,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/11.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline my_i2v_generic \
   --scene-id pendulum \

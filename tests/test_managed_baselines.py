@@ -17,7 +17,7 @@ from physbench.baseline_api import (
 )
 from physbench.baseline_runtime import create_baseline_scaffold
 from physbench.baseline_runtime.drivers.wan22 import Wan22ManagedDriver
-from physbench.data_layout import V4_DATASET
+from physbench.data_layout import V11_DATASET
 from physbench.datasets import load_dataset
 from physbench.domain import TaskSpec
 from physbench.io import (
@@ -95,7 +95,7 @@ def _adapter(physics_usage: str = "ignored") -> dict:
             if physics_usage == "ignored"
             else {
                 "type": "append_structured_text_v1",
-                "template_set": "five_scene_physics_clauses_v1",
+                "template_set": "six_scene_physics_clauses_v2",
             }
         ),
         "spatial": {
@@ -107,6 +107,8 @@ def _adapter(physics_usage: str = "ignored") -> dict:
                     "collision_1d",
                     "inclined_plane_slide",
                     "uniform_circular_motion",
+                    "parabolic_motion",
+                    "push_bottle",
                 )
             }
         },
@@ -177,7 +179,7 @@ def _bundle(
 class ManagedBaselineTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.dataset = load_dataset(V4_DATASET, check_assets=False)
+        cls.dataset = load_dataset(V11_DATASET, check_assets=False)
         cls.direct = load_task(
             ROOT
             / "tasks"
@@ -453,9 +455,8 @@ class ManagedBaselineTests(unittest.TestCase):
             )
 
             task_value = copy.deepcopy(self.finetune.value)
-            task_value["task_id"] = "free_fall_finetune_dry_run"
-            task_value["selection"]["scene_ids"] = ["free_fall"]
-            task_value["selection"]["eval_partitions"] = ["test_id"]
+            task_value["task_id"] = "pendulum_finetune_dry_run"
+            task_value["selection"]["scene_ids"] = ["pendulum"]
             task = TaskSpec(
                 self.finetune.path,
                 task_value,

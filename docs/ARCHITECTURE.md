@@ -36,25 +36,29 @@ Dataset 不认识具体模型；Task 不携带模型输入策略；Baseline 不�
 当前入口：
 
 ```text
-datasets/releases/10.0.0/dataset.json
+datasets/releases/11.0.0/dataset.json
 ```
 
-Dataset和Case使用schema 4.0。每个Case同时拥有：
+Dataset和Case使用schema 5.0。每个Case同时拥有：
 
 - `text.prompt`：模型无关、未注入结构化物理量的原始文本描述；
 - `assets.first_frame` 等媒体；
-- `physics`：带 `value`、`unit`、`annotated` 的结构化物理量；
-- `assets.physics_annotation`：受资产锁保护的Case-local `physics.json`；
+- `physics`：每项恰好带`value`、`unit`、`annotated`、`symbol`的结构化物理量；
+- `assets.physics_annotation`：受资产锁保护、文档schema 2.0的Case-local
+  `physics.v11.json`；
 - `appearance`、`temporal`；
 - evaluator-only reference 与 provenance。
 
 划分不属于Case字段；当前View A只包含train和ID test。原始prompt与物理标注并列保存，
-不由Task或Baseline配置临时生成。Release 10.0.0包含799条Case和六个scene。Loader
+不由Task或Baseline配置临时生成。Release 11.0.0包含799条Case和六个scene。Loader
 要求Case-local物理文件与内联`case.physics`逐字段完全一致；后者继续作为运行时兼容API。
+独立量使用`annotated=true`且其symbol必须进入无数值英文prompt；审计量使用false。
+所有标量为非负大小，方向由prompt表达。V10的三字段quantity和`physics.json`只用于
+不可变历史Release。
 
 ## 3. Task 是模型无关的评测定义
 
-当前Task schema 4.0只允许：
+当前Task schema 4.0只允许以下字段，并显式兼容当前Dataset schema 5.0：
 
 ```text
 schema_version
@@ -89,8 +93,8 @@ evaluation_annotations[job_id]
 reporting_policy
 ```
 
-finetune job的主partition统一为`test`。`evaluation_annotations`携带ID/OOD/mixed和因素，
-只控制诊断汇总；总体Test仍是官方主分。
+finetune job的主partition统一为`test`。当前View A中的test全部是ID；兼容字段
+`evaluation_annotations`仍随job封存，但不再构造OOD/mixed分支。总体Test仍是官方主分。
 
 Job ID 也不包含模型输入策略。不同 Baseline 编译同一 Dataset + Task 时，上述 plan
 必须完全一致。
@@ -150,6 +154,9 @@ appearance / temporal / ood
 允许作为生成输入的 assets
 physics 中 annotated=true 的字段
 ```
+
+这些quantity保留`value`、`unit`和`symbol`，使adapter能以符号为绑定键选择独立物理量；
+Dataset中的数值不会因进入conditionable Case而自动拼接到原始prompt。
 
 它不会提供：
 

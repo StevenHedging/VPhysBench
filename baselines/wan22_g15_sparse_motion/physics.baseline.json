@@ -64,7 +64,7 @@
     "cache_policy": "content_addressed_shared_immutable",
     "physics_transform": {
       "type": "append_structured_text_v1",
-      "template_set": "five_scene_physics_clauses_v1"
+      "template_set": "six_scene_physics_clauses_v2"
     },
     "spatial": {
       "type": "wan22_spatial_v1",

@@ -30,6 +30,10 @@ class FlatDatasetLayoutTests(unittest.TestCase):
             DATASETS_ROOT / "releases" / "10.0.0" / "dataset.json",
             getattr(data_layout, "V10_DATASET", None),
         )
+        self.assertEqual(
+            DATASETS_ROOT / "releases" / "11.0.0" / "dataset.json",
+            getattr(data_layout, "V11_DATASET", None),
+        )
 
     def test_flat_roots_replace_the_legacy_wrapper(self) -> None:
         for name in ("assets", "provenance", "releases"):
@@ -51,6 +55,7 @@ class FlatDatasetLayoutTests(unittest.TestCase):
             "8.0.0": (799, 2032),
             "9.0.0": (799, 5239),
             "10.0.0": (799, 6038),
+            "11.0.0": (799, 6038),
         }
         for version, (case_count, asset_count) in expected.items():
             with self.subTest(version=version):

@@ -85,10 +85,10 @@ native prompt                        = case.text.prompt + audited clauses
 Renderer 使用：
 
 ```text
-src/physbench/baseline_plugins/resources/five_scene_physics_clauses_v1.json
+src/physbench/baseline_plugins/resources/six_scene_physics_clauses_v2.json
 ```
 
-它按 scene 白名单验证字段与单位。Cosmos driver 只读取 TaskInstance 的最终
+它只选择V11中`annotated=true`的独立量，验证字段、单位和symbol。Cosmos driver只读取TaskInstance的最终
 `native_inputs.text.prompt`，不读取 raw physics 或另一个 prompt profile。
 
 ## 4. I2V 与时间规格
@@ -165,7 +165,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/11.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_physics \
   --scene-id pendulum \
@@ -179,7 +179,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   matrix-run \
-  --dataset datasets/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/11.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
   --baseline cosmos3_nano_i2v_physics \

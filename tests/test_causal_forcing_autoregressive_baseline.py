@@ -16,7 +16,7 @@ from physbench.baseline_api import (
 from physbench.baseline_runtime.adapter_loader import load_data_adapter
 from physbench.baseline_runtime import build_i2v_media_contract
 from physbench.baseline_runtime.compiler import ManagedTaskBuilder
-from physbench.data_layout import V10_DATASET
+from physbench.data_layout import V11_DATASET
 from physbench.datasets import load_dataset
 from physbench.io import load_json
 from physbench.tasks import load_task
@@ -69,7 +69,7 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
         cls.manifest = load_json(BASELINE)
         cls.physics_bundle = load_baseline_bundle(PHYSICS_BASELINE)
         cls.physics_manifest = load_json(PHYSICS_BASELINE)
-        cls.dataset = load_dataset(V10_DATASET, check_assets=False)
+        cls.dataset = load_dataset(V11_DATASET, check_assets=False)
         cls.task = load_task(DIRECT_TASK)
         cls.adapter = load_data_adapter(cls.bundle)
         cls.physics_adapter = load_data_adapter(cls.physics_bundle)

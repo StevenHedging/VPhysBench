@@ -5,7 +5,12 @@ import json
 from pathlib import Path
 import unittest
 
-from physbench.data_layout import LATEST_DATASET, V8_DATASET, V10_DATASET
+from physbench.data_layout import (
+    LATEST_DATASET,
+    V8_DATASET,
+    V10_DATASET,
+    V11_DATASET,
+)
 from physbench.datasets import load_dataset
 from physbench.tasks import load_task, plan_atomic_task
 
@@ -13,9 +18,12 @@ from physbench.tasks import load_task, plan_atomic_task
 ROOT = Path(__file__).resolve().parents[1]
 FINETUNE_TASK = ROOT / "tasks/official/five_scene_finetune_eval.json"
 DIRECT_TASK = ROOT / "tasks/official/five_scene_direct_eval.json"
-PENDULUM_PROMPT = (
-    "A pendulum bob is released from rest at the first frame and swings back "
-    "and forth about the fixed pivot."
+PENDULUM_PROMPTS = (
+    "A pendulum bob of radius r is released from rest at initial angle θ_0 on "
+    "a string of length l_s, then swings back and forth about the fixed pivot.",
+    "A pendulum bob of mass m and radius r is released from rest at initial "
+    "angle θ_0 on a string of length l_s, then swings back and forth about the "
+    "fixed pivot.",
 )
 
 
@@ -23,14 +31,15 @@ class SixSceneDatasetV8Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.v8 = load_dataset(V8_DATASET, check_assets=True)
-        cls.dataset = load_dataset(V10_DATASET, check_assets=True)
+        cls.dataset = load_dataset(V11_DATASET, check_assets=True)
         cls.view = cls.dataset.views["view_a"]
 
-    def test_v10_is_current_and_complete(self) -> None:
-        self.assertEqual(V10_DATASET, LATEST_DATASET)
+    def test_v11_is_current_and_complete(self) -> None:
+        self.assertEqual(V11_DATASET, LATEST_DATASET)
+        self.assertNotEqual(V10_DATASET, LATEST_DATASET)
         self.assertNotEqual(V8_DATASET, LATEST_DATASET)
-        self.assertEqual("physics_video_six_scene_v10", self.dataset.dataset_id)
-        self.assertEqual("10.0.0", self.dataset.descriptor["release"])
+        self.assertEqual("physics_video_six_scene_v11", self.dataset.dataset_id)
+        self.assertEqual("11.0.0", self.dataset.descriptor["release"])
         self.assertEqual(799, len(self.dataset.cases))
         self.assertEqual(6038, len(self.dataset.asset_lock["files"]))
         self.assertEqual(
@@ -83,9 +92,13 @@ class SixSceneDatasetV8Tests(unittest.TestCase):
             case for case in self.dataset.cases if case["scene_id"] == "pendulum"
         ]
         self.assertEqual(100, len(pendulum))
-        self.assertTrue(all(
-            case["text"]["prompt"] == PENDULUM_PROMPT for case in pendulum
-        ))
+        self.assertEqual(
+            {35, 65},
+            {
+                sum(case["text"]["prompt"] == prompt for case in pendulum)
+                for prompt in PENDULUM_PROMPTS
+            },
+        )
         self.assertTrue(all(
             case["alignment"]["canonical_first_frame_event"]
             == "initial release point"
@@ -136,11 +149,11 @@ class SixSceneDatasetV8Tests(unittest.TestCase):
             [item["source_stem"] for item in exclusions["excluded_videos"]],
         )
 
-    def test_official_five_evaluator_scene_tasks_use_v8(self) -> None:
+    def test_official_five_evaluator_scene_tasks_use_v11(self) -> None:
         finetune_task = load_task(FINETUNE_TASK)
         direct_task = load_task(DIRECT_TASK)
-        self.assertEqual("five_scene_finetune_eval_v10", finetune_task.task_id)
-        self.assertEqual("five_scene_direct_eval_v10", direct_task.task_id)
+        self.assertEqual("five_scene_finetune_eval_v11", finetune_task.task_id)
+        self.assertEqual("five_scene_direct_eval_v11", direct_task.task_id)
         finetune = plan_atomic_task(finetune_task, self.dataset).value
         self.assertEqual(582, len(finetune["train_case_ids"]))
         self.assertEqual(76, len(finetune["jobs"]))

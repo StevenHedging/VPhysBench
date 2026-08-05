@@ -2,7 +2,7 @@
 
 Physics Video Benchmark 是一个面向物理视频生成模型的六场景、训推一体评测框架。当前
 Dataset release 是
-`datasets/releases/10.0.0/dataset.json`，包含799个case和6,038个
+`datasets/releases/11.0.0/dataset.json`，包含799个case和6,038个
 锁定资产：
 
 - 单摆 `pendulum`
@@ -13,16 +13,18 @@ Dataset release 是
 - 推水瓶 `push_bottle`
 
 当前官方Task为`five_scene_finetune_eval.json`和`five_scene_direct_eval.json`，均指向
-10.0.0 Dataset。推水瓶已进入Dataset，但专用评估器尚未完成，因此暂不进入这两份正式
+11.0.0 Dataset。推水瓶已进入Dataset，但专用评估器尚未完成，因此暂不进入这两份正式
 计分Task。
 
-10.0.0为每个有效Case新增
-`datasets/assets/<scene>/<case>/physics.json`，并通过
+11.0.0为每个有效Case新增
+`datasets/assets/<scene>/<case>/physics.v11.json`，并通过
 `assets.physics_annotation`绑定到Case和`assets.lock.json`。内联`case.physics`仍是
 Baseline和Evaluator的兼容运行时API，Loader会强制校验两者完全一致。Release目录只
 保留`README.md`、`dataset.json`、`release.json`、`cases.jsonl`、
 `assets.lock.json`、`scenes/`和`views/`；迁移与验证证据位于
-`datasets/provenance/releases/10.0.0/`。
+`datasets/provenance/releases/11.0.0/`。每个quantity包含稳定`symbol`；独立量的符号
+必须出现在无数值prompt中。所有标量保存为非负大小，运动方向由prompt表达。10.0.0及其
+`physics.json`保持不可变，以便复现历史结果。
 
 ## 设计原则
 
@@ -96,12 +98,12 @@ PYTHONPATH=src:tests:. /root/miniconda3/envs/phybench/bin/python \
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/releases/10.0.0/dataset.json \
+  --dataset datasets/releases/11.0.0/dataset.json \
   --check-asset-hashes
 ```
 
 这是当前release的正式数据/Task回归入口。`make legacy-test`会额外运行历史Dataset测试；
-其中部分测试需要已经退出当前资产布局的旧路径，不属于10.0.0发布门槛。
+其中部分测试需要已经退出当前资产布局的旧路径，不属于11.0.0发布门槛。
 
 Scene evaluator 需要额外安装：
 
@@ -112,7 +114,7 @@ Scene evaluator 需要额外安装：
 
 ## 快速开始
 
-下面三条命令使用当前10.0.0 Dataset和已有评估器的五场景官方Task。推水瓶需等专用
+下面三条命令使用当前11.0.0 Dataset和已有评估器的五场景官方Task。推水瓶需等专用
 评估器和协议接入后再加入正式Task。
 
 发现并验证 Baseline：
@@ -130,7 +132,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
-  --dataset datasets/releases/10.0.0/dataset.json \
+  --dataset datasets/releases/11.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --output /tmp/wan22_generic_task_instance.json
@@ -141,7 +143,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/releases/10.0.0/dataset.json \
+  --dataset datasets/releases/11.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
   --output-root runs_v2
@@ -152,7 +154,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   matrix-run \
-  --dataset datasets/releases/10.0.0/dataset.json \
+  --dataset datasets/releases/11.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
   --baseline cosmos3_nano_i2v_physics \
@@ -184,13 +186,13 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 ```text
 physics_video_benchmark/
-├── datasets/                 # 唯一权威数据根；10.0.0是当前release
+├── datasets/                 # 唯一权威数据根；11.0.0是当前release
 ├── tasks/official/           # direct_eval 与 finetune_eval 两份模型无关 Task
 ├── baselines/                # schema v5 Bundle、adapter/driver 与本机配置模板
 ├── configs/evaluation/       # scene evaluator 协议
 ├── schemas/v3/               # 历史Dataset、Case、Task及当前TaskInstance
-├── schemas/v4/               # 当前Dataset、Case和Task
-├── schemas/v5/               # Baseline Bundle
+├── schemas/v4/               # 当前Task与历史Dataset/Case
+├── schemas/v5/               # 当前Dataset/Case与Baseline Bundle
 ├── src/physbench/            # planner、runtime、评估与 CLI
 ├── tests/                    # 回归测试
 ├── docs/                     # 架构和操作文档
