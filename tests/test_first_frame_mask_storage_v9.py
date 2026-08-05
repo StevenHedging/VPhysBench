@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import json
 from pathlib import Path
 import tempfile
@@ -113,6 +114,11 @@ class MaskBundleTests(unittest.TestCase):
         missing = sorted(name for name in required if not hasattr(self.storage, name))
         if missing:
             raise AssertionError(f"missing bundle API: {missing}")
+        parameters = inspect.signature(self.storage.write_mask_bundle).parameters
+        if list(parameters) != ["mask_directory", "masks", "instances"]:
+            raise AssertionError(
+                "write_mask_bundle must accept only mask_directory, masks, instances"
+            )
         self.masks = [
             np.array(
                 [
@@ -134,7 +140,7 @@ class MaskBundleTests(unittest.TestCase):
             ),
         ]
         base = "assets/collision_1d/case_a/canonical/masks"
-        self.npz_asset = f"{base}/masks.npz"
+        self.base = base
         self.instances = [
             {
                 "mask_id": "01",
@@ -158,39 +164,40 @@ class MaskBundleTests(unittest.TestCase):
                 directory,
                 self.masks,
                 self.instances,
-                self.npz_asset,
             )
 
-            archive = self.storage.load_mask_npz(directory / "masks.npz")
-            self.assertEqual(
-                {"masks", "mask_ids", "object_ids", "frame_index"},
-                set(archive),
-            )
-            self.assertEqual(np.uint8, archive["masks"].dtype)
-            self.assertEqual((2, 4, 5), archive["masks"].shape)
-            np.testing.assert_array_equal(archive["masks"], np.stack(self.masks))
-            self.assertEqual("U", archive["mask_ids"].dtype.kind)
-            self.assertEqual(["01", "02"], archive["mask_ids"].tolist())
-            self.assertEqual("U", archive["object_ids"].dtype.kind)
-            self.assertEqual(["ball_1", "ball_2"], archive["object_ids"].tolist())
-            self.assertEqual(np.dtype(np.int64), archive["frame_index"].dtype)
-            self.assertEqual((), archive["frame_index"].shape)
-            self.assertEqual(0, int(archive["frame_index"]))
+            self.assertFalse((directory / "masks.npz").exists())
 
             for index, mask_id in enumerate(("01", "02")):
+                archive = self.storage.load_mask_npz(directory / f"{mask_id}.npz")
+                self.assertEqual(
+                    {"masks", "mask_ids", "object_ids", "frame_index"},
+                    set(archive),
+                )
+                self.assertEqual(np.uint8, archive["masks"].dtype)
+                self.assertEqual((1, 4, 5), archive["masks"].shape)
+                np.testing.assert_array_equal(archive["masks"][0], self.masks[index])
+                self.assertEqual([mask_id], archive["mask_ids"].tolist())
+                self.assertEqual([f"ball_{index + 1}"], archive["object_ids"].tolist())
+                self.assertEqual(np.dtype(np.int64), archive["frame_index"].dtype)
+                self.assertEqual((), archive["frame_index"].shape)
+                self.assertEqual(0, int(archive["frame_index"]))
                 png = cv2.imread(
                     str(directory / f"{mask_id}.png"),
                     cv2.IMREAD_UNCHANGED,
                 )
                 self.assertEqual({0, 255}, set(int(value) for value in np.unique(png)))
-                np.testing.assert_array_equal(png > 0, archive["masks"][index] > 0)
+                np.testing.assert_array_equal(png > 0, archive["masks"][0] > 0)
 
             self.assertEqual(
                 {
                     "model": {
-                        "asset": self.npz_asset,
+                        "asset_pattern": (
+                            "assets/collision_1d/case_a/canonical/masks/"
+                            "{mask_id}.npz"
+                        ),
                         "array_key": "masks",
-                        "layout": "OHW",
+                        "layout": "1HW",
                         "dtype": "uint8",
                         "values": [0, 1],
                     },
@@ -213,16 +220,23 @@ class MaskBundleTests(unittest.TestCase):
                 directory,
                 self.masks,
                 self.instances,
-                self.npz_asset,
             )
-            first_bytes = (directory / "masks.npz").read_bytes()
+            first_bytes = {
+                mask_id: (directory / f"{mask_id}.npz").read_bytes()
+                for mask_id in ("01", "02")
+            }
             self.storage.write_mask_bundle(
                 directory,
                 [mask * 255 for mask in self.masks],
                 self.instances,
-                self.npz_asset,
             )
-            self.assertEqual(first_bytes, (directory / "masks.npz").read_bytes())
+            self.assertEqual(
+                first_bytes,
+                {
+                    mask_id: (directory / f"{mask_id}.npz").read_bytes()
+                    for mask_id in ("01", "02")
+                },
+            )
 
             original = {
                 "schema_version": "1.0",
@@ -231,16 +245,19 @@ class MaskBundleTests(unittest.TestCase):
                 "values": [0, 1],
                 "instances": json.loads(json.dumps(self.instances)),
             }
-            upgraded = self.storage.upgrade_manifest_storage(
-                original,
-                self.npz_asset,
-            )
-            self.assertEqual("1.1", upgraded["schema_version"])
+            upgraded = self.storage.upgrade_manifest_storage(original)
+            self.assertEqual("1.2", upgraded["schema_version"])
             self.assertNotIn("dtype", upgraded)
             self.assertNotIn("values", upgraded)
             self.assertEqual(metadata, upgraded["storage"])
-            self.assertEqual([0, 1], [item["npz_index"] for item in upgraded["instances"]])
-            self.assertNotIn("npz_index", original["instances"][0])
+            self.assertEqual(
+                [f"{self.base}/01.npz", f"{self.base}/02.npz"],
+                [item["npz_asset"] for item in upgraded["instances"]],
+            )
+            self.assertTrue(
+                all("npz_index" not in item for item in upgraded["instances"])
+            )
+            self.assertNotIn("npz_asset", original["instances"][0])
 
     def test_bundle_rejects_non_contiguous_ids_and_shape_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -252,14 +269,12 @@ class MaskBundleTests(unittest.TestCase):
                     directory,
                     self.masks,
                     invalid_instances,
-                    self.npz_asset,
                 )
             with self.assertRaises(ValueError):
                 self.storage.write_mask_bundle(
                     directory,
                     [self.masks[0], np.ones((3, 5), dtype=np.uint8)],
                     self.instances,
-                    self.npz_asset,
                 )
             self.assertFalse(directory.exists())
 

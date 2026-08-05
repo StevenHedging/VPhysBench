@@ -50,17 +50,26 @@ def read_binary_png(
     return binary
 
 
-def _storage_metadata(npz_asset: str) -> dict[str, Any]:
-    relative = PurePosixPath(npz_asset)
-    if relative.is_absolute() or ".." in relative.parts:
-        raise ValueError("npz_asset must be a safe relative path")
-    if relative.name != "masks.npz":
-        raise ValueError("npz_asset must end with masks.npz")
+def _storage_metadata(instances: list[dict[str, Any]]) -> dict[str, Any]:
+    if not instances:
+        raise ValueError("storage metadata requires at least one instance")
+    parents: set[PurePosixPath] = set()
+    for instance in instances:
+        asset = instance.get("asset")
+        if not isinstance(asset, str):
+            raise ValueError("instance PNG asset must be a string")
+        relative = PurePosixPath(asset)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError("instance PNG asset must be a safe relative path")
+        parents.add(relative.parent)
+    if len(parents) != 1:
+        raise ValueError("all instance assets must share one mask directory")
+    parent = next(iter(parents))
     return {
         "model": {
-            "asset": relative.as_posix(),
+            "asset_pattern": (parent / "{mask_id}.npz").as_posix(),
             "array_key": "masks",
-            "layout": "OHW",
+            "layout": "1HW",
             "dtype": "uint8",
             "values": [0, 1],
         },
@@ -157,21 +166,20 @@ def write_mask_bundle(
     mask_directory: Path,
     masks: list[np.ndarray],
     instances: list[dict[str, Any]],
-    npz_asset: str,
 ) -> dict[str, Any]:
-    """Atomically write one model archive and one visible PNG per instance."""
+    """Atomically write one model archive and one visible PNG per object."""
 
     stack, mask_ids, object_ids = _validated_bundle(masks, instances)
-    metadata = _storage_metadata(npz_asset)
+    metadata = _storage_metadata(instances)
     mask_directory.mkdir(parents=True, exist_ok=True)
-    arrays = {
-        "masks": stack,
-        "mask_ids": mask_ids,
-        "object_ids": object_ids,
-        "frame_index": np.asarray(0, dtype=np.int64),
-    }
-    _atomic_save_npz(mask_directory / "masks.npz", arrays)
     for index, mask_id in enumerate(mask_ids.tolist()):
+        arrays = {
+            "masks": stack[index : index + 1],
+            "mask_ids": mask_ids[index : index + 1],
+            "object_ids": object_ids[index : index + 1],
+            "frame_index": np.asarray(0, dtype=np.int64),
+        }
+        _atomic_save_npz(mask_directory / f"{mask_id}.npz", arrays)
         _atomic_save_png(mask_directory / f"{mask_id}.png", stack[index])
     return metadata
 
@@ -203,9 +211,8 @@ def load_mask_npz(path: Path) -> dict[str, np.ndarray]:
 
 def upgrade_manifest_storage(
     manifest: dict[str, Any],
-    npz_asset: str,
 ) -> dict[str, Any]:
-    """Return a schema 1.1 manifest without mutating the input object."""
+    """Return a schema 1.2 per-object manifest without mutating the input."""
 
     output = copy.deepcopy(manifest)
     instances = output.get("instances")
@@ -216,9 +223,13 @@ def upgrade_manifest_storage(
             raise ValueError("manifest mask IDs must be contiguous from 01")
         if not isinstance(instance.get("object_id"), str):
             raise ValueError("manifest instance object_id must be a string")
-        instance["npz_index"] = index
-    output["schema_version"] = "1.1"
+        asset = instance.get("asset")
+        if not isinstance(asset, str):
+            raise ValueError("manifest instance PNG asset must be a string")
+        instance["npz_asset"] = PurePosixPath(asset).with_suffix(".npz").as_posix()
+        instance.pop("npz_index", None)
+    output["schema_version"] = "1.2"
     output.pop("dtype", None)
     output.pop("values", None)
-    output["storage"] = _storage_metadata(npz_asset)
+    output["storage"] = _storage_metadata(instances)
     return output
