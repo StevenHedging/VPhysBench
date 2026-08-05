@@ -52,10 +52,11 @@ def _asset_path(physics_video_root: Path, value: str) -> Path:
     return path
 
 
-def _without_npz_index(instances: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _without_npz_fields(instances: list[dict[str, Any]]) -> list[dict[str, Any]]:
     values = json.loads(json.dumps(instances))
     for instance in values:
         instance.pop("npz_index", None)
+        instance.pop("npz_asset", None)
     return values
 
 
@@ -99,7 +100,7 @@ def _preflight_complete_case(
         raise ValueError(f"manifest Case mismatch: {case['case_id']}")
     if manifest.get("frame_index") != 0 or manifest.get("frame_scope") != "first_frame_only":
         raise ValueError(f"manifest is not first-frame-only: {case['case_id']}")
-    if _without_npz_index(manifest.get("instances", [])) != _without_npz_index(instances):
+    if _without_npz_fields(manifest.get("instances", [])) != _without_npz_fields(instances):
         raise ValueError(f"manifest/index instances mismatch: {case['case_id']}")
     first_frame_asset = case.get("assets", {}).get("first_frame")
     if not isinstance(first_frame_asset, str):
@@ -130,24 +131,55 @@ def _preflight_complete_case(
     stack = np.stack(masks)
     if np.any(np.sum(stack, axis=0) > 1):
         raise ValueError(f"overlapping instance masks: {case['case_id']}")
-    npz_asset = (PurePosixPath(manifest_asset).parent / "masks.npz").as_posix()
+    mask_asset_parent = PurePosixPath(manifest_asset).parent
+    summary_npz_asset = (mask_asset_parent / "masks.npz").as_posix()
     exposed_npz = case["assets"].get("first_frame_masks_npz")
-    if exposed_npz not in (None, npz_asset):
+    if exposed_npz not in (None, summary_npz_asset):
         raise ValueError(f"Case exposes the wrong NPZ asset: {case['case_id']}")
-    npz_path = _asset_path(physics_video_root, npz_asset)
-    if npz_path.exists():
-        archive = load_mask_npz(npz_path)
+    summary_npz_path = _asset_path(physics_video_root, summary_npz_asset)
+    object_npz_assets = [
+        (mask_asset_parent / f"{item['mask_id']}.npz").as_posix()
+        for item in instances
+    ]
+    object_npz_paths = [
+        _asset_path(physics_video_root, asset) for asset in object_npz_assets
+    ]
+    expected_mask_ids = [item["mask_id"] for item in instances]
+    expected_object_ids = [item["object_id"] for item in instances]
+    if summary_npz_path.exists():
+        archive = load_mask_npz(summary_npz_path)
         np.testing.assert_array_equal(archive["masks"], stack)
-        if archive["mask_ids"].tolist() != [item["mask_id"] for item in instances]:
-            raise ValueError(f"existing NPZ mask IDs mismatch: {case['case_id']}")
-        if archive["object_ids"].tolist() != [item["object_id"] for item in instances]:
-            raise ValueError(f"existing NPZ object IDs mismatch: {case['case_id']}")
+        if archive["mask_ids"].tolist() != expected_mask_ids:
+            raise ValueError(f"summary NPZ mask IDs mismatch: {case['case_id']}")
+        if archive["object_ids"].tolist() != expected_object_ids:
+            raise ValueError(f"summary NPZ object IDs mismatch: {case['case_id']}")
+        source_kind = "summary"
+    else:
+        if not all(path.is_file() for path in object_npz_paths):
+            raise ValueError(f"Case has neither complete summary nor object NPZ: {case['case_id']}")
+        for index, path in enumerate(object_npz_paths):
+            archive = load_mask_npz(path)
+            if archive["masks"].shape != (1, *expected_shape):
+                raise ValueError(f"object NPZ shape mismatch: {object_npz_assets[index]}")
+            np.testing.assert_array_equal(archive["masks"][0], stack[index])
+            if archive["mask_ids"].tolist() != [expected_mask_ids[index]]:
+                raise ValueError(f"object NPZ mask ID mismatch: {object_npz_assets[index]}")
+            if archive["object_ids"].tolist() != [expected_object_ids[index]]:
+                raise ValueError(f"object NPZ object ID mismatch: {object_npz_assets[index]}")
+        source_kind = "objects"
+    for index, asset in enumerate(object_npz_assets, start=1):
+        role = f"first_frame_subject_mask_npz_{index:02d}"
+        exposed = case["assets"].get(role)
+        if exposed not in (None, asset):
+            raise ValueError(f"Case exposes the wrong object NPZ: {case['case_id']}")
     return {
         "case_id": case["case_id"],
         "mask_directory": manifest_path.parent,
         "manifest_path": manifest_path,
         "manifest_asset": manifest_asset,
-        "npz_asset": npz_asset,
+        "summary_npz_path": summary_npz_path,
+        "object_npz_assets": object_npz_assets,
+        "source_kind": source_kind,
         "instances": instances,
         "mask_assets": [item["asset"] for item in instances],
         "expected_shape": expected_shape,
@@ -220,6 +252,7 @@ def upgrade_release(
 
     records = read_jsonl(release_root / "masks.jsonl")
     operations = preflight_release(release_root, physics_video_root)
+    removed_summary_npz_files = 0
     if materialize:
         for operation in operations:
             masks = [
@@ -233,27 +266,38 @@ def upgrade_release(
                 operation["mask_directory"],
                 masks,
                 operation["instances"],
-                operation["npz_asset"],
             )
-            manifest = upgrade_manifest_storage(
-                read_json(operation["manifest_path"]),
-                operation["npz_asset"],
-            )
+            manifest = upgrade_manifest_storage(read_json(operation["manifest_path"]))
             if manifest["storage"] != storage:
                 raise ValueError(f"storage metadata mismatch: {operation['case_id']}")
+            for index, instance in enumerate(manifest["instances"]):
+                archive = load_mask_npz(
+                    _asset_path(physics_video_root, instance["npz_asset"])
+                )
+                if archive["masks"].shape != (1, *operation["expected_shape"]):
+                    raise ValueError(f"written object NPZ shape mismatch: {instance['npz_asset']}")
+                np.testing.assert_array_equal(archive["masks"][0], masks[index])
+                if archive["mask_ids"].tolist() != [instance["mask_id"]]:
+                    raise ValueError(f"written object NPZ mask ID mismatch: {instance['npz_asset']}")
+                if archive["object_ids"].tolist() != [instance["object_id"]]:
+                    raise ValueError(f"written object NPZ object ID mismatch: {instance['npz_asset']}")
             _write_json_atomic(operation["manifest_path"], manifest)
+            if operation["summary_npz_path"].exists():
+                operation["summary_npz_path"].unlink()
+                removed_summary_npz_files += 1
     skipped_ids = [
         record["case_id"] for record in records if record.get("status") == "skipped"
     ]
     report = {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "release": "9.0.0",
         "materialized": materialize,
         "selected_cases": len(records),
         "complete_cases": len(operations),
         "skipped_cases": len(skipped_ids),
         "mask_files": sum(len(item["instances"]) for item in operations),
-        "npz_files": len(operations),
+        "npz_files": sum(len(item["instances"]) for item in operations),
+        "removed_summary_npz_files": removed_summary_npz_files,
         "skipped_case_ids": skipped_ids,
     }
     if report_path is not None:

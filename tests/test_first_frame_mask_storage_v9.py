@@ -341,6 +341,13 @@ class ReleaseUpgradeTests(unittest.TestCase):
                     "segmentation": {"sam_predicted_iou": 0.9},
                 }
             )
+        np.savez_compressed(
+            masks_directory / "masks.npz",
+            masks=np.stack(masks),
+            mask_ids=np.asarray(["01", "02"]),
+            object_ids=np.asarray(["ball_1", "ball_2"]),
+            frame_index=np.asarray(0, dtype=np.int64),
+        )
         manifest_relative = case_relative / "masks" / "manifest.json"
         manifest = {
             "schema_version": "1.0",
@@ -429,43 +436,68 @@ class ReleaseUpgradeTests(unittest.TestCase):
             operations = self.upgrade.preflight_release(release_root, physics_root)
 
             self.assertEqual(1, len(operations))
-            self.assertFalse((masks_directory / "masks.npz").exists())
+            self.assertTrue((masks_directory / "masks.npz").exists())
+            self.assertFalse((masks_directory / "01.npz").exists())
             self.assertEqual(original_png, (masks_directory / "01.png").read_bytes())
             report_path = release_root / "mask_storage_upgrade_report.json"
-            report = self.upgrade.upgrade_release(
-                release_root=release_root,
-                physics_video_root=physics_root,
-                materialize=True,
-                report_path=report_path,
-            )
+            try:
+                report = self.upgrade.upgrade_release(
+                    release_root=release_root,
+                    physics_video_root=physics_root,
+                    materialize=True,
+                    report_path=report_path,
+                )
+            except TypeError as exc:
+                self.fail(f"upgrade still uses the summary NPZ writer API: {exc}")
             self.assertEqual(2, report["selected_cases"])
             self.assertEqual(1, report["complete_cases"])
             self.assertEqual(1, report["skipped_cases"])
             self.assertEqual(2, report["mask_files"])
-            self.assertEqual(1, report["npz_files"])
+            self.assertEqual(2, report["npz_files"])
+            self.assertEqual(1, report["removed_summary_npz_files"])
             self.assertEqual(["case_skipped"], report["skipped_case_ids"])
             self.assertTrue(report_path.is_file())
-            archive = np.load(masks_directory / "masks.npz", allow_pickle=False)
-            try:
-                self.assertEqual((2, 4, 5), archive["masks"].shape)
-                self.assertEqual(["ball_1", "ball_2"], archive["object_ids"].tolist())
-            finally:
-                archive.close()
+            self.assertFalse((masks_directory / "masks.npz").exists())
+            for index, mask_id in enumerate(("01", "02"), start=1):
+                with np.load(
+                    masks_directory / f"{mask_id}.npz",
+                    allow_pickle=False,
+                ) as archive:
+                    self.assertEqual((1, 4, 5), archive["masks"].shape)
+                    self.assertEqual([mask_id], archive["mask_ids"].tolist())
+                    self.assertEqual([f"ball_{index}"], archive["object_ids"].tolist())
             png = cv2.imread(str(masks_directory / "01.png"), cv2.IMREAD_UNCHANGED)
             self.assertEqual({0, 255}, set(int(value) for value in np.unique(png)))
             manifest = json.loads((masks_directory / "manifest.json").read_text())
-            self.assertEqual("1.1", manifest["schema_version"])
-            self.assertEqual([0, 1], [item["npz_index"] for item in manifest["instances"]])
-            first_archive = (masks_directory / "masks.npz").read_bytes()
+            self.assertEqual("1.2", manifest["schema_version"])
+            self.assertEqual(
+                [
+                    "assets/collision_1d/case_a/canonical/masks/01.npz",
+                    "assets/collision_1d/case_a/canonical/masks/02.npz",
+                ],
+                [item["npz_asset"] for item in manifest["instances"]],
+            )
+            self.assertTrue(all("npz_index" not in item for item in manifest["instances"]))
+            first_archives = {
+                mask_id: (masks_directory / f"{mask_id}.npz").read_bytes()
+                for mask_id in ("01", "02")
+            }
 
-            self.upgrade.upgrade_release(
+            second_report = self.upgrade.upgrade_release(
                 release_root=release_root,
                 physics_video_root=physics_root,
                 materialize=True,
                 report_path=report_path,
             )
 
-            self.assertEqual(first_archive, (masks_directory / "masks.npz").read_bytes())
+            self.assertEqual(0, second_report["removed_summary_npz_files"])
+            self.assertEqual(
+                first_archives,
+                {
+                    mask_id: (masks_directory / f"{mask_id}.npz").read_bytes()
+                    for mask_id in ("01", "02")
+                },
+            )
 
     def test_bad_png_fails_before_any_bundle_is_written(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -492,7 +524,8 @@ class ReleaseUpgradeTests(unittest.TestCase):
                     report_path=None,
                 )
 
-            self.assertFalse((masks_directory / "masks.npz").exists())
+            self.assertTrue((masks_directory / "masks.npz").exists())
+            self.assertFalse((masks_directory / "01.npz").exists())
             self.assertEqual(second_before, (masks_directory / "02.png").read_bytes())
 
 

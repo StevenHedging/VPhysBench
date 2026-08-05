@@ -1110,14 +1110,12 @@ def process_case(
         instances.append(
             {
                 "mask_id": f"{index:02d}",
-                "npz_index": index - 1,
                 **declaration,
                 "asset": mask_relative.as_posix(),
                 **geometry,
                 "segmentation": segmentation,
             }
         )
-    npz_relative = mask_directory_relative / "masks.npz"
     manifest = upgrade_manifest_storage({
         "schema_version": "1.0",
         "case_id": case["case_id"],
@@ -1136,7 +1134,7 @@ def process_case(
         },
         "localization": localization,
         "instances": instances,
-    }, npz_relative.as_posix())
+    })
     instances = manifest["instances"]
     if materialize:
         mask_directory = PHYSICS_VIDEO_ROOT / mask_directory_relative
@@ -1144,7 +1142,6 @@ def process_case(
             mask_directory,
             masks,
             instances,
-            npz_relative.as_posix(),
         )
         if storage != manifest["storage"]:
             raise ValueError("generated Mask storage metadata is inconsistent")
@@ -1163,7 +1160,7 @@ def process_case(
         "scene_id": scene,
         "status": "complete",
         "mask_directory": mask_directory_relative.as_posix(),
-        "npz_asset": npz_relative.as_posix(),
+        "npz_assets": [item["npz_asset"] for item in instances],
         "instances": instances,
         "localization": localization,
     }
@@ -1294,7 +1291,7 @@ def main() -> int:
     order = {case["case_id"]: index for index, case in enumerate(cases)}
     results.sort(key=lambda item: order[item["case_id"]])
     report = {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "generator_id": GENERATOR_ID,
         "base_release": "8.0.0",
         "target_release": "9.0.0",
