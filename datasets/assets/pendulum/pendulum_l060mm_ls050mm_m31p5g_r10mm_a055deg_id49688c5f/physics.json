@@ -3,30 +3,35 @@
   "physics": {
     "bob_mass": {
       "annotated": true,
+      "symbol": "m",
       "unit": "kg",
       "value": 0.0315
     },
     "bob_radius": {
       "annotated": true,
+      "symbol": "r",
       "unit": "m",
       "value": 0.01
     },
     "initial_angle": {
       "annotated": true,
+      "symbol": "θ_0",
       "unit": "deg",
       "value": 55.0
     },
     "pendulum_length": {
-      "annotated": true,
+      "annotated": false,
+      "symbol": "l",
       "unit": "m",
       "value": 0.06
     },
     "string_length": {
       "annotated": true,
+      "symbol": "l_s",
       "unit": "m",
       "value": 0.05
     }
   },
   "scene_id": "pendulum",
-  "schema_version": "1.0"
+  "schema_version": "2.0"
 }

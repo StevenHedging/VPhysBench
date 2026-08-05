@@ -1,0 +1,65 @@
+{
+  "constraints": [
+    "Collision must remain one-dimensional and central"
+  ],
+  "display_name": "一维对心碰撞",
+  "generalization_factors": [
+    {
+      "category": "object_composition",
+      "name": "ball_spec_composition",
+      "source": "appearance.ball_sequence"
+    },
+    {
+      "category": "object_composition",
+      "name": "ball_material",
+      "source": "appearance.ball_materials"
+    },
+    {
+      "category": "interaction_structure",
+      "name": "collision_structure",
+      "source": "appearance.collision_structure"
+    },
+    {
+      "category": "environment",
+      "name": "background",
+      "source": "appearance.background"
+    }
+  ],
+  "metric_spec": {
+    "common_sense_checks": [
+      "contact precedes velocity exchange",
+      "no interpenetration",
+      "approximately one-dimensional motion"
+    ],
+    "prediction_quantities": [
+      "pre/post collision velocities",
+      "momentum residual",
+      "restitution residual"
+    ],
+    "prediction_subjects": [
+      "striker_ball",
+      "target_ball"
+    ],
+    "visual_attributes": [
+      "ball material",
+      "contact rendering",
+      "track consistency"
+    ]
+  },
+  "non_conditionable_physics_parameters": [
+    "striker_initial_velocity"
+  ],
+  "scene_id": "collision_1d",
+  "schema_version": "2.0",
+  "structured_physics_parameters": [
+    "ball_1_initial_velocity",
+    "ball_1_mass",
+    "ball_1_radius",
+    "ball_2_initial_velocity",
+    "ball_2_mass",
+    "ball_2_radius",
+    "ball_3_initial_velocity",
+    "ball_3_mass",
+    "ball_3_radius"
+  ]
+}

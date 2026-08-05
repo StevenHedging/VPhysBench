@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
+from physbench.datasets import load_dataset
+from physbench.io import load_json
 from physbench.io import load_jsonl
 from scripts import build_dataset_v12 as builder
 
@@ -65,6 +68,55 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
             self.assertTrue(write.relative_path.endswith("/physics.json"))
             self.assertEqual(builder._physics_payload(case), write.payload)
             self.assertTrue(write.payload.endswith(b"\n"))
+
+    def test_published_release_is_minimal_and_single_file(self) -> None:
+        self.assertEqual(
+            {
+                "README.md",
+                "assets.lock.json",
+                "cases.jsonl",
+                "dataset.json",
+                "release.json",
+                "scenes",
+                "views",
+            },
+            {path.name for path in builder.OUTPUT_RELEASE_ROOT.iterdir()},
+        )
+        snapshot = load_dataset(
+            builder.OUTPUT_RELEASE_ROOT / "dataset.json",
+            check_asset_hashes=True,
+        )
+        self.assertEqual(builder.OUTPUT_DATASET_ID, snapshot.dataset_id)
+        self.assertEqual(799, len(snapshot.cases))
+        self.assertEqual(6038, len(snapshot.asset_lock["files"]))
+        self.assertTrue(all(
+            case["assets"]["physics_annotation"].endswith("/physics.json")
+            for case in snapshot.cases
+        ))
+        self.assertFalse(list(builder.DATASETS_ROOT.glob("assets/*/*/physics.v11.json")))
+        self.assertEqual(
+            799,
+            len(list(builder.DATASETS_ROOT.glob("assets/*/*/physics.json"))),
+        )
+
+    def test_release_changes_only_identity_and_physics_path(self) -> None:
+        output = load_jsonl(builder.OUTPUT_RELEASE_ROOT / "cases.jsonl")
+        self.assertEqual(799, len(output))
+        for old, new in zip(self.v11_cases, output, strict=True):
+            restored = dict(new)
+            restored["assets"] = dict(restored["assets"])
+            restored["assets"]["physics_annotation"] = old["assets"][
+                "physics_annotation"
+            ]
+            self.assertEqual(old, restored)
+        for name in ("view_a.json", "view_b.json"):
+            self.assertEqual(
+                (builder.BASE_RELEASE_ROOT / "views" / name).read_bytes(),
+                (builder.OUTPUT_RELEASE_ROOT / "views" / name).read_bytes(),
+            )
+        evidence = load_json(builder.PROVENANCE_ROOT / "migration.json")
+        self.assertEqual(799, evidence["counts"]["physics_documents_renamed"])
+        self.assertEqual(0, evidence["counts"]["media_changes"])
 
 
 if __name__ == "__main__":

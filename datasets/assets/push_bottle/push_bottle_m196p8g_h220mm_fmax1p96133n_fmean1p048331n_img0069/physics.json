@@ -3,25 +3,29 @@
   "physics": {
     "bottle_height": {
       "annotated": true,
+      "symbol": "h",
       "unit": "m",
       "value": 0.22
     },
     "bottle_mass": {
       "annotated": true,
+      "symbol": "m",
       "unit": "kg",
       "value": 0.1968
     },
     "mean_applied_force": {
       "annotated": true,
+      "symbol": "F_mean",
       "unit": "N",
       "value": 1.048331
     },
     "peak_applied_force": {
       "annotated": true,
+      "symbol": "F_peak",
       "unit": "N",
       "value": 1.96133
     }
   },
   "scene_id": "push_bottle",
-  "schema_version": "1.0"
+  "schema_version": "2.0"
 }

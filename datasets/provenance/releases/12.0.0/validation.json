@@ -1,0 +1,12 @@
+{
+  "asset_files_digest": "453f72aa81527c4aa6ab1dca60e3e54f638bb53be2e924a7898a84ef9d821796",
+  "cases": 799,
+  "dataset_digest": "87cc6adda5e5fdf628d1ab48237d0287a64fcc43261b20fd7216e8999ea98c31",
+  "dataset_id": "physics_video_six_scene_v12",
+  "locked_assets": 6038,
+  "media_changes": 0,
+  "physics_documents": 799,
+  "quantities": 5286,
+  "schema_version": "1.0",
+  "status": "valid"
+}

@@ -1,0 +1,50 @@
+{
+  "constraints": [
+    "Canonical frame zero shows an upright bottle before the push develops",
+    "Canonical media preserves the complete source video without crop or trim"
+  ],
+  "display_name": "推水瓶",
+  "generalization_factors": [
+    {
+      "category": "interaction_structure",
+      "name": "interaction",
+      "source": "appearance.interaction"
+    },
+    {
+      "category": "acquisition",
+      "name": "capture_session",
+      "source": "appearance.capture_session"
+    }
+  ],
+  "metric_spec": {
+    "common_sense_checks": [
+      "bottle begins upright",
+      "push initiates tipping",
+      "continuous rigid-body fall",
+      "no spontaneous topology change"
+    ],
+    "prediction_quantities": [
+      "tipping onset",
+      "angular motion",
+      "fall direction",
+      "final toppled state"
+    ],
+    "prediction_subjects": [
+      "bottle"
+    ],
+    "visual_attributes": [
+      "bottle integrity",
+      "support contact",
+      "push interaction"
+    ]
+  },
+  "non_conditionable_physics_parameters": [],
+  "scene_id": "push_bottle",
+  "schema_version": "2.0",
+  "structured_physics_parameters": [
+    "bottle_height",
+    "bottle_mass",
+    "mean_applied_force",
+    "peak_applied_force"
+  ]
+}
