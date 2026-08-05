@@ -99,7 +99,7 @@ def build_mask_records(
     base_cases: list[dict[str, Any]],
     report: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-    """Build Case assets and the schema 1.1 mask index without mutating inputs."""
+    """Build Case assets and the schema 1.2 mask index without mutating inputs."""
 
     if report.get("selected_cases") != len(base_cases):
         raise ValueError("mask report does not cover every base Case")
@@ -133,22 +133,28 @@ def build_mask_records(
             expected_id = f"{index + 1:02d}"
             if instance.get("mask_id") != expected_id:
                 raise ValueError(f"{case['case_id']} has non-contiguous mask IDs")
-            instance["npz_index"] = index
+            instance.pop("npz_index", None)
+            instance["npz_asset"] = str(
+                Path(instance["asset"]).with_suffix(".npz")
+            )
         manifest_asset = (
             f"{result['mask_directory']}/manifest.json" if complete else None
         )
-        npz_asset = f"{result['mask_directory']}/masks.npz" if complete else None
         case["assets"]["first_frame_mask_manifest"] = manifest_asset
-        case["assets"]["first_frame_masks_npz"] = npz_asset
+        case["assets"].pop("first_frame_masks_npz", None)
         for index in range(1, expected + 1):
             role = f"first_frame_subject_mask_{index:02d}"
             case["assets"][role] = (
                 instances[index - 1]["asset"] if complete else None
             )
+            npz_role = f"first_frame_subject_mask_npz_{index:02d}"
+            case["assets"][npz_role] = (
+                instances[index - 1]["npz_asset"] if complete else None
+            )
         output_cases.append(case)
 
         record: dict[str, Any] = {
-            "schema_version": "1.1",
+            "schema_version": "1.2",
             "case_id": case["case_id"],
             "scene_id": case["scene_id"],
             "status": "complete" if complete else "skipped",
@@ -158,7 +164,6 @@ def build_mask_records(
             "ordering": "row_major_top_to_bottom_then_left_to_right",
             "expected_subject_count": expected,
             "manifest_asset": manifest_asset,
-            "npz_asset": npz_asset,
             "instances": instances,
         }
         if complete:
@@ -178,7 +183,7 @@ def build_mask_records(
         "completed": completed,
         "skipped": skipped,
         "total_masks": total_masks,
-        "total_npz": completed,
+        "total_npz": total_masks,
     }
 
 
@@ -211,7 +216,7 @@ def main() -> int:
         "mask_annotations": {
             "path": "masks.jsonl",
             "sha256": mask_index_sha256,
-            "schema_version": "1.1",
+            "schema_version": "1.2",
         },
     }
     write_json(RELEASE_ROOT / "dataset.json", descriptor)
@@ -219,7 +224,7 @@ def main() -> int:
     write_json(
         RELEASE_ROOT / "mask_release_audit.json",
         {
-            "schema_version": "1.1",
+            "schema_version": "1.2",
             "base_release": "8.0.0",
             "base_dataset_id": "physics_video_six_scene_v8",
             "base_dataset_digest": base_release["dataset_digest"],
@@ -230,7 +235,8 @@ def main() -> int:
             "skipped_case_count": len(skipped),
             "mask_file_count": total_masks,
             "npz_file_count": total_npz,
-            "model_mask_storage": "compressed NPZ uint8 [O,H,W] with values {0,1}",
+            "legacy_summary_npz_file_count": 0,
+            "model_mask_storage": "per-object compressed NPZ uint8 [1,H,W] with values {0,1}",
             "visualization_mask_storage": "single-channel PNG uint8 [H,W] with values {0,255}",
             "frame_scope": "first_frame_only",
             "subject_policy": {

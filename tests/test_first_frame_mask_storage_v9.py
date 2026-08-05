@@ -601,24 +601,38 @@ class ReleaseBuilderTests(unittest.TestCase):
 
         self.assertEqual(original, base_cases)
         complete_assets = cases[0]["assets"]
+        self.assertNotIn("first_frame_masks_npz", complete_assets)
         self.assertEqual(
-            "assets/case_a/canonical/masks/masks.npz",
-            complete_assets["first_frame_masks_npz"],
+            "assets/case_a/canonical/masks/01.npz",
+            complete_assets["first_frame_subject_mask_npz_01"],
+        )
+        self.assertEqual(
+            "assets/case_a/canonical/masks/02.npz",
+            complete_assets["first_frame_subject_mask_npz_02"],
         )
         self.assertEqual(
             "assets/case_a/canonical/masks/manifest.json",
             complete_assets["first_frame_mask_manifest"],
         )
-        self.assertIsNone(cases[1]["assets"]["first_frame_masks_npz"])
-        self.assertIsNone(cases[1]["assets"]["first_frame_mask_manifest"])
-        self.assertEqual("1.1", records[0]["schema_version"])
-        self.assertEqual(
-            "assets/case_a/canonical/masks/masks.npz",
-            records[0]["npz_asset"],
+        self.assertNotIn("first_frame_masks_npz", cases[1]["assets"])
+        self.assertIsNone(
+            cases[1]["assets"]["first_frame_subject_mask_npz_01"]
         )
-        self.assertEqual([0, 1], [item["npz_index"] for item in records[0]["instances"]])
-        self.assertEqual("1.1", records[1]["schema_version"])
-        self.assertIsNone(records[1]["npz_asset"])
+        self.assertIsNone(cases[1]["assets"]["first_frame_mask_manifest"])
+        self.assertEqual("1.2", records[0]["schema_version"])
+        self.assertNotIn("npz_asset", records[0])
+        self.assertEqual(
+            [
+                "assets/case_a/canonical/masks/01.npz",
+                "assets/case_a/canonical/masks/02.npz",
+            ],
+            [item["npz_asset"] for item in records[0]["instances"]],
+        )
+        self.assertTrue(
+            all("npz_index" not in item for item in records[0]["instances"])
+        )
+        self.assertEqual("1.2", records[1]["schema_version"])
+        self.assertNotIn("npz_asset", records[1])
         self.assertEqual([], records[1]["instances"])
         self.assertEqual(
             {
@@ -631,7 +645,7 @@ class ReleaseBuilderTests(unittest.TestCase):
                     }
                 ],
                 "total_masks": 2,
-                "total_npz": 1,
+                "total_npz": 2,
             },
             summary,
         )

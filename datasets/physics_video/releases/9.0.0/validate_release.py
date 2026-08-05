@@ -69,8 +69,8 @@ def validate() -> dict[str, Any]:
         if without_mask_assets(case) != base_case:
             raise ValueError(f"non-mask Case content changed: {case['case_id']}")
 
-    if descriptor.get("mask_annotations", {}).get("schema_version") != "1.1":
-        raise ValueError("dataset mask annotation schema must be 1.1")
+    if descriptor.get("mask_annotations", {}).get("schema_version") != "1.2":
+        raise ValueError("dataset mask annotation schema must be 1.2")
 
     if descriptor["mask_annotations"]["sha256"] != sha256(
         RELEASE_ROOT / descriptor["mask_annotations"]["path"]
@@ -90,23 +90,33 @@ def validate() -> dict[str, Any]:
         scene = case["scene_id"]
         scene_counts.setdefault(scene, {"complete_cases": 0, "mask_files": 0})
         expected = int(record["expected_subject_count"])
+        if record.get("schema_version") != "1.2":
+            raise ValueError(f"mask record schema is not 1.2: {case['case_id']}")
+        if "npz_asset" in record:
+            raise ValueError(f"mask record exposes a summary NPZ: {case['case_id']}")
+        if "first_frame_masks_npz" in case["assets"]:
+            raise ValueError(f"Case exposes a summary NPZ role: {case['case_id']}")
         if record["status"] == "skipped":
             skipped_cases.append(case["case_id"])
-            if (
-                record["instances"]
-                or record["manifest_asset"] is not None
-                or record.get("npz_asset") is not None
-            ):
+            if record["instances"] or record["manifest_asset"] is not None:
                 raise ValueError(f"skipped Case exposes masks: {case['case_id']}")
             if case["assets"]["first_frame_mask_manifest"] is not None:
                 raise ValueError(f"skipped Case exposes a manifest: {case['case_id']}")
-            if case["assets"].get("first_frame_masks_npz") is not None:
-                raise ValueError(f"skipped Case exposes an NPZ: {case['case_id']}")
+            for index in range(1, expected + 1):
+                mask_id = f"{index:02d}"
+                png_role = f"first_frame_subject_mask_{mask_id}"
+                npz_role = f"first_frame_subject_mask_npz_{mask_id}"
+                if case["assets"].get(png_role) is not None:
+                    raise ValueError(
+                        f"skipped Case exposes a PNG role: {case['case_id']}"
+                    )
+                if case["assets"].get(npz_role) is not None:
+                    raise ValueError(
+                        f"skipped Case exposes an NPZ role: {case['case_id']}"
+                    )
             continue
         if record["status"] != "complete":
             raise ValueError(f"invalid mask status for {case['case_id']}")
-        if record.get("schema_version") != "1.1":
-            raise ValueError(f"mask record schema is not 1.1: {case['case_id']}")
         instances = record["instances"]
         if len(instances) != expected:
             raise ValueError(f"mask cardinality mismatch: {case['case_id']}")
@@ -118,8 +128,8 @@ def validate() -> dict[str, Any]:
             raise ValueError(f"manifest Case mismatch: {case['case_id']}")
         if manifest["frame_index"] != 0 or manifest["frame_scope"] != "first_frame_only":
             raise ValueError(f"manifest is not first-frame-only: {case['case_id']}")
-        if manifest.get("schema_version") != "1.1":
-            raise ValueError(f"manifest schema is not 1.1: {case['case_id']}")
+        if manifest.get("schema_version") != "1.2":
+            raise ValueError(f"manifest schema is not 1.2: {case['case_id']}")
         if manifest["instances"] != instances:
             raise ValueError(f"manifest/index instance mismatch: {case['case_id']}")
         first_frame = cv2.imread(
@@ -128,48 +138,48 @@ def validate() -> dict[str, Any]:
         )
         if first_frame is None:
             raise ValueError(f"cannot decode first frame: {case['case_id']}")
-        npz_asset = record.get("npz_asset")
-        if not isinstance(npz_asset, str):
-            raise ValueError(f"complete Case lacks NPZ asset: {case['case_id']}")
-        if case["assets"].get("first_frame_masks_npz") != npz_asset:
-            raise ValueError(f"Case/index NPZ asset mismatch: {case['case_id']}")
+        mask_asset_parent = Path(instances[0]["asset"]).parent
         expected_storage = {
             "model": {
-                "asset": npz_asset,
+                "asset_pattern": str(mask_asset_parent / "{mask_id}.npz"),
                 "array_key": "masks",
-                "layout": "OHW",
+                "layout": "1HW",
                 "dtype": "uint8",
                 "values": [0, 1],
             },
             "visualization": {
-                "asset_pattern": str(Path(npz_asset).parent / "{mask_id}.png"),
+                "asset_pattern": str(mask_asset_parent / "{mask_id}.png"),
                 "dtype": "uint8",
                 "values": [0, 255],
             },
         }
         if manifest.get("storage") != expected_storage:
             raise ValueError(f"manifest storage contract mismatch: {case['case_id']}")
-        archive = load_mask_npz(PHYSICS_VIDEO_ROOT / npz_asset)
-        if archive["masks"].shape != (expected, *first_frame.shape[:2]):
-            raise ValueError(f"NPZ mask shape mismatch: {case['case_id']}")
         expected_mask_ids = [f"{index:02d}" for index in range(1, expected + 1)]
-        if archive["mask_ids"].tolist() != expected_mask_ids:
-            raise ValueError(f"NPZ mask IDs mismatch: {case['case_id']}")
-        if archive["object_ids"].tolist() != [
-            instance["object_id"] for instance in instances
-        ]:
-            raise ValueError(f"NPZ object IDs mismatch: {case['case_id']}")
         masks = []
         centroids = []
         for index, instance in enumerate(instances, start=1):
             expected_id = f"{index:02d}"
             if instance["mask_id"] != expected_id:
                 raise ValueError(f"non-contiguous mask IDs: {case['case_id']}")
-            if instance.get("npz_index") != index - 1:
-                raise ValueError(f"non-contiguous NPZ indices: {case['case_id']}")
+            if "npz_index" in instance:
+                raise ValueError(f"instance exposes an NPZ index: {case['case_id']}")
             asset_role = f"first_frame_subject_mask_{expected_id}"
             if case["assets"].get(asset_role) != instance["asset"]:
                 raise ValueError(f"Case/index asset mismatch: {case['case_id']}")
+            expected_npz_asset = str(Path(instance["asset"]).with_suffix(".npz"))
+            if instance.get("npz_asset") != expected_npz_asset:
+                raise ValueError(f"instance NPZ asset mismatch: {case['case_id']}")
+            npz_role = f"first_frame_subject_mask_npz_{expected_id}"
+            if case["assets"].get(npz_role) != expected_npz_asset:
+                raise ValueError(f"Case/index NPZ role mismatch: {case['case_id']}")
+            archive = load_mask_npz(PHYSICS_VIDEO_ROOT / expected_npz_asset)
+            if archive["masks"].shape != (1, *first_frame.shape[:2]):
+                raise ValueError(f"NPZ mask shape mismatch: {expected_npz_asset}")
+            if archive["mask_ids"].tolist() != [expected_id]:
+                raise ValueError(f"NPZ mask ID mismatch: {expected_npz_asset}")
+            if archive["object_ids"].tolist() != [instance["object_id"]]:
+                raise ValueError(f"NPZ object ID mismatch: {expected_npz_asset}")
             mask = cv2.imread(
                 str(PHYSICS_VIDEO_ROOT / instance["asset"]),
                 cv2.IMREAD_UNCHANGED,
@@ -186,7 +196,7 @@ def validate() -> dict[str, Any]:
                     f"PNG values are not non-empty {{0,255}}: {instance['asset']}"
                 )
             binary = np.ascontiguousarray(mask > 0, dtype=np.uint8)
-            if not np.array_equal(binary, archive["masks"][index - 1]):
+            if not np.array_equal(binary, archive["masks"][0]):
                 raise ValueError(f"PNG/NPZ pixels differ: {instance['asset']}")
             area = int(np.count_nonzero(mask))
             if area != instance["area_pixels"]:
@@ -197,6 +207,7 @@ def validate() -> dict[str, Any]:
                 raise ValueError(f"mask centroid metadata mismatch: {instance['asset']}")
             masks.append(binary)
             centroids.append(centroid)
+            npz_files += 1
         for first_index in range(len(masks)):
             for second_index in range(first_index + 1, len(masks)):
                 if np.array_equal(masks[first_index], masks[second_index]):
@@ -215,7 +226,6 @@ def validate() -> dict[str, Any]:
                 raise ValueError(f"masks are not in row-major order: {case['case_id']}")
         complete_cases += 1
         mask_files += len(masks)
-        npz_files += 1
         scene_counts[scene]["complete_cases"] += 1
         scene_counts[scene]["mask_files"] += len(masks)
 
@@ -223,9 +233,21 @@ def validate() -> dict[str, Any]:
         complete_cases != 797
         or len(skipped_cases) != 2
         or mask_files != 1205
-        or npz_files != 797
+        or npz_files != 1205
     ):
         raise ValueError("release totals differ from the frozen contract")
+
+    asset_root = PHYSICS_VIDEO_ROOT / "assets"
+    object_npz_paths = list(asset_root.glob("*/*/canonical/masks/[0-9][0-9].npz"))
+    legacy_npz_paths = list(asset_root.glob("*/*/canonical/masks/masks.npz"))
+    mask_png_paths = list(asset_root.glob("*/*/canonical/masks/[0-9][0-9].png"))
+    manifest_paths = list(asset_root.glob("*/*/canonical/masks/manifest.json"))
+    if len(object_npz_paths) != 1205:
+        raise ValueError("filesystem must contain 1,205 per-object mask NPZ files")
+    if legacy_npz_paths:
+        raise ValueError("filesystem still contains legacy masks.npz files")
+    if len(mask_png_paths) != 1205 or len(manifest_paths) != 797:
+        raise ValueError("filesystem PNG/manifest totals differ from the frozen contract")
 
     base_lock = read_json(BASE_RELEASE_ROOT / "assets.lock.json")
     lock = read_json(RELEASE_ROOT / "assets.lock.json")
@@ -234,8 +256,8 @@ def validate() -> dict[str, Any]:
     for path, item in base_by_path.items():
         if current_by_path.get(path) != item:
             raise ValueError(f"8.0.0 locked asset changed in 9.0.0: {path}")
-    if len(lock["files"]) != 4831:
-        raise ValueError("9.0.0 asset lock must contain 4,831 files")
+    if len(lock["files"]) != 5239:
+        raise ValueError("9.0.0 asset lock must contain 5,239 files")
     snapshot = load_dataset(
         RELEASE_ROOT / "dataset.json",
         check_assets=True,
@@ -261,9 +283,10 @@ def validate() -> dict[str, Any]:
             "Case identity/order and all non-mask content equal 8.0.0",
             "first-frame-only manifest contract",
             "per-Case subject cardinality",
-            "NPZ keys/layout/dtype/value/ID/non-empty contract",
+            "per-object NPZ keys/[1,H,W]/dtype/value/ID/non-empty contract",
             "PNG shape/dtype/{0,255}/non-empty contract",
-            "pixel equality between every PNG and NPZ object plane",
+            "pixel equality between every PNG and its object NPZ plane",
+            "no legacy masks.npz files",
             "mask metadata area and centroid",
             "multi-instance uniqueness, exclusivity, and ordering",
             "mask index SHA-256",
