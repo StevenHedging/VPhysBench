@@ -161,9 +161,9 @@ def _assert_no_model_payload(case: dict[str, Any]) -> None:
 
 def _validate_case(case: dict[str, Any], known_scenes: set[str]) -> None:
     schema_version = case.get("schema_version")
-    if schema_version not in {"3.0", "4.0"}:
+    if schema_version not in {"3.0", "4.0", "5.0"}:
         raise ValueError(
-            f"case {case.get('case_id')} must use schema_version=3.0 or 4.0"
+            f"case {case.get('case_id')} must use schema_version=3.0, 4.0, or 5.0"
         )
     required = (
         REQUIRED_CASE_KEYS_V3
@@ -175,16 +175,16 @@ def _validate_case(case: dict[str, Any], known_scenes: set[str]) -> None:
         raise ValueError(
             f"dataset case {case.get('case_id')} missing {missing}"
         )
-    if schema_version == "4.0" and "ood" in case:
+    if schema_version in {"4.0", "5.0"} and "ood" in case:
         raise ValueError(
-            f"dataset v4 case {case.get('case_id')} must not contain view-relative ood"
+            f"dataset v4+ case {case.get('case_id')} must not contain view-relative ood"
         )
-    if schema_version == "4.0":
+    if schema_version in {"4.0", "5.0"}:
         allowed = REQUIRED_CASE_KEYS_V4 | {"alignment"}
         unknown = sorted(set(case) - allowed)
         if unknown:
             raise ValueError(
-                f"dataset v4 case {case.get('case_id')} has unknown fields: "
+                f"dataset v4+ case {case.get('case_id')} has unknown fields: "
                 f"{unknown}"
             )
     require_safe_id(case.get("case_id"), label="case.case_id")
@@ -226,6 +226,8 @@ def _validate_case(case: dict[str, Any], known_scenes: set[str]) -> None:
         if not isinstance(quantity, dict):
             raise ValueError(f"case {case['case_id']} physics.{name} must be an object")
         expected_quantity_fields = {"value", "unit", "annotated"}
+        if schema_version == "5.0":
+            expected_quantity_fields.add("symbol")
         if set(quantity) != expected_quantity_fields:
             raise ValueError(
                 f"case {case['case_id']} physics.{name} fields must be "
@@ -241,6 +243,10 @@ def _validate_case(case: dict[str, Any], known_scenes: set[str]) -> None:
                 f"case {case['case_id']} physics.{name}.value must be a "
                 "finite number"
             )
+        if schema_version == "5.0" and value < 0:
+            raise ValueError(
+                f"case {case['case_id']} physics.{name}.value must be non-negative"
+            )
         if (
             not isinstance(quantity["unit"], str)
             or not quantity["unit"].strip()
@@ -251,6 +257,13 @@ def _validate_case(case: dict[str, Any], known_scenes: set[str]) -> None:
         if not isinstance(quantity["annotated"], bool):
             raise ValueError(
                 f"case {case['case_id']} physics.{name}.annotated must be boolean"
+            )
+        if schema_version == "5.0" and (
+            not isinstance(quantity["symbol"], str)
+            or not quantity["symbol"].strip()
+        ):
+            raise ValueError(
+                f"case {case['case_id']} physics.{name}.symbol must be non-empty"
             )
     if not isinstance(case["assets"], dict):
         raise ValueError(f"case {case['case_id']} assets must be an object")
@@ -657,9 +670,11 @@ def _validate_case_physics_annotation(
             f"case {case['case_id']} physics annotation fields must be "
             f"{sorted(expected_fields)}"
         )
-    if document["schema_version"] != "1.0":
+    expected_schema = "2.0" if case.get("schema_version") == "5.0" else "1.0"
+    if document["schema_version"] != expected_schema:
         raise ValueError(
-            f"case {case['case_id']} physics annotation schema must be 1.0"
+            f"case {case['case_id']} physics annotation schema must be "
+            f"{expected_schema}"
         )
     if document["case_id"] != case["case_id"]:
         raise ValueError(
@@ -685,9 +700,9 @@ def load_dataset(
     descriptor_path = Path(path).resolve()
     descriptor = load_json(descriptor_path)
     descriptor_schema = descriptor.get("schema_version")
-    if descriptor_schema not in {"3.0", "4.0"}:
+    if descriptor_schema not in {"3.0", "4.0", "5.0"}:
         raise ValueError(
-            "dataset descriptor must use schema_version=3.0 or 4.0"
+            "dataset descriptor must use schema_version=3.0, 4.0, or 5.0"
         )
     require_safe_id(
         descriptor.get("dataset_id"),
@@ -698,7 +713,7 @@ def load_dataset(
     scene_configs = _load_directory_json(root / descriptor["scene_catalog"])
     if not scene_configs:
         raise ValueError("dataset scene catalog is empty")
-    if descriptor_schema == "4.0":
+    if descriptor_schema in {"4.0", "5.0"}:
         for scene in scene_configs.values():
             _validate_scene_v2(scene)
     seen: set[str] = set()
@@ -718,7 +733,7 @@ def load_dataset(
         for view_id, relative_path in descriptor["views"].items()
     }
     _validate_views(cases, views)
-    if descriptor_schema == "4.0":
+    if descriptor_schema in {"4.0", "5.0"}:
         _validate_v4_scene_case_and_view_contracts(
             cases,
             scene_configs,
