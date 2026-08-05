@@ -1,0 +1,22 @@
+{
+  "case_id": "circular_r1_silver02cm_img_0374",
+  "physics": {
+    "angular_velocity": {
+      "annotated": true,
+      "unit": "deg/s",
+      "value": 54.55
+    },
+    "angular_velocity_rad_s": {
+      "annotated": false,
+      "unit": "rad/s",
+      "value": 0.9520771069629067
+    },
+    "object_1_orbit_radius": {
+      "annotated": true,
+      "unit": "m",
+      "value": 0.02
+    }
+  },
+  "scene_id": "uniform_circular_motion",
+  "schema_version": "1.0"
+}

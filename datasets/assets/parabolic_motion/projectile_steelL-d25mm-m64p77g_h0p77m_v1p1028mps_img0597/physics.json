@@ -1,0 +1,47 @@
+{
+  "case_id": "parabolic_img_0597",
+  "physics": {
+    "ball_mass": {
+      "annotated": true,
+      "unit": "kg",
+      "value": 0.06477
+    },
+    "ball_radius": {
+      "annotated": true,
+      "unit": "m",
+      "value": 0.0125
+    },
+    "initial_horizontal_velocity": {
+      "annotated": true,
+      "unit": "m/s",
+      "value": 1.1027790030877813
+    },
+    "launch_height": {
+      "annotated": true,
+      "unit": "m",
+      "value": 0.77
+    },
+    "photogate_block_time": {
+      "annotated": false,
+      "unit": "s",
+      "value": 0.02267
+    },
+    "photogate_distance_before_launch": {
+      "annotated": false,
+      "unit": "m",
+      "value": 0.012
+    },
+    "ramp_angle": {
+      "annotated": false,
+      "unit": "deg",
+      "value": 15.0
+    },
+    "release_distance": {
+      "annotated": false,
+      "unit": "m",
+      "value": 0.5
+    }
+  },
+  "scene_id": "parabolic_motion",
+  "schema_version": "1.0"
+}

@@ -7,7 +7,22 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from physbench.io import canonical_sha256, load_json, load_jsonl
 from scripts import build_dataset_v10 as builder
+
+
+EXPECTED_RELEASE_ENTRIES = {
+    "README.md",
+    "dataset.json",
+    "release.json",
+    "cases.jsonl",
+    "assets.lock.json",
+    "scenes",
+    "views",
+}
+EXPECTED_PHYSICS_FINGERPRINT = (
+    "ca8c593007ce4e3d6d7437656f9aa0c3f32b5ff245a4592c570297ba9f957d1a"
+)
 
 
 class CaseLocalPhysicsPreparationTests(unittest.TestCase):
@@ -86,21 +101,45 @@ class CaseLocalPhysicsPreparationTests(unittest.TestCase):
 
     def test_real_legacy_cleanup_preflight_enumerates_exact_32_directories(self) -> None:
         cases = builder.read_jsonl(builder.BASE_RELEASE_ROOT / "cases.jsonl")
-
-        removals = builder.preflight_legacy_cleanup(cases)
-
-        self.assertEqual(32, len(removals))
-        self.assertEqual(32, len({item.relative_directory for item in removals}))
-        for item in removals:
-            self.assertTrue(item.absolute_directory.name.startswith("collision_r2_"))
-            self.assertEqual(
-                "source/first_frame_source.png", item.relative_file
+        candidates = list(
+            (builder.DATASETS_ROOT / "assets" / "collision_1d").glob(
+                "collision_r2_*"
             )
-            active = next(case for case in cases if case["case_id"] == item.case_id)
+        )
+
+        if candidates:
+            removals = builder.preflight_legacy_cleanup(cases)
+            records = [
+                {
+                    "case_id": item.case_id,
+                    "directory": item.relative_directory,
+                    "file": (
+                        Path(item.relative_directory) / item.relative_file
+                    ).as_posix(),
+                }
+                for item in removals
+            ]
+        else:
+            migration = load_json(
+                builder.PROVENANCE_ROOT / "migration.json"
+            )
+            records = migration["removed_legacy_directories"]
+
+        self.assertEqual(32, len(records))
+        self.assertEqual(32, len({item["directory"] for item in records}))
+        for item in records:
+            name = Path(item["directory"]).name
+            self.assertTrue(name.startswith("collision_r2_"))
+            self.assertTrue(item["file"].endswith("/source/first_frame_source.png"))
+            active = next(case for case in cases if case["case_id"] == item["case_id"])
             self.assertNotIn(
-                f"assets/collision_1d/{item.absolute_directory.name}/canonical/",
+                f"assets/collision_1d/{name}/canonical/",
                 active["assets"]["first_frame"],
             )
+            if not candidates:
+                self.assertFalse(
+                    (builder.DATASETS_ROOT / item["directory"]).exists()
+                )
 
     def test_legacy_cleanup_preflight_rejects_an_extra_file(self) -> None:
         case_id = "collision_r2_fixture"
@@ -172,6 +211,58 @@ class CaseLocalPhysicsPreparationTests(unittest.TestCase):
                 }
             },
         }
+
+
+class DatasetV10ReleaseTests(unittest.TestCase):
+    def test_release_is_minimal_and_preserves_every_v9_case_fact(self) -> None:
+        v9_cases = load_jsonl(builder.BASE_RELEASE_ROOT / "cases.jsonl")
+        v10_cases = load_jsonl(builder.OUTPUT_RELEASE_ROOT / "cases.jsonl")
+
+        self.assertEqual(
+            EXPECTED_RELEASE_ENTRIES,
+            {path.name for path in builder.OUTPUT_RELEASE_ROOT.iterdir()},
+        )
+        self.assertEqual(799, len(v10_cases))
+        physics_paths = {
+            case["assets"]["physics_annotation"] for case in v10_cases
+        }
+        self.assertEqual(799, len(physics_paths))
+        for old, new in zip(v9_cases, v10_cases, strict=True):
+            comparable = copy.deepcopy(new)
+            comparable["assets"].pop("physics_annotation")
+            self.assertEqual(old, comparable)
+
+    def test_release_lock_adds_only_799_physics_documents(self) -> None:
+        v9 = load_json(builder.BASE_RELEASE_ROOT / "assets.lock.json")
+        v10 = load_json(builder.OUTPUT_RELEASE_ROOT / "assets.lock.json")
+        old_by_path = {item["path"]: item for item in v9["files"]}
+        new_by_path = {item["path"]: item for item in v10["files"]}
+
+        self.assertEqual(5239, len(old_by_path))
+        self.assertEqual(6038, len(new_by_path))
+        for path, old in old_by_path.items():
+            self.assertEqual(old, new_by_path[path])
+        added = set(new_by_path) - set(old_by_path)
+        self.assertEqual(799, len(added))
+        self.assertTrue(all(path.endswith("/physics.json") for path in added))
+
+    def test_v9_and_v10_physics_fingerprints_are_identical(self) -> None:
+        fingerprints = []
+        for release_root in (
+            builder.BASE_RELEASE_ROOT,
+            builder.OUTPUT_RELEASE_ROOT,
+        ):
+            cases = load_jsonl(release_root / "cases.jsonl")
+            fingerprints.append(
+                canonical_sha256(
+                    [(case["case_id"], case["physics"]) for case in cases]
+                )
+            )
+
+        self.assertEqual(
+            [EXPECTED_PHYSICS_FINGERPRINT, EXPECTED_PHYSICS_FINGERPRINT],
+            fingerprints,
+        )
 
 
 if __name__ == "__main__":

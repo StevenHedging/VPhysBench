@@ -1,0 +1,27 @@
+{
+  "case_id": "push_bottle_m348p75g_h200mm_fmax6p766588n_fmean4p237453n_img0132",
+  "physics": {
+    "bottle_height": {
+      "annotated": true,
+      "unit": "m",
+      "value": 0.2
+    },
+    "bottle_mass": {
+      "annotated": true,
+      "unit": "kg",
+      "value": 0.34875
+    },
+    "mean_applied_force": {
+      "annotated": true,
+      "unit": "N",
+      "value": 4.237453
+    },
+    "peak_applied_force": {
+      "annotated": true,
+      "unit": "N",
+      "value": 6.766588
+    }
+  },
+  "scene_id": "push_bottle",
+  "schema_version": "1.0"
+}

@@ -1,0 +1,52 @@
+{
+  "case_id": "incline_r1_a32deg_bggreen_img_0350",
+  "physics": {
+    "block_length": {
+      "annotated": true,
+      "unit": "m",
+      "value": 0.11
+    },
+    "block_mass": {
+      "annotated": true,
+      "unit": "kg",
+      "value": 0.08768
+    },
+    "calibration_length": {
+      "annotated": true,
+      "unit": "m",
+      "value": 0.49
+    },
+    "friction_force": {
+      "annotated": true,
+      "unit": "N",
+      "value": 0.337615744319013
+    },
+    "gravity_acceleration": {
+      "annotated": true,
+      "unit": "m/s^2",
+      "value": 9.80665
+    },
+    "incline_angle": {
+      "annotated": true,
+      "unit": "deg",
+      "value": 32.0
+    },
+    "initial_velocity": {
+      "annotated": false,
+      "unit": "m/s",
+      "value": 0.0
+    },
+    "kinetic_friction_coefficient": {
+      "annotated": true,
+      "unit": "1",
+      "value": 0.463
+    },
+    "theoretical_acceleration": {
+      "annotated": true,
+      "unit": "m/s^2",
+      "value": 1.34618822340673
+    }
+  },
+  "scene_id": "inclined_plane_slide",
+  "schema_version": "1.0"
+}
