@@ -23,7 +23,7 @@ adaptation ID 都必须匹配 `^[A-Za-z0-9][A-Za-z0-9_.-]*$`。路径分隔符�
 ## 2. 官方 Task
 
 当前Dataset有六个scene，但推水瓶评估器尚未定义。两份官方Task因此继续选择已有评估器
-的五个scene，并已切换到11.0.0 Dataset：
+的五个scene，并已切换到12.0.0 Dataset：
 
 | 文件 | family | View | 训练 |
 | --- | --- | --- | --- |
@@ -38,9 +38,9 @@ Fine-tune + eval 示例：
 ```json
 {
   "schema_version": "4.0",
-  "task_id": "five_scene_finetune_eval_v11",
+  "task_id": "five_scene_finetune_eval_v12",
   "family": "finetune_eval",
-  "dataset_id": "physics_video_six_scene_v11",
+  "dataset_id": "physics_video_six_scene_v12",
   "dataset_view": "view_a",
   "selection": {
     "scene_ids": [
@@ -198,7 +198,7 @@ binding 都会改变或破坏 digest。
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
-  --dataset datasets/releases/11.0.0/dataset.json \
+  --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
   --output /tmp/wan22_physics_task_instance.json
@@ -215,7 +215,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/releases/11.0.0/dataset.json \
+  --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --output-root runs_v2 \
@@ -254,7 +254,7 @@ Direct-eval 工程 smoke 可加：
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   matrix-run \
-  --dataset datasets/releases/11.0.0/dataset.json \
+  --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \

@@ -23,16 +23,8 @@ class FlatDatasetLayoutTests(unittest.TestCase):
             data_layout.PHYSICS_VIDEO_PROVENANCE,
         )
         self.assertEqual(
-            DATASETS_ROOT / "releases" / "9.0.0" / "dataset.json",
-            getattr(data_layout, "V9_DATASET", None),
-        )
-        self.assertEqual(
-            DATASETS_ROOT / "releases" / "10.0.0" / "dataset.json",
-            getattr(data_layout, "V10_DATASET", None),
-        )
-        self.assertEqual(
-            DATASETS_ROOT / "releases" / "11.0.0" / "dataset.json",
-            getattr(data_layout, "V11_DATASET", None),
+            DATASETS_ROOT / "releases" / "12.0.0" / "dataset.json",
+            data_layout.V12_DATASET,
         )
 
     def test_flat_roots_replace_the_legacy_wrapper(self) -> None:
@@ -50,40 +42,14 @@ class FlatDatasetLayoutTests(unittest.TestCase):
         self.assertTrue(compatibility.is_symlink())
         self.assertEqual(source_archives.resolve(), compatibility.resolve())
 
-    def test_current_releases_resolve_and_verify_all_locked_assets(self) -> None:
-        expected = {
-            "8.0.0": (799, 2032),
-            "9.0.0": (799, 5239),
-            "10.0.0": (799, 6038),
-            "11.0.0": (799, 6038),
-        }
-        for version, (case_count, asset_count) in expected.items():
+    def test_current_release_resolves_without_an_asset_lock(self) -> None:
+        expected = {"12.0.0": 799}
+        for version, case_count in expected.items():
             with self.subTest(version=version):
                 descriptor = DATASETS_ROOT / "releases" / version / "dataset.json"
                 dataset = load_dataset(descriptor, check_assets=True)
                 self.assertEqual(case_count, len(dataset.cases))
-                self.assertEqual(asset_count, len(dataset.asset_lock["files"]))
-
-    def test_release_scripts_find_repository_when_run_outside_checkout(self) -> None:
-        release_root = DATASETS_ROOT / "releases" / "9.0.0"
-        for script_name in ("validate_release.py", "generate_first_frame_masks.py"):
-            with self.subTest(script_name=script_name):
-                script_path = release_root / script_name
-                probe = (
-                    "import runpy; "
-                    f"values = runpy.run_path({str(script_path)!r}, run_name='layout_probe'); "
-                    "print(values['REPOSITORY_ROOT'])"
-                )
-                result = subprocess.run(
-                    [sys.executable, "-I", "-c", probe],
-                    cwd="/tmp",
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                )
-                self.assertEqual(0, result.returncode, result.stderr)
-                self.assertEqual(str(ROOT), result.stdout.strip())
-
+                self.assertIsNone(dataset.asset_lock)
 
 if __name__ == "__main__":
     unittest.main()

@@ -14,7 +14,7 @@ from physbench.baseline_api import (
 from physbench.baseline_runtime.task_instance_validation import (
     validate_task_instance_document,
 )
-from physbench.data_layout import V4_DATASET
+from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
 from physbench.domain import TaskSpec
 from physbench.identifiers import SAFE_ID_PATTERN
@@ -40,7 +40,7 @@ PHYSICS_BASELINE = (
 class TaskRuntimeContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.dataset = load_dataset(V4_DATASET, check_assets=False)
+        cls.dataset = load_dataset(LATEST_DATASET, check_assets=False)
         cls.direct = load_task(DIRECT_TASK)
         cls.finetune = load_task(FINETUNE_TASK)
         cls.generic_bundle = load_baseline_bundle(GENERIC_BASELINE)
@@ -158,7 +158,7 @@ class TaskRuntimeContractTests(unittest.TestCase):
             escaped_run = root / "escaped-run"
             with self.assertRaisesRegex(ValueError, "run_id"):
                 run_atomic(
-                    dataset_path=V4_DATASET,
+                    dataset_path=LATEST_DATASET,
                     task_path=task_path,
                     baseline_path=GENERIC_BASELINE,
                     output_root=output,
@@ -171,7 +171,7 @@ class TaskRuntimeContractTests(unittest.TestCase):
             escaped_matrix = root / "escaped-matrix.matrix.json"
             with self.assertRaisesRegex(ValueError, "matrix_id"):
                 run_matrix(
-                    dataset_path=V4_DATASET,
+                    dataset_path=LATEST_DATASET,
                     task_path=task_path,
                     baseline_paths=[
                         GENERIC_BASELINE,
@@ -256,7 +256,7 @@ class TaskRuntimeContractTests(unittest.TestCase):
             )
             output = root / "runs"
             run_dirs = run_matrix(
-                dataset_path=V4_DATASET,
+                dataset_path=LATEST_DATASET,
                 task_path=task_path,
                 baseline_paths=[GENERIC_BASELINE, PHYSICS_BASELINE],
                 output_root=output,
@@ -305,7 +305,7 @@ class TaskRuntimeContractTests(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(RuntimeError, "fixture failure"):
                     run_matrix(
-                        dataset_path=V4_DATASET,
+                        dataset_path=LATEST_DATASET,
                         task_path=task_path,
                         baseline_paths=[
                             GENERIC_BASELINE,

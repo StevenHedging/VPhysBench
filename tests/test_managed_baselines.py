@@ -17,7 +17,7 @@ from physbench.baseline_api import (
 )
 from physbench.baseline_runtime import create_baseline_scaffold
 from physbench.baseline_runtime.drivers.wan22 import Wan22ManagedDriver
-from physbench.data_layout import V11_DATASET
+from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
 from physbench.domain import TaskSpec
 from physbench.io import (
@@ -179,7 +179,7 @@ def _bundle(
 class ManagedBaselineTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.dataset = load_dataset(V11_DATASET, check_assets=False)
+        cls.dataset = load_dataset(LATEST_DATASET, check_assets=False)
         cls.direct = load_task(
             ROOT
             / "tasks"

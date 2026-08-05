@@ -13,7 +13,7 @@ from physbench.baseline_api import (
     load_baseline_bundle,
     load_baseline_plugin,
 )
-from physbench.data_layout import V11_DATASET
+from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
 from physbench.domain import TaskSpec
 from physbench.io import canonical_sha256, load_json
@@ -49,7 +49,7 @@ def _contains_key(value: object, target: str) -> bool:
 class IntegratedBaselineTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.dataset = load_dataset(V11_DATASET, check_assets=False)
+        cls.dataset = load_dataset(LATEST_DATASET, check_assets=False)
         cls.direct = load_task(
             ROOT
             / "tasks"

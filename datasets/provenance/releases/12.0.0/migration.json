@@ -1,22 +1,21 @@
 {
   "base": {
-    "asset_files_digest": "24cc40112226df876ca8305d004ff6c79c259e8b9271f62ec4f222f397725889",
-    "dataset_digest": "bd9479d5cde83daa97c3acf4abce094497ef36219ceda8b03614f36b442e7615",
     "dataset_id": "physics_video_six_scene_v11",
     "release": "11.0.0"
   },
-  "case_facts_sha256": "322880e165aebe3a0d32ef485d238e0a8ff21a18aad91ef29779dcfb8360530e",
   "counts": {
     "cases": 799,
-    "locked_assets": 6038,
     "media_changes": 0,
     "physics_documents_renamed": 799
   },
+  "legacy_coverage": {
+    "annotated_flags_corrected": 715,
+    "negative_values_normalized": 494,
+    "quantities": 5286,
+    "symbols_added": 5286
+  },
   "migration": "single_current_physics_v12",
-  "non_physics_asset_records_sha256": "05d5f9d3672ca26aff52b644b26c78d669af4541725a6277656f37d3b3a5f947",
   "output": {
-    "asset_files_digest": "453f72aa81527c4aa6ab1dca60e3e54f638bb53be2e924a7898a84ef9d821796",
-    "dataset_digest": "87cc6adda5e5fdf628d1ab48237d0287a64fcc43261b20fd7216e8999ea98c31",
     "dataset_id": "physics_video_six_scene_v12",
     "release": "12.0.0"
   },

@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "template_set_id": "six_scene_physics_clauses_v2",
-  "description": "V11 independent structured quantities appended to Dataset-owned symbolic prompts.",
+  "description": "Current independent structured quantities appended to Dataset-owned symbolic prompts.",
   "scenes": {
     "pendulum": {
       "parameter_intro": " Numeric physical values: ",

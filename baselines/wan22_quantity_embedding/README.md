@@ -71,7 +71,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/releases/11.0.0/dataset.json \
+  --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_quantity_embedding_v1 \
   --run-id wan22_quantity_embedding_v1_viewa_seed42 \
@@ -195,7 +195,7 @@ quantity-embedding identities on the same frozen View A Task:
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   matrix-run \
-  --dataset datasets/releases/11.0.0/dataset.json \
+  --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
@@ -214,7 +214,7 @@ report its parameter inventory rather than claiming an exactly
 parameter-matched ablation.
 
 The selected fields match the structured-text comparison arm. The V2 registry
-selects only V11 independent quantities marked `annotated=true`; derived,
+selects only current independent quantities marked `annotated=true`; derived,
 calibration, auxiliary and duplicate-alias fields remain evaluator/audit data
 and are never injected. Each selected audit record preserves value, unit and
 symbol.

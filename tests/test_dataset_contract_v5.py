@@ -24,7 +24,7 @@ class DatasetContractV5Tests(unittest.TestCase):
             "assets": {
                 "first_frame": "frame.bin",
                 "reference_video": "frame.bin",
-                "physics_annotation": "physics.v11.json",
+                "physics_annotation": "physics.json",
             },
             "physics": {
                 "bob_mass": {
@@ -53,7 +53,7 @@ class DatasetContractV5Tests(unittest.TestCase):
         assets.mkdir(parents=True)
         (assets / "frame.bin").write_bytes(b"asset\n")
         write_json(
-            assets / "physics.v11.json",
+            assets / "physics.json",
             {
                 "schema_version": document_schema,
                 "case_id": case["case_id"],
@@ -111,7 +111,7 @@ class DatasetContractV5Tests(unittest.TestCase):
             {
                 "schema_version": "5.0",
                 "dataset_id": "symbolic_fixture",
-                "release": "11.0.0",
+                "release": "12.0.0",
                 "cases": "cases.jsonl",
                 "asset_root": "assets",
                 "scene_catalog": "scenes",
@@ -153,15 +153,11 @@ class DatasetContractV5Tests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "schema must be 2.0"):
                 load_dataset(descriptor, check_assets=False)
 
-    def test_schema_4_rejects_symbol_and_historical_v10_still_loads(self) -> None:
+    def test_schema_4_rejects_symbol(self) -> None:
         case = self._case()
         case["schema_version"] = "4.0"
         with self.assertRaisesRegex(ValueError, "fields must be"):
             _validate_case(case, {"pendulum"})
-
-        from physbench.data_layout import V10_DATASET
-
-        self.assertEqual("4.0", load_dataset(V10_DATASET).descriptor["schema_version"])
 
 
 if __name__ == "__main__":

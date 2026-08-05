@@ -71,11 +71,11 @@ Task选择Dataset、View、scene、test范围、seed和评估协议。Task不决
 
 在解压或转码前记录：
 
-- 来源路径、文件大小、SHA-256；
+- 来源路径和文件大小；
 - ZIP成员完整列表；
 - XLSX的sheet、表头、合并单元格、公式和非空行；
 - 每个视频的容器、编码、宽高、帧数、nominal FPS、duration和旋转元数据；
-- 当前最新Dataset digest与目标scene。
+- 当前Dataset ID、release与目标scene。
 
 解压必须防止绝对路径和`../`路径穿越。原始包放入
 `datasets/provenance/source_archives/`，XLSX原件放入
@@ -152,7 +152,7 @@ Task选择Dataset、View、scene、test范围、seed和评估协议。Task不决
 
 至少执行四层检查：
 
-1. 原始文件SHA-256完全相同；
+1. 原始文件大小相同且逐字节比较一致；
 2. 来源archive/member、trial ID或采集时间相同；
 3. 视频感知近重复：抽取多个时间点的图像指纹并检查时间偏移后的重复片段；
 4. 相同标注与高度相似画面人工复核。
@@ -231,7 +231,7 @@ Task选择Dataset、View、scene、test范围、seed和评估协议。Task不决
 
 ```text
 assets/<scene_id>/<descriptive_physical_case_directory>/
-├── physics.v11.json        # 与当前Case绑定的符号化结构化物理标注
+├── physics.json        # 与当前Case绑定的符号化结构化物理标注
 ├── source/                 # 可选的原始成员硬链接/副本
 └── canonical/
     ├── reference.mp4
@@ -257,7 +257,7 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 - 多主体字段的编号必须与首帧从左到右/scene定义一致，并在provenance中记录映射依据；
 - 规格球等复用对象必须先查权威catalog，不能为同一规格创建多个别名。
 
-当前Case-local文件名为`physics.v11.json`，使用以下自描述包裹格式：
+当前Case-local文件名为`physics.json`，使用以下自描述包裹格式：
 
 ```json
 {
@@ -273,7 +273,7 @@ Case schema必须为`5.0`，并增加`assets.physics_annotation`指向该文件�
 `physics`深度相等。二者不能分别手工维护：导入脚本应从同一个标准化记录确定性生成，
 发布Loader会在任何资产检查模式下强制校验一致性。
 
-V10的`physics.json`、文档schema 1.0和三字段quantity仅用于加载不可变历史Release。
+新导入不得生成文档schema 1.0或三字段quantity，也不得创建版本后缀物理文件。
 新导入不能继续生成或覆盖这些历史文件。
 
 ### 阶段7：设计View A的train/ID test
@@ -297,8 +297,8 @@ V10的`physics.json`、文档schema 1.0和三字段quantity仅用于加载不可
 2. 合并全部有效旧Case和新增Case后，重新统计每个replicate group与stratum的
    数量，先判断旧比例是否仍然合理；
 3. 先处理重复/replicate group，同组样本不得跨train/test；
-4. 若新增批次使旧Train过窄或Test严重失衡，应在新Dataset ID/
-   digest下重新划分全部Case，不能把所有新增数据机械地塞入Test；
+4. 若新增批次使旧Train过窄或Test严重失衡，应在新Dataset ID下重新划分全部Case，
+   不能把所有新增数据机械地塞入Test；
 5. test只选训练支持域内的独立ID试次，并按物理条件与实验形式分层；通常每个scene不
    超过20条；
 6. 记录从旧release到新release的每条划分变化、比例、支持域和理由；历史结果不得
@@ -317,17 +317,15 @@ V10的`physics.json`、文档schema 1.0和三字段quantity仅用于加载不可
 若数据量不足以同时形成有代表性的train与ID test，应暂缓正式finetune划分，不能用合成
 样本或未覆盖情景勉强填充test。
 
-### 阶段8：构建View B、asset lock与新release
+### 阶段8：构建View B与新release
 
 - View B完整覆盖所有Case，使用冻结seed确定性分组；
-- `assets.lock.json`包含所有Case引用资产的相对路径、大小和SHA-256；
-- 每个有效Case的`physics.v11.json`必须作为`physics_annotation`进入资产锁；
-- `release.json`冻结Dataset digest和资产集合digest；
-- 新release目录在全部校验通过前由staging原子生成；
+- 每个有效Case的`physics.json`必须作为`physics_annotation`绑定到Case；
+- 新release在结构、路径和视觉检查通过后发布；
 - 旧release、旧Case和旧媒体不得就地覆盖。
 
-当前11.0.0采用精简运行时Release边界，只在Release目录放置`README.md`、
-`dataset.json`、`release.json`、`cases.jsonl`、`assets.lock.json`、`scenes/`和`views/`。
+当前12.0.0采用精简运行时Release边界，只在Release目录放置`README.md`、
+`dataset.json`、`cases.jsonl`、`scenes/`和`views/`。
 导入清单、排除表、迁移审核、验证报告及构建脚本应分别放在仓库`scripts/`和
 `datasets/provenance/`，不要复制进新Release。全局mask索引只有存在明确运行时消费者
 时才发布；逐Case mask manifest和对象mask资产始终由Case角色引用。
@@ -338,7 +336,7 @@ V10的`physics.json`、文档schema 1.0和三字段quantity仅用于加载不可
 
 | 产物 | 内容 |
 | --- | --- |
-| source inventory | ZIP/XLSX/video清单、hash和probe |
+| source inventory | ZIP/XLSX/video清单和probe |
 | normalized annotations | 逐行标准化结果与单位换算 |
 | field decision table | 每个XLSX字段的归类和目标字段 |
 | video-annotation mapping | 一一对应证据 |
@@ -347,7 +345,7 @@ V10的`physics.json`、文档schema 1.0和三字段quantity仅用于加载不可
 | alignment audit | 源起止帧、crop、probe和视觉复核状态 |
 | prompt audit | 自动禁词检查与语义复核 |
 | split audit | group、train/test、ID支持域和理由 |
-| migration audit | 基础release、数量变化、digest与媒体改动量 |
+| migration audit | 基础release、数量变化与媒体改动量 |
 
 推荐排除原因码：
 
@@ -375,24 +373,19 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --dataset datasets/releases/<version>/dataset.json \
   --check-assets
 
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
-  validate-dataset \
-  --dataset datasets/releases/<version>/dataset.json \
-  --check-asset-hashes
 ```
 
 还必须运行：
 
 - Case/scene/View/Task schema测试；
 - case ID、资产路径和source locator唯一性检查；
-- train/test媒体hash与近重复泄漏检查；
+- train/test媒体逐字节重复与感知近重复泄漏检查；
 - first frame与reference第0帧一致性检查；
 - reference与source窗口的FPS、帧数、duration关系检查；
 - prompt数值/单位/背景/颜色/视角禁词检查；
 - `physics`中背景/颜色/环境字段检查；
 - View A完整覆盖、互斥、全部test为ID且每scene不超过约定上限；
-- release和asset digest复算。
-- Case-local`physics.v11.json`身份、文档schema 2.0、四字段quantity及其与内联
+- Case-local`physics.json`身份、文档schema 2.0、四字段quantity及其与内联
   `case.physics`的一致性检查；
 - 所有quantity值有限且非负，symbol非空且Case内唯一；全部独立量symbol出现在prompt，
   审计量symbol不出现在prompt，速度方向由prompt无歧义表达。
@@ -421,7 +414,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 4. 哪些标注经过单位换算、catalog修正或人工澄清；
 5. 视频清洗和视觉复核覆盖率；
 6. 各scene的train和ID test数量；
-7. Dataset、asset和Task digest；
+7. Dataset ID、release与Task ID；
 8. 是否修改或复制过媒体字节；
 9. 尚未解决的风险和需要数据提供者回答的问题。
 

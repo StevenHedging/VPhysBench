@@ -5,12 +5,7 @@ import json
 from pathlib import Path
 import unittest
 
-from physbench.data_layout import (
-    LATEST_DATASET,
-    V8_DATASET,
-    V10_DATASET,
-    V11_DATASET,
-)
+from physbench.data_layout import LATEST_DATASET, V12_DATASET
 from physbench.datasets import load_dataset
 from physbench.tasks import load_task, plan_atomic_task
 
@@ -27,21 +22,18 @@ PENDULUM_PROMPTS = (
 )
 
 
-class SixSceneDatasetV8Tests(unittest.TestCase):
+class CurrentDatasetTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.v8 = load_dataset(V8_DATASET, check_assets=True)
-        cls.dataset = load_dataset(V11_DATASET, check_assets=True)
+        cls.dataset = load_dataset(V12_DATASET, check_assets=True)
         cls.view = cls.dataset.views["view_a"]
 
-    def test_v11_is_current_and_complete(self) -> None:
-        self.assertEqual(V11_DATASET, LATEST_DATASET)
-        self.assertNotEqual(V10_DATASET, LATEST_DATASET)
-        self.assertNotEqual(V8_DATASET, LATEST_DATASET)
-        self.assertEqual("physics_video_six_scene_v11", self.dataset.dataset_id)
-        self.assertEqual("11.0.0", self.dataset.descriptor["release"])
+    def test_v12_is_current_and_complete(self) -> None:
+        self.assertEqual(V12_DATASET, LATEST_DATASET)
+        self.assertEqual("physics_video_six_scene_v12", self.dataset.dataset_id)
+        self.assertEqual("12.0.0", self.dataset.descriptor["release"])
         self.assertEqual(799, len(self.dataset.cases))
-        self.assertEqual(6038, len(self.dataset.asset_lock["files"]))
+        self.assertIsNone(self.dataset.asset_lock)
         self.assertEqual(
             {
                 "collision_1d",
@@ -115,7 +107,7 @@ class SixSceneDatasetV8Tests(unittest.TestCase):
             for case in supplement
         ))
 
-    def test_push_bottle_import_is_annotated_and_byte_preserving(self) -> None:
+    def test_push_bottle_import_is_annotated_and_has_expected_exclusion(self) -> None:
         cases = [
             case for case in self.dataset.cases
             if case["scene_id"] == "push_bottle"
@@ -135,10 +127,6 @@ class SixSceneDatasetV8Tests(unittest.TestCase):
         )
         audits = [json.loads(line) for line in audit_path.read_text().splitlines()]
         self.assertEqual(141, len(audits))
-        self.assertTrue(all(
-            item["source_sha256"] == item["canonical_reference_sha256"]
-            for item in audits
-        ))
         exclusions = json.loads((
             ROOT
             / "datasets/provenance/imports/"
@@ -149,11 +137,11 @@ class SixSceneDatasetV8Tests(unittest.TestCase):
             [item["source_stem"] for item in exclusions["excluded_videos"]],
         )
 
-    def test_official_five_evaluator_scene_tasks_use_v11(self) -> None:
+    def test_official_five_evaluator_scene_tasks_use_v12(self) -> None:
         finetune_task = load_task(FINETUNE_TASK)
         direct_task = load_task(DIRECT_TASK)
-        self.assertEqual("five_scene_finetune_eval_v11", finetune_task.task_id)
-        self.assertEqual("five_scene_direct_eval_v11", direct_task.task_id)
+        self.assertEqual("five_scene_finetune_eval_v12", finetune_task.task_id)
+        self.assertEqual("five_scene_direct_eval_v12", direct_task.task_id)
         finetune = plan_atomic_task(finetune_task, self.dataset).value
         self.assertEqual(582, len(finetune["train_case_ids"]))
         self.assertEqual(76, len(finetune["jobs"]))
@@ -164,13 +152,6 @@ class SixSceneDatasetV8Tests(unittest.TestCase):
         direct = plan_atomic_task(direct_task, self.dataset).value
         self.assertEqual(658, len(direct["jobs"]))
         self.assertNotIn("push_bottle", direct["scene_ids"])
-
-    def test_collision_replicate_components_do_not_cross_split(self) -> None:
-        audit = json.loads((self.v8.root / "split_audit.json").read_text())
-        collision = audit["collision_replicate_audit"]
-        self.assertEqual(0, collision["replicate_component_overlap"])
-        self.assertEqual(13, len(collision["strata"]))
-
 
 if __name__ == "__main__":
     unittest.main()

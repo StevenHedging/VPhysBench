@@ -9,25 +9,25 @@ Frozen source bundle: 1.0.0
 Execution-time HEAD:  918e9f7 (not separately sealed by the run manifest)
 Base model:  WAN2.2-TI2V-5B
 Source run:  five_scene_finetune_eval_v4 / scene_default_v1
-Current Task: five_scene_finetune_eval_v11 (Task schema 4.0) / scene_default_v10
-Dataset:     physics_video_six_scene_v11 / View A
+Current Task: five_scene_finetune_eval_v12 (Task schema 4.0) / scene_default_v10
+Dataset:     physics_video_six_scene_v12 / View A
 ```
 
 目标是检验：相对于“不使用结构化物理量”和“把物理量直接写入 prompt”，显式编码数值、
 量纲和物理量语义是否能改善生成运动的物理一致性。它仍是 I2V：输入为 Case 首帧、
 `case.text.prompt`，并从 `case.physics[annotated=true]` 中消费由 registry 明确筛选的
-物理量子集；它不会把全部结构化标注都送入模型。当前V2 registry只选择V11中
+物理量子集；它不会把全部结构化标注都送入模型。当前V2 registry只选择V12中
 `annotated=true`的独立量，并保留value、unit和symbol。当前仅支持`finetune_eval`
 Task family。
 
 2026-07-28 完成的 source run 密封了 bundle `1.0.0` 和 baseline digest，并保留当时
 的 v4 Task 与 `scene_default_v1` native evaluation identity。执行时仓库 HEAD 为
-`918e9f7`，但该 commit 未被 run manifest 单独密封。当前官方Task使用V11 Dataset、
+`918e9f7`，但该 commit 未被 run manifest 单独密封。当前官方Task使用V12 Dataset、
 Task schema 4.0与`scene_default_v10`；
 该 source run 已另存一份不可变的 `scene_default_v2` alternate reevaluation，没有
 回写或伪装成 canonical v1。完整实验身份、训练证据、两套协议和 66 条逐 Case 结果见
 [`experiments/WAN22_QUANTITY_EMBEDDING_20260728.md`](experiments/WAN22_QUANTITY_EMBEDDING_20260728.md)。
-下文命令引用当前`tasks/official`文件，因此新运行会生成V11 Task identity和bundle 1.0.1
+下文命令引用当前`tasks/official`文件，因此新运行会生成V12 Task identity和bundle 1.0.1
 身份，而不是复用历史 v4/v1 source identity。
 
 ## 2. 从设想到可训练实现
@@ -194,7 +194,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/releases/11.0.0/dataset.json \
+  --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_quantity_embedding_v1 \
   --run-id wan22_quantity_embedding_v1_viewa_seed42_dryrun \
@@ -206,7 +206,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/releases/11.0.0/dataset.json \
+  --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_quantity_embedding_v1 \
   --run-id wan22_quantity_embedding_v1_viewa_seed42 \
@@ -230,7 +230,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   matrix-run \
-  --dataset datasets/releases/11.0.0/dataset.json \
+  --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \

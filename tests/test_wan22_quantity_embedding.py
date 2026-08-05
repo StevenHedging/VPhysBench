@@ -50,7 +50,7 @@ from physbench.baselines.wan22_quantity_model import (
     quantity_state_dict,
     verify_quantity_checkpoint_manifest,
 )
-from physbench.data_layout import V4_DATASET
+from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
 from physbench.domain import TaskSpec
 from physbench.io import (
@@ -349,7 +349,7 @@ class _FakeLoraPipe:
 class Wan22QuantityEmbeddingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.dataset = load_dataset(V4_DATASET, check_assets=False)
+        cls.dataset = load_dataset(LATEST_DATASET, check_assets=False)
         cls.by_id = {
             case["case_id"]: case for case in cls.dataset.cases
         }
@@ -357,14 +357,14 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
         cls.plugin = load_baseline_plugin(cls.bundle)
         cls.adapter = cls.plugin.task_builder.data_adapter
 
-    def test_all_214_cases_adapt_without_task_compilation(self) -> None:
+    def test_all_current_cases_adapt_without_task_compilation(self) -> None:
         self.assertEqual("1.0.1", self.bundle.value["baseline_version"])
-        self.assertEqual(214, len(self.dataset.cases))
+        self.assertEqual(799, len(self.dataset.cases))
         adaptations = [
             self.adapter.adapt_case(case, role="eval")
             for case in self.dataset.cases
         ]
-        self.assertEqual(214, len(adaptations))
+        self.assertEqual(799, len(adaptations))
         self.assertEqual(
             {case["case_id"] for case in self.dataset.cases},
             {item["case_id"] for item in adaptations},
@@ -1362,18 +1362,24 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
         self,
     ) -> None:
         value = {
-            "schema_version": "3.0",
-            "task_id": "free_fall_quantity_embedding_dry_run",
+            "schema_version": "4.0",
+            "task_id": "pendulum_quantity_embedding_dry_run",
             "family": "finetune_eval",
             "dataset_id": self.dataset.dataset_id,
             "dataset_view": "view_a",
             "selection": {
-                "scene_ids": ["free_fall"],
-                "eval_partitions": ["test_id"],
+                "scene_ids": ["pendulum"],
+                "test_regimes": ["id"],
             },
-            "ood2": {"enabled": False},
             "seeds": {"training": [42], "inference": [42]},
-            "evaluation": {"protocol": "scene_default_v3"},
+            "evaluation": {
+                "protocol": "scene_default_v10",
+                "reporting": {
+                    "primary_score": "overall_test",
+                    "breakdowns": [],
+                    "minimum_subgroup_jobs": 5,
+                },
+            },
         }
         task = TaskSpec(
             ROOT / "tests" / "fixtures" / "legacy_v4_finetune_task.json",
@@ -1381,8 +1387,8 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
             canonical_sha256(value),
         )
         instance = self.plugin.task_builder.build(self.dataset, task)
-        self.assertEqual(7, len(instance.canonical_plan.train_case_ids))
-        self.assertEqual(4, len(instance.canonical_plan.jobs))
+        self.assertEqual(80, len(instance.canonical_plan.train_case_ids))
+        self.assertEqual(20, len(instance.canonical_plan.jobs))
 
         def fake_video(
             _media,
@@ -1455,7 +1461,7 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
                 sampling_plan["sampler_binding"],
             )
             metadata = load_jsonl(training["metadata"])
-            self.assertEqual(7, len(metadata))
+            self.assertEqual(80, len(metadata))
             metadata_fields = {
                 "video",
                 "prompt",

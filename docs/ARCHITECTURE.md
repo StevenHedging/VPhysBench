@@ -36,7 +36,7 @@ Dataset 不认识具体模型；Task 不携带模型输入策略；Baseline 不�
 当前入口：
 
 ```text
-datasets/releases/11.0.0/dataset.json
+datasets/releases/12.0.0/dataset.json
 ```
 
 Dataset和Case使用schema 5.0。每个Case同时拥有：
@@ -44,17 +44,16 @@ Dataset和Case使用schema 5.0。每个Case同时拥有：
 - `text.prompt`：模型无关、未注入结构化物理量的原始文本描述；
 - `assets.first_frame` 等媒体；
 - `physics`：每项恰好带`value`、`unit`、`annotated`、`symbol`的结构化物理量；
-- `assets.physics_annotation`：受资产锁保护、文档schema 2.0的Case-local
-  `physics.v11.json`；
+- `assets.physics_annotation`：文档schema 2.0的Case-local
+  `physics.json`；
 - `appearance`、`temporal`；
 - evaluator-only reference 与 provenance。
 
 划分不属于Case字段；当前View A只包含train和ID test。原始prompt与物理标注并列保存，
-不由Task或Baseline配置临时生成。Release 11.0.0包含799条Case和六个scene。Loader
+不由Task或Baseline配置临时生成。Release 12.0.0包含799条Case和六个scene。Loader
 要求Case-local物理文件与内联`case.physics`逐字段完全一致；后者继续作为运行时兼容API。
 独立量使用`annotated=true`且其symbol必须进入无数值英文prompt；审计量使用false。
-所有标量为非负大小，方向由prompt表达。V10的三字段quantity和`physics.json`只用于
-不可变历史Release。
+所有标量为非负大小，方向由prompt表达。旧三字段quantity不再属于活动运行契约。
 
 ## 3. Task 是模型无关的评测定义
 

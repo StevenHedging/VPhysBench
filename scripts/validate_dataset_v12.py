@@ -7,10 +7,9 @@ import argparse
 import math
 import re
 from pathlib import Path
-from typing import Any
 
 from physbench.datasets import load_dataset
-from physbench.io import canonical_sha256, load_json, write_json
+from physbench.io import load_json, write_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,9 +20,7 @@ PROVENANCE_ROOT = DATASETS_ROOT / "provenance" / "releases" / "12.0.0"
 EXPECTED_ENTRIES = {
     "README.md",
     "dataset.json",
-    "release.json",
     "cases.jsonl",
-    "assets.lock.json",
     "scenes",
     "views",
 }
@@ -36,14 +33,6 @@ def _symbol_in_prompt(symbol: str, prompt: str) -> bool:
     ) is not None
 
 
-def _non_physics_files(lock: dict[str, Any]) -> list[dict[str, Any]]:
-    return [
-        item
-        for item in lock["files"]
-        if "physics_annotation" not in item["roles"]
-    ]
-
-
 def validate_v12(
     dataset_path: Path = V12_DATASET,
     *,
@@ -54,15 +43,15 @@ def validate_v12(
         raise ValueError(f"V12 validator requires {V12_DATASET}")
     if {path.name for path in V12_RELEASE_ROOT.iterdir()} != EXPECTED_ENTRIES:
         raise ValueError("V12 runtime Release tree is not minimal")
-    snapshot = load_dataset(dataset_path, check_asset_hashes=True)
+    snapshot = load_dataset(dataset_path)
     if snapshot.dataset_id != "physics_video_six_scene_v12":
         raise ValueError(f"unexpected Dataset ID: {snapshot.dataset_id}")
     if snapshot.descriptor["schema_version"] != "5.0":
         raise ValueError("V12 requires Dataset schema 5.0")
     if len(snapshot.cases) != 799 or len(snapshot.scene_configs) != 6:
         raise ValueError("V12 Case/Scene count mismatch")
-    if len(snapshot.asset_lock["files"]) != 6038:
-        raise ValueError("V12 asset-lock count mismatch")
+    if snapshot.asset_lock is not None:
+        raise ValueError("V12 must not use an asset lock")
 
     physics_paths: set[str] = set()
     quantity_count = 0
@@ -103,29 +92,16 @@ def validate_v12(
     if evidence["counts"] != {
         "cases": 799,
         "physics_documents_renamed": 799,
-        "locked_assets": 6038,
         "media_changes": 0,
     }:
         raise ValueError("V12 migration evidence counts mismatch")
-    non_physics_digest = canonical_sha256(
-        _non_physics_files(snapshot.asset_lock)
-    )
-    if non_physics_digest != evidence["non_physics_asset_records_sha256"]:
-        raise ValueError("V12 non-physics asset evidence mismatch")
-
-    release = load_json(V12_RELEASE_ROOT / "release.json")
-    if release["dataset_digest"] != snapshot.digest:
-        raise ValueError("V12 release digest mismatch")
     report = {
         "schema_version": "1.0",
         "status": "valid",
         "dataset_id": snapshot.dataset_id,
-        "dataset_digest": snapshot.digest,
-        "asset_files_digest": release["asset_files_digest"],
         "cases": 799,
         "physics_documents": 799,
         "quantities": 5286,
-        "locked_assets": 6038,
         "media_changes": 0,
     }
     if write_report:

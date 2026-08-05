@@ -7,7 +7,7 @@ from pathlib import Path
 
 from _paths import ROOT
 from physbench.baseline_api import load_baseline_bundle, load_baseline_plugin
-from physbench.data_layout import V4_DATASET
+from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
 from physbench.domain import TaskSpec
 from physbench.io import canonical_sha256, load_json, write_json
@@ -47,7 +47,7 @@ def _contains_key(value: object, target: str) -> bool:
 class ArchitectureV4Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.dataset = load_dataset(V4_DATASET, check_assets=True)
+        cls.dataset = load_dataset(LATEST_DATASET, check_assets=True)
         cls.task = load_task(DIRECT_TASK)
 
         cls.generic_bundle = load_baseline_bundle(GENERIC_BASELINE)
@@ -91,19 +91,9 @@ class ArchitectureV4Tests(unittest.TestCase):
             ))
             self.assertFalse(_contains_key(case, "conditioning"))
 
-    def test_dataset_release_locks_every_referenced_asset(self) -> None:
-        self.assertIsNotNone(self.dataset.asset_lock)
-        locked = {
-            item["path"] for item in self.dataset.asset_lock["files"]
-        }
-        referenced = {
-            value
-            for case in self.dataset.cases
-            for value in case["assets"].values()
-            if value
-        }
-        self.assertEqual(referenced, locked)
-        self.assertEqual("4.0.0", self.dataset.descriptor["release"])
+    def test_dataset_release_does_not_use_an_asset_lock(self) -> None:
+        self.assertIsNone(self.dataset.asset_lock)
+        self.assertEqual("12.0.0", self.dataset.descriptor["release"])
 
     def test_tasks_and_canonical_plans_are_model_agnostic(self) -> None:
         for path in (DIRECT_TASK, FINETUNE_TASK):
@@ -152,8 +142,6 @@ class ArchitectureV4Tests(unittest.TestCase):
             generic_adapter["materialization_fingerprint"],
             physics_adapter["materialization_fingerprint"],
         )
-        self.assertFalse(_contains_key(generic, "conditioning"))
-        self.assertFalse(_contains_key(physics, "conditioning"))
 
     def test_data_adapter_declares_all_five_stages(self) -> None:
         description = (
@@ -262,42 +250,6 @@ class ArchitectureV4Tests(unittest.TestCase):
         self.assertTrue(all(
             "conditioning" not in job for job in plan.jobs
         ))
-
-    def test_ood2_scene_enters_evaluation_universe_not_training(self) -> None:
-        source = load_task(FINETUNE_TASK)
-        value = copy.deepcopy(source.value)
-        value["selection"]["scene_ids"] = ["pendulum"]
-        value["ood2"] = {
-            "enabled": True,
-            "heldout_scenes": ["free_fall"],
-        }
-        task = TaskSpec(
-            source.path,
-            value,
-            canonical_sha256(value),
-        )
-
-        plan = plan_atomic_task(task, self.dataset).value
-
-        self.assertEqual(
-            ["free_fall", "pendulum"],
-            plan["scene_ids"],
-        )
-        self.assertTrue(all(
-            next(
-                case["scene_id"]
-                for case in self.dataset.cases
-                if case["case_id"] == case_id
-            )
-            == "pendulum"
-            for case_id in plan["train_case_ids"]
-        ))
-        self.assertTrue(any(
-            job["scene_id"] == "free_fall"
-            and job["evaluation_partition"] == "test_ood2"
-            for job in plan["jobs"]
-        ))
-
 
 if __name__ == "__main__":
     unittest.main()

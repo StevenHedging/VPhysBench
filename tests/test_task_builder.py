@@ -5,7 +5,7 @@ import unittest
 
 from _paths import ROOT
 from physbench.baseline_api import load_baseline_bundle, load_baseline_plugin
-from physbench.data_layout import V11_DATASET
+from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
 from physbench.domain import BaselineTaskInstance
 from physbench.io import load_json, load_jsonl
@@ -40,7 +40,7 @@ def _contains_key(value: object, target: str) -> bool:
 class TaskBuilderContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.dataset_path = V11_DATASET
+        cls.dataset_path = LATEST_DATASET
         cls.dataset = load_dataset(
             cls.dataset_path, check_assets=True
         )
@@ -248,8 +248,8 @@ class TaskBuilderContractTests(unittest.TestCase):
             self.assertTrue(
                 (run_dir / "task_builder.json").is_file()
             )
-            self.assertTrue(
-                (run_dir / "frozen" / "assets.lock.json").is_file()
+            self.assertFalse(
+                (run_dir / "frozen" / "assets.lock.json").exists()
             )
             artifact_policy = load_json(
                 run_dir / "artifact_policy.json"

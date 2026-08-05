@@ -5,11 +5,11 @@ import unittest
 from _paths import ROOT
 from physbench.baseline_api import load_baseline_bundle, load_baseline_plugin
 from physbench.baseline_runtime.adapter_loader import load_data_adapter
+from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
 from physbench.io import load_json
 
 
-V11_DATASET = ROOT / "datasets" / "releases" / "11.0.0" / "dataset.json"
 CAUSAL_MANIFEST = (
     ROOT / "baselines" / "causal_forcing_pp_2step_i2v" / "physics.baseline.json"
 )
@@ -27,10 +27,10 @@ QUANTITY_RESOURCE = (
 )
 
 
-class SymbolicConsumerV11Tests(unittest.TestCase):
+class SymbolicConsumerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.dataset = load_dataset(V11_DATASET)
+        cls.dataset = load_dataset(LATEST_DATASET)
 
     def test_active_manifests_use_versioned_v2_resources(self) -> None:
         causal = load_json(CAUSAL_MANIFEST)
@@ -55,7 +55,7 @@ class SymbolicConsumerV11Tests(unittest.TestCase):
             load_json(QUANTITY_RESOURCE)["registry_id"],
         )
 
-    def test_resources_exactly_cover_v11_independent_parameter_universes(self) -> None:
+    def test_resources_exactly_cover_current_independent_parameter_universes(self) -> None:
         causal = load_json(CAUSAL_RESOURCE)
         quantity = load_json(QUANTITY_RESOURCE)
         for scene_id in sorted(self.dataset.scene_configs):
@@ -77,7 +77,7 @@ class SymbolicConsumerV11Tests(unittest.TestCase):
             self.assertEqual(expected, causal_names, scene_id)
             self.assertEqual(expected, quantity_names, scene_id)
 
-    def test_both_adapters_select_every_and_only_independent_v11_quantity(self) -> None:
+    def test_both_adapters_select_every_and_only_independent_quantity(self) -> None:
         causal_bundle = load_baseline_bundle(CAUSAL_MANIFEST)
         causal_adapter = load_data_adapter(causal_bundle)
         quantity_bundle = load_baseline_bundle(QUANTITY_MANIFEST)

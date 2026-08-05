@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "registry_id": "six_scene_quantity_embedding_v2",
-  "description": "V11 independent symbolic quantities encoded by the WAN2.2 quantity-token Baseline.",
+  "description": "Current independent symbolic quantities encoded by the WAN2.2 quantity-token Baseline.",
   "dimension_basis": ["L", "M", "T", "I", "Theta", "N_amount", "J_luminous"],
   "quantity_types": {"unknown": 0, "length": 1, "radius": 2, "angle": 3, "mass": 4, "velocity": 5, "acceleration": 6, "coefficient": 7, "force": 8, "angular_velocity": 9},
   "units": {

@@ -11,7 +11,7 @@ from physbench.baseline_api import (
     load_baseline_bundle,
     load_baseline_plugin,
 )
-from physbench.data_layout import V4_DATASET
+from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
 from physbench.io import canonical_sha256, load_json, write_json
 from physbench.tasks import load_task, plan_atomic_task
@@ -19,10 +19,11 @@ from physbench.tasks import load_task, plan_atomic_task
 
 SCENE_IDS = [
     "pendulum",
-    "free_fall",
     "collision_1d",
     "inclined_plane_slide",
     "uniform_circular_motion",
+    "parabolic_motion",
+    "push_bottle",
 ]
 
 
@@ -132,7 +133,7 @@ def _create_bundle(root: Path, name: str, baseline_id: str) -> Path:
 class BaselineBundleV5Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.dataset = load_dataset(V4_DATASET, check_assets=False)
+        cls.dataset = load_dataset(LATEST_DATASET, check_assets=False)
         cls.task = load_task(
             ROOT
             / "tasks"

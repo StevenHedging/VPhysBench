@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 
 from _paths import ROOT
-from physbench.data_layout import V4_DATASET
+from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
 from physbench.evaluation.common.media import (
     VideoInfo,
@@ -235,7 +235,7 @@ class EvaluationProtocolV2Tests(unittest.TestCase):
     def test_frozen_dataset_pendulum_references_pass_v2_preflight(
         self,
     ) -> None:
-        dataset = load_dataset(V4_DATASET)
+        dataset = load_dataset(LATEST_DATASET)
         pendulum_root = dataset.asset_root / "assets" / "pendulum"
         if not pendulum_root.is_dir():
             self.skipTest("canonical pendulum assets are not materialized")
@@ -269,7 +269,7 @@ class EvaluationProtocolV2Tests(unittest.TestCase):
     def test_real_hevc_keeps_legacy_and_forward_decode_identities_distinct(
         self,
     ) -> None:
-        dataset = load_dataset(V4_DATASET)
+        dataset = load_dataset(LATEST_DATASET)
         case = next(
             item
             for item in dataset.cases

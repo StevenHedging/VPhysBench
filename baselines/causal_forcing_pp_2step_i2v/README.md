@@ -104,14 +104,14 @@ Compile or dry-run the current five-evaluator-scene task:
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
-  --dataset datasets/releases/11.0.0/dataset.json \
+  --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline causal_forcing_pp_2step_i2v_physics \
   --output /tmp/causal_forcing_pp_physics.task.json
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/releases/11.0.0/dataset.json \
+  --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline causal_forcing_pp_2step_i2v_physics \
   --output-root runs_v2
