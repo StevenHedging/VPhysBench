@@ -8,12 +8,14 @@
   "frame_scope": "first_frame_only",
   "generator": "sam2.1_hiera_tiny_first_frame_physical_subject_v1",
   "mask_file_count": 1205,
-  "mask_index_sha256": "e526ad74e727096bc0d4429e49eabc2f20c0da158f11496626190765520cf644",
+  "mask_index_sha256": "2d00c8ddb4afb26d76ebe7d29570f39ddc1d96f98a7de4c6db401ddedb765c90",
+  "model_mask_storage": "compressed NPZ uint8 [O,H,W] with values {0,1}",
+  "npz_file_count": 797,
   "old_case_and_media_policy": "8.0.0 Case facts and pre-existing media are copied or referenced without modification",
   "ordering": "row-major scan order: top-to-bottom, then left-to-right within a row",
   "output_dataset_id": "physics_video_six_scene_v9",
   "output_release": "9.0.0",
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "skipped_case_count": 2,
   "skipped_cases": [
     {
@@ -34,5 +36,6 @@
     "pendulum": "bob only; exclude cord",
     "push_bottle": "bottle only; exclude hand",
     "uniform_circular_motion": "every orbiting block"
-  }
+  },
+  "visualization_mask_storage": "single-channel PNG uint8 [H,W] with values {0,255}"
 }

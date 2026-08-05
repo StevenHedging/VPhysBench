@@ -5,8 +5,8 @@
   "dataset_id": "physics_video_six_scene_v9",
   "mask_annotations": {
     "path": "masks.jsonl",
-    "schema_version": "1.0",
-    "sha256": "e526ad74e727096bc0d4429e49eabc2f20c0da158f11496626190765520cf644"
+    "schema_version": "1.1",
+    "sha256": "2d00c8ddb4afb26d76ebe7d29570f39ddc1d96f98a7de4c6db401ddedb765c90"
   },
   "release": "9.0.0",
   "release_manifest": "release.json",
