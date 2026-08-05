@@ -2,7 +2,8 @@
 
 > 审阅范围：`/root/Steven/physics_video_benchmark/datasets/` 及其直接引用的数据规范  
 > 审阅日期：2026-08-04（UTC）  
-> 当前权威入口：`physics_video/releases/7.0.0/dataset.json`
+> 本文主体是 7.0.0 历史审阅快照；当前目录入口见 `README.md`，路径已迁移到
+> `releases/<version>/dataset.json`。
 
 ## 1. 一页概览
 
@@ -39,30 +40,29 @@
 datasets/
 ├── README.md
 ├── _incoming/                         # 新来源暂存；当前只有 .gitkeep
-└── physics_video/
+├── assets/                            # 按scene/case组织的冻结媒体资产
+│   ├── README.md
+│   ├── <scene_id>/<physical_case_dir>/
+│   │   ├── canonical/
+│   │   │   ├── reference.mp4
+│   │   │   └── first_frame.png
+│   │   └── source/                    # 可选原始成员，常见 reference.mov
+│   └── source_archives -> ../provenance/source_archives
+├── provenance/                        # 来源与质量审计
+│   ├── source_archives/               # 批次原始ZIP，仅保存一次
+│   ├── source_docs/                   # XLSX、TXT、规范化标注
+│   ├── imports/                       # 导入记录与排除清单
+│   ├── alignment/                     # 起始帧、入场、裁剪和时标审核
+│   └── path_relocation.json
+└── releases/
     ├── README.md
-    ├── assets/                        # 冻结媒体资产
-    │   ├── README.md
-    │   ├── <scene_id>/<physical_case_dir>/
-    │   │   ├── canonical/
-    │   │   │   ├── reference.mp4
-    │   │   │   └── first_frame.png
-    │   │   └── source/                # 可选原始成员，常见 reference.mov
-    │   └── source_archives/<batch>/   # 批次原始 ZIP/XLSX，仅保存一次
-    ├── provenance/                    # 来源与质量审计
-    │   ├── source_docs/               # XLSX、TXT、规范化标注
-    │   ├── imports/                   # 导入记录与排除清单
-    │   ├── alignment/                 # 起始帧、入场、裁剪和时标审核
-    │   └── path_relocation.json
-    └── releases/
-        ├── README.md
-        ├── 1.0.0/ ... 6.0.0/         # 仅用于解释/复现历史结果
-        └── 7.0.0/                     # 当前正式快照
-            ├── dataset.json
-            ├── release.json
-            ├── cases.jsonl
-            ├── assets.lock.json
-            ├── scenes/*.json
+    ├── 1.0.0/ ... 6.0.0/             # 仅用于解释/复现历史结果
+    └── 7.0.0/                         # 本文统计对应的历史快照
+        ├── dataset.json
+        ├── release.json
+        ├── cases.jsonl
+        ├── assets.lock.json
+        └── scenes/*.json
             ├── views/view_a.json
             ├── views/view_b.json
             ├── ball_spec_catalog.json
@@ -86,7 +86,8 @@ dataset.json
 provenance/ ──为导入、标注、裁剪和对齐提供审计证据
 ```
 
-当前 `datasets/` 约占 39 GiB。主要空间来自 `assets/collision_1d`（约 23 GiB）和 `assets/source_archives`（约 14 GiB）。
+在本文对应的7.0.0历史快照中，主要空间来自碰撞媒体和原始压缩包；当前原始压缩包的
+权威物理位置已迁移到`provenance/source_archives`。
 
 ## 3. 当前 Release 中各文件的职责
 
@@ -350,7 +351,7 @@ circular_w54p55dps_r1-20mm_img0370
 
 ## 10. 使用注意事项与当前缺口
 
-1. **权威文档版本不完全同步**：`datasets/README.md`、`physics_video/README.md` 和 7.0.0 descriptor 已指向 7.0.0，但 `docs/DATASET.md` 仍主要描述 6.0.0/604 Case。涉及当前数量和入口时，应以 7.0.0 descriptor、release、Case 和 View 文件为准。
+1. **本文是历史快照**：正文统计对应7.0.0，不代表当前release。涉及当前数量和入口时，应以`datasets/README.md`及显式选择的descriptor、release、Case和View文件为准。
 2. **当前没有 validation split**：View A 只有 Train/Test；如训练流程需要验证集，应在运行配置中另行设计，不能就地修改正式 Dataset。
 3. **当前没有正式 V2V 输入资产**：没有 `assets.input_video`。`reference_video`、source 或 physics reference 不得冒充 V2V conditioning input。
 4. **模板文本多样性有限**：593 条 Case 只有 11 个不同英文 prompt；这更适合过程语义控制，不适合评估自然语言表达多样性。
@@ -368,7 +369,7 @@ circular_w54p55dps_r1-20mm_img0370
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/7.0.0/dataset.json \
+  --dataset datasets/releases/7.0.0/dataset.json \
   --check-assets
 ```
 
@@ -377,7 +378,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/7.0.0/dataset.json \
+  --dataset datasets/releases/7.0.0/dataset.json \
   --check-asset-hashes
 ```
 
@@ -386,16 +387,16 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ## 12. 主要依据
 
 - [Dataset 根说明](README.md)
-- [Physics Video Dataset 说明](physics_video/README.md)
-- [Canonical Assets 说明](physics_video/assets/README.md)
-- [Release 选择规则](physics_video/releases/README.md)
-- [7.0.0 说明](physics_video/releases/7.0.0/README.md)
-- [7.0.0 descriptor](physics_video/releases/7.0.0/dataset.json)
-- [7.0.0 release manifest](physics_video/releases/7.0.0/release.json)
-- [7.0.0 Cases](physics_video/releases/7.0.0/cases.jsonl)
-- [View A](physics_video/releases/7.0.0/views/view_a.json) / [View B](physics_video/releases/7.0.0/views/view_b.json)
-- [划分审计](physics_video/releases/7.0.0/split_audit.json)
-- [迁移审计](physics_video/releases/7.0.0/migration_audit.json)
-- [文本/媒体修复审计](physics_video/releases/7.0.0/text_video_alignment_repair.json)
+- [Dataset 根说明](README.md)
+- [Canonical Assets 说明](assets/README.md)
+- [Release 选择规则](releases/README.md)
+- [7.0.0 说明](releases/7.0.0/README.md)
+- [7.0.0 descriptor](releases/7.0.0/dataset.json)
+- [7.0.0 release manifest](releases/7.0.0/release.json)
+- [7.0.0 Cases](releases/7.0.0/cases.jsonl)
+- [View A](releases/7.0.0/views/view_a.json) / [View B](releases/7.0.0/views/view_b.json)
+- [划分审计](releases/7.0.0/split_audit.json)
+- [迁移审计](releases/7.0.0/migration_audit.json)
+- [文本/媒体修复审计](releases/7.0.0/text_video_alignment_repair.json)
 - [数据集规范（注意当前正文仍以 6.0.0 为主）](../docs/DATASET.md)
 - [数据导入规范](../docs/DATASET_INGESTION.md)

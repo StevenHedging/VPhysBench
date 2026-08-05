@@ -24,7 +24,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA_ROOT = ROOT / "datasets" / "physics_video"
+DATA_ROOT = ROOT / "datasets"
 RELEASE_ROOT = DATA_ROOT / "releases" / "5.1.0"
 CASES_PATH = RELEASE_ROOT / "cases.jsonl"
 MAPPING_PATH = RELEASE_ROOT / "asset_directory_mapping.json"

@@ -36,7 +36,7 @@ import numpy as np
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA_ROOT = ROOT / "datasets" / "physics_video"
+DATA_ROOT = ROOT / "datasets"
 ARCHIVE = (
     DATA_ROOT / "assets" / "source_archives" / "20260723_new_scenes"
     / "inclined_plane_raw.zip"

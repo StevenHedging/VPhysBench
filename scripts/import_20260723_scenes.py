@@ -42,7 +42,7 @@ from physbench.io import (  # noqa: E402
 from physbench.splitters import build_view_b  # noqa: E402
 
 
-DATA_ROOT = ROOT / "datasets" / "physics_video"
+DATA_ROOT = ROOT / "datasets"
 ASSET_ROOT = DATA_ROOT / "assets"
 SOURCE_ROOT = ASSET_ROOT / "source_archives" / "20260723_new_scenes"
 DOC_ROOT = (

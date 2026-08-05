@@ -70,7 +70,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/4.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_quantity_embedding_v1 \
   --run-id wan22_quantity_embedding_v1_viewa_seed42 \
@@ -194,7 +194,7 @@ quantity-embedding identities on the same frozen View A Task:
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   matrix-run \
-  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/4.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \

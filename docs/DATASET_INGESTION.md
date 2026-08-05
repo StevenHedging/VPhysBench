@@ -74,8 +74,8 @@ Task选择Dataset、View、scene、test范围、seed和评估协议。Task不决
 - 当前最新Dataset digest与目标scene。
 
 解压必须防止绝对路径和`../`路径穿越。原始包放入
-`datasets/physics_video/assets/source_archives/`，XLSX原件放入
-`datasets/physics_video/provenance/source_docs/<import_id>/`。
+`datasets/provenance/source_archives/`，XLSX原件放入
+`datasets/provenance/source_docs/<import_id>/`。
 
 阶段0不能修改正式资产。
 
@@ -331,12 +331,12 @@ failed_visual_alignment_review
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/<version>/dataset.json \
+  --dataset datasets/releases/<version>/dataset.json \
   --check-assets
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/<version>/dataset.json \
+  --dataset datasets/releases/<version>/dataset.json \
   --check-asset-hashes
 ```
 

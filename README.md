@@ -2,7 +2,7 @@
 
 Physics Video Benchmark 是一个面向物理视频生成模型的六场景、训推一体评测框架。当前
 Dataset release 是
-`datasets/physics_video/releases/8.0.0/dataset.json`，包含799个case和2,032个
+`datasets/releases/8.0.0/dataset.json`，包含799个case和2,032个
 锁定资产：
 
 - 单摆 `pendulum`
@@ -88,7 +88,7 @@ PYTHONPATH=src:tests:. /root/miniconda3/envs/phybench/bin/python \
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
+  --dataset datasets/releases/8.0.0/dataset.json \
   --check-asset-hashes
 ```
 
@@ -122,7 +122,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
-  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
+  --dataset datasets/releases/8.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --output /tmp/wan22_generic_task_instance.json
@@ -133,7 +133,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
+  --dataset datasets/releases/8.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
   --output-root runs_v2
@@ -144,7 +144,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   matrix-run \
-  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
+  --dataset datasets/releases/8.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
   --baseline cosmos3_nano_i2v_physics \

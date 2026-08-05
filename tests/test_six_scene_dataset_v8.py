@@ -115,7 +115,7 @@ class SixSceneDatasetV8Tests(unittest.TestCase):
         self.assertTrue(all(set(case["physics"]) == expected_physics for case in cases))
         audit_path = (
             ROOT
-            / "datasets/physics_video/provenance/imports/"
+            / "datasets/provenance/imports/"
             "push_bottle_20260804_import_audit.jsonl"
         )
         audits = [json.loads(line) for line in audit_path.read_text().splitlines()]
@@ -126,7 +126,7 @@ class SixSceneDatasetV8Tests(unittest.TestCase):
         ))
         exclusions = json.loads((
             ROOT
-            / "datasets/physics_video/provenance/imports/"
+            / "datasets/provenance/imports/"
             "push_bottle_20260804_exclusions.json"
         ).read_text())
         self.assertEqual(

@@ -218,7 +218,7 @@ class CollisionV5EvaluatorTests(unittest.TestCase):
         ]
         reference = (
             root
-            / "datasets/physics_video/assets/collision_1d"
+            / "datasets/assets/collision_1d"
             / "collision_n2-single_b1-steelL-d25mm-m64p77g-v0mps_"
             "b2-steelM-d20mm-m33p13g-vneg0p2847mps_img0989"
             / "canonical/reference.mp4"

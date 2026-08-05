@@ -11,12 +11,13 @@
     └── first_frame.png     # 与 reference frame 0 一致
 ```
 
-批量压缩来源只在 `assets/source_archives/<batch>/` 保存一次。Case 使用
+批量压缩来源只在 `provenance/source_archives/<batch>/` 保存一次；
+`assets/source_archives` 是为冻结release保留的兼容链接。Case 使用
 `assets.source_archive` 与 `provenance.source_locator.member` 定位原始成员。
 
 Canonical 规则：
 
-- 文件路径相对 `datasets/physics_video/`；
+- 文件路径相对 `datasets/`；
 - 当前目录名简要编码 scene 的主要结构化物理量，不编码背景、颜色或采集环境；
 - `case_id`继续作为稳定身份，目录名与case ID的绑定记录在6.0.0
   `asset_directory_mapping.json`；

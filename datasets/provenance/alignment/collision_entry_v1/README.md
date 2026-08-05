@@ -15,7 +15,7 @@ case 均引用这里记录的 `collision_entry_v1` 对齐结果。
 
 源第 0 帧已满足契约时不裁切。其余视频从人工审定的解码帧开始，以 lossless HEVC
 生成 canonical 视频。运行时资产位置由
-`datasets/physics_video/releases/3.0.0/dataset.json` 和 case 的 `assets` 字段解析，
+`datasets/releases/3.0.0/dataset.json` 和 case 的 `assets` 字段解析，
 不能从审计记录中的字符串路径推导。
 
 ## 冻结证据
@@ -44,7 +44,7 @@ review_status = visually_verified
 cd /root/Steven/physics_video_benchmark
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
+  --dataset datasets/releases/3.0.0/dataset.json \
   --check-asset-hashes
 ```
 

@@ -36,7 +36,7 @@ Dataset 不认识具体模型；Task 不携带模型输入策略；Baseline 不�
 当前入口：
 
 ```text
-datasets/physics_video/releases/8.0.0/dataset.json
+datasets/releases/8.0.0/dataset.json
 ```
 
 Dataset和Case使用schema 4.0。每个Case同时拥有：

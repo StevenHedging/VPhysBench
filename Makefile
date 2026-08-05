@@ -1,7 +1,7 @@
 .PHONY: test legacy-test smoke
 
 test:
-	PYTHONPATH=src python3 -m unittest tests.test_five_scene_dataset_v7 -v
+	PYTHONPATH=src python3 -m unittest tests.test_six_scene_dataset_v8 -v
 
 # Historical suites intentionally retain old Dataset IDs and may require media
 # paths that no longer exist in the current asset layout.
@@ -15,8 +15,8 @@ smoke:
 	PYTHONPATH=src python3 -m physbench baseline init smoke_submission \
 		--backend submission --root "$$smoke_root/baselines" >/dev/null; \
 	PYTHONPATH=src python3 -m physbench atomic-run \
-		--dataset datasets/physics_video/releases/7.0.0/dataset.json \
-		--task tasks/smoke/five_scene_direct_eval_v7.json \
+		--dataset datasets/releases/8.0.0/dataset.json \
+		--task tasks/official/five_scene_direct_eval.json \
 		--baseline "$$smoke_root/baselines/smoke_submission" \
 		--case-id circular_r1_silver02cm_img_0370 \
 		--run-id smoke \

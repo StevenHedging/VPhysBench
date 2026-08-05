@@ -24,12 +24,12 @@ from physbench.io import canonical_sha256, load_json, write_json, write_jsonl
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RELEASES_ROOT = PROJECT_ROOT / "datasets/physics_video/releases"
+RELEASES_ROOT = PROJECT_ROOT / "datasets/releases"
 BASE_ROOT = RELEASES_ROOT / "5.1.0"
 OUTPUT_ROOT = RELEASES_ROOT / "6.0.0"
 COLLISION_CURATION_ROOT = (
     PROJECT_ROOT
-    / "datasets/physics_video/provenance/source_docs/20260730_parabolic_collision/collision"
+    / "datasets/provenance/source_docs/20260730_parabolic_collision/collision"
 )
 DATASET_ID = "physics_video_six_scene_v6"
 RELEASE = "6.0.0"

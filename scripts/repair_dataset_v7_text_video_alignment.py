@@ -38,7 +38,7 @@ from physbench.io import (  # noqa: E402
 )
 
 
-DATA_ROOT = ROOT / "datasets" / "physics_video"
+DATA_ROOT = ROOT / "datasets"
 RELEASE_ROOT = DATA_ROOT / "releases" / "7.0.0"
 DESCRIPTOR_PATH = RELEASE_ROOT / "dataset.json"
 CASES_PATH = RELEASE_ROOT / "cases.jsonl"

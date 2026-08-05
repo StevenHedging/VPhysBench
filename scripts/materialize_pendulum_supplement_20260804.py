@@ -28,7 +28,7 @@ import numpy as np
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DATASET_ROOT = REPO_ROOT / "datasets/physics_video"
+DATASET_ROOT = REPO_ROOT / "datasets"
 ARCHIVE = Path("/root/Steven/补充_小球单摆实验.zip")
 WORKBOOK_MEMBER = "补充_小球单摆实验/钟摆实验.xlsx"
 IMPORT_ID = "pendulum_supplement_20260804"
@@ -354,7 +354,7 @@ def _write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
 def _preserve_sources(archive: Path) -> tuple[Path, Path]:
     archive_target = (
         DATASET_ROOT
-        / "assets/source_archives/20260804_new_data/pendulum_supplement.zip"
+        / "provenance/source_archives/20260804_new_data/pendulum_supplement.zip"
     )
     archive_target.parent.mkdir(parents=True, exist_ok=True)
     if not archive_target.exists():

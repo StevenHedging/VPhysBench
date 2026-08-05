@@ -453,7 +453,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
-  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/4.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline my_i2v_generic \
   --output /tmp/my_i2v_generic_task.json
@@ -464,7 +464,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/4.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline my_i2v_generic \
   --scene-id pendulum \

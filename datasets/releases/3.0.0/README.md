@@ -27,7 +27,7 @@ View A 覆盖 187 个纯对照 case。未进入 View A 的 15 个斜面 case 和
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/3.0.0/dataset.json \
+  --dataset datasets/releases/3.0.0/dataset.json \
   --check-asset-hashes
 ```
 

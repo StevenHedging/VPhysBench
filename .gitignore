@@ -11,7 +11,9 @@ results/*
 !results/README.md
 datasets/_incoming/*
 !datasets/_incoming/.gitkeep
-datasets/physics_video/assets/*
-!datasets/physics_video/assets/README.md
-datasets/physics_video/provenance/alignment/
+datasets/assets/*
+!datasets/assets/README.md
+!datasets/assets/source_archives
+datasets/provenance/alignment/
+datasets/provenance/source_archives/
 cache/

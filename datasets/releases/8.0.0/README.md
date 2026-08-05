@@ -6,4 +6,4 @@
 
 补充单摆的 canonical 第 0 帧按 Dataset 语义定义为初始释放点，时间裁剪唯一目的为
 去除人手。推水瓶视频按原字节保留，不做裁剪、剪辑、重采样或重编码。完整来源与
-排除记录位于 `datasets/physics_video/provenance/`。
+排除记录位于 `datasets/provenance/`。

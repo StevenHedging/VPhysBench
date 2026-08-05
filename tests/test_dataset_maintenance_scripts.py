@@ -44,7 +44,7 @@ class DatasetV4MigrationSafetyTests(unittest.TestCase):
     def test_force_refuses_release_outside_the_release_root(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            releases = root / "datasets" / "physics_video" / "releases"
+            releases = root / "datasets" / "releases"
             outside = root / "unrelated" / "4.0.0"
             self._write_identity(outside)
             marker = outside / "keep.txt"
@@ -66,7 +66,7 @@ class DatasetV4MigrationSafetyTests(unittest.TestCase):
     def test_force_refuses_a_release_with_the_wrong_identity(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            releases = root / "datasets" / "physics_video" / "releases"
+            releases = root / "datasets" / "releases"
             target = releases / "4.0.0"
             self._write_identity(target, dataset_id="different_dataset")
             marker = target / "keep.txt"
@@ -88,7 +88,7 @@ class DatasetV4MigrationSafetyTests(unittest.TestCase):
     def test_force_removes_only_a_verified_release(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            releases = root / "datasets" / "physics_video" / "releases"
+            releases = root / "datasets" / "releases"
             target = releases / "4.0.0"
             self._write_identity(target)
 

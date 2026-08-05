@@ -27,7 +27,7 @@ import numpy as np
 
 RELEASE_ROOT = Path(__file__).resolve().parent
 PHYSICS_VIDEO_ROOT = RELEASE_ROOT.parents[1]
-REPOSITORY_ROOT = PHYSICS_VIDEO_ROOT.parents[1]
+REPOSITORY_ROOT = PHYSICS_VIDEO_ROOT.parent
 BASE_RELEASE_ROOT = PHYSICS_VIDEO_ROOT / "releases" / "8.0.0"
 SAM2_ROOT = Path("/root/Nico/third_party/sam2")
 DEFAULT_CHECKPOINT = Path(

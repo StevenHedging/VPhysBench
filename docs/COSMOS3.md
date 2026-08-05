@@ -165,7 +165,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   atomic-run \
-  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/4.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_physics \
   --scene-id pendulum \
@@ -179,7 +179,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   matrix-run \
-  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/4.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
   --baseline cosmos3_nano_i2v_physics \

@@ -38,7 +38,7 @@ from physbench.splitters import build_view_b  # noqa: E402
 from build_dataset_asset_lock import rebuild_asset_lock  # noqa: E402
 
 
-DATA_ROOT = ROOT / "datasets" / "physics_video"
+DATA_ROOT = ROOT / "datasets"
 ASSET_ROOT = DATA_ROOT / "assets"
 RELEASES_ROOT = DATA_ROOT / "releases"
 BASE_ROOT = RELEASES_ROOT / "4.0.0"

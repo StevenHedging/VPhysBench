@@ -948,7 +948,7 @@ def review_sheets(records: list[dict[str, Any]], batch_size: int = 8) -> None:
 def duplicate_audit() -> dict[str, Any]:
     inventory = load_jsonl(COLLISION_INVENTORY)
     old_sources = sorted(
-        (ROOT / "datasets/physics_video/assets/collision_1d").glob(
+        (ROOT / "datasets/assets/collision_1d").glob(
             "*/source/reference.*"
         )
     )

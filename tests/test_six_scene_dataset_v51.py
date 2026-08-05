@@ -13,8 +13,8 @@ from physbench.datasets import load_dataset
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RELEASE_ROOT = ROOT / "datasets/physics_video/releases/5.1.0"
-DATA_ROOT = ROOT / "datasets/physics_video"
+RELEASE_ROOT = ROOT / "datasets/releases/5.1.0"
+DATA_ROOT = ROOT / "datasets"
 BACKGROUND_TERMS = re.compile(
     r"(?:^|[-_])(?:bg|background|black|white|oil|foam|lab|tabletop)(?:[-_]|$)",
     re.IGNORECASE,
@@ -163,7 +163,7 @@ class SixSceneDatasetV51Tests(unittest.TestCase):
     def test_dataset_assets_preserve_native_timing(self) -> None:
         audit_path = (
             ROOT
-            / "datasets/physics_video/provenance/alignment"
+            / "datasets/provenance/alignment"
             / "native_timing_20260731_v1/audit.jsonl"
         )
         records = [

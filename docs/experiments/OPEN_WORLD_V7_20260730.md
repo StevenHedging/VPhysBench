@@ -313,7 +313,7 @@ cd /root/Steven/physics_video_benchmark
 
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/4.0.0/dataset.json \
   --check-assets
 ```
 

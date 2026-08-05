@@ -22,7 +22,7 @@ from zipfile import ZipFile
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DATASET_ROOT = REPO_ROOT / "datasets/physics_video"
+DATASET_ROOT = REPO_ROOT / "datasets"
 DEFAULT_ANALYSIS = Path(
     "/mnt/nvme1/physics_video_benchmark_ingest/20260804_new_data/"
     "push_bottle_analysis.json"
@@ -321,7 +321,7 @@ def main() -> None:
     ):
         raise ValueError("expected exactly 141 reviewed intake candidates")
 
-    archive_root = DATASET_ROOT / "assets/source_archives/20260804_new_data"
+    archive_root = DATASET_ROOT / "provenance/source_archives/20260804_new_data"
     video_archive_target = archive_root / "push_bottle.zip"
     annotation_archive_target = archive_root / "push_bottle_physics_annotations.zip"
     _preserve_file(args.video_archive, video_archive_target)

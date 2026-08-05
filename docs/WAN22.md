@@ -269,7 +269,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   task-build \
-  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/4.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
   --output /tmp/wan22_physics_finetune_task.json
@@ -280,7 +280,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   matrix-run \
-  --dataset datasets/physics_video/releases/4.0.0/dataset.json \
+  --dataset datasets/releases/4.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \

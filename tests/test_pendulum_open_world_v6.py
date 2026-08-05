@@ -88,7 +88,7 @@ class PendulumOpenWorldV6Tests(unittest.TestCase):
     def test_all_five_physics_parent_conditions_freeze_the_current_bob(
         self,
     ) -> None:
-        root = ROOT / "datasets" / "physics_video" / "assets" / "pendulum"
+        root = ROOT / "datasets" / "assets" / "pendulum"
         expected = {
             "pendulum_ltot0110mm_lrope0100mm_r010mm_a010deg_ood01": (
                 (329.0, 291.0),

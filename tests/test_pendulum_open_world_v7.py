@@ -521,7 +521,6 @@ class PendulumOpenWorldV7Tests(unittest.TestCase):
         root = (
             ROOT
             / "datasets"
-            / "physics_video"
             / "assets"
             / "pendulum"
         )
@@ -594,7 +593,6 @@ class PendulumOpenWorldV7Tests(unittest.TestCase):
         path = (
             ROOT
             / "datasets"
-            / "physics_video"
             / "assets"
             / "pendulum"
             / "pendulum_r1_ltot0210mm_lrope0200mm_r010mm_a005deg"
@@ -627,7 +625,6 @@ class PendulumOpenWorldV7Tests(unittest.TestCase):
         path = (
             ROOT
             / "datasets"
-            / "physics_video"
             / "assets"
             / "pendulum"
             / "pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a025deg"

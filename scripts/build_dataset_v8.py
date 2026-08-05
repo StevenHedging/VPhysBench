@@ -20,7 +20,7 @@ from scripts.migrate_dataset_v6 import _collision_replicate_components
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DATA_ROOT = PROJECT_ROOT / "datasets/physics_video"
+DATA_ROOT = PROJECT_ROOT / "datasets"
 RELEASES_ROOT = DATA_ROOT / "releases"
 BASE_ROOT = RELEASES_ROOT / "7.0.0"
 OUTPUT_ROOT = RELEASES_ROOT / "8.0.0"
@@ -700,7 +700,7 @@ def main() -> None:
 
 补充单摆的 canonical 第 0 帧按 Dataset 语义定义为初始释放点，时间裁剪唯一目的为
 去除人手。推水瓶视频按原字节保留，不做裁剪、剪辑、重采样或重编码。完整来源与
-排除记录位于 `datasets/physics_video/provenance/`。
+排除记录位于 `datasets/provenance/`。
 """,
             encoding="utf-8",
         )

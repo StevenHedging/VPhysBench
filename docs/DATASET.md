@@ -7,7 +7,7 @@
 ```text
 dataset_id:     physics_video_six_scene_v8
 release:        8.0.0
-descriptor:     datasets/physics_video/releases/8.0.0/dataset.json
+descriptor:     datasets/releases/8.0.0/dataset.json
 cases:          799
 locked assets:  2032
 dataset digest: 08eb448fe9d02ad0593be4ab50db1b0741e8f77798e3d02df45962e9e857ea8e
@@ -21,35 +21,32 @@ dataset digest: 08eb448fe9d02ad0593be4ab50db1b0741e8f77798e3d02df45962e9e857ea8e
 
 ```text
 datasets/
-└── physics_video/
-    ├── assets/
-    │   ├── pendulum/
-    │   ├── collision_1d/
-    │   ├── inclined_plane_slide/
-    │   ├── uniform_circular_motion/
-    │   ├── parabolic_motion/
-    │   ├── push_bottle/
-    │   └── source_archives/
-    ├── provenance/
-    │   ├── imports/
-    │   └── source_docs/
-    └── releases/
-        ├── 1.0.0/…7.0.0/            # 历史结果引用的只读元数据
-        └── 8.0.0/
-            ├── dataset.json          # 唯一加载入口
-            ├── release.json          # Dataset 与资产集合 digest
-            ├── cases.jsonl           # Case schema 4.0
-            ├── assets.lock.json      # 引用资产的大小和 SHA-256
-            ├── ball_spec_catalog.json
-            ├── annotation_corrections.json
-            ├── asset_directory_mapping.json
-            ├── split_audit.json
-            ├── migration_audit.json
-            ├── scenes/
-            └── views/
+├── assets/
+│   ├── pendulum/
+│   ├── collision_1d/
+│   ├── inclined_plane_slide/
+│   ├── uniform_circular_motion/
+│   ├── parabolic_motion/
+│   ├── push_bottle/
+│   └── source_archives -> ../provenance/source_archives
+├── provenance/
+│   ├── source_archives/
+│   ├── imports/
+│   └── source_docs/
+└── releases/
+    ├── 1.0.0/…7.0.0/            # 历史结果引用的只读元数据
+    ├── 8.0.0/
+    │   ├── dataset.json          # 当前运行默认入口
+    │   ├── release.json          # Dataset 与资产集合 digest
+    │   ├── cases.jsonl           # Case schema 4.0
+    │   ├── assets.lock.json      # 引用资产的大小和 SHA-256
+    │   ├── scenes/
+    │   └── views/
+    └── 9.0.0/                    # 8.0.0 Case + 首帧逐主体mask
 ```
 
-原始压缩包按字节保存在 `assets/source_archives/`，Case 的
+原始压缩包按字节保存在 `provenance/source_archives/`；冻结release仍可通过兼容路径
+`assets/source_archives/` 访问。Case 的
 `provenance.source_locator` 记录 archive/member。供运行和评估使用的 canonical
 视频、首帧等按 scene/描述性物理目录存放，路径稳定且受 asset lock 保护。
 
@@ -216,7 +213,7 @@ View B：
 - 推水瓶reference按源MOV原字节保留，不裁剪、不剪辑、不改FPS和帧数、不重编码；
 - View A全局改为train与ID test，不再设置OOD/mixed测试子集；
 - 完整审计见`8.0.0/split_audit.json`、`8.0.0/migration_audit.json`和
-  `datasets/physics_video/provenance/imports/`。
+  `datasets/provenance/imports/`。
 
 可复现脚本：
 
@@ -313,7 +310,7 @@ canonical prompt 的历史迁移语义保持不变。
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
+  --dataset datasets/releases/8.0.0/dataset.json \
   --check-assets
 ```
 
@@ -322,7 +319,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/physics_video/releases/8.0.0/dataset.json \
+  --dataset datasets/releases/8.0.0/dataset.json \
   --check-asset-hashes
 ```
 

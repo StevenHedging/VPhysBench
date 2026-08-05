@@ -15,7 +15,6 @@ ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = (
     ROOT
     / "datasets"
-    / "physics_video"
     / "releases"
     / "9.0.0"
     / "mask_storage.py"

@@ -108,7 +108,7 @@ class SixSceneDatasetV5Tests(unittest.TestCase):
         audit = json.loads(
             (
                 ROOT
-                / "datasets/physics_video/releases/5.0.0/"
+                / "datasets/releases/5.0.0/"
                 "expansion_audit.json"
             ).read_text(encoding="utf-8")
         )
