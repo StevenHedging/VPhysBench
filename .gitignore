@@ -19,6 +19,7 @@ datasets/assets/*/*
 !datasets/assets/*/*/
 datasets/assets/*/*/*
 !datasets/assets/*/*/physics.json
+!datasets/assets/*/*/physics.v11.json
 datasets/provenance/alignment/
 datasets/provenance/source_archives/
 cache/
