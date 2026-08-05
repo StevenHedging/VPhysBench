@@ -21,6 +21,7 @@ MODULE_PATH = (
 )
 UPGRADE_PATH = MODULE_PATH.with_name("upgrade_mask_storage.py")
 GENERATOR_PATH = MODULE_PATH.with_name("generate_first_frame_masks.py")
+BUILDER_PATH = MODULE_PATH.with_name("build_release.py")
 
 
 def load_mask_storage():
@@ -52,6 +53,15 @@ def load_generator_module():
     )
     if spec is None or spec.loader is None:
         raise AssertionError(f"cannot import production module: {GENERATOR_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_builder_module():
+    spec = importlib.util.spec_from_file_location("build_mask_release_v9", BUILDER_PATH)
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"cannot import production module: {BUILDER_PATH}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -483,6 +493,100 @@ class GeneratorIntegrationTests(unittest.TestCase):
             generator.GENERATOR_ID,
         )
         self.assertTrue(callable(generator.write_mask_bundle))
+
+
+class ReleaseBuilderTests(unittest.TestCase):
+    def test_builder_indexes_complete_npz_and_keeps_skipped_case_null(self) -> None:
+        builder = load_builder_module()
+        if not hasattr(builder, "build_mask_records"):
+            self.fail("release builder lacks build_mask_records")
+        base_cases = [
+            {
+                "case_id": "case_a",
+                "scene_id": "collision_1d",
+                "physics": {
+                    "ball_1_mass": {"value": 1.0},
+                    "ball_2_mass": {"value": 2.0},
+                },
+                "assets": {"first_frame": "assets/case_a/first_frame.png"},
+            },
+            {
+                "case_id": "case_skipped",
+                "scene_id": "collision_1d",
+                "physics": {"ball_1_mass": {"value": 1.0}},
+                "assets": {"first_frame": "assets/case_skipped/first_frame.png"},
+            },
+        ]
+        instances = [
+            {
+                "mask_id": "01",
+                "object_id": "ball_1",
+                "asset": "assets/case_a/canonical/masks/01.png",
+            },
+            {
+                "mask_id": "02",
+                "object_id": "ball_2",
+                "asset": "assets/case_a/canonical/masks/02.png",
+            },
+        ]
+        report = {
+            "selected_cases": 2,
+            "results": [
+                {
+                    "case_id": "case_a",
+                    "scene_id": "collision_1d",
+                    "status": "complete",
+                    "mask_directory": "assets/case_a/canonical/masks",
+                    "instances": instances,
+                },
+                {
+                    "case_id": "case_skipped",
+                    "scene_id": "collision_1d",
+                    "status": "skipped",
+                    "error": "fixture uncertainty",
+                },
+            ],
+        }
+        original = json.loads(json.dumps(base_cases))
+
+        cases, records, summary = builder.build_mask_records(base_cases, report)
+
+        self.assertEqual(original, base_cases)
+        complete_assets = cases[0]["assets"]
+        self.assertEqual(
+            "assets/case_a/canonical/masks/masks.npz",
+            complete_assets["first_frame_masks_npz"],
+        )
+        self.assertEqual(
+            "assets/case_a/canonical/masks/manifest.json",
+            complete_assets["first_frame_mask_manifest"],
+        )
+        self.assertIsNone(cases[1]["assets"]["first_frame_masks_npz"])
+        self.assertIsNone(cases[1]["assets"]["first_frame_mask_manifest"])
+        self.assertEqual("1.1", records[0]["schema_version"])
+        self.assertEqual(
+            "assets/case_a/canonical/masks/masks.npz",
+            records[0]["npz_asset"],
+        )
+        self.assertEqual([0, 1], [item["npz_index"] for item in records[0]["instances"]])
+        self.assertEqual("1.1", records[1]["schema_version"])
+        self.assertIsNone(records[1]["npz_asset"])
+        self.assertEqual([], records[1]["instances"])
+        self.assertEqual(
+            {
+                "completed": 1,
+                "skipped": [
+                    {
+                        "case_id": "case_skipped",
+                        "scene_id": "collision_1d",
+                        "reason": "fixture uncertainty",
+                    }
+                ],
+                "total_masks": 2,
+                "total_npz": 1,
+            },
+            summary,
+        )
 
 
 if __name__ == "__main__":

@@ -95,35 +95,51 @@ def copy_frozen_metadata() -> None:
         shutil.copy2(BASE_RELEASE_ROOT / filename, RELEASE_ROOT / filename)
 
 
-def main() -> int:
-    base_cases = read_jsonl(BASE_RELEASE_ROOT / "cases.jsonl")
-    report = read_json(REPORT_PATH)
+def build_mask_records(
+    base_cases: list[dict[str, Any]],
+    report: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    """Build Case assets and the schema 1.1 mask index without mutating inputs."""
+
     if report.get("selected_cases") != len(base_cases):
         raise ValueError("mask report does not cover every base Case")
-    by_case = {item["case_id"]: item for item in report["results"]}
+    results = report.get("results")
+    if not isinstance(results, list):
+        raise ValueError("mask report results must be a list")
+    by_case = {item["case_id"]: item for item in results}
+    if len(by_case) != len(results):
+        raise ValueError("mask report contains duplicate Case IDs")
     if set(by_case) != {case["case_id"] for case in base_cases}:
-        raise ValueError("mask report Case IDs do not match 8.0.0")
+        raise ValueError("mask report Case IDs do not match base Cases")
 
-    copy_frozen_metadata()
-    output_cases = []
-    mask_records = []
+    output_cases: list[dict[str, Any]] = []
+    mask_records: list[dict[str, Any]] = []
     completed = 0
-    skipped = []
+    skipped: list[dict[str, Any]] = []
     total_masks = 0
     for base_case in base_cases:
         case = json.loads(json.dumps(base_case))
         result = by_case[case["case_id"]]
         expected = expected_subject_count(case)
         complete = result.get("status") == "complete"
-        instances = result.get("instances", []) if complete else []
+        instances = (
+            json.loads(json.dumps(result.get("instances", []))) if complete else []
+        )
         if complete and len(instances) != expected:
             raise ValueError(
                 f"{case['case_id']} has {len(instances)} masks; expected {expected}"
             )
+        for index, instance in enumerate(instances):
+            expected_id = f"{index + 1:02d}"
+            if instance.get("mask_id") != expected_id:
+                raise ValueError(f"{case['case_id']} has non-contiguous mask IDs")
+            instance["npz_index"] = index
         manifest_asset = (
             f"{result['mask_directory']}/manifest.json" if complete else None
         )
+        npz_asset = f"{result['mask_directory']}/masks.npz" if complete else None
         case["assets"]["first_frame_mask_manifest"] = manifest_asset
+        case["assets"]["first_frame_masks_npz"] = npz_asset
         for index in range(1, expected + 1):
             role = f"first_frame_subject_mask_{index:02d}"
             case["assets"][role] = (
@@ -132,7 +148,7 @@ def main() -> int:
         output_cases.append(case)
 
         record: dict[str, Any] = {
-            "schema_version": "1.0",
+            "schema_version": "1.1",
             "case_id": case["case_id"],
             "scene_id": case["scene_id"],
             "status": "complete" if complete else "skipped",
@@ -142,6 +158,7 @@ def main() -> int:
             "ordering": "row_major_top_to_bottom_then_left_to_right",
             "expected_subject_count": expected,
             "manifest_asset": manifest_asset,
+            "npz_asset": npz_asset,
             "instances": instances,
         }
         if complete:
@@ -157,6 +174,23 @@ def main() -> int:
                 }
             )
         mask_records.append(record)
+    return output_cases, mask_records, {
+        "completed": completed,
+        "skipped": skipped,
+        "total_masks": total_masks,
+        "total_npz": completed,
+    }
+
+
+def main() -> int:
+    base_cases = read_jsonl(BASE_RELEASE_ROOT / "cases.jsonl")
+    report = read_json(REPORT_PATH)
+    copy_frozen_metadata()
+    output_cases, mask_records, summary = build_mask_records(base_cases, report)
+    completed = summary["completed"]
+    skipped = summary["skipped"]
+    total_masks = summary["total_masks"]
+    total_npz = summary["total_npz"]
 
     write_jsonl(RELEASE_ROOT / "cases.jsonl", output_cases)
     write_jsonl(RELEASE_ROOT / "masks.jsonl", mask_records)
@@ -177,7 +211,7 @@ def main() -> int:
         "mask_annotations": {
             "path": "masks.jsonl",
             "sha256": mask_index_sha256,
-            "schema_version": "1.0",
+            "schema_version": "1.1",
         },
     }
     write_json(RELEASE_ROOT / "dataset.json", descriptor)
@@ -185,7 +219,7 @@ def main() -> int:
     write_json(
         RELEASE_ROOT / "mask_release_audit.json",
         {
-            "schema_version": "1.0",
+            "schema_version": "1.1",
             "base_release": "8.0.0",
             "base_dataset_id": "physics_video_six_scene_v8",
             "base_dataset_digest": base_release["dataset_digest"],
@@ -195,6 +229,9 @@ def main() -> int:
             "complete_case_count": completed,
             "skipped_case_count": len(skipped),
             "mask_file_count": total_masks,
+            "npz_file_count": total_npz,
+            "model_mask_storage": "compressed NPZ uint8 [O,H,W] with values {0,1}",
+            "visualization_mask_storage": "single-channel PNG uint8 [H,W] with values {0,255}",
             "frame_scope": "first_frame_only",
             "subject_policy": {
                 "collision_1d": "every visible collision ball",
@@ -214,7 +251,7 @@ def main() -> int:
     )
     print(
         f"cases={len(output_cases)} complete={completed} "
-        f"skipped={len(skipped)} masks={total_masks}"
+        f"skipped={len(skipped)} masks={total_masks} npz={total_npz}"
     )
     return 0
 
