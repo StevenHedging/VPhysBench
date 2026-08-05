@@ -14,6 +14,11 @@ datasets/_incoming/*
 datasets/assets/*
 !datasets/assets/README.md
 !datasets/assets/source_archives
+!datasets/assets/*/
+datasets/assets/*/*
+!datasets/assets/*/*/
+datasets/assets/*/*/*
+!datasets/assets/*/*/physics.json
 datasets/provenance/alignment/
 datasets/provenance/source_archives/
 cache/
