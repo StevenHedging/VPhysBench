@@ -22,6 +22,10 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.cases = load_jsonl(RELEASE_ROOT / "cases.jsonl")
+        cls.loaded_cases = {
+            case["case_id"]: case
+            for case in load_dataset(RELEASE_ROOT / "dataset.json").cases
+        }
 
     def test_v11_content_coverage_is_preserved_as_migration_evidence(self) -> None:
         evidence = load_json(PROVENANCE_ROOT / "migration.json")
@@ -46,13 +50,44 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
             self.assertEqual("2.0", document["schema_version"])
             self.assertEqual(case["case_id"], document["case_id"])
             self.assertEqual(case["scene_id"], document["scene_id"])
-            self.assertEqual(case["physics"], document["physics"])
+            self.assertEqual(
+                self.loaded_cases[case["case_id"]]["physics"],
+                document["physics"],
+            )
         self.assertEqual(799, len(set(paths)))
 
-    def test_published_release_is_minimal_and_single_file(self) -> None:
+    def test_every_indexed_case_owns_one_caption_document(self) -> None:
+        caption_paths = []
+        for case in self.cases:
+            self.assertNotIn("text", case)
+            self.assertNotIn("physics", case)
+            relative = case["assets"]["caption"]
+            self.assertTrue(relative.endswith("/caption.json"))
+            caption_paths.append(relative)
+            document = load_json(DATASETS_ROOT / relative)
+            self.assertEqual(
+                {
+                    "annotation_source",
+                    "caption",
+                    "case_id",
+                    "language",
+                    "scene_id",
+                    "schema_version",
+                },
+                set(document),
+            )
+            self.assertEqual(case["case_id"], document["case_id"])
+            self.assertEqual(case["scene_id"], document["scene_id"])
+            self.assertTrue(document["caption"].strip())
+            self.assertEqual(
+                document["caption"],
+                self.loaded_cases[case["case_id"]]["text"]["prompt"],
+            )
+        self.assertEqual(799, len(set(caption_paths)))
+
+    def test_published_release_is_minimal_with_case_local_members(self) -> None:
         self.assertEqual(
             {
-                "README.md",
                 "cases.jsonl",
                 "dataset.json",
                 "scenes",
@@ -74,6 +109,10 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
         self.assertEqual(
             799,
             len(list(DATASETS_ROOT.glob("assets/*/*/physics.json"))),
+        )
+        self.assertEqual(
+            799,
+            len(list(DATASETS_ROOT.glob("assets/*/*/caption.json"))),
         )
 
     def test_release_records_zero_media_changes(self) -> None:

@@ -34,9 +34,8 @@ datasets/
 │   └── releases/12.0.0/         # 单文件迁移与独立验证证据
 └── releases/
     └── 12.0.0/                  # 唯一活动运行快照
-        ├── README.md
         ├── dataset.json          # 当前运行默认入口
-        ├── cases.jsonl           # Case schema 5.0
+        ├── cases.jsonl           # 轻量Case索引
         ├── scenes/
         └── views/
 ```
@@ -48,14 +47,16 @@ datasets/
 
 ## 3. Case schema 5.0
 
-每行 Case 的核心字段：
+`cases.jsonl`每行保存Case身份、资产路径、非物理元数据、时序和来源，但不重复保存caption
+或physics。Loader通过资产引用读取Case-local成员，然后返回完整的schema 5.0 Case。
+物化后的核心字段：
 
 | 字段 | 语义 |
 | --- | --- |
 | `case_id` | 全 Dataset 唯一稳定 ID |
 | `scene_id` | 六个正式 scene 之一 |
-| `text` | 原始 prompt、语言与标注来源 |
-| `assets` | 首帧、reference、source archive、mask及`physics_annotation`等 |
+| `text` | Loader从`caption.json`物化的prompt、语言与标注来源 |
+| `assets` | 首帧、reference、source archive、mask、`caption`及`physics_annotation`等 |
 | `physics` | 结构化物理量及其可信状态 |
 | `appearance` | 非结构化物理量的情景、外观、环境、实验形式与采集信息 |
 | `temporal` | encoded time 与物理时间关系 |
@@ -72,22 +73,28 @@ train和ID test；历史release中的OOD字段仅用于复现旧结果，不能�
 
 ## 4. 原始 prompt
 
-原始文本固定保存在：
+原始文本的唯一存储位置是：
 
 ```text
-case.text.prompt
+assets/<scene_id>/<case_directory>/caption.json
+case.assets.caption
 ```
 
-`text` 的完整结构：
+文件结构：
 
 ```json
 {
   "schema_version": "1.0",
-  "prompt": "A pendulum bob of mass m and radius r is released ...",
+  "case_id": "<case_id>",
+  "scene_id": "pendulum",
+  "caption": "A pendulum bob of mass m and radius r is released ...",
   "language": "en",
   "annotation_source": "symbolic_physics_prompt_v1"
 }
 ```
+
+Loader校验身份后，将`caption`映射为兼容运行时字段`case.text.prompt`。Baseline和
+Evaluator只消费物化后的Case，不直接解析该文件。
 
 该prompt只描述可见物理过程和独立物理量的数学符号，不包含具体数值、单位、背景、颜色、
 视角或采集提示。碰撞scene
@@ -99,13 +106,7 @@ case.text.prompt
 
 ## 5. 结构化物理标注
 
-物理量与 prompt 并列保存在：
-
-```text
-case.physics.<parameter>
-```
-
-同一标注还作为Case资产保存在：
+结构化物理量的唯一存储位置是：
 
 ```text
 assets/<scene_id>/<case_directory>/physics.json
@@ -113,9 +114,8 @@ case.assets.physics_annotation
 ```
 
 文件必须恰好包含`schema_version`、`case_id`、`scene_id`和`physics`。Loader即使在
-`check_assets=False`时也会读取它，校验Case/Scene身份并要求文件中的`physics`与内联
-`case.physics`完全相等。内联字段继续作为Baseline和Evaluator的兼容运行时API，文件
-则把标注与物理资产Case绑定。
+`check_assets=False`时也会读取它，校验Case/Scene身份，并将`physics`物化为下游兼容的
+`case.physics`运行时API。
 
 每个 quantity 恰好包含：
 
@@ -153,6 +153,7 @@ prompt承担。
 
 ```text
 assets/<scene_id>/<descriptive_physical_case_directory>/
+├── caption.json            # 唯一的当前Case-local文本描述
 ├── physics.json            # 唯一的当前Case-local符号化标注
 ├── source/                 # 可选原始字节
 └── canonical/
@@ -164,6 +165,7 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 
 - Case 中的路径相对 `dataset.asset_root`；
 - 当前Release不维护资产锁或文件哈希；
+- `cases.jsonl`只引用`caption.json`和`physics.json`，不复制二者内容；
 - 12.0.0 的目录名只编码 scene 的主要结构化物理量与唯一身份后缀，不使用背景、
   颜色或采集环境；
 - I2V 使用显式 `assets.first_frame`，不在运行时从 GT 临时补首帧；
@@ -252,7 +254,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --check-assets
 ```
 
-Loader 同时验证 descriptor、Case schema、scene、View coverage、路径越界、
-Case-local物理文件的身份与内联`case.physics`一致性。当前发布门禁还应运行
+Loader 同时验证 descriptor、Case schema、scene、View coverage、路径越界，以及
+Case-local caption/physics文件的身份与内容。当前发布门禁还应运行
 `scripts/validate_dataset_v12.py`；
 旧Release没有活动兼容门禁。

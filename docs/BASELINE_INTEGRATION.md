@@ -3,9 +3,10 @@
 本文面向新增模型或算法。当前新实验只使用 schema 5.0 Baseline；Task 不再为物理信息
 使用方式复制实验臂。
 
-当前Dataset 12.0.0在每条Case中同时提供内联`case.physics`和锁定的
-`assets.physics_annotation`（`physics.json`）。Loader已保证两者完全一致；Baseline仍应使用
-`case.physics[annotated=true]`这一稳定运行时API，不应绕过Loader直接解释文件格式。
+当前Dataset 12.0.0将caption与结构化物理量分别保存在Case-local `caption.json`和
+`physics.json`。Loader将它们物化为`case.text`和`case.physics`；Baseline应使用
+`case.text.prompt`与`case.physics[annotated=true]`这两个稳定运行时API，不应绕过Loader
+直接解释文件格式。
 每个独立quantity都保留非负`value`、`unit`和稳定`symbol`；方向来自Case prompt，不能
 再从数值正负号推断。`annotated=false`字段只供Evaluator和审计使用。
 

@@ -1,0 +1,8 @@
+{
+  "annotation_source": "symbolic_physics_prompt_v1",
+  "caption": "The left ball has mass m_1, radius r_1, and initial speed v_1, while the right ball has mass m_2, radius r_2, and initial speed v_2. The left ball is initially stationary, the right ball moves left, and they undergo a one-dimensional central collision.",
+  "case_id": "collision_supp_20260729_img_0971_two_ball_single_incident",
+  "language": "en",
+  "scene_id": "collision_1d",
+  "schema_version": "1.0"
+}

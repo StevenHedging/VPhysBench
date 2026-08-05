@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Symbolic conditionable physical-video case independent of Dataset views",
+  "title": "Materialized symbolic physical-video Case returned by the Dataset Loader",
   "type": "object",
   "required": [
     "schema_version",

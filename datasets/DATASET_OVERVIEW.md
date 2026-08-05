@@ -15,10 +15,11 @@
 train与较小的ID test；View B完整覆盖所有Case并提供确定性分组。当前两份官方五场景
 Task暂不包含尚无专用Evaluator的`push_bottle`。
 
-每条Case的资产目录只包含一个结构化物理标注文件`physics.json`。它使用文档schema
-2.0，必须与`case.physics`完全一致，并通过`assets.physics_annotation`绑定到Case。
-quantity固定为`value/unit/annotated/symbol`四字段；数值表示非负大小，方向写入无数值
-prompt。背景、颜色、视角和实验形式不进入结构化物理量。
+每条Case的资产目录包含唯一的`caption.json`和`physics.json`，分别由
+`assets.caption`与`assets.physics_annotation`绑定。`cases.jsonl`不复制这两份内容；
+Loader读取后提供`case.text`和`case.physics`。quantity固定为
+`value/unit/annotated/symbol`四字段；数值表示非负大小，方向写入无数值caption。
+背景、颜色、视角和实验形式不进入结构化物理量。
 
 `datasets/releases/`只保留`12.0.0/`这一份运行快照。V1–V11已失活，不允许扫描、自动
 回退或作为当前运行输入；历史Dataset ID和迁移事实可从Git历史及

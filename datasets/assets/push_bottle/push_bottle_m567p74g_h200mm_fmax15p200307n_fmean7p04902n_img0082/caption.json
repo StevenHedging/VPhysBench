@@ -1,0 +1,8 @@
+{
+  "annotation_source": "symbolic_physics_prompt_v1",
+  "caption": "An upright bottle of mass m and height h is pushed near its top by a force with mean magnitude F_mean and peak magnitude F_peak, then tips and falls onto its side.",
+  "case_id": "push_bottle_m567p74g_h200mm_fmax15p200307n_fmean7p04902n_img0082",
+  "language": "en",
+  "scene_id": "push_bottle",
+  "schema_version": "1.0"
+}

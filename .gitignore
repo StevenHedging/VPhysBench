@@ -18,6 +18,7 @@ datasets/assets/*
 datasets/assets/*/*
 !datasets/assets/*/*/
 datasets/assets/*/*/*
+!datasets/assets/*/*/caption.json
 !datasets/assets/*/*/physics.json
 datasets/provenance/alignment/
 datasets/provenance/source_archives/

@@ -202,7 +202,7 @@ Task选择Dataset、View、scene、test范围、seed和评估协议。Task不决
 
 ### 阶段5：分配符号并编写文本描述
 
-`case.text.prompt`与首帧共同说明“接下来发生什么”。文本必须：
+Case caption与首帧共同说明“接下来发生什么”。文本必须：
 
 - 无歧义地描述可见物理过程；
 - 在需要时说明主体数量、哪个主体初始运动/静止、运动方向和交互顺序；
@@ -231,7 +231,8 @@ Task选择Dataset、View、scene、test范围、seed和评估协议。Task不决
 
 ```text
 assets/<scene_id>/<descriptive_physical_case_directory>/
-├── physics.json        # 与当前Case绑定的符号化结构化物理标注
+├── caption.json            # 与当前Case绑定的文本描述
+├── physics.json            # 与当前Case绑定的符号化结构化物理标注
 ├── source/                 # 可选的原始成员硬链接/副本
 └── canonical/
     ├── reference.mp4
@@ -268,10 +269,22 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 }
 ```
 
-Case schema必须为`5.0`，并增加`assets.physics_annotation`指向该文件；内联
-`case.physics`必须与文件中的
-`physics`深度相等。二者不能分别手工维护：导入脚本应从同一个标准化记录确定性生成，
-发布Loader会在任何资产检查模式下强制校验一致性。
+文本写入同目录的`caption.json`：
+
+```json
+{
+  "schema_version": "1.0",
+  "case_id": "<case_id>",
+  "scene_id": "<scene_id>",
+  "caption": "<无数值文本描述>",
+  "language": "en",
+  "annotation_source": "<source_id>"
+}
+```
+
+`cases.jsonl`只保存轻量索引：增加`assets.caption`和`assets.physics_annotation`，不要
+再内联`text`或`physics`。发布Loader会严格读取两份Case-local文件，并物化出下游使用的
+`case.text`与`case.physics`。
 
 新导入不得生成文档schema 1.0或三字段quantity，也不得创建版本后缀物理文件。
 新导入不能继续生成或覆盖这些历史文件。
@@ -320,12 +333,13 @@ Case schema必须为`5.0`，并增加`assets.physics_annotation`指向该文件�
 ### 阶段8：构建View B与新release
 
 - View B完整覆盖所有Case，使用冻结seed确定性分组；
-- 每个有效Case的`physics.json`必须作为`physics_annotation`绑定到Case；
+- 每个有效Case的`caption.json`和`physics.json`必须分别作为`caption`与
+  `physics_annotation`绑定到Case；
 - 新release在结构、路径和视觉检查通过后发布；
 - 旧release、旧Case和旧媒体不得就地覆盖。
 
-当前12.0.0采用精简运行时Release边界，只在Release目录放置`README.md`、
-`dataset.json`、`cases.jsonl`、`scenes/`和`views/`。
+当前12.0.0采用精简运行时Release边界，只在Release目录放置`dataset.json`、
+`cases.jsonl`、`scenes/`和`views/`。
 导入清单、排除表、迁移审核、验证报告及构建脚本应分别放在仓库`scripts/`和
 `datasets/provenance/`，不要复制进新Release。全局mask索引只有存在明确运行时消费者
 时才发布；逐Case mask manifest和对象mask资产始终由Case角色引用。
@@ -385,8 +399,8 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 - prompt数值/单位/背景/颜色/视角禁词检查；
 - `physics`中背景/颜色/环境字段检查；
 - View A完整覆盖、互斥、全部test为ID且每scene不超过约定上限；
-- Case-local`physics.json`身份、文档schema 2.0、四字段quantity及其与内联
-  `case.physics`的一致性检查；
+- Case-local `caption.json`与`physics.json`的身份、文档schema、唯一引用以及Loader
+  物化结果检查；
 - 所有quantity值有限且非负，symbol非空且Case内唯一；全部独立量symbol出现在prompt，
   审计量symbol不出现在prompt，速度方向由prompt无歧义表达。
 

@@ -691,6 +691,94 @@ def _validate_case_physics_annotation(
         )
 
 
+def _case_member_path(
+    case: dict[str, Any],
+    asset_root: Path,
+    role: str,
+) -> Path:
+    assets = case.get("assets")
+    if not isinstance(assets, dict):
+        raise ValueError(f"case {case.get('case_id')} assets must be an object")
+    relative = assets.get(role)
+    if not isinstance(relative, str) or not relative.strip():
+        raise ValueError(
+            f"case {case.get('case_id')} requires assets.{role}"
+        )
+    path = (asset_root / relative).resolve()
+    try:
+        path.relative_to(asset_root)
+    except ValueError as exc:
+        raise ValueError(
+            f"case {case.get('case_id')} {role} escapes asset_root"
+        ) from exc
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"case {case.get('case_id')} missing assets.{role}: {path}"
+        )
+    return path
+
+
+def _materialize_v5_case_members(
+    indexed_case: dict[str, Any],
+    asset_root: Path,
+) -> dict[str, Any]:
+    case_id = indexed_case.get("case_id")
+    scene_id = indexed_case.get("scene_id")
+    if "text" in indexed_case or "physics" in indexed_case:
+        raise ValueError(
+            f"schema 5 case index {case_id} must not inline text or physics"
+        )
+
+    caption = load_json(_case_member_path(indexed_case, asset_root, "caption"))
+    caption_fields = {
+        "schema_version",
+        "case_id",
+        "scene_id",
+        "caption",
+        "language",
+        "annotation_source",
+    }
+    if not isinstance(caption, dict) or set(caption) != caption_fields:
+        raise ValueError(
+            f"case {case_id} caption fields must be {sorted(caption_fields)}"
+        )
+    if caption["schema_version"] != "1.0":
+        raise ValueError(f"case {case_id} caption schema must be 1.0")
+    if caption["case_id"] != case_id:
+        raise ValueError(f"case {case_id} caption Case mismatch")
+    if caption["scene_id"] != scene_id:
+        raise ValueError(f"case {case_id} caption Scene mismatch")
+
+    physics_document = load_json(
+        _case_member_path(indexed_case, asset_root, "physics_annotation")
+    )
+    physics_fields = {"schema_version", "case_id", "scene_id", "physics"}
+    if (
+        not isinstance(physics_document, dict)
+        or set(physics_document) != physics_fields
+    ):
+        raise ValueError(
+            f"case {case_id} physics annotation fields must be "
+            f"{sorted(physics_fields)}"
+        )
+    if physics_document["schema_version"] != "2.0":
+        raise ValueError(f"case {case_id} physics annotation schema must be 2.0")
+    if physics_document["case_id"] != case_id:
+        raise ValueError(f"case {case_id} physics annotation Case mismatch")
+    if physics_document["scene_id"] != scene_id:
+        raise ValueError(f"case {case_id} physics annotation Scene mismatch")
+
+    case = dict(indexed_case)
+    case["text"] = {
+        "schema_version": caption["schema_version"],
+        "prompt": caption["caption"],
+        "language": caption["language"],
+        "annotation_source": caption["annotation_source"],
+    }
+    case["physics"] = physics_document["physics"]
+    return case
+
+
 def load_dataset(
     path: str | Path,
     *,
@@ -709,7 +797,16 @@ def load_dataset(
         label="dataset.dataset_id",
     )
     root = descriptor_path.parent
-    cases = tuple(load_jsonl(root / descriptor["cases"]))
+    indexed_cases = tuple(load_jsonl(root / descriptor["cases"]))
+    asset_root = (root / descriptor.get("asset_root", ".")).resolve()
+    cases = (
+        tuple(
+            _materialize_v5_case_members(case, asset_root)
+            for case in indexed_cases
+        )
+        if descriptor_schema == "5.0"
+        else indexed_cases
+    )
     scene_configs = _load_directory_json(root / descriptor["scene_catalog"])
     if not scene_configs:
         raise ValueError("dataset scene catalog is empty")
@@ -739,9 +836,9 @@ def load_dataset(
             scene_configs,
             views["view_a"],
         )
-    asset_root = (root / descriptor.get("asset_root", ".")).resolve()
-    for case in cases:
-        _validate_case_physics_annotation(case, asset_root)
+    if descriptor_schema != "5.0":
+        for case in cases:
+            _validate_case_physics_annotation(case, asset_root)
     asset_lock = _load_asset_lock(root, descriptor, cases)
     if check_asset_hashes and asset_lock is None:
         raise ValueError("cannot verify asset hashes without an asset lock")

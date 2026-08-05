@@ -4,7 +4,9 @@
     "release": "11.0.0"
   },
   "counts": {
+    "caption_documents_created": 799,
     "cases": 799,
+    "inline_members_removed": 1598,
     "media_changes": 0,
     "physics_documents_renamed": 799
   },

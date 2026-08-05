@@ -1,0 +1,8 @@
+{
+  "annotation_source": "symbolic_physics_prompt_v1",
+  "caption": "A pendulum bob of radius r is released from rest at initial angle θ_0 on a string of length l_s, then swings back and forth about the fixed pivot.",
+  "case_id": "pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a025deg",
+  "language": "en",
+  "scene_id": "pendulum",
+  "schema_version": "1.0"
+}

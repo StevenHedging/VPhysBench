@@ -1,0 +1,8 @@
+{
+  "annotation_source": "symbolic_physics_prompt_v1",
+  "caption": "A block of mass m and length l starts from rest and slides down an incline of angle θ. The kinetic friction coefficient between the block and incline is μ_k, and the gravitational acceleration is g.",
+  "case_id": "incline_r1_a32deg_bgblack_img_0345",
+  "language": "en",
+  "scene_id": "inclined_plane_slide",
+  "schema_version": "1.0"
+}

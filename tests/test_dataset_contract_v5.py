@@ -47,6 +47,7 @@ class DatasetContractV5Tests(unittest.TestCase):
         *,
         case: dict | None = None,
         document_schema: str = "2.0",
+        caption_case_id: str | None = None,
     ) -> Path:
         case = copy.deepcopy(case or self._case())
         assets = root / "assets"
@@ -61,7 +62,22 @@ class DatasetContractV5Tests(unittest.TestCase):
                 "physics": case["physics"],
             },
         )
-        write_jsonl(root / "cases.jsonl", [case])
+        write_json(
+            assets / "caption.json",
+            {
+                "schema_version": "1.0",
+                "case_id": caption_case_id or case["case_id"],
+                "scene_id": case["scene_id"],
+                "caption": case["text"]["prompt"],
+                "language": case["text"]["language"],
+                "annotation_source": case["text"]["annotation_source"],
+            },
+        )
+        indexed_case = copy.deepcopy(case)
+        indexed_case["assets"]["caption"] = "caption.json"
+        indexed_case.pop("text")
+        indexed_case.pop("physics")
+        write_jsonl(root / "cases.jsonl", [indexed_case])
         (root / "scenes").mkdir()
         write_json(
             root / "scenes" / "pendulum.json",
@@ -129,7 +145,19 @@ class DatasetContractV5Tests(unittest.TestCase):
                 self._write_dataset(Path(temporary)),
                 check_assets=False,
             )
+        self.assertEqual(
+            "A bob of mass m swings about a fixed pivot.",
+            snapshot.cases[0]["text"]["prompt"],
+        )
         self.assertEqual("m", snapshot.cases[0]["physics"]["bob_mass"]["symbol"])
+
+    def test_schema_5_rejects_caption_bound_to_another_case(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            descriptor = self._write_dataset(
+                Path(temporary), caption_case_id="pendulum_case_2"
+            )
+            with self.assertRaisesRegex(ValueError, "caption Case mismatch"):
+                load_dataset(descriptor, check_assets=False)
 
     def test_schema_5_quantity_contract_rejects_invalid_fields_and_values(self) -> None:
         mutations = {

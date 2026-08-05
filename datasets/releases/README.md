@@ -9,13 +9,11 @@
 代码必须使用`physbench.data_layout.LATEST_DATASET`，命令行必须显式传入当前descriptor。
 不得通过扫描目录、取最大版本、加载失败后回退或“找一个能加载的版本”来选择Release。
 
-12.0.0保持799条Case的媒体、View和来源事实不变，将已校正的V11内容固化为每条Case
-唯一的`physics.json`。quantity使用四字段
-`value/unit/annotated/symbol`；标量为非负大小，方向由英文符号prompt承担。它使用精简
-运行时快照：
+12.0.0保持799条Case的媒体、View和来源事实不变。每条Case在资产目录中拥有唯一的
+`caption.json`与`physics.json`；`cases.jsonl`只保存索引和其它Case元数据，Loader负责
+物化兼容的`case.text`与`case.physics`。它使用精简运行时快照：
 
 ```text
-README.md
 dataset.json
 cases.jsonl
 scenes/

@@ -15,11 +15,10 @@ Dataset release 是
 12.0.0 Dataset。推水瓶已进入Dataset，但专用评估器尚未完成，因此暂不进入这两份正式
 计分Task。
 
-12.0.0将V11已校正的结构化物理内容发布为每个Case唯一的
-`datasets/assets/<scene>/<case>/physics.json`，并通过
-`assets.physics_annotation`绑定到Case。内联`case.physics`仍是
-Baseline和Evaluator的兼容运行时API，Loader会强制校验两者完全一致。Release目录只
-保留`README.md`、`dataset.json`、`cases.jsonl`、`scenes/`和`views/`；迁移与验证证据位于
+12.0.0在每个Case资产目录中只保存一份`caption.json`和一份`physics.json`，并由
+`cases.jsonl`中的`assets.caption`与`assets.physics_annotation`引用。Loader读取这两个
+Case-local成员后，向Baseline和Evaluator提供兼容的`case.text`与`case.physics`运行时
+接口。Release目录只保留`dataset.json`、`cases.jsonl`、`scenes/`和`views/`；迁移与验证证据位于
 `datasets/provenance/releases/12.0.0/`。每个quantity包含稳定`symbol`；独立量的符号
 必须出现在无数值prompt中。所有标量保存为非负大小，运动方向由prompt表达。V1–V11
 不再保留为活动运行目录；历史结果依靠Git历史和provenance追溯。

@@ -4,6 +4,7 @@
 
 ```text
 assets/<scene_id>/<descriptive_physical_case_directory>/
+├── caption.json             # 唯一的当前文本描述
 ├── physics.json             # 唯一的当前符号化结构化物理标注
 ├── source/                  # 可选，原始逐字节文件
 └── canonical/
@@ -12,10 +13,10 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
     └── masks/               # 逐主体manifest、PNG和NPZ
 ```
 
-该物理文件必须恰好包含`schema_version`、`case_id`、`scene_id`和`physics`。
-12.0.0 Case的`assets.physics_annotation`引用`physics.json`；Loader校验其身份及
-`physics`与内联`case.physics`完全一致。媒体通常被Git忽略，Case根部的
-`physics.json`是例外，属于受版本控制的Dataset元数据。
+`caption.json`保存Case/Scene身份、caption、语言和标注来源；`physics.json`保存
+Case/Scene身份及`physics`。12.0.0的轻量Case索引通过`assets.caption`和
+`assets.physics_annotation`引用二者，Loader读取后物化`case.text`与`case.physics`。
+媒体通常被Git忽略，Case根部的两个JSON属于受版本控制的Dataset元数据。
 
 Canonical规则：
 
@@ -26,7 +27,7 @@ Canonical规则：
 - first frame与reference解码帧0一致；
 - canonical视频只做必要的事件窗口和空间裁剪，不为模型改FPS或抽帧；
 - 当前Release不维护资产锁或文件哈希；
-- 每个Case只能有一个`physics.json`，禁止新增版本后缀副本；
+- 每个Case只能有一个`caption.json`和一个`physics.json`，禁止新增版本后缀副本；
 - 任何模型侧媒体转换不得回写本目录。
 
 批量压缩来源只在`provenance/source_archives/<batch>/`保存一次；

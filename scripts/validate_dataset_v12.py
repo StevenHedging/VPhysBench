@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 from physbench.datasets import load_dataset
-from physbench.io import load_json, write_json
+from physbench.io import load_json, load_jsonl, write_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,7 +18,6 @@ V12_RELEASE_ROOT = DATASETS_ROOT / "releases" / "12.0.0"
 V12_DATASET = V12_RELEASE_ROOT / "dataset.json"
 PROVENANCE_ROOT = DATASETS_ROOT / "provenance" / "releases" / "12.0.0"
 EXPECTED_ENTRIES = {
-    "README.md",
     "dataset.json",
     "cases.jsonl",
     "scenes",
@@ -53,9 +52,25 @@ def validate_v12(
     if snapshot.asset_lock is not None:
         raise ValueError("V12 must not use an asset lock")
 
+    indexed_cases = load_jsonl(V12_RELEASE_ROOT / "cases.jsonl")
+    loaded_by_id = {case["case_id"]: case for case in snapshot.cases}
     physics_paths: set[str] = set()
+    caption_paths: set[str] = set()
     quantity_count = 0
-    for case in snapshot.cases:
+    for indexed_case in indexed_cases:
+        if "text" in indexed_case or "physics" in indexed_case:
+            raise ValueError(
+                f"inline member remains in Case index: {indexed_case['case_id']}"
+            )
+        case = loaded_by_id[indexed_case["case_id"]]
+        caption_relative = indexed_case["assets"].get("caption")
+        if (
+            not isinstance(caption_relative, str)
+            or not caption_relative.endswith("/caption.json")
+            or caption_relative in caption_paths
+        ):
+            raise ValueError(f"invalid caption path for {case['case_id']}")
+        caption_paths.add(caption_relative)
         relative = case["assets"].get("physics_annotation")
         if not isinstance(relative, str) or not relative.endswith("/physics.json"):
             raise ValueError(f"invalid physics path for {case['case_id']}")
@@ -81,16 +96,24 @@ def validate_v12(
             present = _symbol_in_prompt(symbol, prompt)
             if bool(quantity["annotated"]) != present:
                 raise ValueError(f"prompt-symbol mismatch {case['case_id']}/{name}")
-    if len(physics_paths) != 799 or quantity_count != 5286:
+    if (
+        len(caption_paths) != 799
+        or len(physics_paths) != 799
+        or quantity_count != 5286
+    ):
         raise ValueError("V12 physics coverage mismatch")
     if list(DATASETS_ROOT.glob("assets/*/*/physics.v11.json")):
         raise ValueError("versioned physics documents remain")
     if len(list(DATASETS_ROOT.glob("assets/*/*/physics.json"))) != 799:
         raise ValueError("V12 does not have exactly 799 physics.json files")
+    if len(list(DATASETS_ROOT.glob("assets/*/*/caption.json"))) != 799:
+        raise ValueError("V12 does not have exactly 799 caption.json files")
 
     evidence = load_json(PROVENANCE_ROOT / "migration.json")
     if evidence["counts"] != {
+        "caption_documents_created": 799,
         "cases": 799,
+        "inline_members_removed": 1598,
         "physics_documents_renamed": 799,
         "media_changes": 0,
     }:
@@ -100,6 +123,7 @@ def validate_v12(
         "status": "valid",
         "dataset_id": snapshot.dataset_id,
         "cases": 799,
+        "caption_documents": 799,
         "physics_documents": 799,
         "quantities": 5286,
         "media_changes": 0,

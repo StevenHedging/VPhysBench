@@ -1,0 +1,8 @@
+{
+  "annotation_source": "symbolic_physics_prompt_v1",
+  "caption": "A ball of mass m and radius r is launched horizontally to the left with initial speed v_0 from a vertical height h, then follows a downward parabolic path.",
+  "case_id": "parabolic_img_0652",
+  "language": "en",
+  "scene_id": "parabolic_motion",
+  "schema_version": "1.0"
+}
