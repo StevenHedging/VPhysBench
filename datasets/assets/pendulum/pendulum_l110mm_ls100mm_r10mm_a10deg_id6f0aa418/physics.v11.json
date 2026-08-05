@@ -1,0 +1,31 @@
+{
+  "case_id": "pendulum_r2_ltot0110mm_lrope0100mm_r010mm_a010deg",
+  "physics": {
+    "bob_radius": {
+      "annotated": true,
+      "symbol": "r",
+      "unit": "m",
+      "value": 0.01
+    },
+    "initial_angle": {
+      "annotated": true,
+      "symbol": "θ_0",
+      "unit": "deg",
+      "value": 10.0
+    },
+    "pendulum_length": {
+      "annotated": false,
+      "symbol": "l",
+      "unit": "m",
+      "value": 0.11
+    },
+    "string_length": {
+      "annotated": true,
+      "symbol": "l_s",
+      "unit": "m",
+      "value": 0.1
+    }
+  },
+  "scene_id": "pendulum",
+  "schema_version": "2.0"
+}

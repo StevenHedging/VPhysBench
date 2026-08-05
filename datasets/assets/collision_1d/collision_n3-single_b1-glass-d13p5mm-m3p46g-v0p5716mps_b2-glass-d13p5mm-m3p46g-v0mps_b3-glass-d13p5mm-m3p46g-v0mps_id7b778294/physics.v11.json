@@ -1,0 +1,67 @@
+{
+  "case_id": "collision_r2_glass_marble_glass_marble_glass_marble_v05716",
+  "physics": {
+    "ball_1_initial_velocity": {
+      "annotated": true,
+      "symbol": "v_1",
+      "unit": "m/s",
+      "value": 0.5716
+    },
+    "ball_1_mass": {
+      "annotated": true,
+      "symbol": "m_1",
+      "unit": "kg",
+      "value": 0.00346
+    },
+    "ball_1_radius": {
+      "annotated": true,
+      "symbol": "r_1",
+      "unit": "m",
+      "value": 0.00675
+    },
+    "ball_2_initial_velocity": {
+      "annotated": true,
+      "symbol": "v_2",
+      "unit": "m/s",
+      "value": 0.0
+    },
+    "ball_2_mass": {
+      "annotated": true,
+      "symbol": "m_2",
+      "unit": "kg",
+      "value": 0.00346
+    },
+    "ball_2_radius": {
+      "annotated": true,
+      "symbol": "r_2",
+      "unit": "m",
+      "value": 0.00675
+    },
+    "ball_3_initial_velocity": {
+      "annotated": true,
+      "symbol": "v_3",
+      "unit": "m/s",
+      "value": 0.0
+    },
+    "ball_3_mass": {
+      "annotated": true,
+      "symbol": "m_3",
+      "unit": "kg",
+      "value": 0.00346
+    },
+    "ball_3_radius": {
+      "annotated": true,
+      "symbol": "r_3",
+      "unit": "m",
+      "value": 0.00675
+    },
+    "striker_initial_velocity": {
+      "annotated": false,
+      "symbol": "v_s",
+      "unit": "m/s",
+      "value": 0.5716
+    }
+  },
+  "scene_id": "collision_1d",
+  "schema_version": "2.0"
+}

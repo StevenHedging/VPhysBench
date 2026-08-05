@@ -8,7 +8,7 @@ import unittest
 from collections import Counter
 from pathlib import Path
 
-from physbench.io import load_jsonl
+from physbench.io import canonical_sha256, load_json, load_jsonl
 from scripts import build_dataset_v11 as builder
 
 
@@ -314,6 +314,110 @@ class SymbolicPhysicsMigrationTests(unittest.TestCase):
                     check=False,
                 )
                 self.assertEqual(0 if ignored else 1, result.returncode)
+
+
+class DatasetV11ReleaseTests(unittest.TestCase):
+    def test_release_is_minimal_and_preserves_non_symbolic_case_facts(self) -> None:
+        self.assertEqual(
+            {
+                "README.md",
+                "dataset.json",
+                "release.json",
+                "cases.jsonl",
+                "assets.lock.json",
+                "scenes",
+                "views",
+            },
+            {path.name for path in builder.OUTPUT_RELEASE_ROOT.iterdir()},
+        )
+        old_cases = load_jsonl(builder.BASE_RELEASE_ROOT / "cases.jsonl")
+        new_cases = load_jsonl(builder.OUTPUT_RELEASE_ROOT / "cases.jsonl")
+        self.assertEqual(799, len(new_cases))
+        physics_paths = {
+            case["assets"]["physics_annotation"] for case in new_cases
+        }
+        self.assertEqual(799, len(physics_paths))
+        self.assertTrue(
+            all(path.endswith("/physics.v11.json") for path in physics_paths)
+        )
+        for old, new in zip(old_cases, new_cases, strict=True):
+            self.assertEqual(old["case_id"], new["case_id"])
+            comparable_old = copy.deepcopy(old)
+            comparable_new = copy.deepcopy(new)
+            for value in (comparable_old, comparable_new):
+                value.pop("schema_version")
+                value.pop("text")
+                value.pop("physics")
+                value["assets"].pop("physics_annotation")
+            self.assertEqual(comparable_old, comparable_new)
+
+    def test_release_lock_replaces_only_v10_physics_documents(self) -> None:
+        old = load_json(builder.BASE_RELEASE_ROOT / "assets.lock.json")
+        new = load_json(builder.OUTPUT_RELEASE_ROOT / "assets.lock.json")
+        old_nonphysics = {
+            item["path"]: item
+            for item in old["files"]
+            if not item["path"].endswith("/physics.json")
+        }
+        new_nonphysics = {
+            item["path"]: item
+            for item in new["files"]
+            if not item["path"].endswith("/physics.v11.json")
+        }
+        self.assertEqual(5239, len(old_nonphysics))
+        self.assertEqual(old_nonphysics, new_nonphysics)
+        self.assertEqual(6038, len(new["files"]))
+
+    def test_views_are_byte_identical_and_scenes_change_only_classification(self) -> None:
+        for old_path in sorted((builder.BASE_RELEASE_ROOT / "views").glob("*.json")):
+            self.assertEqual(
+                old_path.read_bytes(),
+                (builder.OUTPUT_RELEASE_ROOT / "views" / old_path.name).read_bytes(),
+            )
+        for old_path in sorted((builder.BASE_RELEASE_ROOT / "scenes").glob("*.json")):
+            old = load_json(old_path)
+            new = load_json(builder.OUTPUT_RELEASE_ROOT / "scenes" / old_path.name)
+            for value in (old, new):
+                value.pop("structured_physics_parameters")
+                value.pop("non_conditionable_physics_parameters")
+            self.assertEqual(old, new)
+
+    def test_migration_evidence_has_exact_counts_and_digests(self) -> None:
+        evidence = load_json(builder.PROVENANCE_ROOT / "migration.json")
+        self.assertEqual(
+            {
+                "cases": 799,
+                "physics_documents": 799,
+                "locked_assets": 6038,
+                "value_changes": 494,
+                "annotation_flag_changes": 715,
+                "prompt_changes": 799,
+                "media_changes": 0,
+            },
+            evidence["counts"],
+        )
+        expected_symbol_digest = canonical_sha256(
+            [
+                {"scene_id": scene, "parameter": name, "symbol": symbol}
+                for (scene, name), symbol in sorted(builder.SYMBOLS.items())
+            ]
+        )
+        self.assertEqual(expected_symbol_digest, evidence["symbol_table_sha256"])
+        self.assertEqual(
+            {
+                path.name: canonical_sha256(load_json(path))
+                for path in sorted((builder.BASE_RELEASE_ROOT / "views").glob("*.json"))
+            },
+            evidence["view_digests"],
+        )
+        self.assertEqual(
+            load_json(builder.BASE_RELEASE_ROOT / "release.json")["dataset_digest"],
+            evidence["base"]["dataset_digest"],
+        )
+        self.assertEqual(
+            load_json(builder.OUTPUT_RELEASE_ROOT / "release.json")["dataset_digest"],
+            evidence["output"]["dataset_digest"],
+        )
 
 
 if __name__ == "__main__":

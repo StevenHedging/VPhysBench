@@ -1,0 +1,49 @@
+{
+  "case_id": "collision_supp_20260729_img_1097_two_ball_single_incident",
+  "physics": {
+    "ball_1_initial_velocity": {
+      "annotated": true,
+      "symbol": "v_1",
+      "unit": "m/s",
+      "value": 0.0
+    },
+    "ball_1_mass": {
+      "annotated": true,
+      "symbol": "m_1",
+      "unit": "kg",
+      "value": 0.06477
+    },
+    "ball_1_radius": {
+      "annotated": true,
+      "symbol": "r_1",
+      "unit": "m",
+      "value": 0.0125
+    },
+    "ball_2_initial_velocity": {
+      "annotated": true,
+      "symbol": "v_2",
+      "unit": "m/s",
+      "value": 0.19402405898331443
+    },
+    "ball_2_mass": {
+      "annotated": true,
+      "symbol": "m_2",
+      "unit": "kg",
+      "value": 0.03313
+    },
+    "ball_2_radius": {
+      "annotated": true,
+      "symbol": "r_2",
+      "unit": "m",
+      "value": 0.01
+    },
+    "striker_initial_velocity": {
+      "annotated": false,
+      "symbol": "v_s",
+      "unit": "m/s",
+      "value": 0.19402405898331443
+    }
+  },
+  "scene_id": "collision_1d",
+  "schema_version": "2.0"
+}

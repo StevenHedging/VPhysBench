@@ -1,0 +1,65 @@
+{
+  "constraints": [
+    "Canonical frame zero is the visually reviewed frame immediately before or at the onset of sliding"
+  ],
+  "display_name": "斜面下滑",
+  "generalization_factors": [
+    {
+      "category": "environment",
+      "name": "background",
+      "source": "appearance.background"
+    },
+    {
+      "category": "appearance",
+      "name": "block_appearance",
+      "source": "appearance.block"
+    },
+    {
+      "category": "environment",
+      "name": "track_material",
+      "source": "appearance.track_material"
+    },
+    {
+      "category": "acquisition",
+      "name": "viewpoint",
+      "source": "appearance.camera"
+    }
+  ],
+  "metric_spec": {
+    "common_sense_checks": [
+      "motion remains along the incline",
+      "speed increases monotonically after release",
+      "continuous contact with the track",
+      "no spontaneous uphill reversal"
+    ],
+    "prediction_quantities": [
+      "trajectory",
+      "acceleration",
+      "time to descend"
+    ],
+    "prediction_subjects": [
+      "sliding_block"
+    ],
+    "visual_attributes": [
+      "background",
+      "block identity",
+      "track contact",
+      "fixed camera"
+    ]
+  },
+  "non_conditionable_physics_parameters": [
+    "calibration_length",
+    "friction_force",
+    "initial_velocity",
+    "theoretical_acceleration"
+  ],
+  "scene_id": "inclined_plane_slide",
+  "schema_version": "2.0",
+  "structured_physics_parameters": [
+    "block_length",
+    "block_mass",
+    "gravity_acceleration",
+    "incline_angle",
+    "kinetic_friction_coefficient"
+  ]
+}
