@@ -5,12 +5,12 @@
 当前 DatasetSnapshot：
 
 ```text
-dataset_id:     physics_video_six_scene_v8
-release:        8.0.0
-descriptor:     datasets/releases/8.0.0/dataset.json
+dataset_id:     physics_video_six_scene_v10
+release:        10.0.0
+descriptor:     datasets/releases/10.0.0/dataset.json
 cases:          799
-locked assets:  2032
-dataset digest: 08eb448fe9d02ad0593be4ab50db1b0741e8f77798e3d02df45962e9e857ea8e
+locked assets:  6038
+dataset digest: 199f84da728b45208c06fc8aabd2cfe9ecf1dfe3ce7f622725df3a102f03a335
 ```
 
 `datasets/` 是唯一权威数据根。Baseline、cache 和 run 不能回写或覆盖这里的资产。
@@ -32,17 +32,18 @@ datasets/
 ├── provenance/
 │   ├── source_archives/
 │   ├── imports/
-│   └── source_docs/
+│   ├── source_docs/
+│   └── releases/10.0.0/         # V10迁移与独立验证证据
 └── releases/
-    ├── 1.0.0/…7.0.0/            # 历史结果引用的只读元数据
-    ├── 8.0.0/
-    │   ├── dataset.json          # 当前运行默认入口
-    │   ├── release.json          # Dataset 与资产集合 digest
-    │   ├── cases.jsonl           # Case schema 4.0
-    │   ├── assets.lock.json      # 引用资产的大小和 SHA-256
-    │   ├── scenes/
-    │   └── views/
-    └── 9.0.0/                    # 8.0.0 Case + 首帧逐主体mask
+    ├── 1.0.0/…9.0.0/            # 历史结果引用的只读快照
+    └── 10.0.0/
+        ├── README.md
+        ├── dataset.json          # 当前运行默认入口
+        ├── release.json          # Dataset 与资产集合 digest
+        ├── cases.jsonl           # Case schema 4.0
+        ├── assets.lock.json      # 引用资产的大小和 SHA-256
+        ├── scenes/
+        └── views/
 ```
 
 原始压缩包按字节保存在 `provenance/source_archives/`；冻结release仍可通过兼容路径
@@ -59,7 +60,7 @@ datasets/
 | `case_id` | 全 Dataset 唯一稳定 ID |
 | `scene_id` | 六个正式 scene 之一 |
 | `text` | 原始 prompt、语言与标注来源 |
-| `assets` | 首帧、reference、source archive、可选 mask 等 |
+| `assets` | 首帧、reference、source archive、mask及`physics_annotation`等 |
 | `physics` | 结构化物理量及其可信状态 |
 | `appearance` | 非结构化物理量的情景、外观、环境、实验形式与采集信息 |
 | `temporal` | encoded time 与物理时间关系 |
@@ -95,7 +96,7 @@ case.text.prompt
 
 该 prompt 只描述可见物理过程，不包含数值、背景、颜色、视角或采集提示。碰撞scene
 逐case明确主体数量、初始运动/静止角色和运动方向，避免用一个模板模糊不同情景；
-8.0.0中的100条单摆统一采用“首帧静止释放并绕固定点往复摆动”的语义。所有Baseline
+10.0.0中的100条单摆统一采用“首帧静止释放并绕固定点往复摆动”的语义。所有Baseline
 都以它为文本源；是否原样使用、
 追加结构化物理文本或转换成其它模型表示，由 Baseline 的 `input_policy` 与 adapter
 决定。Task 不生成或选择 prompt。
@@ -107,6 +108,18 @@ case.text.prompt
 ```text
 case.physics.<parameter>
 ```
+
+同一标注还作为Case资产保存在：
+
+```text
+assets/<scene_id>/<case_directory>/physics.json
+case.assets.physics_annotation
+```
+
+文件必须恰好包含`schema_version`、`case_id`、`scene_id`和`physics`。Loader即使在
+`check_assets=False`时也会读取它，校验Case/Scene身份并要求文件中的`physics`与内联
+`case.physics`完全相等。内联字段继续作为Baseline和Evaluator的兼容运行时API，文件
+则把标注与物理资产Case绑定并纳入资产锁。
 
 每个 quantity 至少包含：
 
@@ -138,6 +151,7 @@ conditionable Case 中。数据导入时无法建立可靠标注对应关系的�
 
 ```text
 assets/<scene_id>/<descriptive_physical_case_directory>/
+├── physics.json            # Case-local结构化物理标注
 ├── source/                 # 可选原始字节
 └── canonical/
     ├── reference.mp4       # evaluator 使用的物理参考
@@ -148,7 +162,7 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 
 - Case 中的路径相对 `dataset.asset_root`；
 - `assets.lock.json` 封印所有引用文件的大小和 SHA-256；
-- 8.0.0 的目录名只编码 scene 的主要结构化物理量与唯一身份后缀，不使用背景、
+- 10.0.0 的目录名只编码 scene 的主要结构化物理量与唯一身份后缀，不使用背景、
   颜色或采集环境；
 - I2V 使用显式 `assets.first_frame`，不在运行时从 GT 临时补首帧；
 - reference/source/provenance 属于 evaluator 或数据审计，不交给生成 driver；
@@ -166,7 +180,7 @@ reference与源MOV逐字节一致，首帧由该reference第0帧解码得到。
 V2V 必须另外登记独立输入视频资产，例如 `assets.input_video`。其中
 `conditioning_video` 只是 adapter 对该输入媒体 channel 的角色名，不表示 Task
 层的物理信息分组；reference、physics reference 和 source video 均禁止充当 V2V 输入。
-当前 8.0.0 release 没有正式 `assets.input_video`，因此 V2V Bundle 只是接口能力，
+当前10.0.0 Release没有正式`assets.input_video`，因此V2V Bundle只是接口能力，
 不能直接运行官方数据。
 
 ## 7. View A：finetune_eval
@@ -202,7 +216,28 @@ View B：
 - group 尽量均衡；
 - group 是报告/抽样维度，不表达模型的物理使用方式，也不等同于 ID/OOD 层级。
 
-## 9. Release 8.0.0 的新增数据与划分
+## 9. Release 10.0.0 的Case-local物理标注
+
+10.0.0以9.0.0为唯一基础，不改变799条Case的任何已有事实：
+
+- 每条Case新增一个自描述`physics.json`和`assets.physics_annotation`；
+- 799个物理文件与5,239个既有资产共同形成6,038项资产锁；
+- 物理指纹保持
+  `ca8c593007ce4e3d6d7437656f9aa0c3f32b5ff245a4592c570297ba9f957d1a`；
+- Release只保留七类运行时内容；构建和验证证据移到
+  `datasets/provenance/releases/10.0.0/`；
+- 不复制9.0.0的全局`masks.jsonl`，逐Case mask manifest与对象mask资产保持不变；
+- 删除32个只剩未引用`source/first_frame_source.png`的旧碰撞路径残留；删除前路径、
+  大小和SHA-256已写入`migration.json`。这些PNG未被Git跟踪，删除后不能从Git直接恢复。
+
+可复现构建和独立验证：
+
+```bash
+PYTHONPATH=src:. python scripts/build_dataset_v10.py --check
+PYTHONPATH=src:. python scripts/validate_dataset_v10.py
+```
+
+## 10. Release 8.0.0 的新增数据与划分（历史）
 
 8.0.0基于7.0.0新增两批数据，并重新划分全部scene：
 
@@ -221,7 +256,7 @@ View B：
 PYTHONPATH=src:. python3 scripts/build_dataset_v8.py
 ```
 
-## 10. Release 6.0.0 的划分迁移（历史）
+## 11. Release 6.0.0 的划分迁移（历史）
 
 6.0.0 从5.1.0元数据生成，媒体字节和资产digest不变。5.1.0只提供Case事实和历史
 审计，不再约束碰撞scene的新划分：
@@ -246,7 +281,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
 
 逐scene数量、digest与零媒体改动声明见`6.0.0/migration_audit.json`。
 
-## 11. Release 5.1.0 的规范化语义（历史）
+## 12. Release 5.1.0 的规范化语义（历史）
 
 5.1.0 从不可变的 5.0.0 派生：
 
@@ -303,14 +338,14 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
 接受。正式 release 一旦发布应视为不可变。4.0.0 从 3.0.0 固化 Case schema 3.0 与
 canonical prompt 的历史迁移语义保持不变。
 
-## 12. 验收
+## 13. 验收
 
 快速 metadata 与资产存在性检查：
 
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/releases/8.0.0/dataset.json \
+  --dataset datasets/releases/10.0.0/dataset.json \
   --check-assets
 ```
 
@@ -319,9 +354,10 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   validate-dataset \
-  --dataset datasets/releases/8.0.0/dataset.json \
+  --dataset datasets/releases/10.0.0/dataset.json \
   --check-asset-hashes
 ```
 
 Loader 同时验证 descriptor、Case schema、scene、View coverage、路径越界、
-`assets.lock.json` 和 `release.json` 中的 Dataset digest。
+`assets.lock.json`、`release.json`中的Dataset digest，以及Case-local物理文件的身份与
+内联`case.physics`一致性。完整V10验收还应运行`scripts/validate_dataset_v10.py`。

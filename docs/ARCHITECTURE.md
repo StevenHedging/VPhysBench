@@ -36,7 +36,7 @@ Dataset 不认识具体模型；Task 不携带模型输入策略；Baseline 不�
 当前入口：
 
 ```text
-datasets/releases/8.0.0/dataset.json
+datasets/releases/10.0.0/dataset.json
 ```
 
 Dataset和Case使用schema 4.0。每个Case同时拥有：
@@ -44,11 +44,13 @@ Dataset和Case使用schema 4.0。每个Case同时拥有：
 - `text.prompt`：模型无关、未注入结构化物理量的原始文本描述；
 - `assets.first_frame` 等媒体；
 - `physics`：带 `value`、`unit`、`annotated` 的结构化物理量；
+- `assets.physics_annotation`：受资产锁保护的Case-local `physics.json`；
 - `appearance`、`temporal`；
 - evaluator-only reference 与 provenance。
 
 划分不属于Case字段；当前View A只包含train和ID test。原始prompt与物理标注并列保存，
-不由Task或Baseline配置临时生成。Release 8.0.0包含799条Case和六个scene。
+不由Task或Baseline配置临时生成。Release 10.0.0包含799条Case和六个scene。Loader
+要求Case-local物理文件与内联`case.physics`逐字段完全一致；后者继续作为运行时兼容API。
 
 ## 3. Task 是模型无关的评测定义
 

@@ -3,7 +3,9 @@
 > 审阅范围：`/root/Steven/physics_video_benchmark/datasets/` 及其直接引用的数据规范  
 > 审阅日期：2026-08-04（UTC）  
 > 本文主体是 7.0.0 历史审阅快照；当前目录入口见 `README.md`，路径已迁移到
-> `releases/<version>/dataset.json`。
+> `releases/10.0.0/dataset.json`。10.0.0的799条Case均有Case-local
+> `physics.json`，且7.0.0时代遗留的32个无引用碰撞目录已在V10迁移中删除；本文后文
+> 对旧目录和旧数量的描述只用于解释历史快照。
 
 ## 1. 一页概览
 
@@ -398,5 +400,5 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 - [划分审计](releases/7.0.0/split_audit.json)
 - [迁移审计](releases/7.0.0/migration_audit.json)
 - [文本/媒体修复审计](releases/7.0.0/text_video_alignment_repair.json)
-- [数据集规范（注意当前正文仍以 6.0.0 为主）](../docs/DATASET.md)
+- [当前数据集规范](../docs/DATASET.md)
 - [数据导入规范](../docs/DATASET_INGESTION.md)

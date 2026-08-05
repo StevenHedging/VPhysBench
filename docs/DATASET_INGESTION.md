@@ -220,6 +220,7 @@ Task选择Dataset、View、scene、test范围、seed和评估协议。Task不决
 
 ```text
 assets/<scene_id>/<descriptive_physical_case_directory>/
+├── physics.json            # 与Case绑定的结构化物理标注
 ├── source/                 # 可选的原始成员硬链接/副本
 └── canonical/
     ├── reference.mp4
@@ -241,6 +242,21 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 - 不确定的值不能用`0`代替缺失；若scene要求该量而无法得到，整条Case不进入正式集；
 - 多主体字段的编号必须与首帧从左到右/scene定义一致，并在provenance中记录映射依据；
 - 规格球等复用对象必须先查权威catalog，不能为同一规格创建多个别名。
+
+`physics.json`使用以下自描述包裹格式：
+
+```json
+{
+  "schema_version": "1.0",
+  "case_id": "<case_id>",
+  "scene_id": "<scene_id>",
+  "physics": {}
+}
+```
+
+Case必须增加`assets.physics_annotation`指向该文件，且内联`case.physics`必须与文件中的
+`physics`深度相等。二者不能分别手工维护：导入脚本应从同一个标准化记录确定性生成，
+发布Loader会在任何资产检查模式下强制校验一致性。
 
 ### 阶段7：设计View A的train/ID test
 
@@ -287,9 +303,16 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 
 - View B完整覆盖所有Case，使用冻结seed确定性分组；
 - `assets.lock.json`包含所有Case引用资产的相对路径、大小和SHA-256；
+- 每个有效Case的`physics.json`必须作为`physics_annotation`进入资产锁；
 - `release.json`冻结Dataset digest和资产集合digest；
 - 新release目录在全部校验通过前由staging原子生成；
 - 旧release、旧Case和旧媒体不得就地覆盖。
+
+当前10.0.0采用精简运行时Release边界，只在Release目录放置`README.md`、
+`dataset.json`、`release.json`、`cases.jsonl`、`assets.lock.json`、`scenes/`和`views/`。
+导入清单、排除表、迁移审核、验证报告及构建脚本应分别放在仓库`scripts/`和
+`datasets/provenance/`，不要复制进新Release。全局mask索引只有存在明确运行时消费者
+时才发布；逐Case mask manifest和对象mask资产始终由Case角色引用。
 
 ## 5. 必须保留的审计产物
 
@@ -351,6 +374,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 - `physics`中背景/颜色/环境字段检查；
 - View A完整覆盖、互斥、全部test为ID且每scene不超过约定上限；
 - release和asset digest复算。
+- Case-local`physics.json`身份、字段集合及其与内联`case.physics`的一致性检查。
 
 ### 6.2 视觉验收
 

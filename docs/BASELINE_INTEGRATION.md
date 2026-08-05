@@ -3,6 +3,10 @@
 本文面向新增模型或算法。当前新实验只使用 schema 5.0 Baseline；Task 不再为物理信息
 使用方式复制实验臂。
 
+当前Dataset 10.0.0在每条Case中同时提供内联`case.physics`和锁定的
+`assets.physics_annotation`。Loader已保证两者完全一致；Baseline仍应使用
+`case.physics[annotated=true]`这一稳定运行时API，不应绕过Loader直接解释文件格式。
+
 ## 1. 先确定 Baseline identity
 
 一个 Baseline identity 应固定：
