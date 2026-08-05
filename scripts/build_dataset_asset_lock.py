@@ -135,6 +135,27 @@ def _validate_candidate_snapshot(
             if not path.is_file():
                 raise FileNotFoundError(path)
             _copy_into_stage(root, stage_root, relative)
+        asset_root_value = descriptor.get("asset_root", ".")
+        source_asset_root = (root / asset_root_value).resolve()
+        stage_asset_root = (stage_root / asset_root_value).resolve()
+        if source_asset_root != stage_asset_root:
+            for case in cases:
+                physics_annotation = case.get("assets", {}).get(
+                    "physics_annotation"
+                )
+                if physics_annotation is None:
+                    continue
+                source = (source_asset_root / physics_annotation).resolve()
+                try:
+                    source.relative_to(source_asset_root)
+                except ValueError as exc:
+                    raise ValueError(
+                        f"case {case.get('case_id')} physics annotation escapes "
+                        "asset_root"
+                    ) from exc
+                target = stage_asset_root / physics_annotation
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
         write_json(stage_root / lock_relative, lock)
         write_json(stage_root / release_relative, release_manifest)
 

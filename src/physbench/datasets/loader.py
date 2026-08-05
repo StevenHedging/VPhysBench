@@ -632,6 +632,50 @@ def _load_asset_lock(
     return lock
 
 
+def _validate_case_physics_annotation(
+    case: dict[str, Any],
+    asset_root: Path,
+) -> None:
+    relative = case["assets"].get("physics_annotation")
+    if relative is None:
+        return
+    path = (asset_root / relative).resolve()
+    try:
+        path.relative_to(asset_root)
+    except ValueError as exc:
+        raise ValueError(
+            f"case {case['case_id']} physics annotation escapes asset_root"
+        ) from exc
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"case {case['case_id']} missing assets.physics_annotation: {path}"
+        )
+    document = load_json(path)
+    expected_fields = {"schema_version", "case_id", "scene_id", "physics"}
+    if not isinstance(document, dict) or set(document) != expected_fields:
+        raise ValueError(
+            f"case {case['case_id']} physics annotation fields must be "
+            f"{sorted(expected_fields)}"
+        )
+    if document["schema_version"] != "1.0":
+        raise ValueError(
+            f"case {case['case_id']} physics annotation schema must be 1.0"
+        )
+    if document["case_id"] != case["case_id"]:
+        raise ValueError(
+            f"case {case['case_id']} physics annotation Case mismatch"
+        )
+    if document["scene_id"] != case["scene_id"]:
+        raise ValueError(
+            f"case {case['case_id']} physics annotation Scene mismatch"
+        )
+    if document["physics"] != case["physics"]:
+        raise ValueError(
+            f"case {case['case_id']} physics annotation differs from inline "
+            "case.physics"
+        )
+
+
 def load_dataset(
     path: str | Path,
     *,
@@ -681,6 +725,8 @@ def load_dataset(
             views["view_a"],
         )
     asset_root = (root / descriptor.get("asset_root", ".")).resolve()
+    for case in cases:
+        _validate_case_physics_annotation(case, asset_root)
     asset_lock = _load_asset_lock(root, descriptor, cases)
     if check_asset_hashes and asset_lock is None:
         raise ValueError("cannot verify asset hashes without an asset lock")

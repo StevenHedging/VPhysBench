@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import tempfile
 import unittest
 from pathlib import Path
@@ -110,6 +111,7 @@ class AssetLockBuilderSafetyTests(unittest.TestCase):
         root: Path,
         *,
         valid_case: bool,
+        physics_document: dict | None = None,
     ) -> Path:
         (root / "assets").mkdir(parents=True)
         (root / "assets" / "frame.bin").write_bytes(b"immutable asset\n")
@@ -145,6 +147,9 @@ class AssetLockBuilderSafetyTests(unittest.TestCase):
         }
         if not valid_case:
             case["text"].pop("prompt")
+        if physics_document is not None:
+            write_json(root / "assets" / "physics.json", physics_document)
+            case["assets"]["physics_annotation"] = "physics.json"
         write_jsonl(root / "cases.jsonl", [case])
         write_json(
             root / "scenes" / "pendulum.json",
@@ -179,6 +184,28 @@ class AssetLockBuilderSafetyTests(unittest.TestCase):
         }
         write_json(root / "dataset.json", descriptor)
         return root / "dataset.json"
+
+    @staticmethod
+    def _physics_document() -> dict:
+        return {
+            "schema_version": "1.0",
+            "case_id": "pendulum_case_1",
+            "scene_id": "pendulum",
+            "physics": {
+                "gravity": {
+                    "value": 9.8,
+                    "unit": "m/s^2",
+                    "annotated": True,
+                }
+            },
+        }
+
+    @staticmethod
+    def _remove_release_contract(descriptor: Path) -> None:
+        value = load_json(descriptor)
+        value.pop("asset_lock")
+        value.pop("release_manifest")
+        write_json(descriptor, value)
 
     def test_default_dataset_is_the_latest_release(self) -> None:
         self.assertEqual(
@@ -253,6 +280,86 @@ class AssetLockBuilderSafetyTests(unittest.TestCase):
             hash_file.assert_called_once_with(
                 (root / "assets" / "frame.bin").resolve()
             )
+
+    def test_matching_case_local_physics_loads_and_is_locked(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "9.9.9"
+            root.mkdir()
+            descriptor = self._write_dataset(
+                root,
+                valid_case=True,
+                physics_document=self._physics_document(),
+            )
+
+            output, _ = build_dataset_asset_lock.rebuild_asset_lock(descriptor)
+            snapshot = load_dataset(descriptor, check_asset_hashes=True)
+
+            self.assertEqual(
+                ["frame.bin", "physics.json"],
+                [item["path"] for item in load_json(output)["files"]],
+            )
+            self.assertEqual(
+                "physics.json",
+                snapshot.cases[0]["assets"]["physics_annotation"],
+            )
+
+    def test_case_local_physics_mismatch_is_rejected_without_asset_checks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "9.9.9"
+            root.mkdir()
+            document = self._physics_document()
+            document["physics"]["gravity"]["value"] = 9.81
+            descriptor = self._write_dataset(
+                root,
+                valid_case=True,
+                physics_document=document,
+            )
+            self._remove_release_contract(descriptor)
+
+            with self.assertRaisesRegex(
+                ValueError, "differs from inline case.physics"
+            ):
+                load_dataset(descriptor, check_assets=False)
+
+    def test_missing_case_local_physics_is_rejected_without_asset_checks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "9.9.9"
+            root.mkdir()
+            descriptor = self._write_dataset(
+                root,
+                valid_case=True,
+                physics_document=self._physics_document(),
+            )
+            self._remove_release_contract(descriptor)
+            (root / "assets" / "physics.json").unlink()
+
+            with self.assertRaisesRegex(
+                FileNotFoundError, "missing assets.physics_annotation"
+            ):
+                load_dataset(descriptor, check_assets=False)
+
+    def test_case_local_physics_identity_and_schema_are_exact(self) -> None:
+        mutations = {
+            "schema": ("schema_version", "2.0", "schema must be 1.0"),
+            "case": ("case_id", "pendulum_case_2", "Case mismatch"),
+            "scene": ("scene_id", "collision_1d", "Scene mismatch"),
+            "fields": ("unexpected", True, "fields must be"),
+        }
+        for label, (field, value, message) in mutations.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / "9.9.9"
+                root.mkdir()
+                document = copy.deepcopy(self._physics_document())
+                document[field] = value
+                descriptor = self._write_dataset(
+                    root,
+                    valid_case=True,
+                    physics_document=document,
+                )
+                self._remove_release_contract(descriptor)
+
+                with self.assertRaisesRegex(ValueError, message):
+                    load_dataset(descriptor, check_assets=False)
 
 
 if __name__ == "__main__":
