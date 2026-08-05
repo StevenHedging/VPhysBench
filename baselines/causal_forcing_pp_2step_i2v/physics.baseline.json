@@ -14,7 +14,8 @@
     "collision_1d",
     "inclined_plane_slide",
     "parabolic_motion",
-    "uniform_circular_motion"
+    "uniform_circular_motion",
+    "push_bottle"
   ],
   "capabilities": {
     "task_families": ["direct_eval"],
@@ -86,7 +87,7 @@
     "first_frame_policy": "require_asset",
     "physics_transform": {
       "type": "append_structured_text_v1",
-      "template_set": "six_scene_physics_clauses_v1"
+      "template_set": "six_scene_physics_clauses_v2"
     },
     "spatial": {
       "type": "causal_forcing_fixed_token_budget_v1",
@@ -96,7 +97,8 @@
         "collision_1d": {"width": 832, "height": 480},
         "inclined_plane_slide": {"width": 832, "height": 480},
         "parabolic_motion": {"width": 480, "height": 832},
-        "uniform_circular_motion": {"width": 480, "height": 832}
+        "uniform_circular_motion": {"width": 480, "height": 832},
+        "push_bottle": {"width": 480, "height": 832}
       }
     },
     "temporal": {

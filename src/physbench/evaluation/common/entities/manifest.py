@@ -109,6 +109,7 @@ class PhysicalAttribute:
     value: float
     unit: str
     annotated: bool
+    symbol: str | None = None
     source_parameter: str | None = None
 
     def __post_init__(self) -> None:
@@ -141,6 +142,15 @@ class PhysicalAttribute:
             raise ValueError(
                 f"physical attribute {self.name}.annotated must be boolean"
             )
+        if self.symbol is not None:
+            object.__setattr__(
+                self,
+                "symbol",
+                _required_text(
+                    self.symbol,
+                    label=f"physical attribute {self.name}.symbol",
+                ),
+            )
         if self.source_parameter is not None:
             object.__setattr__(
                 self,
@@ -154,12 +164,15 @@ class PhysicalAttribute:
             )
 
     def to_canonical_dict(self) -> dict[str, Any]:
-        return {
+        output = {
             "value": self.value,
             "unit": self.unit,
             "annotated": self.annotated,
             "source_parameter": self.source_parameter,
         }
+        if self.symbol is not None:
+            output["symbol"] = self.symbol
+        return output
 
 
 def _attribute_from_quantity(
@@ -172,7 +185,7 @@ def _attribute_from_quantity(
     raw = _mapping(quantity, label=label)
     _strict_fields(
         raw,
-        allowed={"value", "unit", "annotated"},
+        allowed={"value", "unit", "annotated", "symbol"},
         required={"value", "unit", "annotated"},
         label=label,
     )
@@ -181,6 +194,7 @@ def _attribute_from_quantity(
         value=raw["value"],
         unit=raw["unit"],
         annotated=raw["annotated"],
+        symbol=raw.get("symbol"),
         source_parameter=source_parameter,
     )
 
@@ -224,7 +238,13 @@ def _parse_physical_attributes(
                 raw_quantity,
                 label=f"{label}.{name}",
             )
-            allowed = {"value", "unit", "annotated", "source_parameter"}
+            allowed = {
+                "value",
+                "unit",
+                "annotated",
+                "symbol",
+                "source_parameter",
+            }
             _strict_fields(
                 quantity,
                 allowed=allowed,
@@ -245,6 +265,7 @@ def _parse_physical_attributes(
                 value=quantity["value"],
                 unit=quantity["unit"],
                 annotated=quantity["annotated"],
+                symbol=quantity.get("symbol"),
                 source_parameter=source_parameter,
             )
             if source_parameter is not None and case_physics is not None:
@@ -921,11 +942,21 @@ def _collision_entities(
             for attribute in entities[striker_index - 1].physical_attributes
             if attribute.name == "initial_velocity"
         )
-        if (
-            alias.value != striker_velocity.value
-            or alias.unit != striker_velocity.unit
-            or alias.annotated != striker_velocity.annotated
-        ):
+        schema_version = case.get("schema_version")
+        if schema_version == "5.0":
+            disagrees = (
+                abs(alias.value) != abs(striker_velocity.value)
+                or alias.unit != striker_velocity.unit
+                or alias.annotated
+                or not striker_velocity.annotated
+            )
+        else:
+            disagrees = (
+                alias.value != striker_velocity.value
+                or alias.unit != striker_velocity.unit
+                or alias.annotated != striker_velocity.annotated
+            )
+        if disagrees:
             raise ValueError(
                 "case.physics.striker_initial_velocity disagrees with "
                 f"case.physics.ball_{striker_index}_initial_velocity"

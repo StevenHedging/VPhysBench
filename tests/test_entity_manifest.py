@@ -19,12 +19,16 @@ def _quantity(
     unit: str,
     *,
     annotated: bool = True,
+    symbol: str | None = None,
 ) -> dict[str, object]:
-    return {
+    quantity: dict[str, object] = {
         "value": value,
         "unit": unit,
         "annotated": annotated,
     }
+    if symbol is not None:
+        quantity["symbol"] = symbol
+    return quantity
 
 
 def _collision_case(count: int) -> dict[str, object]:
@@ -179,6 +183,50 @@ class EntityManifestTests(unittest.TestCase):
         case["appearance"]["striker_ball_index"] = 3  # type: ignore[index]
         with self.assertRaisesRegex(ValueError, "striker_ball_index"):
             materialize_entity_manifest(case)
+
+    def test_schema_5_collision_alias_uses_magnitude_and_preserves_symbols(
+        self,
+    ) -> None:
+        case = _collision_case(2)
+        case["schema_version"] = "5.0"
+        case["appearance"]["striker_ball_index"] = 2  # type: ignore[index]
+        case["physics"]["ball_1_initial_velocity"] = _quantity(  # type: ignore[index]
+            0.0, "m/s", symbol="v_1"
+        )
+        case["physics"]["ball_2_initial_velocity"] = _quantity(  # type: ignore[index]
+            -0.2, "m/s", symbol="v_2"
+        )
+        case["physics"]["ball_1_mass"]["symbol"] = "m_1"  # type: ignore[index]
+        case["physics"]["ball_1_radius"]["symbol"] = "r_1"  # type: ignore[index]
+        case["physics"]["ball_2_mass"]["symbol"] = "m_2"  # type: ignore[index]
+        case["physics"]["ball_2_radius"]["symbol"] = "r_2"  # type: ignore[index]
+        case["physics"]["striker_initial_velocity"] = _quantity(  # type: ignore[index]
+            0.2, "m/s", annotated=False, symbol="v_s"
+        )
+
+        manifest = materialize_entity_manifest(case)
+        velocity = next(
+            attribute
+            for attribute in manifest.entities[1].physical_attributes
+            if attribute.name == "initial_velocity"
+        )
+        self.assertEqual("v_2", velocity.symbol)
+        self.assertEqual(
+            "v_2",
+            manifest.to_canonical_dict()["entities"][1][
+                "physical_attributes"
+            ]["initial_velocity"]["symbol"],
+        )
+
+        historical = copy.deepcopy(case)
+        historical["schema_version"] = "4.0"
+        for quantity in historical["physics"].values():  # type: ignore[union-attr]
+            quantity.pop("symbol")
+        historical["physics"]["striker_initial_velocity"][  # type: ignore[index]
+            "annotated"
+        ] = True
+        with self.assertRaisesRegex(ValueError, "striker_initial_velocity disagrees"):
+            materialize_entity_manifest(historical)
 
     def test_parabolic_motion_has_projectile_and_launch_frame(self) -> None:
         case = {

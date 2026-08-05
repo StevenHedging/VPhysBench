@@ -31,7 +31,7 @@ PHYSICS_TEMPLATE = (
     / "physbench"
     / "baseline_plugins"
     / "resources"
-    / "six_scene_physics_clauses_v1.json"
+    / "six_scene_physics_clauses_v2.json"
 )
 DIRECT_TASK = ROOT / "tasks" / "official" / "five_scene_direct_eval.json"
 SCENES = {
@@ -115,17 +115,17 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
         self.assertEqual(
             {
                 "type": "append_structured_text_v1",
-                "template_set": "six_scene_physics_clauses_v1",
+                "template_set": "six_scene_physics_clauses_v2",
             },
             self.physics_manifest["adapter"]["physics_transform"],
         )
         self.assertEqual(
-            SCENES, set(self.physics_manifest["supported_scenes"])
+            SCENES | {"push_bottle"},
+            set(self.physics_manifest["supported_scenes"]),
         )
         for field in (
             "baseline_version",
             "implementation",
-            "supported_scenes",
             "capabilities",
             "model",
             "runtime",
@@ -140,13 +140,17 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
             "kind",
             "preset",
             "first_frame_policy",
-            "spatial",
             "temporal",
         ):
             self.assertEqual(
                 self.manifest["adapter"][field],
                 self.physics_manifest["adapter"][field],
                 field,
+            )
+        for scene_id in SCENES:
+            self.assertEqual(
+                self.manifest["adapter"]["spatial"]["scene_profiles"][scene_id],
+                self.physics_manifest["adapter"]["spatial"]["scene_profiles"][scene_id],
             )
 
     def test_both_causal_forcing_identities_are_discoverable(self) -> None:
@@ -215,10 +219,6 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
         self,
     ) -> None:
         seen_scenes = set()
-        self.assertEqual(
-            self.adapter.materialization_fingerprint,
-            self.physics_adapter.materialization_fingerprint,
-        )
         self.assertNotEqual(
             self.adapter.fingerprint,
             self.physics_adapter.fingerprint,
@@ -231,7 +231,7 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
             physics = self.physics_adapter.adapt_case(case, role="eval")
             self.assertTrue(
                 physics["prompt"].startswith(
-                    case["text"]["prompt"] + " Physical parameters"
+                    case["text"]["prompt"] + " Numeric physical values"
                 ),
                 case["case_id"],
             )
@@ -277,8 +277,8 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
         self.assertIn("ball_1_initial_velocity", used)
         self.assertIn("ball_2_initial_velocity", used)
         self.assertNotIn("striker_initial_velocity", used)
-        self.assertIn("numbered from left to right", adaptation["prompt"])
-        self.assertIn("rightward velocity is positive", adaptation["prompt"])
+        self.assertIn("numbered left to right", adaptation["prompt"])
+        self.assertNotIn("rightward velocity is positive", adaptation["prompt"])
 
     def test_parabolic_physics_prompt_uses_all_four_conditionable_values(
         self,
@@ -298,7 +298,7 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
             },
             set(adaptation["used_parameters"]),
         )
-        self.assertIn("initial horizontal speed", adaptation["prompt"])
+        self.assertIn("v_0 is", adaptation["prompt"])
         self.assertNotIn("photogate", adaptation["prompt"].lower())
 
     def test_inclined_plane_prompt_uses_all_conditionable_physics(self) -> None:
@@ -313,11 +313,8 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
                 "incline_angle",
                 "block_length",
                 "block_mass",
-                "calibration_length",
                 "gravity_acceleration",
                 "kinetic_friction_coefficient",
-                "friction_force",
-                "theoretical_acceleration",
             },
             set(adaptation["used_parameters"]),
         )
@@ -328,14 +325,14 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
     ) -> None:
         template = load_json(PHYSICS_TEMPLATE)
         self.assertEqual(
-            "six_scene_physics_clauses_v1",
+            "six_scene_physics_clauses_v2",
             template["template_set_id"],
         )
-        self.assertEqual(SCENES, set(template["scenes"]))
+        self.assertEqual(SCENES | {"push_bottle"}, set(template["scenes"]))
         dependencies = self.physics_adapter.dependency_paths()
         self.assertIn(
             "src/physbench/baseline_plugins/resources/"
-            "six_scene_physics_clauses_v1.json",
+            "six_scene_physics_clauses_v2.json",
             dependencies,
         )
 

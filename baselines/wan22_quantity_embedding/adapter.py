@@ -183,6 +183,7 @@ class QuantityRegistry:
                 )
             quantity = {
                 "name": name,
+                "symbol": raw.get("symbol"),
                 "raw_value": value,
                 "raw_unit": unit,
                 "rendered_value": rendered_value,
@@ -201,7 +202,11 @@ class QuantityRegistry:
                 quantity=rendered_quantity
             )
             clauses.append((clause, quantity))
-            used[name] = {"value": value, "unit": unit}
+            used[name] = {
+                "value": value,
+                "unit": unit,
+                "symbol": raw.get("symbol"),
+            }
 
         if not clauses:
             raise ValueError(

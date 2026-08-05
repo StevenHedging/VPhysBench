@@ -7,7 +7,7 @@
     "driver": "driver.py",
     "fingerprint_paths": [
       "adapter.py",
-      "quantity_registry.json"
+      "quantity_registry_v2.json"
     ]
   },
   "description": "WAN2.2-TI2V-5B with DiT LoRA and a trainable SI-aware quantity encoder that replaces each physical quantity span in frozen UMT5 context before DiT cross-attention.",
@@ -16,7 +16,9 @@
     "free_fall",
     "collision_1d",
     "inclined_plane_slide",
-    "uniform_circular_motion"
+    "uniform_circular_motion",
+    "parabolic_motion",
+    "push_bottle"
   ],
   "capabilities": {
     "task_families": ["finetune_eval"],
@@ -78,13 +80,15 @@
       "preset": "standard_i2v_v1",
       "first_frame_policy": "require_asset",
       "cache_policy": "content_addressed_shared_immutable",
-      "quantity_registry": "quantity_registry.json",
+      "quantity_registry": "quantity_registry_v2.json",
       "spatial": {
         "type": "wan22_spatial_v1",
         "scene_profiles": {
           "pendulum": {"name": "portrait", "width": 480, "height": 832},
           "free_fall": {"name": "portrait", "width": 480, "height": 832},
           "uniform_circular_motion": {"name": "portrait", "width": 480, "height": 832},
+          "parabolic_motion": {"name": "portrait", "width": 480, "height": 832},
+          "push_bottle": {"name": "portrait", "width": 480, "height": 832},
           "collision_1d": {"name": "landscape", "width": 832, "height": 480},
           "inclined_plane_slide": {"name": "landscape", "width": 832, "height": 480}
         }

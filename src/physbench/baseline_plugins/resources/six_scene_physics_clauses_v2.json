@@ -1,0 +1,89 @@
+{
+  "schema_version": "1.0",
+  "template_set_id": "six_scene_physics_clauses_v2",
+  "description": "V11 independent structured quantities appended to Dataset-owned symbolic prompts.",
+  "scenes": {
+    "pendulum": {
+      "parameter_intro": " Numeric physical values: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "string_length", "required": true, "expected_unit": "m", "precision": 3, "template": "l_s is {value} meters"},
+        {"name": "bob_radius", "required": true, "expected_unit": "m", "precision": 3, "template": "r is {value} meters"},
+        {"name": "initial_angle", "required": true, "expected_unit": "deg", "precision": 1, "template": "θ_0 is {value} degrees"},
+        {"name": "bob_mass", "required": false, "expected_unit": "kg", "precision": 5, "template": "m is {value} kilograms"}
+      ]
+    },
+    "free_fall": {
+      "parameter_intro": " Numeric physical values: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "initial_height", "required": true, "expected_unit": "m", "precision": 2, "template": "the initial height is {value} meters"},
+        {"name": "ball_radius", "required": true, "expected_unit": "m", "precision": 4, "template": "the ball radius is {value} meters"},
+        {"name": "ball_mass", "required": false, "expected_unit": "kg", "precision": 5, "template": "the ball mass is {value} kilograms"},
+        {"name": "initial_velocity", "required": false, "expected_unit": "m/s", "precision": 3, "template": "the initial speed is {value} meters per second"}
+      ]
+    },
+    "collision_1d": {
+      "parameter_intro": " Numeric physical values (balls are numbered left to right): ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "ball_1_initial_velocity", "required": true, "expected_unit": "m/s", "precision": 4, "template": "v_1 is {value} meters per second"},
+        {"name": "ball_1_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "m_1 is {value} kilograms"},
+        {"name": "ball_1_radius", "required": true, "expected_unit": "m", "precision": 5, "template": "r_1 is {value} meters"},
+        {"name": "ball_2_initial_velocity", "required": true, "expected_unit": "m/s", "precision": 4, "template": "v_2 is {value} meters per second"},
+        {"name": "ball_2_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "m_2 is {value} kilograms"},
+        {"name": "ball_2_radius", "required": true, "expected_unit": "m", "precision": 5, "template": "r_2 is {value} meters"},
+        {"name": "ball_3_initial_velocity", "required": false, "expected_unit": "m/s", "precision": 4, "template": "v_3 is {value} meters per second"},
+        {"name": "ball_3_mass", "required": false, "expected_unit": "kg", "precision": 5, "template": "m_3 is {value} kilograms"},
+        {"name": "ball_3_radius", "required": false, "expected_unit": "m", "precision": 5, "template": "r_3 is {value} meters"}
+      ]
+    },
+    "inclined_plane_slide": {
+      "parameter_intro": " Numeric physical values: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "incline_angle", "required": true, "expected_unit": "deg", "precision": 1, "template": "θ is {value} degrees"},
+        {"name": "block_length", "required": true, "expected_unit": "m", "precision": 3, "template": "l is {value} meters"},
+        {"name": "block_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "m is {value} kilograms"},
+        {"name": "gravity_acceleration", "required": true, "expected_unit": "m/s^2", "precision": 5, "template": "g is {value} meters per second squared"},
+        {"name": "kinetic_friction_coefficient", "required": true, "expected_unit": "1", "precision": 3, "template": "μ_k is {value}"}
+      ]
+    },
+    "parabolic_motion": {
+      "parameter_intro": " Numeric physical values: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "initial_horizontal_velocity", "required": true, "expected_unit": "m/s", "precision": 4, "template": "v_0 is {value} meters per second"},
+        {"name": "launch_height", "required": true, "expected_unit": "m", "precision": 3, "template": "h is {value} meters"},
+        {"name": "ball_radius", "required": true, "expected_unit": "m", "precision": 5, "template": "r is {value} meters"},
+        {"name": "ball_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "m is {value} kilograms"}
+      ]
+    },
+    "push_bottle": {
+      "parameter_intro": " Numeric physical values: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "bottle_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "m is {value} kilograms"},
+        {"name": "bottle_height", "required": true, "expected_unit": "m", "precision": 3, "template": "h is {value} meters"},
+        {"name": "mean_applied_force", "required": true, "expected_unit": "N", "precision": 5, "template": "F_mean is {value} newtons"},
+        {"name": "peak_applied_force", "required": true, "expected_unit": "N", "precision": 5, "template": "F_peak is {value} newtons"}
+      ]
+    },
+    "uniform_circular_motion": {
+      "parameter_intro": " Numeric physical values: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "angular_velocity", "required": true, "expected_unit": "deg/s", "precision": 2, "template": "ω is {value} degrees per second"},
+        {"name": "object_1_orbit_radius", "required": true, "expected_unit": "m", "precision": 2, "template": "r_1 is {value} meters"},
+        {"name": "object_2_orbit_radius", "required": false, "expected_unit": "m", "precision": 2, "template": "r_2 is {value} meters"}
+      ]
+    }
+  }
+}

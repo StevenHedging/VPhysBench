@@ -123,6 +123,7 @@ class StructuredPhysicsTextRenderer:
                 "value": value,
                 "unit": unit,
                 "rendered_value": rendered_value,
+                "symbol": quantity.get("symbol"),
             }
         if not rendered_clauses:
             return base_prompt, used_parameters

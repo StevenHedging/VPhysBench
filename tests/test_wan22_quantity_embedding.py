@@ -67,6 +67,7 @@ BASELINE = (
 )
 QUANTITY_FIELDS = {
     "name",
+    "symbol",
     "raw_value",
     "raw_unit",
     "rendered_value",
@@ -462,6 +463,7 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
                     names.append(name)
                     sentinels.append(quantity["sentinel"])
                     source = case["physics"][name]
+                    self.assertEqual(source.get("symbol"), quantity["symbol"])
                     self.assertIs(source["annotated"], True)
                     self.assertEqual(source["value"], quantity["raw_value"])
                     self.assertEqual(source["unit"], quantity["raw_unit"])
@@ -562,7 +564,9 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
             native["physics"]["quantities"],
         )
         self.assertEqual(ids.shape, mask.shape)
-        self.assertEqual(7, len(audits))
+        self.assertEqual(
+            len(native["physics"]["quantities"]), len(audits)
+        )
         positions = [item["token_span"][0] for item in audits]
         self.assertEqual(len(positions), len(set(positions)))
         self.assertTrue(all(
