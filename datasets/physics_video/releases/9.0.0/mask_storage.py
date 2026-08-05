@@ -33,6 +33,23 @@ def normalize_binary_mask(mask: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(mask > 0, dtype=np.uint8)
 
 
+def read_binary_png(
+    path: Path,
+    expected_shape: tuple[int, int] | None = None,
+) -> np.ndarray:
+    """Decode a PNG and normalize either approved binary representation."""
+
+    mask = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+    if mask is None:
+        raise ValueError(f"cannot decode mask PNG: {path}")
+    binary = normalize_binary_mask(mask)
+    if expected_shape is not None and binary.shape != expected_shape:
+        raise ValueError(
+            f"mask PNG shape {binary.shape} does not match {expected_shape}: {path}"
+        )
+    return binary
+
+
 def _storage_metadata(npz_asset: str) -> dict[str, Any]:
     relative = PurePosixPath(npz_asset)
     if relative.is_absolute() or ".." in relative.parts:

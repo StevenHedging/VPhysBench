@@ -39,6 +39,7 @@ DEFAULT_CHECKPOINT_SHA256 = (
 SAM2_CONFIG = "configs/sam2.1/sam2.1_hiera_t.yaml"
 GENERATOR_ID = "sam2.1_hiera_tiny_first_frame_physical_subject_v1"
 
+sys.path.insert(0, str(RELEASE_ROOT))
 sys.path.insert(0, str(REPOSITORY_ROOT / "src"))
 sys.path.insert(0, str(SAM2_ROOT))
 
@@ -51,6 +52,7 @@ from physbench.evaluation.scenes.parabolic_motion.evaluator import (  # noqa: E4
 from physbench.evaluation.scenes.pendulum.open_world import (  # noqa: E402
     _circle_candidates as pendulum_circle_candidates,
 )
+from mask_storage import upgrade_manifest_storage, write_mask_bundle  # noqa: E402
 
 
 SINGLE_SUBJECTS = {
@@ -1108,13 +1110,15 @@ def process_case(
         instances.append(
             {
                 "mask_id": f"{index:02d}",
+                "npz_index": index - 1,
                 **declaration,
                 "asset": mask_relative.as_posix(),
                 **geometry,
                 "segmentation": segmentation,
             }
         )
-    manifest = {
+    npz_relative = mask_directory_relative / "masks.npz"
+    manifest = upgrade_manifest_storage({
         "schema_version": "1.0",
         "case_id": case["case_id"],
         "scene_id": scene,
@@ -1122,8 +1126,6 @@ def process_case(
         "frame_index": 0,
         "frame_scope": "first_frame_only",
         "image_shape_hw": list(frame.shape[:2]),
-        "dtype": "uint8",
-        "values": [0, 1],
         "ordering": "row_major_top_to_bottom_then_left_to_right; collision preserves declared left-to-right ball order",
         "generator": {
             "id": GENERATOR_ID,
@@ -1134,14 +1136,18 @@ def process_case(
         },
         "localization": localization,
         "instances": instances,
-    }
+    }, npz_relative.as_posix())
+    instances = manifest["instances"]
     if materialize:
         mask_directory = PHYSICS_VIDEO_ROOT / mask_directory_relative
-        mask_directory.mkdir(parents=True, exist_ok=True)
-        for index, mask in enumerate(masks, start=1):
-            path = mask_directory / f"{index:02d}.png"
-            if not cv2.imwrite(str(path), mask.astype(np.uint8)):
-                raise ValueError(f"failed to write {path}")
+        storage = write_mask_bundle(
+            mask_directory,
+            masks,
+            instances,
+            npz_relative.as_posix(),
+        )
+        if storage != manifest["storage"]:
+            raise ValueError("generated Mask storage metadata is inconsistent")
         (mask_directory / "manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
         )
@@ -1157,6 +1163,7 @@ def process_case(
         "scene_id": scene,
         "status": "complete",
         "mask_directory": mask_directory_relative.as_posix(),
+        "npz_asset": npz_relative.as_posix(),
         "instances": instances,
         "localization": localization,
     }
@@ -1287,7 +1294,7 @@ def main() -> int:
     order = {case["case_id"]: index for index, case in enumerate(cases)}
     results.sort(key=lambda item: order[item["case_id"]])
     report = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "generator_id": GENERATOR_ID,
         "base_release": "8.0.0",
         "target_release": "9.0.0",
