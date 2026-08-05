@@ -12,6 +12,9 @@ The 10.0.0 release directory must contain only files required to load,
 validate, select, and reproduce the runtime Dataset snapshot. Build tools and
 historical evidence belong outside the immutable runtime snapshot.
 
+Remove the 32 unreferenced pre-5.1 collision asset directories after proving
+that they are legacy path remnants rather than independent Cases.
+
 ## Non-goals
 
 - Do not normalize, rename, regroup, reorder, derive, or otherwise revise any
@@ -21,6 +24,8 @@ historical evidence belong outside the immutable runtime snapshot.
 - Do not remove inline `case.physics` in this release.
 - Do not introduce Dataset or Case schema 5.0.
 - Do not delete or rewrite historical releases 1.0.0 through 9.0.0.
+- Do not delete an asset path referenced by Dataset 9.0.0 or any file from a
+  current descriptive Case directory.
 - Do not copy 9.0.0 build scripts, reports, or legacy audit files into
   10.0.0.
 
@@ -67,10 +72,14 @@ member of the asset Case and places it under the asset lock. Loading 10.0.0
 must reject a missing document, a Case or Scene identity mismatch, or any
 difference between the file's `physics` object and inline `case.physics`.
 
-The 32 scene/Case asset directories not referenced by the 799 Cases in 9.0.0
-are outside the 10.0.0 release and must not receive a generated
-`physics.json`. The `source_archives` compatibility link is not a Case tree and
-is excluded from this inventory.
+The 32 `collision_r2_*` directories outside the 799 current Case directories
+are V5.0 path remnants. Their Case IDs remain active, but V5.1 moved each Case
+to one descriptive physical directory and V5.1 through V9 reference only that
+new directory. Each remnant contains exactly one unreferenced derived file,
+`source/first_frame_source.png`, and no canonical video or source video. They
+must not receive a duplicate `physics.json`; they are deleted under the legacy
+cleanup contract below. The `source_archives` compatibility link is not a Case
+tree and is excluded from this inventory.
 
 Case-local `physics.json` files are source-controlled Dataset metadata even
 though they live below the generally ignored media tree. Ignore rules and
@@ -141,11 +150,36 @@ datasets/provenance/releases/10.0.0/
 
 `migration.json` records base/output identities and digests, expected and
 actual Case/file counts, the unchanged physics fingerprint, and the explicit
-list of runtime files. `validation.json` records the completed invariant
-checks and final digests. Historical correction catalogs, directory mappings,
-split audits, mask-generation reports, and storage-upgrade reports remain in
-the historical releases that produced them and are referenced from the V10
-README instead of being copied.
+list of runtime files. It also records every removed legacy directory and the
+relative path, byte size, and SHA-256 of its sole file before deletion.
+`validation.json` records the completed invariant checks and final digests.
+Historical correction catalogs, directory mappings, split audits,
+mask-generation reports, and storage-upgrade reports remain in the historical
+releases that produced them and are referenced from the V10 README instead of
+being copied.
+
+## Legacy Asset Cleanup Contract
+
+The V10 build performs cleanup only after its read-only preflight has proved
+all of the following for an exact, enumerated set of 32 paths:
+
+1. every directory is an immediate child of `datasets/assets/collision_1d`;
+2. every name begins with `collision_r2_`;
+3. the directory is not the resolved Case directory of any 9.0.0 Case;
+4. its corresponding Case ID exists in 9.0.0 and resolves to a different,
+   descriptive physical directory;
+5. its complete filesystem content is exactly one regular file at
+   `source/first_frame_source.png` plus the two required directories;
+6. no release Case asset role from 1.0.0 through 9.0.0 references that
+   remaining file;
+7. the file's byte size and SHA-256 have been captured in the migration
+   evidence.
+
+Deletion uses the enumerated absolute paths produced by preflight and never a
+recursive wildcard rooted above an individual legacy directory. These ignored
+PNG files are not recoverable from Git after deletion; their identity remains
+in the V10 migration evidence and their source experiments remain represented
+by the active descriptive Case directories and the preserved source archives.
 
 ## Loader and Validation
 
@@ -173,7 +207,8 @@ The V10 release validator additionally proves:
   10.0.0;
 - all 5,239 pre-existing locked paths retain their size and SHA-256;
 - the 799 new paths are the only new locked assets;
-- no unreferenced asset directory receives a physics document;
+- the exact 32 validated legacy directories have been removed and no other
+  asset directory has been deleted;
 - the release directory contains exactly the seven documented runtime
   components and no build/audit/report payloads;
 - a full `check_asset_hashes=True` Dataset load succeeds.
@@ -200,6 +235,9 @@ and release-local historical documentation remain unchanged.
 - Existing `physics.json` content must either be byte-identical to the
   deterministic candidate or cause the build to abort; the builder never
   silently replaces conflicting annotation content.
+- Legacy directories are deleted only after the complete 32-directory cleanup
+  preflight and migration evidence generation succeed; any unexpected member
+  aborts cleanup before the first deletion.
 - Release metadata is built in a temporary sibling directory and published by
   rename only after validation.
 - If validation fails, 10.0.0 is not published. Deterministically written,
@@ -220,3 +258,6 @@ and release-local historical documentation remain unchanged.
    the slim release/provenance boundary.
 9. Historical releases and non-V10 physical annotation content remain
    unchanged.
+10. Exactly 32 validated legacy `collision_r2_*` directories are removed, and
+    the migration evidence records the path, size, and SHA-256 of each deleted
+    PNG.
