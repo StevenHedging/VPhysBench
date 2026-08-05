@@ -42,6 +42,7 @@ V8_DATASET = V8_RELEASE_ROOT / "dataset.json"
 V9_RELEASE_ROOT = RELEASES_ROOT / "9.0.0"
 V9_DATASET = V9_RELEASE_ROOT / "dataset.json"
 
-# Keep the operational default pinned until Tasks are deliberately migrated
-# from the v8 Dataset identity to the mask-augmented v9 identity.
-LATEST_DATASET = V8_DATASET
+V10_RELEASE_ROOT = RELEASES_ROOT / "10.0.0"
+V10_DATASET = V10_RELEASE_ROOT / "dataset.json"
+
+LATEST_DATASET = V10_DATASET

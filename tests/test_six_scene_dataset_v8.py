@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import unittest
 
-from physbench.data_layout import LATEST_DATASET, V8_DATASET
+from physbench.data_layout import LATEST_DATASET, V8_DATASET, V10_DATASET
 from physbench.datasets import load_dataset
 from physbench.tasks import load_task, plan_atomic_task
 
@@ -22,15 +22,17 @@ PENDULUM_PROMPT = (
 class SixSceneDatasetV8Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.dataset = load_dataset(V8_DATASET, check_assets=True)
+        cls.v8 = load_dataset(V8_DATASET, check_assets=True)
+        cls.dataset = load_dataset(V10_DATASET, check_assets=True)
         cls.view = cls.dataset.views["view_a"]
 
-    def test_v8_is_current_and_complete(self) -> None:
-        self.assertEqual(V8_DATASET, LATEST_DATASET)
-        self.assertEqual("physics_video_six_scene_v8", self.dataset.dataset_id)
-        self.assertEqual("8.0.0", self.dataset.descriptor["release"])
+    def test_v10_is_current_and_complete(self) -> None:
+        self.assertEqual(V10_DATASET, LATEST_DATASET)
+        self.assertNotEqual(V8_DATASET, LATEST_DATASET)
+        self.assertEqual("physics_video_six_scene_v10", self.dataset.dataset_id)
+        self.assertEqual("10.0.0", self.dataset.descriptor["release"])
         self.assertEqual(799, len(self.dataset.cases))
-        self.assertEqual(2032, len(self.dataset.asset_lock["files"]))
+        self.assertEqual(6038, len(self.dataset.asset_lock["files"]))
         self.assertEqual(
             {
                 "collision_1d",
@@ -135,21 +137,23 @@ class SixSceneDatasetV8Tests(unittest.TestCase):
         )
 
     def test_official_five_evaluator_scene_tasks_use_v8(self) -> None:
-        finetune = plan_atomic_task(
-            load_task(FINETUNE_TASK), self.dataset
-        ).value
+        finetune_task = load_task(FINETUNE_TASK)
+        direct_task = load_task(DIRECT_TASK)
+        self.assertEqual("five_scene_finetune_eval_v10", finetune_task.task_id)
+        self.assertEqual("five_scene_direct_eval_v10", direct_task.task_id)
+        finetune = plan_atomic_task(finetune_task, self.dataset).value
         self.assertEqual(582, len(finetune["train_case_ids"]))
         self.assertEqual(76, len(finetune["jobs"]))
         self.assertTrue(all(
             annotation["generalization_regime"] == "id"
             for annotation in finetune["evaluation_annotations"].values()
         ))
-        direct = plan_atomic_task(load_task(DIRECT_TASK), self.dataset).value
+        direct = plan_atomic_task(direct_task, self.dataset).value
         self.assertEqual(658, len(direct["jobs"]))
         self.assertNotIn("push_bottle", direct["scene_ids"])
 
     def test_collision_replicate_components_do_not_cross_split(self) -> None:
-        audit = json.loads((self.dataset.root / "split_audit.json").read_text())
+        audit = json.loads((self.v8.root / "split_audit.json").read_text())
         collision = audit["collision_replicate_audit"]
         self.assertEqual(0, collision["replicate_component_overlap"])
         self.assertEqual(13, len(collision["strata"]))
