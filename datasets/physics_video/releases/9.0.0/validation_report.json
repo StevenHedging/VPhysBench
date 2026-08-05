@@ -1,14 +1,15 @@
 {
-  "asset_file_count": 4831,
+  "asset_file_count": 5239,
   "base_locked_assets_verified_unchanged": 2032,
   "case_count": 799,
   "checks": [
     "Case identity/order and all non-mask content equal 8.0.0",
     "first-frame-only manifest contract",
     "per-Case subject cardinality",
-    "NPZ keys/layout/dtype/value/ID/non-empty contract",
+    "per-object NPZ keys/[1,H,W]/dtype/value/ID/non-empty contract",
     "PNG shape/dtype/{0,255}/non-empty contract",
-    "pixel equality between every PNG and NPZ object plane",
+    "pixel equality between every PNG and its object NPZ plane",
+    "no legacy masks.npz files",
     "mask metadata area and centroid",
     "multi-instance uniqueness, exclusivity, and ordering",
     "mask index SHA-256",
@@ -16,10 +17,10 @@
     "9.0.0 loader validation with every asset SHA-256"
   ],
   "complete_case_count": 797,
-  "dataset_digest": "146f7a701dd5ce9530ed4d895f3278c416c67aa236b3a54032d7c4e20d875978",
+  "dataset_digest": "e18d80b5f1df6d63f600cde27a720a76441eaa8cfadac925dbed35ed05488590",
   "dataset_id": "physics_video_six_scene_v9",
   "mask_file_count": 1205,
-  "npz_file_count": 797,
+  "npz_file_count": 1205,
   "scene_counts": {
     "collision_1d": {
       "complete_cases": 330,
