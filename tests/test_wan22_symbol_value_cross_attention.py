@@ -25,6 +25,13 @@ from physbench.baselines.wan22_symbol_value_model import (
     pool_symbol_embeddings,
     symbol_value_inference_conditioning,
 )
+from physbench.baseline_api import (
+    discover_baseline_bundles,
+    load_baseline_bundle,
+    load_baseline_plugin,
+)
+from physbench.data_layout import LATEST_DATASET
+from physbench.datasets import load_dataset
 
 
 REGISTRY = (
@@ -32,6 +39,12 @@ REGISTRY = (
     / "baselines"
     / "wan22_symbol_value_cross_attention"
     / "quantity_registry.json"
+)
+BASELINE = (
+    ROOT
+    / "baselines"
+    / "wan22_symbol_value_cross_attention"
+    / "baseline.json"
 )
 
 
@@ -289,6 +302,58 @@ class SymbolValueCheckpointTests(unittest.TestCase):
                 )
         validate_lora.assert_not_called()
         self.assertFalse(hasattr(untouched, "loaded"))
+
+
+class SymbolValueBaselineIntegrationTests(unittest.TestCase):
+    def test_bundle_is_discovered_with_sealed_training_recipe(self) -> None:
+        baseline_id = "wan22_ti2v_5b_lora_r32_symbol_value_cross_attention_v1"
+        discovered = discover_baseline_bundles()
+        self.assertIn(baseline_id, discovered)
+        self.assertEqual(BASELINE, discovered[baseline_id])
+
+        bundle = load_baseline_bundle(BASELINE)
+        self.assertEqual("1.0.0", bundle.value["baseline_version"])
+        self.assertEqual(
+            ["symbol_value_cross_attention_v1"],
+            bundle.value["input_policy"]["physics"]["representations"],
+        )
+        trainer = bundle.value["trainer"]["config"]
+        self.assertEqual(32, trainer["rank"])
+        self.assertEqual(1, trainer["dataset_repeat"])
+        self.assertEqual(2, trainer["num_epochs"])
+        self.assertEqual(42, trainer["seed"])
+        conditioner = bundle.value["model"]["symbol_value_conditioner"]
+        self.assertEqual(4096, conditioner["text_hidden_size"])
+        self.assertEqual(512, conditioner["attention_hidden_size"])
+        self.assertEqual(8, conditioner["attention_heads"])
+
+    def test_real_dataset_cases_adapt_without_changing_captions(self) -> None:
+        dataset = load_dataset(LATEST_DATASET, check_assets=False)
+        bundle = load_baseline_bundle(BASELINE)
+        adapter = load_baseline_plugin(bundle).task_builder.data_adapter
+
+        for case in dataset.cases:
+            adaptation = adapter.adapt_case(case, role="eval")
+            self.assertEqual(
+                case["text"]["prompt"].strip(),
+                adaptation["native_inputs"]["text"]["prompt"],
+            )
+            quantities = adaptation["native_inputs"]["physics"]["quantities"]
+            self.assertTrue(quantities, case["case_id"])
+            self.assertTrue(all(item["symbol"] in case["text"]["prompt"]
+                                for item in quantities))
+
+    def test_runtime_entrypoints_are_declared_and_present(self) -> None:
+        expected = [
+            ROOT / "scripts" / "wan22_symbol_value_train.py",
+            ROOT / "scripts" / "train_wan22_symbol_value.sh",
+            ROOT / "scripts" / "wan22_symbol_value_generate.py",
+            ROOT / "scripts" / "wan22_symbol_value_generate_batch.py",
+            ROOT / "src" / "physbench" / "baselines" / "wan22_symbol_value.py",
+            ROOT / "src" / "physbench" / "baseline_plugins" / "wan22_symbol_value.py",
+            ROOT / "src" / "physbench" / "baseline_runtime" / "drivers" / "wan22_symbol_value.py",
+        ]
+        self.assertTrue(all(path.is_file() for path in expected))
 
 
 def _case() -> dict:
