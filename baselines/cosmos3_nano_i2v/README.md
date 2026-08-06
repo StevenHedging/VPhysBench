@@ -5,7 +5,7 @@ the same `nvidia/Cosmos3-Nano` checkpoint and managed driver:
 
 - `cosmos3_nano_i2v_generic` uses the Case's canonical `text.prompt` and
   explicitly ignores structured physics.
-- `cosmos3_nano_i2v_physics` appends the Case's annotated structured physics
+- `cosmos3_nano_i2v_physics` appends the Case's formal structured physics
   to that same prompt with `six_scene_physics_clauses_v2`, selecting only
   independent quantities and preserving value, unit and symbol.
 

@@ -8,6 +8,7 @@ from typing import Any
 
 from physbench.baseline_api.interfaces import DataAdapter
 from physbench.baseline_runtime.adapter import StandardDataAdapter
+from physbench.datasets.physics import flat_physics_quantities
 from physbench.io import canonical_sha256, load_json, sha256_file
 
 
@@ -123,14 +124,11 @@ class QuantityRegistry:
             ) from exc
         clauses: list[tuple[str, dict[str, Any]]] = []
         used: dict[str, dict[str, Any]] = {}
+        physics = flat_physics_quantities(case)
         for parameter in scene["parameters"]:
             name = parameter["name"]
-            raw = case["physics"].get(name)
-            usable = (
-                isinstance(raw, dict)
-                and raw.get("annotated") is True
-                and raw.get("value") is not None
-            )
+            raw = physics.get(name)
+            usable = isinstance(raw, dict) and raw.get("value") is not None
             if not usable:
                 if parameter.get("required", False):
                     raise ValueError(
@@ -290,7 +288,7 @@ class QuantityEmbeddingDataAdapter(DataAdapter):
         standard_config["physics_transform"] = {"type": "none"}
         ignored_policy = copy.deepcopy(bundle.value["input_policy"])
         ignored_policy["physics"] = {
-            "source": "case.physics[annotated=true]",
+            "source": "case.physics",
             "usage": "ignored",
             "representations": [],
         }

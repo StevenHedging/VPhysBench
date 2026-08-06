@@ -46,10 +46,10 @@ def validate_input_policy(value: Any) -> dict[str, Any]:
         raise ValueError(
             "baseline input_policy.physics fields mismatch"
         )
-    if physics.get("source") != "case.physics[annotated=true]":
+    if physics.get("source") != "case.physics":
         raise ValueError(
             "baseline input_policy.physics.source must be "
-            "case.physics[annotated=true]"
+            "case.physics"
         )
     usage = physics.get("usage")
     if usage not in PHYSICS_USAGES:

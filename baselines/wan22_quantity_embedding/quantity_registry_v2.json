@@ -53,8 +53,7 @@
         {"name": "incline_angle", "source_role": "independent", "required": true, "unit": "deg", "precision": 1, "quantity_type": "angle", "template": "θ is {quantity}"},
         {"name": "block_length", "source_role": "independent", "required": true, "unit": "m", "precision": 3, "quantity_type": "length", "template": "l is {quantity}"},
         {"name": "block_mass", "source_role": "independent", "required": true, "unit": "kg", "precision": 5, "quantity_type": "mass", "template": "m is {quantity}"},
-        {"name": "gravity_acceleration", "source_role": "independent", "required": true, "unit": "m/s^2", "precision": 5, "quantity_type": "acceleration", "template": "g is {quantity}"},
-        {"name": "kinetic_friction_coefficient", "source_role": "independent", "required": true, "unit": "1", "precision": 3, "quantity_type": "coefficient", "template": "μ_k is {quantity}"}
+        {"name": "gravity_acceleration", "source_role": "independent", "required": true, "unit": "m/s^2", "precision": 5, "quantity_type": "acceleration", "template": "g is {quantity}"}
       ]
     },
     "parabolic_motion": {

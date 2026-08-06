@@ -7,7 +7,7 @@
     "driver": "driver.py",
     "fingerprint_paths": []
   },
-  "description": "NVIDIA Cosmos3-Nano base I2V baseline that appends annotated structured physics to each Case's canonical prompt.",
+  "description": "NVIDIA Cosmos3-Nano base I2V baseline that appends formal structured physics to each Case's canonical prompt.",
   "supported_scenes": [
     "pendulum",
     "free_fall",
@@ -31,7 +31,7 @@
       "usage": "required"
     },
     "physics": {
-      "source": "case.physics[annotated=true]",
+      "source": "case.physics",
       "usage": "required",
       "representations": ["structured_text"]
     }

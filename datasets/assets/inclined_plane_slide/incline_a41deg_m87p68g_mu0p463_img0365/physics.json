@@ -1,59 +1,31 @@
 {
   "case_id": "incline_r1_a41deg_bggreen_img_0365",
   "physics": {
-    "block_length": {
-      "annotated": true,
-      "symbol": "l",
-      "unit": "m",
-      "value": 0.11
+    "environment": {
+      "gravity_acceleration": {
+        "symbol": "g",
+        "unit": "m/s^2",
+        "value": 9.80665
+      },
+      "incline_angle": {
+        "symbol": "θ",
+        "unit": "deg",
+        "value": 41.0
+      }
     },
-    "block_mass": {
-      "annotated": true,
-      "symbol": "m",
-      "unit": "kg",
-      "value": 0.08768
-    },
-    "calibration_length": {
-      "annotated": false,
-      "symbol": "l_cal",
-      "unit": "m",
-      "value": 0.49
-    },
-    "friction_force": {
-      "annotated": false,
-      "symbol": "F_f",
-      "unit": "N",
-      "value": 0.300456822940149
-    },
-    "gravity_acceleration": {
-      "annotated": true,
-      "symbol": "g",
-      "unit": "m/s^2",
-      "value": 9.80665
-    },
-    "incline_angle": {
-      "annotated": true,
-      "symbol": "θ",
-      "unit": "deg",
-      "value": 41.0
-    },
-    "initial_velocity": {
-      "annotated": false,
-      "symbol": "v_0",
-      "unit": "m/s",
-      "value": 0.0
-    },
-    "kinetic_friction_coefficient": {
-      "annotated": true,
-      "symbol": "μ_k",
-      "unit": "1",
-      "value": 0.463
-    },
-    "theoretical_acceleration": {
-      "annotated": false,
-      "symbol": "a_th",
-      "unit": "m/s^2",
-      "value": 3.00699831428492
+    "objects": {
+      "object_1": {
+        "length": {
+          "symbol": "l",
+          "unit": "m",
+          "value": 0.11
+        },
+        "mass": {
+          "symbol": "m",
+          "unit": "kg",
+          "value": 0.08768
+        }
+      }
     }
   },
   "scene_id": "inclined_plane_slide"

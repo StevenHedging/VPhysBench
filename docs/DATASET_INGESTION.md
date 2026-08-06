@@ -92,10 +92,10 @@ Task选择Dataset、View、scene、test范围、seed和评估协议。Task不决
 
 | 原始字段 | 示例 | 归类 | 目标位置 | 处理 |
 | --- | --- | --- | --- | --- |
-| 小球质量/g | 33.13 | 直接物理量 | `physics.ball_mass` | 转为kg |
-| 小球直径/cm | 2.0 | 直接物理量 | `physics.ball_radius` | 除以2并转为m |
-| 遮光时间/ms | 8.2 | 辅助测量 | `physics.photogate_block_time` | 转为s，通常`annotated=false` |
-| 初速度 | 由直径/时间计算 | 派生物理量 | `physics.initial_velocity` | 记录公式和来源可信度 |
+| 小球质量/g | 33.13 | 正式物理量 | `physics.objects.object_1.mass` | 转为kg |
+| 小球直径/cm | 2.0 | 正式物理量 | `physics.objects.object_1.radius` | 除以2并转为m |
+| 遮光时间/ms | 8.2 | 辅助测量 | `provenance.measurements` | 保留原值，不进入physics |
+| 初速度 | 由直径/时间计算 | 可用派生物理量 | `physics.objects.object_1.initial_velocity` | 仅当它是scene所需独立状态时进入physics，并记录公式 |
 | 背景颜色 | 黑色 | 环境 | `appearance.background` | 可作划分分层字段 |
 | 球数 | 3 | 实验形式 | `appearance.object_count` | 可作划分分层字段 |
 | 有初速度球数 | 2 | 实验形式 | `appearance.collision_structure` | 规范枚举 |
@@ -104,9 +104,10 @@ Task选择Dataset、View、scene、test范围、seed和评估协议。Task不决
 
 字段分成四类，而不是只分成两类：
 
-1. **直接物理量**：仪器或人工明确测得的质量、半径、长度、角度、时间、速度等；
-2. **派生/辅助物理量**：由公式换算或只用于校准的量；仍可放入`physics`，但是否
-   `annotated=true`必须有依据；
+1. **正式物理量**：scene契约所需、定义清楚且可信的对象固有属性、初始动力学状态或
+   环境物理参数；直接测量或可靠换算都可以，但不得重复表达同一自由度；
+2. **派生/辅助测量**：只用于校准、换算、查错或重复表达的量；放入provenance，不进入
+   `physics`；
 3. **非物理情景元数据**：背景、颜色、材质标签、实验形式、对象组成、视角和批次；
    放入`appearance`，可用于View划分；
 4. **来源与质量控制信息**：文件名、行号、备注、操作者和异常；放入provenance/audit。
@@ -210,8 +211,7 @@ Case caption与首帧共同说明“接下来发生什么”。文本必须：
 - 无歧义地描述可见物理过程；
 - 在需要时说明主体数量、哪个主体初始运动/静止、运动方向和交互顺序；
 - 足够简洁，不写实验报告或物理结论；
-- 包含该Case全部`annotated=true`独立物理量的`symbol`，并明确符号对应的主体和物理
-  含义；`annotated=false`审计量的symbol不得进入prompt；
+- 包含该Case全部正式物理量的`symbol`，并明确符号对应的主体和物理含义；
 - 不包含任何具体数值、单位、代数计算式或评测结论；
 - 不提背景、颜色、材质外观、机位、视角、裁剪、光电门、分辨率和采集设备；
 - 不描述视频中不可见、也无法由标注可靠确定的结果。
@@ -245,20 +245,20 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 目录名简要编码主要结构化物理量和唯一身份后缀，用于人工区分；不得编码背景、颜色、
 视角、实验室或其它环境信息。`case_id`一经发布保持稳定，不把可变路径当身份。
 
-每个物理量使用：
+五个已分类Scene使用`physics.objects.object_N`与`physics.environment`两组；对象编号必须
+与首帧mask从左到右、从上到下的矩阵顺序一致。每个正式物理量使用：
 
 ```json
-{"value": 0.03313, "unit": "kg", "annotated": true, "symbol": "m_1"}
+{"value": 0.03313, "unit": "kg", "symbol": "m_1"}
 ```
 
 - 统一使用scene约定单位，优先SI；
 - `value`必须是有限且非负的标量大小；方向单独写入prompt；
 - `symbol`必须是非空字符串、在同一Case内唯一，并与scene级注册表一致；
-- `annotated=true`仅用于可信、独立、可作为模型条件的物理量，其symbol必须进入prompt；
-- 派生量、辅助装置量或可信度不足但仍值得审计的量设为`annotated=false`；
-- 重复别名即使数值可信也应为`annotated=false`，避免同一独立自由度被重复注入；
+- `physics`只保存可信、独立、可作为模型条件的正式物理量，其symbol必须进入prompt；
+- 派生审计量、辅助装置量、可信度不足的量和重复别名只进入provenance；
 - 不确定的值不能用`0`代替缺失；若scene要求该量而无法得到，整条Case不进入正式集；
-- 多主体字段的编号必须与首帧从左到右/scene定义一致，并在provenance中记录映射依据；
+- 多主体字段的编号必须与首帧mask的矩阵顺序一致，并在provenance中记录映射依据；
 - 规格球等复用对象必须先查权威catalog，不能为同一规格创建多个别名。
 
 当前Case-local文件名为`physics.json`，使用以下最小包裹格式：
@@ -286,7 +286,7 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 `case.text`与`case.physics`。
 
 Case-local成员不重复写schema或annotation source；这些由当前Dataset契约和provenance表达。
-新导入不得生成三字段quantity，也不得创建版本后缀物理文件。
+新导入只能生成`value/unit/symbol`三字段quantity，不得创建版本后缀物理文件。
 新导入不能继续生成或覆盖这些历史文件。
 
 ### 阶段7：设计View A的train/ID test

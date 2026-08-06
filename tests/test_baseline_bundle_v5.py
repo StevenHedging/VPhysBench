@@ -87,7 +87,7 @@ def _manifest(baseline_id: str) -> dict:
                 "usage": "required",
             },
             "physics": {
-                "source": "case.physics[annotated=true]",
+                "source": "case.physics",
                 "usage": "ignored",
                 "representations": [],
             },
@@ -323,7 +323,7 @@ class BaselineBundleV5Tests(unittest.TestCase):
             )
             changed_policy = copy.deepcopy(_manifest("fixture")["input_policy"])
             changed_policy["physics"] = {
-                "source": "case.physics[annotated=true]",
+                "source": "case.physics",
                 "usage": "required",
                 "representations": ["structured_text"],
             }

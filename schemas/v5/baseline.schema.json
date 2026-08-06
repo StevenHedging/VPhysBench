@@ -193,7 +193,7 @@
           "type": "object",
           "required": ["source", "usage", "representations"],
           "properties": {
-            "source": {"const": "case.physics[annotated=true]"},
+            "source": {"const": "case.physics"},
             "usage": {
               "enum": ["ignored", "optional", "required"]
             },

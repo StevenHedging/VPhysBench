@@ -42,15 +42,12 @@
       "support stability"
     ]
   },
-  "non_conditionable_physics_parameters": [
-    "pendulum_length"
-  ],
   "scene_id": "pendulum",
   "schema_version": "2.0",
   "structured_physics_parameters": [
-    "bob_mass",
-    "bob_radius",
-    "initial_angle",
-    "string_length"
+    "environment.string_length",
+    "objects.object_1.initial_angle",
+    "objects.object_1.mass",
+    "objects.object_1.radius"
   ]
 }

@@ -207,15 +207,6 @@ class InclinedPlaneCaseEvaluator(ReferenceCaseEvaluator):
             ylabel="Normalized along-plane displacement",
             title=f"Inclined-plane trajectory — {request.case['case_id']}",
         )
-        physics = request.case.get("physics", {})
-        theoretical = physics.get("theoretical_acceleration", {}).get("value")
-        calibration = physics.get("calibration_length", {}).get("value")
-        reference_acceleration_m_s2 = None
-        if calibration and reference_trace.span_px > 0:
-            reference_acceleration_m_s2 = (
-                reference_trace.acceleration_px_s2
-                / (reference_trace.span_px / float(calibration))
-            )
         analysis = SceneAnalysis(
             score=state_score["score"],
             metrics={
@@ -227,11 +218,6 @@ class InclinedPlaneCaseEvaluator(ReferenceCaseEvaluator):
                 "plane_rectified_mask_iou": {
                     **rectified_iou_summary,
                     "role": "viewpoint_normalized_diagnostic",
-                },
-                "reference_physics_diagnostic": {
-                    "theoretical_acceleration_m_s2": theoretical,
-                    "fitted_acceleration_m_s2": reference_acceleration_m_s2,
-                    "initial_velocity_treatment": "fitted_not_trusted_from_label",
                 },
             },
             quality={

@@ -66,7 +66,7 @@ has eight persistent model workers rather than reloading the model 658 times.
 
 The physics identity uses the standard `append_structured_text_v1` adapter and
 the audited `six_scene_physics_clauses_v2` template. The adapter reads only
-`case.physics` values marked `annotated=true`, validates every unit, renders a
+`case.physics` values retained as formal quantities, validates every unit, renders a
 deterministic English clause and records the exact values in
 `used_parameters` together with their stable symbols. Appearance, background, capture setup and all
 parameters marked non-conditionable remain excluded.

@@ -6,6 +6,7 @@ from typing import Any
 
 from ..baseline_api.input_policy import validate_input_policy
 from ..baseline_api.interfaces import DataAdapter
+from ..datasets.physics import flat_physics_quantities
 from ..io import canonical_sha256, load_json, sha256_file
 from .media_contract import build_i2v_media_contract
 
@@ -84,19 +85,15 @@ class StructuredPhysicsTextRenderer:
             ) from exc
         rendered_clauses: list[str] = []
         used_parameters: dict[str, dict[str, Any]] = {}
-        quantities = case["physics"]
+        quantities = flat_physics_quantities(case)
         for clause in scene["parameter_clauses"]:
             name = clause["name"]
             quantity = quantities.get(name)
-            usable = (
-                isinstance(quantity, dict)
-                and quantity.get("annotated") is True
-                and quantity.get("value") is not None
-            )
+            usable = isinstance(quantity, dict) and quantity.get("value") is not None
             if not usable:
                 if clause.get("required", False):
                     raise ValueError(
-                        f"case {case['case_id']} lacks required annotated "
+                        f"case {case['case_id']} lacks required formal "
                         f"physics parameter {name}"
                     )
                 continue
@@ -243,6 +240,7 @@ class StandardDataAdapter(DataAdapter):
                     "managed V2V adapter requires video_asset_key"
                 )
             if asset_key in {
+                "physics_reference_video",
                 "reference_video",
                 "source_video",
             }:

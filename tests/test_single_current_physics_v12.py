@@ -60,6 +60,86 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
             )
         self.assertEqual(799, len(set(paths)))
 
+    def test_formal_physics_is_grouped_without_annotation_flags(self) -> None:
+        grouped_scenes = {
+            "collision_1d",
+            "inclined_plane_slide",
+            "parabolic_motion",
+            "pendulum",
+            "uniform_circular_motion",
+        }
+        leaf_count = 0
+        for case in self.cases:
+            document = load_json(
+                DATASETS_ROOT / case["assets"]["physics_annotation"]
+            )
+            physics = document["physics"]
+            if case["scene_id"] in grouped_scenes:
+                self.assertEqual({"objects", "environment"}, set(physics))
+                object_ids = sorted(physics["objects"])
+                self.assertEqual(
+                    [f"object_{index}" for index in range(1, len(object_ids) + 1)],
+                    object_ids,
+                )
+                quantities = [
+                    quantity
+                    for values in physics["objects"].values()
+                    for quantity in values.values()
+                ] + list(physics["environment"].values())
+            else:
+                self.assertEqual("push_bottle", case["scene_id"])
+                quantities = list(physics.values())
+            leaf_count += len(quantities)
+            for quantity in quantities:
+                self.assertEqual({"value", "unit", "symbol"}, set(quantity))
+        self.assertEqual(3959, leaf_count)
+
+    def test_scene_classification_has_no_auxiliary_physics(self) -> None:
+        for case in self.cases:
+            document = load_json(
+                DATASETS_ROOT / case["assets"]["physics_annotation"]
+            )
+            physics = document["physics"]
+            scene_id = case["scene_id"]
+            if scene_id != "push_bottle" and set(physics) != {
+                "objects",
+                "environment",
+            }:
+                self.fail(f"{case['case_id']} does not use grouped physics")
+            if scene_id == "collision_1d":
+                self.assertEqual({}, physics["environment"])
+                self.assertTrue(all(
+                    set(values) == {"mass", "radius", "initial_velocity"}
+                    for values in physics["objects"].values()
+                ))
+            elif scene_id == "inclined_plane_slide":
+                self.assertEqual(
+                    {"incline_angle", "gravity_acceleration"},
+                    set(physics["environment"]),
+                )
+                self.assertEqual(
+                    {"mass", "length"},
+                    set(physics["objects"]["object_1"]),
+                )
+            elif scene_id == "parabolic_motion":
+                self.assertEqual({}, physics["environment"])
+                self.assertEqual(
+                    {"mass", "radius", "initial_horizontal_velocity", "launch_height"},
+                    set(physics["objects"]["object_1"]),
+                )
+            elif scene_id == "pendulum":
+                self.assertEqual({"string_length"}, set(physics["environment"]))
+                self.assertTrue(
+                    set(physics["objects"]["object_1"])
+                    in ({"radius", "initial_angle"}, {"mass", "radius", "initial_angle"})
+                )
+            elif scene_id == "uniform_circular_motion":
+                self.assertEqual({"angular_velocity"}, set(physics["environment"]))
+                self.assertTrue(all(
+                    set(values) == {"orbit_radius"}
+                    for values in physics["objects"].values()
+                ))
+
     def test_every_indexed_case_owns_one_caption_document(self) -> None:
         caption_paths = []
         for case in self.cases:

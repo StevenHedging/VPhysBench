@@ -7,6 +7,7 @@ from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 from ....io import canonical_sha256
+from ....datasets.physics import flat_physics_quantities
 from .contracts import (
     EntitySpec,
     LifecyclePolicy,
@@ -186,14 +187,14 @@ def _attribute_from_quantity(
     _strict_fields(
         raw,
         allowed={"value", "unit", "annotated", "symbol"},
-        required={"value", "unit", "annotated"},
+        required={"value", "unit"},
         label=label,
     )
     return PhysicalAttribute(
         name=name,
         value=raw["value"],
         unit=raw["unit"],
-        annotated=raw["annotated"],
+        annotated=raw.get("annotated", True),
         symbol=raw.get("symbol"),
         source_parameter=source_parameter,
     )
@@ -738,7 +739,10 @@ def parse_entity_manifest(value: Mapping[str, Any]) -> EntityManifest:
 
 
 def _case_physics(case: Mapping[str, Any]) -> Mapping[str, Any]:
-    return _mapping(case.get("physics"), label="case.physics")
+    physics = _mapping(case.get("physics"), label="case.physics")
+    if set(physics) == {"objects", "environment"}:
+        return flat_physics_quantities(case)
+    return physics
 
 
 def _reference_capability(case: Mapping[str, Any]) -> ReferenceCapability:
@@ -1133,6 +1137,9 @@ def _single_entity_defaults(
 def _circular_entities(
     case: Mapping[str, Any],
 ) -> tuple[EntityDeclaration, ...]:
+    grouped_current = set(_mapping(
+        case.get("physics"), label="case.physics"
+    )) == {"objects", "environment"}
     physics = _case_physics(case)
     appearance = _mapping(
         case.get("appearance"),
@@ -1187,13 +1194,12 @@ def _circular_entities(
                 entity_class="orbiter",
                 physical_attributes=_attributes_from_case(
                     physics,
-                    (
+                    (("orbit_radius", f"object_{index}_orbit_radius"),)
+                    if grouped_current
+                    else (
                         ("orbit_radius", f"object_{index}_orbit_radius"),
                         ("angular_velocity", "angular_velocity"),
-                        (
-                            "angular_velocity_rad_s",
-                            "angular_velocity_rad_s",
-                        ),
+                        ("angular_velocity_rad_s", "angular_velocity_rad_s"),
                     ),
                     label=f"circular object_{index}",
                     required=False,
@@ -1239,6 +1245,9 @@ def _legacy_scene_entities(
             ),
         )
     if scene_id == "inclined_plane_slide":
+        grouped_current = set(_mapping(
+            case.get("physics"), label="case.physics"
+        )) == {"objects", "environment"}
         return _single_entity_defaults(
             case,
             entity_id="sliding_block",
@@ -1247,8 +1256,7 @@ def _legacy_scene_entities(
             bindings=(
                 ("length", "block_length"),
                 ("mass", "block_mass"),
-                ("initial_velocity", "initial_velocity"),
-            ),
+            ) + (() if grouped_current else (("initial_velocity", "initial_velocity"),)),
             lifecycle=LifecyclePolicy.MAY_EXIT,
             appearance_bindings=(
                 ("appearance_label", "block"),
@@ -1256,12 +1264,18 @@ def _legacy_scene_entities(
             ),
         )
     if scene_id == "pendulum":
+        grouped_current = set(_mapping(
+            case.get("physics"), label="case.physics"
+        )) == {"objects", "environment"}
         return _single_entity_defaults(
             case,
             entity_id="bob",
             role_id="pendulum_bob",
             entity_class="pendulum_bob",
             bindings=(
+                ("radius", "bob_radius"),
+                ("initial_angle", "initial_angle"),
+            ) if grouped_current else (
                 ("radius", "bob_radius"),
                 ("initial_angle", "initial_angle"),
                 ("pendulum_length", "pendulum_length"),

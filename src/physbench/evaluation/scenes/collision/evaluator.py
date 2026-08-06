@@ -23,6 +23,7 @@ from ...common.robustness import (
 )
 from ...common.tracking import extract_centroid_trace
 from ...contracts import CaseEvaluationRequest
+from ....datasets.physics import flat_physics_quantities
 from .observation import (
     build_collision_prompts,
     build_multiframe_collision_prompts,
@@ -148,7 +149,7 @@ class CollisionCaseEvaluator(ReferenceCaseEvaluator):
         prediction_video,
     ) -> SceneAnalysis:
         robust = robust_subject_enabled(self.config)
-        physics = request.case.get("physics", {})
+        physics = flat_physics_quantities(request.case)
         masses = np.asarray(
             [
                 float(physics[f"ball_{index}_mass"]["value"])

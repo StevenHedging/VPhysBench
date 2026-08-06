@@ -17,9 +17,10 @@ Task暂不包含尚无专用Evaluator的`push_bottle`。
 
 每条Case的资产目录包含唯一的`caption.json`和`physics.json`，分别由
 `assets.caption`与`assets.physics_annotation`绑定。`cases.jsonl`不复制这两份内容；
-Loader读取后提供`case.text`和`case.physics`。quantity固定为
-`value/unit/annotated/symbol`四字段；数值表示非负大小，方向写入无数值caption。
-背景、颜色、视角和实验形式不进入结构化物理量。
+Loader读取后提供`case.text`和`case.physics`。正式quantity固定为
+`value/unit/symbol`三字段；数值表示非负大小，方向写入无数值caption。五个已分类Scene
+按`physics.objects.object_N`和`physics.environment`组织，背景、颜色、视角、实验形式、
+辅助测量和派生审计量均不进入结构化物理量。
 
 `datasets/releases/`只保留`12.0.0/`这一份运行快照。V1–V11已失活，不允许扫描、自动
 回退或作为当前运行输入；历史Dataset ID和迁移事实可从Git历史及

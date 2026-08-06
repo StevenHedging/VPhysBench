@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from physbench.datasets import load_dataset
+from physbench.datasets.physics import iter_physics_quantities
 from physbench.io import load_json, load_jsonl, write_json
 
 
@@ -113,7 +114,7 @@ def validate_v12(
             raise ValueError(f"physics document is not minimal for {case['case_id']}")
         prompt = case["text"]["prompt"]
         symbols: set[str] = set()
-        for name, quantity in case["physics"].items():
+        for path, _, quantity in iter_physics_quantities(case):
             quantity_count += 1
             value = quantity["value"]
             if (
@@ -122,18 +123,17 @@ def validate_v12(
                 or not math.isfinite(float(value))
                 or value < 0
             ):
-                raise ValueError(f"invalid quantity {case['case_id']}/{name}")
+                raise ValueError(f"invalid quantity {case['case_id']}/{path}")
             symbol = quantity["symbol"]
             if not isinstance(symbol, str) or not symbol or symbol in symbols:
-                raise ValueError(f"invalid symbol {case['case_id']}/{name}")
+                raise ValueError(f"invalid symbol {case['case_id']}/{path}")
             symbols.add(symbol)
-            present = _symbol_in_prompt(symbol, prompt)
-            if bool(quantity["annotated"]) != present:
-                raise ValueError(f"prompt-symbol mismatch {case['case_id']}/{name}")
+            if not _symbol_in_prompt(symbol, prompt):
+                raise ValueError(f"prompt-symbol mismatch {case['case_id']}/{path}")
     if (
         len(caption_paths) != 799
         or len(physics_paths) != 799
-        or quantity_count != 5286
+        or quantity_count != 3959
     ):
         raise ValueError("V12 physics coverage mismatch")
     if list(DATASETS_ROOT.glob("assets/*/*/physics.v11.json")):
@@ -170,11 +170,32 @@ def validate_v12(
     if forbidden_audit_keys(provenance_cases):
         raise ValueError("V12 provenance contains hash metadata")
 
-    mask_manifests = [
-        load_json(DATASETS_ROOT / case["assets"]["first_frame_mask_manifest"])
-        for case in indexed_cases
-        if "first_frame_mask_manifest" in case["assets"]
-    ]
+    mask_manifests = []
+    for indexed_case in indexed_cases:
+        relative = indexed_case["assets"].get("first_frame_mask_manifest")
+        if relative is None:
+            continue
+        manifest = load_json(DATASETS_ROOT / relative)
+        loaded = loaded_by_id[indexed_case["case_id"]]
+        physics = loaded["physics"]
+        for index, instance in enumerate(manifest["instances"], 1):
+            object_id = f"object_{index}"
+            if instance.get("object_id") != object_id:
+                raise ValueError(
+                    f"mask object ordering mismatch for {indexed_case['case_id']}"
+                )
+            if indexed_case["scene_id"] == "push_bottle":
+                expected_keys = sorted(physics)
+            else:
+                expected_keys = sorted(
+                    f"objects.{object_id}.{name}"
+                    for name in physics["objects"][object_id]
+                )
+            if instance.get("physics_keys") != expected_keys:
+                raise ValueError(
+                    f"mask physics binding mismatch for {indexed_case['case_id']}"
+                )
+        mask_manifests.append(manifest)
     if len(mask_manifests) != 797 or forbidden_audit_keys(mask_manifests):
         raise ValueError("V12 mask manifests contain invalid audit metadata")
 
@@ -196,7 +217,7 @@ def validate_v12(
         "physics_documents": 799,
         "provenance_cases": 799,
         "mask_manifests": 797,
-        "quantities": 5286,
+        "quantities": 3959,
         "media_changes": 0,
     }
     if write_report:

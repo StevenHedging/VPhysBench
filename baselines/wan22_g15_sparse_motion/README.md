@@ -5,7 +5,7 @@ schema-v5 Baseline identities:
 
 - `wan22_g15_sparse_motion_r32_e20_generic` uses the Case's canonical prompt
   and explicitly ignores structured physics.
-- `wan22_g15_sparse_motion_r32_e20_physics` appends the Case's annotated
+- `wan22_g15_sparse_motion_r32_e20_physics` appends the Case's formal
   independent structured physics with `six_scene_physics_clauses_v2`, preserving
   each quantity's non-negative value, unit and stable symbol.
 

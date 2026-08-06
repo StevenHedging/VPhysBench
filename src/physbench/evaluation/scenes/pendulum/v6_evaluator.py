@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 
 from ....io import canonical_sha256, sha256_file
+from ....datasets.physics import flat_physics_quantities
 from ...common.artifacts import (
     save_iou_curve,
     save_series_comparison,
@@ -747,15 +748,15 @@ def _load_condition_frame(
 
 
 def _pendulum_radius_length_ratio(case: Mapping[str, Any]) -> float:
-    physics = case.get("physics", {})
+    physics = flat_physics_quantities(case)
     try:
         radius = float(physics["bob_radius"]["value"])
-        length = float(physics["pendulum_length"]["value"])
+        length = float(physics["string_length"]["value"])
     except (KeyError, TypeError, ValueError) as exc:
         raise ReferenceAnalysisError(
             "reference_pendulum_physics_incomplete",
             "pendulum condition identity requires bob_radius and "
-            "pendulum_length quantities",
+            "string_length quantities",
         ) from exc
     if not math.isfinite(radius) or not math.isfinite(length) or min(
         radius, length

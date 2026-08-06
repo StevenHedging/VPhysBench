@@ -23,6 +23,7 @@ from ...common.errors import ReferenceAnalysisError
 from ...common.masks.quality import observed_mask_iou, summarize_mask_ious
 from ...common.subject import compare_subjects, infer_reference_mode
 from ...contracts import CaseEvaluationRequest
+from ....datasets.physics import flat_physics_quantities
 from .open_world import (
     PENDULUM_STRUCTURE_SPEC_VERSION,
     extract_bob_masks,
@@ -154,7 +155,7 @@ class PendulumOpenWorldCaseEvaluatorV7(ReferenceCaseEvaluator):
         )
         try:
             initial_angle_deg = float(
-                request.case["physics"]["initial_angle"]["value"]
+                flat_physics_quantities(request.case)["initial_angle"]["value"]
             )
             condition_decision = detect_condition_structure_v7(
                 condition_frame,

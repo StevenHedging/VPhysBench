@@ -35,7 +35,7 @@
       "usage": "required"
     },
     "physics": {
-      "source": "case.physics[annotated=true]",
+      "source": "case.physics",
       "usage": "required",
       "representations": ["quantity_token_embedding_v1"]
     }

@@ -58,7 +58,7 @@ physics或来源审核信息。Loader通过资产引用读取Case-local成员，
 | `scene_id` | 六个正式 scene 之一 |
 | `text` | Loader从`caption.json`物化的唯一`prompt` |
 | `assets` | `caption`、首帧、`physics_annotation`、`reference_video`及可选mask manifest |
-| `physics` | 结构化物理量及其可信状态 |
+| `physics` | 按物理主体与环境分组的正式结构化物理量 |
 | `appearance` | 非结构化物理量的情景、外观、环境、实验形式与采集信息 |
 | `temporal` | 仅保存运行时所需的`encoded_to_physical_speed` |
 
@@ -116,33 +116,45 @@ case.assets.physics_annotation
 `check_assets=False`时也会读取它，校验Case/Scene身份，并将`physics`物化为下游兼容的
 `case.physics`运行时API。
 
-每个 quantity 恰好包含：
+五个已分类Scene的`physics`恰好包含`objects`和`environment`。对象编号使用
+`object_1`、`object_2`……，与首帧mask从左到右、从上到下的矩阵顺序一致：
+
+```json
+{
+  "objects": {
+    "object_1": {
+      "mass": {"value": 0.03313, "unit": "kg", "symbol": "m_1"}
+    }
+  },
+  "environment": {
+    "gravity_acceleration": {"value": 9.8, "unit": "m/s^2", "symbol": "g"}
+  }
+}
+```
+
+`push_bottle`的对象/环境边界暂缓单独整理，因此当前仍使用扁平quantity映射。每个
+quantity都恰好包含：
 
 ```json
 {
   "value": 54.55,
   "unit": "deg/s",
-  "annotated": true,
   "symbol": "ω"
 }
 ```
 
-`annotated=true`表示独立、可信、可作为模型输入的物理量；其`symbol`必须原样出现在
-`case.text.prompt`中，但Dataset prompt不得包含数值。`annotated=false`通常是派生、
-校准、辅助或重复别名量，保留给Evaluator与审计，不进入prompt或conditionable Case。
-所有`value`必须有限且非负；velocity字段存速度大小，向左/向右、静止等方向语义由
-prompt承担。
-
-活动Dataset只使用上述四字段quantity；旧三字段文档不再位于运行目录。
+活动Dataset中的quantity全部是独立、可信、可作为模型输入的正式物理量；`symbol`必须
+原样出现在`case.text.prompt`中，但Dataset prompt不得包含数值。派生量、校准量、辅助
+装置量、重复别名和背景信息只进入provenance，不进入`physics`。所有`value`必须有限且
+非负；velocity字段存速度大小，向左/向右、静止等方向语义由prompt承担。
 
 主要物理量：
 
-- 单摆：绳长、摆球半径、摆球质量与初始角度；`pendulum_length`是重复几何定义，
-  仅供审计；
+- 单摆：对象含摆球半径、可用时的摆球质量与初始角度；环境含绳长；
 - 一维碰撞：球质量、半径、初速度；
-- 斜面下滑：斜面角度、物块质量与长度、重力加速度、摩擦系数；理论加速度、摩擦力、
-  初始速度和标定长度仅供审计；
-- 匀速圆周运动：角速度、一个或两个物体的轨道半径；
+- 斜面下滑：对象含物块质量与长度；环境仅含斜面角度与重力加速度；
+- 平抛：对象含质量、半径、初始水平速度与发射高度；环境为空；
+- 匀速圆周运动：对象含各自轨道半径；环境含角速度；
 - 平抛运动：出门初速度、竖直落差、球质量与半径；光电门和斜坡相关量仅供审计；
 - 推水瓶：水瓶质量、高度、最大施力和平均施力。
 
@@ -228,7 +240,8 @@ View B：
 - 每条Case只保留一个无版本冗余字段的`physics.json`，Case由Dataset descriptor声明schema 5.0；
 - 每个quantity新增稳定`symbol`，独立量符号进入英文prompt，具体数值和单位不进入；
 - 将494个碰撞有符号速度值转换为非负速度大小，方向明确写在prompt中；
-- 将715个派生、校准、辅助或重复别名量降为`annotated=false`审计量；
+- 删除全部派生、校准、辅助或重复别名量，并删除quantity中的`annotated`字段；
+- 五个Scene按对象与环境分类，共保留3959个正式quantity；
 - 799个Case各自只保留一个物理文件；
 - Release只保留四类运行时内容；迁移、逐Case provenance与独立验证记录位于
   `datasets/provenance/releases/12.0.0/`。

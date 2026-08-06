@@ -76,7 +76,7 @@ def _input_policy(physics_usage: str = "ignored") -> dict:
             "usage": "required",
         },
         "physics": {
-            "source": "case.physics[annotated=true]",
+            "source": "case.physics",
             "usage": physics_usage,
             "representations": (
                 [] if physics_usage == "ignored" else ["structured_text"]

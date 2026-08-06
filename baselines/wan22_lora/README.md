@@ -5,9 +5,9 @@ recipe as two schema-v5 managed Baseline identities:
 
 - `wan22_ti2v_5b_lora_r32_v3_generic` uses the Case's canonical prompt and
   explicitly ignores structured physics.
-- `wan22_ti2v_5b_lora_r32_v3_physics` appends the Case's annotated structured
-  physics with `six_scene_physics_clauses_v2`; only independent
-  `annotated=true` quantities are selected, with value, unit and symbol preserved.
+- `wan22_ti2v_5b_lora_r32_v3_physics` appends the Case's formal structured
+  physics with `six_scene_physics_clauses_v2`; all current formal quantities
+  are selected, with value, unit and symbol preserved.
 
 The distinction is Baseline-owned through `input_policy` and
 `adapter.physics_transform`; both identities can run the same `direct_eval`

@@ -9,6 +9,7 @@ from _paths import ROOT
 from physbench.baseline_api import load_baseline_bundle, load_baseline_plugin
 from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
+from physbench.datasets.physics import flat_physics_quantities
 from physbench.domain import TaskSpec
 from physbench.io import canonical_sha256, load_json, write_json
 from physbench.tasks import load_task, plan_atomic_task
@@ -80,10 +81,7 @@ class ArchitectureV4Tests(unittest.TestCase):
             )
             self.assertTrue(case["text"]["prompt"].strip())
             self.assertTrue(case["physics"])
-            self.assertTrue(any(
-                quantity["annotated"] is True
-                for quantity in case["physics"].values()
-            ))
+            self.assertTrue(flat_physics_quantities(case))
             self.assertFalse(_contains_key(case, "conditioning"))
 
     def test_dataset_release_does_not_use_an_asset_lock(self) -> None:
@@ -167,7 +165,7 @@ class ArchitectureV4Tests(unittest.TestCase):
     ) -> None:
         case = self._pendulum_case()
         changed = copy.deepcopy(case)
-        changed["physics"]["string_length"]["value"] = 999.0
+        changed["physics"]["environment"]["string_length"]["value"] = 999.0
         adapter = self.generic_plugin.task_builder.data_adapter
 
         first = adapter.adapt_case(case, role="eval")
@@ -190,7 +188,7 @@ class ArchitectureV4Tests(unittest.TestCase):
     ) -> None:
         case = self._pendulum_case()
         changed = copy.deepcopy(case)
-        changed["physics"]["string_length"]["value"] += 0.01
+        changed["physics"]["environment"]["string_length"]["value"] += 0.01
         adapter = self.physics_plugin.task_builder.data_adapter
 
         first = adapter.adapt_case(case, role="eval")

@@ -211,7 +211,7 @@ def _input_policy(
             "usage": "required",
         },
         "physics": {
-            "source": "case.physics[annotated=true]",
+            "source": "case.physics",
             "usage": usage,
             "representations": representations,
         },

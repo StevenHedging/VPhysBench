@@ -45,11 +45,7 @@
       },
       "additionalProperties": false
     },
-    "physics": {
-      "type": "object",
-      "minProperties": 1,
-      "additionalProperties": {"$ref": "#/$defs/quantity"}
-    },
+    "physics": {},
     "appearance": {
       "type": "object",
       "description": "Non-physics scenario, appearance, environment, setup-form and acquisition metadata."
@@ -66,19 +62,60 @@
     ]
   },
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {"scene_id": {"const": "push_bottle"}},
+        "required": ["scene_id"]
+      },
+      "then": {
+        "properties": {"physics": {"$ref": "#/$defs/flatPhysics"}}
+      },
+      "else": {
+        "properties": {"physics": {"$ref": "#/$defs/groupedPhysics"}}
+      }
+    }
+  ],
   "$defs": {
     "assetPath": {
       "type": "string",
       "minLength": 1,
       "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+"
     },
+    "flatPhysics": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/quantity"}
+    },
+    "groupedPhysics": {
+      "type": "object",
+      "required": ["objects", "environment"],
+      "properties": {
+        "objects": {
+          "type": "object",
+          "minProperties": 1,
+          "patternProperties": {
+            "^object_[1-9][0-9]*$": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {"$ref": "#/$defs/quantity"}
+            }
+          },
+          "additionalProperties": false
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/quantity"}
+        }
+      },
+      "additionalProperties": false
+    },
     "quantity": {
       "type": "object",
-      "required": ["value", "unit", "annotated", "symbol"],
+      "required": ["value", "unit", "symbol"],
       "properties": {
         "value": {"type": "number", "minimum": 0},
         "unit": {"type": "string", "minLength": 1},
-        "annotated": {"type": "boolean"},
         "symbol": {"type": "string", "minLength": 1}
       },
       "additionalProperties": false

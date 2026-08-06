@@ -7,7 +7,7 @@
     "driver": "driver.py",
     "fingerprint_paths": ["provenance/*.json"]
   },
-  "description": "Frozen G15 WAN2.2-TI2V-5B sparse-motion LoRA that appends annotated structured physics to each Case's canonical prompt; diagnostic only due to benchmark overlap.",
+  "description": "Frozen G15 WAN2.2-TI2V-5B sparse-motion LoRA that appends formal structured physics to each Case's canonical prompt; diagnostic only due to benchmark overlap.",
   "supported_scenes": [
     "pendulum",
     "free_fall",
@@ -31,7 +31,7 @@
       "usage": "required"
     },
     "physics": {
-      "source": "case.physics[annotated=true]",
+      "source": "case.physics",
       "usage": "required",
       "representations": ["structured_text"]
     }

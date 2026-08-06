@@ -5,12 +5,12 @@
 
 当前Dataset 12.0.0将caption与结构化物理量分别保存在Case-local `caption.json`和
 `physics.json`。Loader将它们物化为`case.text`和`case.physics`；Baseline应使用
-`case.text.prompt`与`case.physics[annotated=true]`这两个稳定运行时API，不应绕过Loader
+`case.text.prompt`与`case.physics`这两个稳定运行时API，不应绕过Loader
 直接解释文件格式。
 成员文件本身不重复携带schema、language或annotation source；Baseline也不应依赖这些
 已删除字段。当前GT的唯一Dataset角色是`assets.reference_video`。
-每个独立quantity都保留非负`value`、`unit`和稳定`symbol`；方向来自Case prompt，不能
-再从数值正负号推断。`annotated=false`字段只供Evaluator和审计使用。
+每个正式quantity都保留非负`value`、`unit`和稳定`symbol`；方向来自Case prompt，不能
+再从数值正负号推断。辅助、派生和审计量不进入运行时`case.physics`。
 
 ## 1. 先确定 Baseline identity
 
@@ -122,7 +122,7 @@ baselines/*/*.baseline.json
       "usage": "required"
     },
     "physics": {
-      "source": "case.physics[annotated=true]",
+      "source": "case.physics",
       "usage": "ignored",
       "representations": []
     }
@@ -171,7 +171,7 @@ baselines/*/*.baseline.json
       "usage": "required"
     },
     "physics": {
-      "source": "case.physics[annotated=true]",
+      "source": "case.physics",
       "usage": "required",
       "representations": ["structured_text"]
     }
@@ -206,7 +206,7 @@ text.usage  = required
 | --- | --- |
 | `ignored` | `representations=[]`，不得产生 physics channel |
 | `optional` | representation 非空；按 case 使用时登记 channel 与参数 |
-| `required` | representation 非空；每条 adaptation 必须使用 annotated 参数 |
+| `required` | representation 非空；每条 adaptation 必须使用 formal quantity |
 
 对 standard adapter：
 
@@ -287,7 +287,7 @@ Adapter 必须：
 - 实现 `adapt_case(case, *, role)`；
 - 输出 JSON-serializable `native_inputs` 和 `input_contract`；
 - 精确登记 `used_parameters`；
-- 只使用`annotated=true`独立量并保持值、单位和symbol一致；
+- 只使用正式独立量并保持值、单位和symbol一致；
 - 给出完整与 media-materialization 两种 SHA-256 fingerprint；
 - 通过 `dependency_paths()` 登记 Bundle 外的输出相关实现。
 
@@ -504,7 +504,7 @@ bundle discovery / schema validation
 deployment identity
 input_policy 与 adapter 一致
 ignored physics produces no channel
-required physics uses annotated parameters
+required physics uses formal parameters
 canonical plan unchanged across Baselines
 materialization fingerprint shared when media recipe identical
 TaskInstance deterministic and sealed

@@ -18,6 +18,7 @@ from physbench.baseline_runtime import build_i2v_media_contract
 from physbench.baseline_runtime.compiler import ManagedTaskBuilder
 from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
+from physbench.datasets.physics import flat_physics_quantities
 from physbench.io import load_json
 from physbench.tasks import load_task
 
@@ -106,7 +107,7 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
         )
         self.assertEqual(
             {
-                "source": "case.physics[annotated=true]",
+                "source": "case.physics",
                 "usage": "required",
                 "representations": ["structured_text"],
             },
@@ -245,9 +246,9 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
                 physics["native_inputs"]["generation_shape"],
             )
             self.assertTrue(physics["used_parameters"], case["case_id"])
+            projected = flat_physics_quantities(case)
             for name, rendered in physics["used_parameters"].items():
-                quantity = case["physics"][name]
-                self.assertIs(quantity["annotated"], True)
+                quantity = projected[name]
                 self.assertEqual(quantity["value"], rendered["value"])
                 self.assertEqual(quantity["unit"], rendered["unit"])
             channels = physics["input_contract"]["physics_channels"]
@@ -269,8 +270,8 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
             item
             for item in self.dataset.cases
             if item["scene_id"] == "collision_1d"
-            and item["physics"]["ball_1_initial_velocity"]["value"] != 0
-            and item["physics"]["ball_2_initial_velocity"]["value"] != 0
+            and flat_physics_quantities(item)["ball_1_initial_velocity"]["value"] != 0
+            and flat_physics_quantities(item)["ball_2_initial_velocity"]["value"] != 0
         )
         adaptation = self.physics_adapter.adapt_case(case, role="eval")
         used = adaptation["used_parameters"]
@@ -314,7 +315,6 @@ class CausalForcingAutoregressiveBaselineTests(unittest.TestCase):
                 "block_length",
                 "block_mass",
                 "gravity_acceleration",
-                "kinetic_friction_coefficient",
             },
             set(adaptation["used_parameters"]),
         )

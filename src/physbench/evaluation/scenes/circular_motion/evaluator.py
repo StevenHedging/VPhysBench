@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+import math
 
 import numpy as np
 
@@ -22,6 +23,7 @@ from ...common.robustness import (
 )
 from ...common.tracking import extract_instance_tracks
 from ...contracts import CaseEvaluationRequest
+from ....datasets.physics import flat_physics_quantities
 from .observation import green_disk_object_masks
 from .scoring import extract_orbit_traces, score_orbits
 
@@ -188,10 +190,13 @@ class CircularMotionCaseEvaluator(ReferenceCaseEvaluator):
             ylabel="Relative unwrapped angle (rad)",
             title=f"Circular-motion angular trajectory — {request.case['case_id']}",
         )
+        omega_deg_s = flat_physics_quantities(request.case).get(
+            "angular_velocity", {}
+        ).get("value")
         annotated_omega = (
-            request.case.get("physics", {})
-            .get("angular_velocity_rad_s", {})
-            .get("value")
+            math.radians(float(omega_deg_s))
+            if omega_deg_s is not None
+            else None
         )
         analysis = SceneAnalysis(
             score=state_score["score"],

@@ -604,7 +604,7 @@ def validate_adaptation_record(
         )
     elif physics_usage == "required" and not used_parameters:
         raise ValueError(
-            "physics-required adaptation must consume at least one annotated "
+            "physics-required adaptation must consume at least one formal "
             "physical parameter"
         )
     elif physics_usage == "optional" and bool(physics_channels) != bool(

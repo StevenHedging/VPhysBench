@@ -12,6 +12,7 @@ from ..domain import (
     DatasetSnapshot,
     TaskSpec,
 )
+from ..datasets.physics import flat_physics_quantities
 from ..io import canonical_sha256
 from .input_contract import (
     FORBIDDEN_ASSET_KEYS,
@@ -131,14 +132,10 @@ class ManagedTaskBuilder(TaskBuilder):
             for key, value in case["assets"].items()
             if key not in _NON_RUNTIME_ASSET_KEYS
         }
-        projected["physics"] = {
-            name: copy.deepcopy(quantity)
-            for name, quantity in case["physics"].items()
-            if quantity.get("annotated") is True
-        }
+        projected["physics"] = copy.deepcopy(flat_physics_quantities(case))
         # Every Baseline sees the same conditionable Case. None receives
-        # provenance, source locators, alignment evidence, non-annotated
-        # derived quantities, or evaluator-only assets.
+        # provenance, source locators, alignment evidence, auxiliary
+        # quantities, or evaluator-only assets.
         return projected
 
     @staticmethod
@@ -243,19 +240,18 @@ class ManagedTaskBuilder(TaskBuilder):
         adaptation: dict[str, Any],
         case: dict[str, Any],
     ) -> None:
-        physics = case.get("physics", {})
+        physics = flat_physics_quantities(case)
         invalid = [
             name
             for name in adaptation["used_parameters"]
             if (
                 name not in physics
-                or physics[name].get("annotated") is not True
             )
         ]
         if invalid:
             raise ValueError(
                 f"adaptation for {case['case_id']} uses missing or "
-                f"non-annotated physics fields: {sorted(invalid)}"
+                f"non-formal physics fields: {sorted(invalid)}"
             )
         mismatched = []
         for name, recorded in adaptation["used_parameters"].items():
@@ -406,12 +402,14 @@ class ManagedTaskBuilder(TaskBuilder):
                 or not physics
                 or any(
                     not isinstance(quantity, dict)
-                    or quantity.get("annotated") is not True
+                    or not {"value", "unit"} <= set(quantity) <= {
+                        "value", "unit", "symbol"
+                    }
                     for quantity in physics.values()
                 )
             ):
                 raise ValueError(
-                    f"managed source case {case_id} requires annotated physics"
+                    f"managed source case {case_id} requires formal physics"
                 )
             leaked_assets = sorted(
                 set(assets) & _NON_RUNTIME_ASSET_KEYS

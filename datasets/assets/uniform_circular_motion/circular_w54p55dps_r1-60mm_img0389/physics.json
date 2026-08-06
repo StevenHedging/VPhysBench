@@ -1,23 +1,21 @@
 {
   "case_id": "circular_r1_wood06cm_img_0389",
   "physics": {
-    "angular_velocity": {
-      "annotated": true,
-      "symbol": "ω",
-      "unit": "deg/s",
-      "value": 54.55
+    "environment": {
+      "angular_velocity": {
+        "symbol": "ω",
+        "unit": "deg/s",
+        "value": 54.55
+      }
     },
-    "angular_velocity_rad_s": {
-      "annotated": false,
-      "symbol": "ω_rad",
-      "unit": "rad/s",
-      "value": 0.9520771069629067
-    },
-    "object_1_orbit_radius": {
-      "annotated": true,
-      "symbol": "r_1",
-      "unit": "m",
-      "value": 0.06
+    "objects": {
+      "object_1": {
+        "orbit_radius": {
+          "symbol": "r_1",
+          "unit": "m",
+          "value": 0.06
+        }
+      }
     }
   },
   "scene_id": "uniform_circular_motion"

@@ -47,19 +47,12 @@
       "fixed camera"
     ]
   },
-  "non_conditionable_physics_parameters": [
-    "calibration_length",
-    "friction_force",
-    "initial_velocity",
-    "theoretical_acceleration"
-  ],
   "scene_id": "inclined_plane_slide",
   "schema_version": "2.0",
   "structured_physics_parameters": [
-    "block_length",
-    "block_mass",
-    "gravity_acceleration",
-    "incline_angle",
-    "kinetic_friction_coefficient"
+    "environment.gravity_acceleration",
+    "environment.incline_angle",
+    "objects.object_1.length",
+    "objects.object_1.mass"
   ]
 }

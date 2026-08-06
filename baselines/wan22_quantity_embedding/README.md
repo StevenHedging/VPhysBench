@@ -18,7 +18,7 @@ alternate v2 reevaluation, and all 66 per-Case outcomes are recorded in
 
 This schema-v5 managed Baseline jointly fine-tunes a WAN2.2-TI2V-5B DiT
 LoRA and a small quantity encoder. It consumes the same first frame, Case
-prompt, and a registry-curated subset of annotated physical
+prompt, and a registry-curated subset of formal physical
 fields. It does not consume every annotation, nor ask UMT5 to infer a number
 and unit from ordinary subword tokens.
 
@@ -28,7 +28,7 @@ and unit from ordinary subword tokens.
 It never extracts quantities from arbitrary prose with a regular expression.
 For every selected annotation it:
 
-1. validates the field, unit, stable symbol, `annotated=true` role, and finite non-negative value;
+1. validates the field, unit, stable symbol, and finite non-negative value;
 2. renders an `audited_prompt` containing the literal quantity;
 3. converts the value to SI and records its seven-dimensional SI exponent;
 4. replaces that literal in the model prompt with one unique native T5
@@ -214,7 +214,7 @@ report its parameter inventory rather than claiming an exactly
 parameter-matched ablation.
 
 The selected fields match the structured-text comparison arm. The V2 registry
-selects only current independent quantities marked `annotated=true`; derived,
+selects only current independent quantities retained as formal quantities; derived,
 calibration, auxiliary and duplicate-alias fields remain evaluator/audit data
 and are never injected. Each selected audit record preserves value, unit and
 symbol.

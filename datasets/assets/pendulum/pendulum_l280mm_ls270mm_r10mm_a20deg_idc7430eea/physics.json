@@ -1,29 +1,26 @@
 {
   "case_id": "pendulum_r1_ltot0280mm_lrope0270mm_r010mm_a020deg",
   "physics": {
-    "bob_radius": {
-      "annotated": true,
-      "symbol": "r",
-      "unit": "m",
-      "value": 0.01
+    "environment": {
+      "string_length": {
+        "symbol": "l_s",
+        "unit": "m",
+        "value": 0.27
+      }
     },
-    "initial_angle": {
-      "annotated": true,
-      "symbol": "θ_0",
-      "unit": "deg",
-      "value": 20.0
-    },
-    "pendulum_length": {
-      "annotated": false,
-      "symbol": "l",
-      "unit": "m",
-      "value": 0.28
-    },
-    "string_length": {
-      "annotated": true,
-      "symbol": "l_s",
-      "unit": "m",
-      "value": 0.27
+    "objects": {
+      "object_1": {
+        "initial_angle": {
+          "symbol": "θ_0",
+          "unit": "deg",
+          "value": 20.0
+        },
+        "radius": {
+          "symbol": "r",
+          "unit": "m",
+          "value": 0.01
+        }
+      }
     }
   },
   "scene_id": "pendulum"

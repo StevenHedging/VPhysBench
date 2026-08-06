@@ -54,8 +54,9 @@ Case资产目录保存一份，不由Task或Baseline临时生成。Release 12.0.
 轻量索引，仅含身份、运行时资产、appearance与temporal；Loader严格读取两个Case-local
 JSON并物化兼容的`case.text`和`case.physics`。逐Case来源、采集时序说明与alignment在
 `datasets/provenance/releases/12.0.0/cases.jsonl`中，不进入运行时Case。
-独立量使用`annotated=true`且其symbol必须进入无数值英文prompt；审计量使用false。
-所有标量为非负大小，方向由prompt表达。旧三字段quantity不再属于活动运行契约。
+正式物理量只含`value/unit/symbol`，其symbol必须进入无数值英文prompt；辅助和审计量
+不进入运行时`physics`。
+所有标量为非负大小，方向由prompt表达。旧四字段quantity不再属于活动运行契约。
 
 ## 3. Task 是模型无关的评测定义
 
@@ -114,7 +115,7 @@ Job ID 也不包含模型输入策略。不同 Baseline 编译同一 Dataset + T
       "usage": "required"
     },
     "physics": {
-      "source": "case.physics[annotated=true]",
+      "source": "case.physics",
       "usage": "ignored",
       "representations": []
     }
@@ -128,7 +129,7 @@ Job ID 也不包含模型输入策略。不同 Baseline 编译同一 Dataset + T
 | --- | --- |
 | `ignored` | 不得登记 used parameter 或 physics channel |
 | `optional` | 可按 case 使用；使用时必须同时登记参数和 channel |
-| `required` | 每条 adaptation 必须消费至少一个 annotated 参数并登记 channel |
+| `required` | 每条 adaptation 必须消费至少一个 formal quantity并登记 channel |
 
 `representations` 描述模型侧表示，如 `structured_text`、`numeric_tokens`、
 `trajectory`、`mask`、`optical_flow`、`force_field` 或 `control_video`。标准 adapter
@@ -153,7 +154,7 @@ case_id / scene_id
 text
 appearance / temporal / ood
 允许作为生成输入的 assets
-physics 中 annotated=true 的字段
+physics 中的全部正式quantity（由Compiler投影为稳定语义名）
 ```
 
 这些quantity保留`value`、`unit`和`symbol`，使adapter能以符号为绑定键选择独立物理量；
@@ -163,7 +164,7 @@ Dataset中的数值不会因进入conditionable Case而自动拼接到原始prom
 
 - evaluator reference或source video；
 - provenance、原始定位和 alignment 证据；
-- `annotated=false` 的派生物理量；
+- provenance中的派生、辅助和审计量；
 - training target。Compiler 只在 sealed runtime source 的训练 case 中另加
   `supervised_targets`，供 trainer 使用；adapter 与 eval predictor 均看不到。
 

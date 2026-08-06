@@ -7,7 +7,7 @@
     "driver": "driver.py",
     "fingerprint_paths": []
   },
-  "description": "WAN2.2-TI2V-5B FlowMatch LoRA baseline that appends annotated structured physics to each Case's canonical prompt.",
+  "description": "WAN2.2-TI2V-5B FlowMatch LoRA baseline that appends formal structured physics to each Case's canonical prompt.",
   "supported_scenes": [
     "pendulum",
     "free_fall",
@@ -31,7 +31,7 @@
       "usage": "required"
     },
     "physics": {
-      "source": "case.physics[annotated=true]",
+      "source": "case.physics",
       "usage": "required",
       "representations": ["structured_text"]
     }

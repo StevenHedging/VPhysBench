@@ -46,20 +46,17 @@
       "track consistency"
     ]
   },
-  "non_conditionable_physics_parameters": [
-    "striker_initial_velocity"
-  ],
   "scene_id": "collision_1d",
   "schema_version": "2.0",
   "structured_physics_parameters": [
-    "ball_1_initial_velocity",
-    "ball_1_mass",
-    "ball_1_radius",
-    "ball_2_initial_velocity",
-    "ball_2_mass",
-    "ball_2_radius",
-    "ball_3_initial_velocity",
-    "ball_3_mass",
-    "ball_3_radius"
+    "objects.object_1.initial_velocity",
+    "objects.object_1.mass",
+    "objects.object_1.radius",
+    "objects.object_2.initial_velocity",
+    "objects.object_2.mass",
+    "objects.object_2.radius",
+    "objects.object_3.initial_velocity",
+    "objects.object_3.mass",
+    "objects.object_3.radius"
   ]
 }

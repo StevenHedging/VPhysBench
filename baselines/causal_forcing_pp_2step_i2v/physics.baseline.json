@@ -7,7 +7,7 @@
     "driver": "driver.py",
     "fingerprint_paths": ["config/*.yaml"]
   },
-  "description": "Causal Forcing++ frame-wise two-step autoregressive I2V baseline with annotated structured physics appended to each Case's canonical prompt.",
+  "description": "Causal Forcing++ frame-wise two-step autoregressive I2V baseline with formal structured physics appended to each Case's canonical prompt.",
   "supported_scenes": [
     "pendulum",
     "free_fall",
@@ -32,7 +32,7 @@
       "usage": "required"
     },
     "physics": {
-      "source": "case.physics[annotated=true]",
+      "source": "case.physics",
       "usage": "required",
       "representations": ["structured_text"]
     }

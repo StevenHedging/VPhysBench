@@ -52,6 +52,7 @@ from physbench.baselines.wan22_quantity_model import (
 )
 from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
+from physbench.datasets.physics import flat_physics_quantities
 from physbench.domain import TaskSpec
 from physbench.io import (
     canonical_sha256,
@@ -462,9 +463,8 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
                     name = quantity["name"]
                     names.append(name)
                     sentinels.append(quantity["sentinel"])
-                    source = case["physics"][name]
+                    source = flat_physics_quantities(case)[name]
                     self.assertEqual(source.get("symbol"), quantity["symbol"])
-                    self.assertIs(source["annotated"], True)
                     self.assertEqual(source["value"], quantity["raw_value"])
                     self.assertEqual(source["unit"], quantity["raw_unit"])
                     unit = registry["units"][quantity["raw_unit"]]
@@ -525,14 +525,14 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
 
     def test_adapter_rejects_non_finite_annotated_values(self) -> None:
         case = copy.deepcopy(self.dataset.cases[0])
+        projected = flat_physics_quantities(case)
         parameter = next(
             item
             for item in self.adapter.registry.value["scenes"][
                 case["scene_id"]
             ]["parameters"]
             if (
-                isinstance(case["physics"].get(item["name"]), dict)
-                and case["physics"][item["name"]].get("annotated") is True
+                isinstance(projected.get(item["name"]), dict)
             )
         )
         for value in (
@@ -543,6 +543,7 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
         ):
             with self.subTest(value=value):
                 invalid = copy.deepcopy(case)
+                invalid["physics"] = flat_physics_quantities(invalid)
                 invalid["physics"][parameter["name"]]["value"] = value
                 with self.assertRaisesRegex(ValueError, "must be finite"):
                     self.adapter.adapt_case(invalid, role="eval")

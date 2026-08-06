@@ -7,6 +7,7 @@ from physbench.baseline_api import load_baseline_bundle, load_baseline_plugin
 from physbench.baseline_runtime.adapter_loader import load_data_adapter
 from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
+from physbench.datasets.physics import flat_physics_quantities
 from physbench.io import load_json
 
 
@@ -63,8 +64,7 @@ class SymbolicConsumerTests(unittest.TestCase):
                 name
                 for case in self.dataset.cases
                 if case["scene_id"] == scene_id
-                for name, item in case["physics"].items()
-                if item["annotated"]
+                for name in flat_physics_quantities(case)
             }
             causal_names = {
                 item["name"]
@@ -85,22 +85,19 @@ class SymbolicConsumerTests(unittest.TestCase):
             quantity_bundle
         ).task_builder.data_adapter
         for case in self.dataset.cases:
-            expected = {
-                name
-                for name, item in case["physics"].items()
-                if item["annotated"]
-            }
+            projected = flat_physics_quantities(case)
+            expected = set(projected)
             causal = causal_adapter.adapt_case(case, role="eval")
             quantity = quantity_adapter.adapt_case(case, role="eval")
             self.assertEqual(expected, set(causal["used_parameters"]), case["case_id"])
             self.assertEqual(expected, set(quantity["used_parameters"]), case["case_id"])
             for adaptation in (causal, quantity):
                 for name, audit in adaptation["used_parameters"].items():
-                    self.assertEqual(case["physics"][name]["value"], audit["value"])
-                    self.assertEqual(case["physics"][name]["unit"], audit["unit"])
-                    self.assertEqual(case["physics"][name]["symbol"], audit["symbol"])
+                    self.assertEqual(projected[name]["value"], audit["value"])
+                    self.assertEqual(projected[name]["unit"], audit["unit"])
+                    self.assertEqual(projected[name]["symbol"], audit["symbol"])
             for item in quantity["native_inputs"]["physics"]["quantities"]:
-                self.assertEqual(case["physics"][item["name"]]["symbol"], item["symbol"])
+                self.assertEqual(projected[item["name"]]["symbol"], item["symbol"])
 
 
 if __name__ == "__main__":

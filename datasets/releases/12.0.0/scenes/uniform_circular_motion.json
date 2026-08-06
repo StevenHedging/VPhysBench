@@ -52,14 +52,11 @@
       "fixed overhead camera"
     ]
   },
-  "non_conditionable_physics_parameters": [
-    "angular_velocity_rad_s"
-  ],
   "scene_id": "uniform_circular_motion",
   "schema_version": "2.0",
   "structured_physics_parameters": [
-    "angular_velocity",
-    "object_1_orbit_radius",
-    "object_2_orbit_radius"
+    "environment.angular_velocity",
+    "objects.object_1.orbit_radius",
+    "objects.object_2.orbit_radius"
   ]
 }

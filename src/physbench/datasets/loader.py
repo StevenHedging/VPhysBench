@@ -7,6 +7,7 @@ from typing import Any
 from ..domain import DatasetSnapshot
 from ..identifiers import require_safe_id
 from ..io import canonical_sha256, load_json, load_jsonl, sha256_file
+from .physics import iter_physics_quantities
 
 
 FORBIDDEN_CASE_KEYS = {
@@ -71,17 +72,18 @@ def _load_directory_json(directory: Path) -> dict[str, dict[str, Any]]:
     return values
 
 
-def _validate_scene_v2(scene: dict[str, Any]) -> None:
+def _validate_scene_v2(scene: dict[str, Any], *, current: bool = False) -> None:
     required = {
         "schema_version",
         "scene_id",
         "display_name",
         "structured_physics_parameters",
-        "non_conditionable_physics_parameters",
         "generalization_factors",
         "constraints",
         "metric_spec",
     }
+    if not current:
+        required.add("non_conditionable_physics_parameters")
     if set(scene) != required:
         raise ValueError(
             f"scene {scene.get('scene_id')} schema 2.0 fields must be "
@@ -97,10 +99,10 @@ def _validate_scene_v2(scene: dict[str, Any]) -> None:
         raise ValueError(
             f"scene {scene['scene_id']} display_name must be non-empty"
         )
-    for field in (
-        "structured_physics_parameters",
-        "non_conditionable_physics_parameters",
-    ):
+    parameter_fields = ["structured_physics_parameters"]
+    if not current:
+        parameter_fields.append("non_conditionable_physics_parameters")
+    for field in parameter_fields:
         values = scene[field]
         if not isinstance(values, list) or any(
             not isinstance(value, str) or not value for value in values
@@ -242,23 +244,33 @@ def _validate_case(
             raise ValueError(
                 f"case {case['case_id']} text.{key} must be non-empty"
             )
-    physics = case["physics"]
-    if not isinstance(physics, dict) or not physics:
-        raise ValueError(f"case {case['case_id']} requires structured physics")
-    for name, quantity in physics.items():
+    quantity_records = (
+        list(iter_physics_quantities(case))
+        if schema_version == "5.0"
+        else [
+            (name, name, quantity)
+            for name, quantity in case["physics"].items()
+        ]
+    )
+    for path, _, quantity in quantity_records:
+        name = path
         if not isinstance(name, str) or not name:
             raise ValueError(
                 f"case {case['case_id']} physics parameter names must be non-empty"
             )
         if not isinstance(quantity, dict):
             raise ValueError(f"case {case['case_id']} physics.{name} must be an object")
-        expected_quantity_fields = {"value", "unit", "annotated"}
-        if schema_version == "5.0":
-            expected_quantity_fields.add("symbol")
+        expected_quantity_fields = (
+            {"value", "unit", "symbol"}
+            if schema_version == "5.0"
+            else {"value", "unit", "annotated"}
+        )
         if set(quantity) != expected_quantity_fields:
+            obsolete = "annotated" if "annotated" in quantity else None
             raise ValueError(
                 f"case {case['case_id']} physics.{name} fields must be "
                 f"{sorted(expected_quantity_fields)}"
+                + (f"; obsolete field {obsolete} is forbidden" if obsolete else "")
             )
         value = quantity["value"]
         if (
@@ -281,7 +293,9 @@ def _validate_case(
             raise ValueError(
                 f"case {case['case_id']} physics.{name}.unit must be non-empty"
             )
-        if not isinstance(quantity["annotated"], bool):
+        if schema_version != "5.0" and not isinstance(
+            quantity["annotated"], bool
+        ):
             raise ValueError(
                 f"case {case['case_id']} physics.{name}.annotated must be boolean"
             )
@@ -584,11 +598,21 @@ def _validate_v4_scene_case_and_view_contracts(
     cases: tuple[dict[str, Any], ...],
     scenes: dict[str, dict[str, Any]],
     view_a: dict[str, Any],
+    *,
+    current: bool = False,
 ) -> None:
     by_id = {case["case_id"]: case for case in cases}
     for case in cases:
         scene = scenes[case["scene_id"]]
         conditionable = set(scene["structured_physics_parameters"])
+        if current:
+            actual = {path for path, _, _ in iter_physics_quantities(case)}
+            if not actual <= conditionable:
+                raise ValueError(
+                    f"case {case['case_id']} physics paths are absent from its "
+                    f"scene contract: {sorted(actual - conditionable)}"
+                )
+            continue
         non_conditionable = set(scene["non_conditionable_physics_parameters"])
         overlap = conditionable & non_conditionable
         if overlap:
@@ -842,7 +866,7 @@ def load_dataset(
         raise ValueError("dataset scene catalog is empty")
     if descriptor_schema in {"4.0", "5.0"}:
         for scene in scene_configs.values():
-            _validate_scene_v2(scene)
+            _validate_scene_v2(scene, current=descriptor_schema == "5.0")
     seen: set[str] = set()
     for case in cases:
         _validate_case(
@@ -871,6 +895,7 @@ def load_dataset(
             cases,
             scene_configs,
             views["view_a"],
+            current=descriptor_schema == "5.0",
         )
     if descriptor_schema != "5.0":
         for case in cases:

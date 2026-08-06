@@ -7,6 +7,7 @@ from _paths import ROOT
 from physbench.baseline_api import load_baseline_bundle, load_baseline_plugin
 from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
+from physbench.datasets.physics import flat_physics_quantities
 from physbench.domain import BaselineTaskInstance
 from physbench.io import load_json, load_jsonl
 from physbench.orchestration.atomic_runner import run_atomic
@@ -189,17 +190,10 @@ class TaskBuilderContractTests(unittest.TestCase):
         self.assertEqual(original["text"], source["text"])
         self.assertTrue(source["physics"])
         self.assertTrue(all(
-            quantity["annotated"] is True
+            set(quantity) == {"value", "unit", "symbol"}
             for quantity in source["physics"].values()
         ))
-        self.assertEqual(
-            {
-                name: quantity
-                for name, quantity in original["physics"].items()
-                if quantity["annotated"] is True
-            },
-            source["physics"],
-        )
+        self.assertEqual(flat_physics_quantities(original), source["physics"])
         self.assertNotIn("provenance", source)
         self.assertNotIn("alignment", source)
         self.assertNotIn("has_real_reference_video", source)

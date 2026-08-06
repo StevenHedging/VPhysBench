@@ -62,7 +62,7 @@ def _common(name: str, generation_mode: str) -> dict[str, Any]:
                 "usage": "required",
             },
             "physics": {
-                "source": "case.physics[annotated=true]",
+                "source": "case.physics",
                 "usage": "ignored",
                 "representations": [],
             },
