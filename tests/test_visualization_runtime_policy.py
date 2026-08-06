@@ -56,6 +56,7 @@ class VisualizationRuntimePolicyTest(unittest.TestCase):
             "baseline.json",
         ]
         self.assertFalse(parser.parse_args(base).save_visualizations)
+        self.assertEqual("run", parser.parse_args(base).output_root)
         self.assertTrue(
             parser.parse_args([*base, "--save-visualizations"])
             .save_visualizations
@@ -75,6 +76,7 @@ class VisualizationRuntimePolicyTest(unittest.TestCase):
             "matrix",
         ]
         self.assertFalse(parser.parse_args(matrix).save_visualizations)
+        self.assertEqual("run", parser.parse_args(matrix).output_root)
         self.assertTrue(
             parser.parse_args([*matrix, "--save-visualizations"])
             .save_visualizations

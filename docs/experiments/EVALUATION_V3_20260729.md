@@ -248,7 +248,7 @@ evaluation_id = robust-subject-v3-20260729
 路径模式：
 
 ```text
-runs_v2/<RUN_ID>/reevaluations/
+run/<RUN_ID>/reevaluations/
   scene_default_v3/
     14dac014a9311ce32be65052f88875e9a9432d64f044dfeb7cc5eceb9adc41c6/
       robust-subject-v3-20260729/

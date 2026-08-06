@@ -1,5 +1,7 @@
 # AtomicRun Outputs
 
+`run/` 是当前唯一的 AtomicRun 与 matrix 输出根目录。
+
 每个子目录是一个不可混合的：
 
 ```text

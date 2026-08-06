@@ -136,10 +136,10 @@ partition 不会被伪造为零；这也意味着它仍然只是 observed-only �
 矩阵与 AtomicRun：
 
 ```text
-runs_v2/quantity_controls_viewa_v5_seed42_20260729.matrix.json
-runs_v2/quantity_controls_viewa_v5_seed42_20260729__*/
-runs_v2/quantity_controls_viewb_v5_seed42_20260729.matrix.json
-runs_v2/quantity_controls_viewb_v5_seed42_20260729__*/
+run/quantity_controls_viewa_v5_seed42_20260729.matrix.json
+run/quantity_controls_viewa_v5_seed42_20260729__*/
+run/quantity_controls_viewb_v5_seed42_20260729.matrix.json
+run/quantity_controls_viewb_v5_seed42_20260729__*/
 ```
 
 每个 AtomicRun 都保存 `run.json`、`frozen_cases.jsonl`、`predictions.jsonl`、

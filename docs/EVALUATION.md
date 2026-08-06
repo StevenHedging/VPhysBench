@@ -1523,7 +1523,7 @@ Prediction-side observation/comparison 失败走 fail-closed：保留所有 expe
 使用：
 
 ```text
-runs_v2/<run_id>/evaluation/visualizations/
+run/<run_id>/evaluation/visualizations/
   <scene>/<case>/<seed-or-evaluation>-<stable-identity>/
     visualization.mp4
     audit.json
@@ -1605,7 +1605,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
 ## 13. 产物
 
 ```text
-runs_v2/<run_id>/evaluation/
+run/<run_id>/evaluation/
 ├── manifest.json
 ├── case_results.jsonl
 ├── task_result.json
@@ -1989,7 +1989,7 @@ prediction SHA-256 和限制见
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   evaluate \
-  --run-dir runs_v2/RUN_ID \
+  --run-dir run/RUN_ID \
   --protocol-id scene_default_v3 \
   --evaluation-id protocol-v3-audit-001
 ```
@@ -1997,7 +1997,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 输出目录由协议内容指纹确定：
 
 ```text
-runs_v2/RUN_ID/reevaluations/
+run/RUN_ID/reevaluations/
 └── scene_default_v3/
     └── <protocol_sha256>/
         └── protocol-v3-audit-001/

@@ -62,5 +62,5 @@ Choose the desired Baseline ID when running the same Task:
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
   --scene-id collision_1d \
-  --output-root runs_v2
+  --output-root run
 ```

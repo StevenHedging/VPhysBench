@@ -3,10 +3,8 @@ __pycache__/
 .pytest_cache/
 build/
 *.egg-info/
-runs/*
-!runs/README.md
-runs_v2/*
-!runs_v2/README.md
+run/*
+!run/README.md
 results/*
 !results/README.md
 datasets/_incoming/*

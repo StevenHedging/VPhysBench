@@ -199,7 +199,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_quantity_embedding_v1 \
   --run-id wan22_quantity_embedding_v1_viewa_seed42_dryrun \
-  --output-root runs_v2
+  --output-root run
 ```
 
 完整训练、推理和评估必须使用新的 run ID：
@@ -211,7 +211,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_quantity_embedding_v1 \
   --run-id wan22_quantity_embedding_v1_viewa_seed42 \
-  --output-root runs_v2 \
+  --output-root run \
   --execute
 ```
 
@@ -237,7 +237,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
   --baseline wan22_ti2v_5b_lora_r32_quantity_embedding_v1 \
   --matrix-id wan22_viewa_conditioning_seed42 \
-  --output-root runs_v2 \
+  --output-root run \
   --execute
 ```
 
@@ -284,7 +284,7 @@ inventory 和训练成本，不应只报告分数。
 ## 7. 产物与验收
 
 ```text
-runs_v2/<run_id>/
+run/<run_id>/
 ├── task_instance/manifest.json
 ├── adaptations/case_adaptations.jsonl
 ├── artifacts/wan22/
@@ -381,7 +381,7 @@ AtomicRun 进入 `complete`、`inference_incomplete` 或 `failed` 终态后，�
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
   scripts/summarize_quantity_run.py \
-  --run-dir runs_v2/<run_id> \
+  --run-dir run/<run_id> \
   --output-dir results/<run_id>/<summary_id>
 ```
 

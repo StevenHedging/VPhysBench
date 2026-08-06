@@ -218,7 +218,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
-  --output-root runs_v2 \
+  --output-root run \
   --run-id wan22_generic_dryrun
 ```
 
@@ -232,7 +232,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```
 
 启用后结果写入
-`runs_v2/<run_id>/evaluation/visualizations/<scene>/<case>/...`；该参数只控制运行内的
+`run/<run_id>/evaluation/visualizations/<scene>/<case>/...`；该参数只控制运行内的
 诊断视频，不改变评测分数。并存式重评的视频写入对应 reevaluation 的
 `evaluation/visualizations/`，不会修改 canonical evaluation。
 
@@ -259,15 +259,15 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
   --matrix-id wan22_prompt_injection_ablation \
-  --output-root runs_v2
+  --output-root run
 ```
 
 至少需要两个不同 Baseline ID。加 `--execute` 才运行模型。输出为：
 
 ```text
-runs_v2/wan22_prompt_injection_ablation.matrix.json
-runs_v2/wan22_prompt_injection_ablation__wan22_ti2v_5b_lora_r32_v3_generic/
-runs_v2/wan22_prompt_injection_ablation__wan22_ti2v_5b_lora_r32_v3_physics/
+run/wan22_prompt_injection_ablation.matrix.json
+run/wan22_prompt_injection_ablation__wan22_ti2v_5b_lora_r32_v3_generic/
+run/wan22_prompt_injection_ablation__wan22_ti2v_5b_lora_r32_v3_physics/
 ```
 
 矩阵索引冻结每个 Bundle、deployment、input policy、TaskBuilder fingerprint 与

@@ -172,7 +172,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --scene-id pendulum \
   --case-id CASE_ID \
   --run-id cosmos3_physics_pendulum_dryrun \
-  --output-root runs_v2
+  --output-root run
 ```
 
 同 Task 对照矩阵：
@@ -185,7 +185,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --baseline cosmos3_nano_i2v_generic \
   --baseline cosmos3_nano_i2v_physics \
   --matrix-id cosmos3_generic_vs_physics \
-  --output-root runs_v2
+  --output-root run
 ```
 
 确认 payload 中 base prompt、物理 clause、首帧、shape、seed 与 checkpoint identity 后，

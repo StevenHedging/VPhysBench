@@ -25,7 +25,7 @@ ID/OOD1 job 的推理，以及两套评测协议下的逐 Case 评测。模型�
 完整 run：
 
 ```text
-runs_v2/five_scene_wan22_quantity_embedding_r32_e10_seed42_918e9f7_20260728/
+run/five_scene_wan22_quantity_embedding_r32_e10_seed42_918e9f7_20260728/
 ```
 
 canonical v1 的加固汇总：
@@ -462,7 +462,7 @@ reevaluations/scene_default_v2/
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
   scripts/summarize_quantity_run.py \
-  --run-dir runs_v2/five_scene_wan22_quantity_embedding_r32_e10_seed42_918e9f7_20260728 \
+  --run-dir run/five_scene_wan22_quantity_embedding_r32_e10_seed42_918e9f7_20260728 \
   --output-dir results/five_scene_wan22_quantity_embedding_r32_e10_seed42_918e9f7_20260728/<new_summary_id>
 ```
 
@@ -471,7 +471,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   evaluate \
-  --run-dir runs_v2/five_scene_wan22_quantity_embedding_r32_e10_seed42_918e9f7_20260728 \
+  --run-dir run/five_scene_wan22_quantity_embedding_r32_e10_seed42_918e9f7_20260728 \
   --protocol-id scene_default_v2 \
   --evaluation-id <new_evaluation_id>
 ```

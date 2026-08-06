@@ -77,7 +77,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_quantity_embedding_v1 \
   --run-id wan22_quantity_embedding_v1_viewa_seed42 \
-  --output-root runs_v2 \
+  --output-root run \
   --execute
 ```
 
@@ -125,7 +125,7 @@ must not be described as carrying the newer runtime evidence.
 Important run-local records include:
 
 ```text
-runs_v2/<run_id>/
+run/<run_id>/
 ├── artifacts/wan22/checkpoints/
 ├── artifacts/wan22/checkpoint.json
 ├── artifacts/wan22/checkpoints/training_sampling_runtime.json
@@ -153,7 +153,7 @@ macro-result projections, and training-evidence indexes from a terminal
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
   scripts/summarize_quantity_run.py \
-  --run-dir runs_v2/<run_id> \
+  --run-dir run/<run_id> \
   --output-dir results/<run_id>/<summary_id>
 ```
 
@@ -203,7 +203,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
   --baseline wan22_ti2v_5b_lora_r32_quantity_embedding_v1 \
   --matrix-id wan22_viewa_conditioning_seed42 \
-  --output-root runs_v2 \
+  --output-root run \
   --execute
 ```
 

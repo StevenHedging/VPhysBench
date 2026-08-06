@@ -14,7 +14,7 @@
 - Do not transcode, copy, or rewrite video, image, mask, ZIP, XLSX, or NPZ payloads.
 - Preserve the byte content of every existing release metadata file unless it contains an active documentation or executable path literal that must be updated.
 - Preserve 8.0.0 and 9.0.0 asset-lock verification.
-- Do not rewrite frozen `runs/`, `runs_v2/`, `results/`, or historical provenance audit records.
+- Do not rewrite frozen `run/`, `results/`, or historical provenance audit records.
 - Work in the current checkout as previously authorized; do not create a media-duplicating worktree.
 
 ---

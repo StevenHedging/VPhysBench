@@ -30,7 +30,7 @@ class PredictionArtifactTests(unittest.TestCase):
             source = root / "external" / "prediction.mp4"
             source.parent.mkdir()
             source.write_bytes(b"fixture-video")
-            run_dir = root / "runs_v2" / "run"
+            run_dir = root / "run" / "fixture"
 
             first = import_prediction_video(
                 source=source,

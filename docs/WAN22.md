@@ -288,7 +288,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
   --matrix-id wan22_generic_vs_physics \
-  --output-root runs_v2
+  --output-root run
 ```
 
 首次接入或迁移机器时先做单 case dry-run，再用新 run ID 加 `--execute`。完整操作见

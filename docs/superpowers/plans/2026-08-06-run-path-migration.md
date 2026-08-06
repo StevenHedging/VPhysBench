@@ -62,6 +62,7 @@ Create `tests/test_run_root.py`:
 ```python
 from __future__ import annotations
 
+import subprocess
 import unittest
 
 from _paths import ROOT
@@ -69,19 +70,30 @@ from _paths import ROOT
 
 class RunRootContractTest(unittest.TestCase):
     def test_only_run_root_is_active(self) -> None:
-        lines = {
-            line.strip()
-            for line in (ROOT / ".gitignore").read_text(
-                encoding="utf-8"
-            ).splitlines()
-            if line.strip() and not line.lstrip().startswith("#")
-        }
-        self.assertIn("run/*", lines)
-        self.assertIn("!run/README.md", lines)
-        self.assertNotIn("runs/*", lines)
-        self.assertNotIn("!runs/README.md", lines)
-        self.assertNotIn("runs_v2/*", lines)
-        self.assertNotIn("!runs_v2/README.md", lines)
+        generated = subprocess.run(
+            [
+                "git",
+                "check-ignore",
+                "--no-index",
+                "--quiet",
+                "run/example/generated.json",
+            ],
+            cwd=ROOT,
+            check=False,
+        )
+        readme = subprocess.run(
+            [
+                "git",
+                "check-ignore",
+                "--no-index",
+                "--quiet",
+                "run/README.md",
+            ],
+            cwd=ROOT,
+            check=False,
+        )
+        self.assertEqual(0, generated.returncode)
+        self.assertEqual(1, readme.returncode)
         self.assertTrue((ROOT / "run" / "README.md").is_file())
         self.assertFalse((ROOT / "runs").exists())
         self.assertFalse((ROOT / "runs_v2").exists())

@@ -694,7 +694,7 @@ protocol 重评，并扩大真实视频的 extra/missing、遮挡与 OOD 审计�
 时间线和 JSON audit。启用 `--save-visualizations` 后，大型并列 overlay 与逐
 ID/lifecycle 审计写入所属 evaluation 的
 `visualizations/<scene>/<case>/...`，因此 canonical 结果位于
-`runs_v2/<run_id>/evaluation/visualizations/...`，并存式重评位于对应 variant 内；本地
+`run/<run_id>/evaluation/visualizations/...`，并存式重评位于对应 variant 内；本地
 `visualization_manifest.json` 保存路径、SHA-256 和失败状态。该开关默认关闭，渲染失败
 永远不改变已经计算的 Case 分数。
 

@@ -116,7 +116,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline causal_forcing_pp_2step_i2v_physics \
-  --output-root runs_v2
+  --output-root run
 ```
 
 Add `--execute` to generate. `--case-id CASE_ID` restricts an integration

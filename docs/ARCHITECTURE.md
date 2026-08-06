@@ -286,13 +286,13 @@ DatasetSnapshot × TaskSpec × Baseline identity × seeds
 seed 和 job 签名一致。矩阵索引位于：
 
 ```text
-runs_v2/<matrix_id>.matrix.json
+run/<matrix_id>.matrix.json
 ```
 
 各元素位于：
 
 ```text
-runs_v2/<matrix_id>__<baseline_id>/
+run/<matrix_id>__<baseline_id>/
 ```
 
 矩阵索引区分编排终态和子运行终态：`orchestration_status=complete` 只表示全部

@@ -174,7 +174,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --scene-id pendulum \
   --case-id CASE_ID \
   --run-id cosmos3_generic_pendulum_dryrun \
-  --output-root runs_v2
+  --output-root run
 ```
 
 Dry-run 会冻结 plan/TaskInstance、展开 adapter、写 job 与 planned prediction，但不启动
@@ -190,12 +190,12 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --scene-id pendulum \
   --case-id CASE_ID \
   --run-id cosmos3_generic_pendulum_execute \
-  --output-root runs_v2 \
+  --output-root run \
   --execute
 ```
 
 可视化视频默认关闭。只有需要人工审计时才添加 `--save-visualizations`；启用后写入
-`runs_v2/<run_id>/evaluation/visualizations/<scene>/<case>/...`。视频使用
+`run/<run_id>/evaluation/visualizations/<scene>/<case>/...`。视频使用
 H.264/yuv420p/fast-start，避免旧 `mp4v` 在浏览器中出现“加载视频文件时出错”。
 
 AtomicRun 不覆盖已有目录。单 case 或 subset run 是工程诊断，coverage 不完整时没有正式
@@ -211,7 +211,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --baseline cosmos3_nano_i2v_generic \
   --baseline cosmos3_nano_i2v_physics \
   --matrix-id cosmos3_generic_vs_physics \
-  --output-root runs_v2
+  --output-root run
 ```
 
 矩阵在执行前验证两个 Baseline 的 Dataset、split、seed 与 jobs 完全一致。不加
@@ -220,9 +220,9 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 输出：
 
 ```text
-runs_v2/cosmos3_generic_vs_physics.matrix.json
-runs_v2/cosmos3_generic_vs_physics__cosmos3_nano_i2v_generic/
-runs_v2/cosmos3_generic_vs_physics__cosmos3_nano_i2v_physics/
+run/cosmos3_generic_vs_physics.matrix.json
+run/cosmos3_generic_vs_physics__cosmos3_nano_i2v_generic/
+run/cosmos3_generic_vs_physics__cosmos3_nano_i2v_physics/
 ```
 
 每个元素是独立 AtomicRun，不能把两个 Baseline 的预测写进同一个 run。
@@ -234,7 +234,7 @@ runs_v2/cosmos3_generic_vs_physics__cosmos3_nano_i2v_physics/
 ## 9. Run 输出
 
 ```text
-runs_v2/<run_id>/
+run/<run_id>/
 ├── run.json
 ├── state.json
 ├── plan.json
@@ -298,7 +298,7 @@ SHA-256。
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   prediction-import \
   --source /path/to/existing_prediction.mp4 \
-  --run-dir runs_v2/RUN_ID \
+  --run-dir run/RUN_ID \
   --baseline-id BASELINE_ID \
   --case-id CASE_ID \
   --job-id JOB_ID \
@@ -315,7 +315,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   evaluate \
-  --run-dir runs_v2/RUN_ID \
+  --run-dir run/RUN_ID \
   --protocol-id scene_default_v2 \
   --evaluation-id protocol-v2-audit-001
 ```
@@ -323,7 +323,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 命令读取冻结 TaskInstance、Case 与 `predictions.jsonl`，创建：
 
 ```text
-runs_v2/RUN_ID/reevaluations/
+run/RUN_ID/reevaluations/
 └── scene_default_v2/<protocol_sha256>/protocol-v2-audit-001/
 ```
 
@@ -402,7 +402,7 @@ evaluation/cases/<job_id>/physical_subject_iou_curve.png
 `--save-visualizations` 时才保存，默认关闭。Canonical evaluation 的目录为：
 
 ```text
-runs_v2/<run_id>/evaluation/visualizations/
+run/<run_id>/evaluation/visualizations/
   <scene>/<case>/<seed-or-evaluation>-<hash>/
     visualization.mp4
     audit.json
@@ -411,7 +411,7 @@ runs_v2/<run_id>/evaluation/visualizations/
 并存式重评归属于具体 evaluation variant，目录为：
 
 ```text
-runs_v2/<run_id>/reevaluations/<protocol>/<fingerprint>/<evaluation_id>/
+run/<run_id>/reevaluations/<protocol>/<fingerprint>/<evaluation_id>/
   evaluation/visualizations/<scene>/<case>/<evaluation>-<hash>/...
 ```
 
@@ -420,7 +420,7 @@ runs_v2/<run_id>/reevaluations/<protocol>/<fingerprint>/<evaluation_id>/
 ```bash
 PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   evaluate \
-  --run-dir runs_v2/RUN_ID \
+  --run-dir run/RUN_ID \
   --protocol-id scene_default_v8 \
   --evaluation-id manual-audit-001 \
   --save-visualizations
@@ -536,14 +536,13 @@ Dataset、TaskInstance 和 prediction 新建 AtomicRun。
 
 ## 14. 运行保留与清理
 
-- `runs_v2/`：当前、不可混合的 AtomicRun；
-- `runs/`：历史实验，只为 provenance 或 legacy reevaluate 保留；
+- `run/`：当前唯一、不可混合的 AtomicRun 与 matrix 输出根；
 - `results/`：可选的跨 run 汇总，不是生成视频或 TaskInstance 的权威来源；
 - 可删除失败 smoke、无引用 dry-run、`__pycache__` 与可重建 cache；
 - 应保留发布报告引用的 run、昂贵训练制品、checkpoint identity 与 Dataset provenance。
 
 清理前先检查 `baseline.local.json` 是否仍引用历史 run 内的 checkpoint。不要整体删除
-`runs/` 或 `runs_v2/`。
+`run/`。
 
 ## 15. 发布检查单
 

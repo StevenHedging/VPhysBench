@@ -485,7 +485,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --scene-id pendulum \
   --case-id CASE_ID \
   --run-id my_i2v_generic_dryrun \
-  --output-root runs_v2
+  --output-root run
 ```
 
 检查：

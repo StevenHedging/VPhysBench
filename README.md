@@ -144,7 +144,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
-  --output-root runs_v2
+  --output-root run
 ```
 
 在同一 Task 上成对比较两个 Baseline：
@@ -157,11 +157,11 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
   --baseline cosmos3_nano_i2v_generic \
   --baseline cosmos3_nano_i2v_physics \
   --matrix-id cosmos3_generic_vs_physics \
-  --output-root runs_v2
+  --output-root run
 ```
 
 加 `--execute` 才会启动模型。每个矩阵元素仍是独立
-`runs_v2/<matrix_id>__<baseline_id>/` AtomicRun。
+`run/<matrix_id>__<baseline_id>/` AtomicRun。
 
 ## 文档
 
@@ -193,7 +193,7 @@ physics_video_benchmark/
 ├── src/physbench/            # planner、runtime、评估与 CLI
 ├── tests/                    # 回归测试
 ├── docs/                     # 架构和操作文档
-└── runs_v2/                  # 当前 AtomicRun 输出
+└── run/                  # 当前 AtomicRun 输出
 ```
 
 权威数据资产只能写入 `datasets/`。缩放、抽帧、特征、模型缓存和预测必须进入内容寻址
