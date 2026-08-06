@@ -359,6 +359,7 @@ class MediaTests(unittest.TestCase):
             with zipfile.ZipFile(archive, "w") as handle:
                 handle.write(workbook, "batch/spring.xlsx")
                 handle.writestr("batch/IMG_1518.MOV", b"video")
+                handle.writestr("batch/IMG_1518(1).MOV", b"video")
             output = root / "output"
 
             subprocess.run(
@@ -377,6 +378,12 @@ class MediaTests(unittest.TestCase):
 
             payload = json.loads(
                 (output / "normalized_annotations.json").read_text()
+            )
+            self.assertEqual("source.zip", payload["archive_name"])
+            self.assertNotIn("archive", payload)
+            self.assertEqual(
+                [["batch/IMG_1518(1).MOV", "batch/IMG_1518.MOV"]],
+                payload["duplicate_source_groups"],
             )
             self.assertEqual(1, payload["summary"]["accepted_count"])
             self.assertEqual("T001", payload["accepted"][0]["trial_id"])
@@ -619,6 +626,8 @@ class MediaTests(unittest.TestCase):
                     str(review_path),
                     "--repo-root",
                     str(root),
+                    "--workers",
+                    "2",
                 ],
                 check=True,
                 env={"PYTHONPATH": "src"},

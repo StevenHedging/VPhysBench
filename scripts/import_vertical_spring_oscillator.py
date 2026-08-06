@@ -55,9 +55,20 @@ def inventory(archive: Path, output_dir: Path) -> dict[str, object]:
     trials = load_trial_annotations(workbook_path)
     sources = inventory_archive(archive)
     result = map_trials_to_sources(trials, sources)
+    members_by_content: dict[tuple[int, int], list[str]] = {}
+    for source in sources:
+        members_by_content.setdefault((source.size, source.crc32), []).append(
+            source.member
+        )
+    duplicate_source_groups = sorted(
+        sorted(members)
+        for members in members_by_content.values()
+        if len(members) > 1
+    )
     payload: dict[str, object] = {
-        "archive": str(archive),
+        "archive_name": archive.name,
         "workbook_member": workbook_member.filename,
+        "duplicate_source_groups": duplicate_source_groups,
         "accepted": [
             {
                 "trial_id": item.trial.trial_id,
@@ -97,6 +108,7 @@ def inventory(archive: Path, output_dir: Path) -> dict[str, object]:
             "video_member_count": len(sources),
             "accepted_count": len(result.accepted),
             "excluded_count": len(result.exclusions),
+            "duplicate_source_group_count": len(duplicate_source_groups),
         },
     }
     _write_json(output_dir / "normalized_annotations.json", payload)
@@ -230,89 +242,103 @@ def materialize(
     analysis_path: Path,
     review_path: Path,
     repo_root: Path,
+    *,
+    workers: int = 1,
 ) -> dict[str, int]:
+    if workers < 1:
+        raise ValueError("workers must be positive")
     candidates = _load_jsonl(analysis_path)
     decisions = {
         str(item["trial_id"]): item for item in _load_jsonl(review_path)
     }
     audits: list[dict[str, object]] = []
     exclusions: list[dict[str, object]] = []
-    with zipfile.ZipFile(archive) as handle:
-        for candidate in candidates:
-            trial_id = str(candidate["trial_id"])
-            decision = decisions.get(trial_id)
-            if decision is None:
-                exclusions.append(
-                    {"trial_id": trial_id, "reason": "missing_review_decision"}
-                )
-                continue
-            if decision.get("status") != "approved":
-                exclusions.append(
-                    {
-                        "trial_id": trial_id,
-                        "reason": "visual_review_rejected",
-                        "details": [str(decision.get("reason", "unspecified"))],
-                    }
-                )
-                continue
-            values = dict(candidate)
-            overrides = decision.get("overrides", {})
-            if isinstance(overrides, dict):
-                values.update(overrides)
-            source_member = str(values["source_member"])
-            source = SourceMember(
-                source_member,
-                str(values["video_name"]),
-                int(values["source_size"]),
-                int(values["source_crc32"]),
+    approved: list[tuple[dict[str, object], dict[str, object]]] = []
+    for candidate in candidates:
+        trial_id = str(candidate["trial_id"])
+        decision = decisions.get(trial_id)
+        if decision is None:
+            exclusions.append(
+                {"trial_id": trial_id, "reason": "missing_review_decision"}
             )
-            trial = TrialAnnotation(
-                trial_id,
-                str(values["spring_id"]),
-                str(values["video_name"]),
-                float(values["signed_displacement_mm"]),
-                int(values["workbook_row"]),
+            continue
+        if decision.get("status") != "approved":
+            exclusions.append(
+                {
+                    "trial_id": trial_id,
+                    "reason": "visual_review_rejected",
+                    "details": [str(decision.get("reason", "unspecified"))],
+                }
             )
-            analysis_ball = [float(value) for value in values["analysis_ball_xyr"]]
-            full_ball = [
-                float(value) for value in values["full_resolution_ball_xyr"]
-            ]
-            analysis = VideoAnalysis(
-                candidate=TurningFrameCandidate(
-                    int(values["source_start_frame"]),
-                    float(values["source_start_time_s"]),
-                    analysis_ball[0],
-                    analysis_ball[1],
-                    analysis_ball[2],
-                    float(values["observed_period_s"]),
-                    float(values["track_coverage"]),
-                ),
-                full_resolution_ball=BallDetection(
-                    full_ball[0], full_ball[1], full_ball[2], 1.0
-                ),
-                frame_count=int(values["source_frame_count"]),
-                displayed_width=int(values["displayed_width"]),
-                displayed_height=int(values["displayed_height"]),
-                analysis_stride=int(values["analysis_stride"]),
+            continue
+        approved.append((candidate, decision))
+
+    def materialize_item(
+        item: tuple[dict[str, object], dict[str, object]],
+    ) -> dict[str, object]:
+        candidate, decision = item
+        trial_id = str(candidate["trial_id"])
+        values = dict(candidate)
+        overrides = decision.get("overrides", {})
+        if isinstance(overrides, dict):
+            values.update(overrides)
+        source_member = str(values["source_member"])
+        source = SourceMember(
+            source_member,
+            str(values["video_name"]),
+            int(values["source_size"]),
+            int(values["source_crc32"]),
+        )
+        trial = TrialAnnotation(
+            trial_id,
+            str(values["spring_id"]),
+            str(values["video_name"]),
+            float(values["signed_displacement_mm"]),
+            int(values["workbook_row"]),
+        )
+        analysis_ball = [float(value) for value in values["analysis_ball_xyr"]]
+        full_ball = [
+            float(value) for value in values["full_resolution_ball_xyr"]
+        ]
+        analysis = VideoAnalysis(
+            candidate=TurningFrameCandidate(
+                int(values["source_start_frame"]),
+                float(values["source_start_time_s"]),
+                analysis_ball[0],
+                analysis_ball[1],
+                analysis_ball[2],
+                float(values["observed_period_s"]),
+                float(values["track_coverage"]),
+            ),
+            full_resolution_ball=BallDetection(
+                full_ball[0], full_ball[1], full_ball[2], 1.0
+            ),
+            frame_count=int(values["source_frame_count"]),
+            displayed_width=int(values["displayed_width"]),
+            displayed_height=int(values["displayed_height"]),
+            analysis_stride=int(values["analysis_stride"]),
+        )
+        with zipfile.ZipFile(archive) as handle, tempfile.TemporaryDirectory(
+            prefix="vphysbench_vertical_spring_materialize_"
+        ) as directory:
+            extracted = Path(directory) / source.basename
+            with handle.open(source.member) as source_handle, extracted.open(
+                "wb"
+            ) as target:
+                shutil.copyfileobj(source_handle, target)
+            draft = materialize_case(
+                extracted,
+                trial,
+                source,
+                analysis,
+                repo_root,
             )
-            with tempfile.TemporaryDirectory(
-                prefix="vphysbench_vertical_spring_materialize_"
-            ) as directory:
-                extracted = Path(directory) / source.basename
-                with handle.open(source.member) as source_handle, extracted.open(
-                    "wb"
-                ) as target:
-                    shutil.copyfileobj(source_handle, target)
-                draft = materialize_case(
-                    extracted,
-                    trial,
-                    source,
-                    analysis,
-                    repo_root,
-                )
-            audit = dict(draft.audit)
-            audit["review"] = decision
-            audits.append(audit)
+        audit = dict(draft.audit)
+        audit["review"] = decision
+        return audit
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        audits.extend(executor.map(materialize_item, approved))
     import_root = repo_root / "datasets" / "provenance" / "imports"
     _write_jsonl(
         import_root
@@ -440,6 +466,7 @@ def build_parser() -> argparse.ArgumentParser:
     materialize_parser.add_argument("--analysis", type=Path, required=True)
     materialize_parser.add_argument("--review", type=Path, required=True)
     materialize_parser.add_argument("--repo-root", type=Path, required=True)
+    materialize_parser.add_argument("--workers", type=int, default=1)
     review_parser = subparsers.add_parser("review-sheets")
     review_parser.add_argument("--archive", type=Path, required=True)
     review_parser.add_argument("--analysis", type=Path, required=True)
@@ -469,6 +496,7 @@ def main(argv: list[str] | None = None) -> int:
             args.analysis,
             args.review,
             args.repo_root,
+            workers=args.workers,
         )
         print(json.dumps(summary, sort_keys=True))
         return 0
