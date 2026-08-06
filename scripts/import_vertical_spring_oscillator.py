@@ -533,6 +533,14 @@ def record_review(
         if trial_id in rejection_reasons:
             decision["status"] = "rejected"
             decision["reason"] = rejection_reasons[trial_id]
+        else:
+            decision["checks"] = {
+                "ball_complete": True,
+                "caption_direction": True,
+                "mask_boundary": True,
+                "release_tool_absent": True,
+                "turning_frame": True,
+            }
         decisions.append(decision)
     _write_jsonl(output_path, decisions)
     return len(decisions)

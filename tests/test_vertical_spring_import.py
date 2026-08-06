@@ -820,6 +820,13 @@ class MediaTests(unittest.TestCase):
             self.assertEqual(
                 [
                     {
+                        "checks": {
+                            "ball_complete": True,
+                            "caption_direction": True,
+                            "mask_boundary": True,
+                            "release_tool_absent": True,
+                            "turning_frame": True,
+                        },
                         "reviewer": "codex_visual_review",
                         "status": "approved",
                         "trial_id": "T001",
