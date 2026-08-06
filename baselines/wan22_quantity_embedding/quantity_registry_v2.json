@@ -11,6 +11,7 @@
     "m/s": {"canonical_si_unit": "m/s", "si_scale": 1.0, "dimension": [1, 0, -1, 0, 0, 0, 0]},
     "m/s^2": {"canonical_si_unit": "m/s^2", "si_scale": 1.0, "dimension": [1, 0, -2, 0, 0, 0, 0]},
     "N": {"canonical_si_unit": "kg*m/s^2", "si_scale": 1.0, "dimension": [1, 1, -2, 0, 0, 0, 0]},
+    "N/m": {"canonical_si_unit": "kg/s^2", "si_scale": 1.0, "dimension": [0, 1, -2, 0, 0, 0, 0]},
     "deg": {"canonical_si_unit": "rad", "si_scale": 0.017453292519943295, "dimension": [0, 0, 0, 0, 0, 0, 0]},
     "deg/s": {"canonical_si_unit": "rad/s", "si_scale": 0.017453292519943295, "dimension": [0, 0, -1, 0, 0, 0, 0]}
   },
@@ -78,6 +79,17 @@
         {"name": "angular_velocity", "source_role": "independent", "required": true, "unit": "deg/s", "precision": 2, "quantity_type": "angular_velocity", "template": "ω is {quantity}"},
         {"name": "object_1_orbit_radius", "source_role": "independent", "required": true, "unit": "m", "precision": 2, "quantity_type": "radius", "template": "r_1 is {quantity}"},
         {"name": "object_2_orbit_radius", "source_role": "independent", "required": false, "unit": "m", "precision": 2, "quantity_type": "radius", "template": "r_2 is {quantity}"}
+      ]
+    },
+    "vertical_spring_oscillator": {
+      "parameter_intro": " Numeric physical values: ", "parameter_separator": "; ", "parameter_outro": ".",
+      "parameters": [
+        {"name": "initial_displacement", "source_role": "independent", "required": true, "unit": "m", "precision": 3, "quantity_type": "length", "template": "x_0 is {quantity}"},
+        {"name": "oscillator_mass", "source_role": "independent", "required": true, "unit": "kg", "precision": 4, "quantity_type": "mass", "template": "m is {quantity}"},
+        {"name": "ball_radius", "source_role": "independent", "required": true, "unit": "m", "precision": 3, "quantity_type": "radius", "template": "r is {quantity}"},
+        {"name": "gravity_acceleration", "source_role": "independent", "required": true, "unit": "m/s^2", "precision": 5, "quantity_type": "acceleration", "template": "g is {quantity}"},
+        {"name": "natural_spring_length", "source_role": "independent", "required": true, "unit": "m", "precision": 3, "quantity_type": "length", "template": "L_0 is {quantity}"},
+        {"name": "spring_stiffness", "source_role": "independent", "required": true, "unit": "N/m", "precision": 5, "quantity_type": "coefficient", "template": "k is {quantity}"}
       ]
     }
   }

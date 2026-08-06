@@ -3,7 +3,7 @@
 本文面向新增模型或算法。当前新实验只使用 schema 5.0 Baseline；Task 不再为物理信息
 使用方式复制实验臂。
 
-当前Dataset 12.0.0将caption与结构化物理量分别保存在Case-local `caption.json`和
+当前Dataset 13.0.0将caption与结构化物理量分别保存在Case-local `caption.json`和
 `physics.json`。Loader将它们物化为`case.text`和`case.physics`；Baseline应使用
 `case.text.prompt`与`case.physics`这两个稳定运行时API，不应绕过Loader
 直接解释文件格式。
@@ -256,7 +256,7 @@ Case 资产。
 ```
 
 Adapter audit 中的 `conditioning_video` 表示 V2V 输入媒体角色，并非 Task 的物理信息
-分组。该资产必须独立于 GT/reference/source。当前 Dataset 12.0.0 没有正式
+分组。该资产必须独立于 GT/reference/source。当前 Dataset 13.0.0 没有正式
 `assets.input_video`，所以 V2V 脚手架不能直接运行官方 Task。
 
 ## 7. Python adapter
@@ -468,7 +468,7 @@ PYTHONPATH=src python -m physbench \
 ```bash
 PYTHONPATH=src python -m physbench \
   task-build \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline my_i2v_generic \
   --output results/my_i2v_generic_task.json
@@ -479,7 +479,7 @@ PYTHONPATH=src python -m physbench \
 ```bash
 PYTHONPATH=src python -m physbench \
   atomic-run \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline my_i2v_generic \
   --scene-id pendulum \

@@ -15,7 +15,8 @@
     "inclined_plane_slide",
     "parabolic_motion",
     "uniform_circular_motion",
-    "push_bottle"
+    "push_bottle",
+    "vertical_spring_oscillator"
   ],
   "capabilities": {
     "task_families": ["direct_eval"],
@@ -98,7 +99,8 @@
         "inclined_plane_slide": {"width": 832, "height": 480},
         "parabolic_motion": {"width": 480, "height": 832},
         "uniform_circular_motion": {"width": 480, "height": 832},
-        "push_bottle": {"width": 480, "height": 832}
+        "push_bottle": {"width": 480, "height": 832},
+        "vertical_spring_oscillator": {"width": 480, "height": 832}
       }
     },
     "temporal": {

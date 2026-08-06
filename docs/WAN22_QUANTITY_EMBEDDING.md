@@ -9,8 +9,8 @@ Frozen source bundle: 1.0.0
 Execution-time HEAD:  918e9f7 (not separately sealed by the run manifest)
 Base model:  WAN2.2-TI2V-5B
 Source run:  five_scene_finetune_eval_v4 / scene_default_v1
-Current Task: five_scene_finetune_eval_v12 (Task schema 4.0) / scene_default_v10
-Dataset:     physics_video_six_scene_v12 / View A
+Current Task: five_scene_finetune_eval_v13 (Task schema 4.0) / scene_default_v10
+Dataset:     physics_video_seven_scene_v13 / View A
 ```
 
 目标是检验：相对于“不使用结构化物理量”和“把物理量直接写入 prompt”，显式编码数值、
@@ -195,7 +195,7 @@ PYTHONPATH=src python -m physbench \
 
 PYTHONPATH=src python -m physbench \
   atomic-run \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_quantity_embedding_v1 \
   --run-id wan22_quantity_embedding_v1_viewa_seed42_dryrun \
@@ -207,7 +207,7 @@ PYTHONPATH=src python -m physbench \
 ```bash
 PYTHONPATH=src python -m physbench \
   atomic-run \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_quantity_embedding_v1 \
   --run-id wan22_quantity_embedding_v1_viewa_seed42 \
@@ -231,7 +231,7 @@ PYTHONPATH=src python -m physbench \
 ```bash
 PYTHONPATH=src python -m physbench \
   matrix-run \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \

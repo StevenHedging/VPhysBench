@@ -27,7 +27,7 @@ baselines/wan22_quantity_embedding/
 ├── adapter.py
 ├── driver.py
 ├── quantity_registry.json             # 历史V1资源
-└── quantity_registry_v2.json          # 当前V12独立量资源
+└── quantity_registry_v2.json          # 当前V13独立量资源
 ```
 
 | Baseline ID | Task family | 物理策略 | 用途 |
@@ -272,7 +272,7 @@ PYTHONPATH=src python -m physbench \
 ```bash
 PYTHONPATH=src python -m physbench \
   task-build \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
   --output results/wan22_physics_finetune_task.json
@@ -283,7 +283,7 @@ PYTHONPATH=src python -m physbench \
 ```bash
 PYTHONPATH=src python -m physbench \
   matrix-run \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \

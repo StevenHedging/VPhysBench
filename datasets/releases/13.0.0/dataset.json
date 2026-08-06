@@ -1,0 +1,12 @@
+{
+  "asset_root": "../..",
+  "cases": "cases.jsonl",
+  "dataset_id": "physics_video_seven_scene_v13",
+  "release": "13.0.0",
+  "scene_catalog": "scenes",
+  "schema_version": "5.0",
+  "views": {
+    "view_a": "views/view_a.json",
+    "view_b": "views/view_b.json"
+  }
+}

@@ -23,8 +23,8 @@ class FlatDatasetLayoutTests(unittest.TestCase):
             data_layout.PHYSICS_VIDEO_PROVENANCE,
         )
         self.assertEqual(
-            DATASETS_ROOT / "releases" / "12.0.0" / "dataset.json",
-            data_layout.V12_DATASET,
+            DATASETS_ROOT / "releases" / "13.0.0" / "dataset.json",
+            data_layout.V13_DATASET,
         )
 
     def test_flat_roots_replace_the_legacy_wrapper(self) -> None:
@@ -43,7 +43,7 @@ class FlatDatasetLayoutTests(unittest.TestCase):
         self.assertEqual(source_archives.resolve(), compatibility.resolve())
 
     def test_current_release_resolves_without_an_asset_lock(self) -> None:
-        expected = {"12.0.0": 799}
+        expected = {"13.0.0": 916}
         for version, case_count in expected.items():
             with self.subTest(version=version):
                 descriptor = DATASETS_ROOT / "releases" / version / "dataset.json"

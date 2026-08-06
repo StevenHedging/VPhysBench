@@ -18,7 +18,8 @@
     "inclined_plane_slide",
     "uniform_circular_motion",
     "parabolic_motion",
-    "push_bottle"
+    "push_bottle",
+    "vertical_spring_oscillator"
   ],
   "capabilities": {
     "task_families": ["finetune_eval"],
@@ -90,7 +91,8 @@
           "parabolic_motion": {"name": "portrait", "width": 480, "height": 832},
           "push_bottle": {"name": "portrait", "width": 480, "height": 832},
           "collision_1d": {"name": "landscape", "width": 832, "height": 480},
-          "inclined_plane_slide": {"name": "landscape", "width": 832, "height": 480}
+          "inclined_plane_slide": {"name": "landscape", "width": 832, "height": 480},
+          "vertical_spring_oscillator": {"name": "portrait", "width": 480, "height": 832}
         }
       },
       "temporal": {

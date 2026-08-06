@@ -10,9 +10,9 @@ PHYSICS_VIDEO_ASSETS = DATASETS_ROOT / "assets"
 PHYSICS_VIDEO_PROVENANCE = DATASETS_ROOT / "provenance"
 RELEASES_ROOT = DATASETS_ROOT / "releases"
 
-V12_RELEASE_ROOT = RELEASES_ROOT / "12.0.0"
-V12_DATASET = V12_RELEASE_ROOT / "dataset.json"
+V13_RELEASE_ROOT = RELEASES_ROOT / "13.0.0"
+V13_DATASET = V13_RELEASE_ROOT / "dataset.json"
 
 # There is deliberately only one runtime Dataset entry. Historical releases
 # remain recoverable from Git history, not from the active filesystem surface.
-LATEST_DATASET = V12_DATASET
+LATEST_DATASET = V13_DATASET

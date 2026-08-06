@@ -58,7 +58,7 @@ Choose the desired Baseline ID when running the same Task:
 
 ```bash
 physbench atomic-run \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
   --scene-id collision_1d \

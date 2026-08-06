@@ -1,0 +1,42 @@
+{
+  "case_id": "vertical_spring_s01_x140mm_above_img_1758",
+  "physics": {
+    "environment": {
+      "gravity_acceleration": {
+        "symbol": "g",
+        "unit": "m/s^2",
+        "value": 9.80665
+      },
+      "natural_spring_length": {
+        "symbol": "L_0",
+        "unit": "m",
+        "value": 0.068
+      },
+      "spring_stiffness": {
+        "symbol": "k",
+        "unit": "N/m",
+        "value": 32.6213467096774
+      }
+    },
+    "objects": {
+      "object_1": {
+        "initial_displacement": {
+          "symbol": "x_0",
+          "unit": "m",
+          "value": 0.14
+        },
+        "mass": {
+          "symbol": "m",
+          "unit": "kg",
+          "value": 0.5156
+        },
+        "radius": {
+          "symbol": "r",
+          "unit": "m",
+          "value": 0.025
+        }
+      }
+    }
+  },
+  "scene_id": "vertical_spring_oscillator"
+}

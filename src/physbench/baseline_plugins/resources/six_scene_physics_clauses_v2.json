@@ -81,6 +81,19 @@
         {"name": "object_1_orbit_radius", "required": true, "expected_unit": "m", "precision": 2, "template": "r_1 is {value} meters"},
         {"name": "object_2_orbit_radius", "required": false, "expected_unit": "m", "precision": 2, "template": "r_2 is {value} meters"}
       ]
+    },
+    "vertical_spring_oscillator": {
+      "parameter_intro": " Numeric physical values: ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "initial_displacement", "required": true, "expected_unit": "m", "precision": 3, "template": "x_0 is {value} meters"},
+        {"name": "oscillator_mass", "required": true, "expected_unit": "kg", "precision": 4, "template": "m is {value} kilograms"},
+        {"name": "ball_radius", "required": true, "expected_unit": "m", "precision": 3, "template": "r is {value} meters"},
+        {"name": "gravity_acceleration", "required": true, "expected_unit": "m/s^2", "precision": 5, "template": "g is {value} meters per second squared"},
+        {"name": "natural_spring_length", "required": true, "expected_unit": "m", "precision": 3, "template": "L_0 is {value} meters"},
+        {"name": "spring_stiffness", "required": true, "expected_unit": "N/m", "precision": 5, "template": "k is {value} newtons per meter"}
+      ]
     }
   }
 }
