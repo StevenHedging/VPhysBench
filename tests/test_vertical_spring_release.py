@@ -65,6 +65,7 @@ class VerticalSpringReleaseTests(unittest.TestCase):
                         "trial_id": trial,
                         "workbook_row": int(trial[1:]) + 5,
                         "source_member": f"batch/IMG_{image}.MOV",
+                        "source_group": f"source_{image}",
                         "source_start_frame": 300,
                         "source_start_time_s": 1.25,
                         "source_frame_count": 900,

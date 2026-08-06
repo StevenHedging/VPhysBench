@@ -5,7 +5,7 @@ import json
 import math
 from pathlib import Path, PurePosixPath
 import subprocess
-from typing import Literal, Sequence
+from typing import Any, Literal, Sequence
 import zipfile
 
 import cv2
@@ -106,6 +106,46 @@ class CaseDraft:
     case_id: str
     case_directory: Path
     audit: dict[str, object]
+
+
+def select_spring_test_ids(
+    records: Sequence[dict[str, Any]],
+    *,
+    limit: int = 20,
+) -> list[str]:
+    """Select a bounded, balanced, source-group-safe ID test subset."""
+    if limit < 1:
+        raise ValueError("spring test limit must be positive")
+    strata: dict[tuple[str, float], dict[str, list[str]]] = {}
+    for record in records:
+        stratum = (
+            str(record["direction"]),
+            abs(float(record["signed_displacement_mm"])),
+        )
+        source_group = str(record["source_group"])
+        strata.setdefault(stratum, {}).setdefault(source_group, []).append(
+            str(record["case_id"])
+        )
+    queues = {
+        stratum: [sorted(case_ids) for _, case_ids in sorted(groups.items())]
+        for stratum, groups in sorted(strata.items())
+    }
+    selected: list[str] = []
+    while len(selected) < limit:
+        progressed = False
+        for stratum in sorted(queues):
+            groups = queues[stratum]
+            while len(groups) > 1 and len(selected) + len(groups[0]) > limit:
+                groups.pop(0)
+            if len(groups) <= 1:
+                continue
+            selected.extend(groups.pop(0))
+            progressed = True
+            if len(selected) == limit:
+                break
+        if not progressed:
+            break
+    return selected
 
 
 def _normalized_header(value: object) -> str:
@@ -867,6 +907,7 @@ def materialize_case(
         "source_member": source.member,
         "source_size": source.size,
         "source_crc32": source.crc32,
+        "source_group": source.member,
         "source_start_frame": analysis.candidate.frame_index,
         "source_start_time_s": analysis.candidate.time_s,
         "source_frame_count": analysis.frame_count,

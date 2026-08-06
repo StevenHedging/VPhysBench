@@ -385,6 +385,17 @@ class MediaTests(unittest.TestCase):
                 [["batch/IMG_1518(1).MOV", "batch/IMG_1518.MOV"]],
                 payload["duplicate_source_groups"],
             )
+            self.assertEqual(
+                [
+                    {
+                        "canonical_member": "batch/IMG_1518.MOV",
+                        "excluded_members": ["batch/IMG_1518(1).MOV"],
+                        "reason": "byte_identical_duplicate_source",
+                        "size": 5,
+                    }
+                ],
+                payload.get("duplicate_source_decisions"),
+            )
             self.assertEqual(1, payload["summary"]["accepted_count"])
             self.assertEqual("T001", payload["accepted"][0]["trial_id"])
             self.assertEqual(
@@ -449,6 +460,7 @@ class MediaTests(unittest.TestCase):
             self.assertEqual(6, draft.audit["workbook_row"])
             self.assertEqual(1, draft.audit["source_size"])
             self.assertEqual(2, draft.audit["source_crc32"])
+            self.assertEqual("batch/IMG_1538.MOV", draft.audit["source_group"])
             self.assertEqual(0.8, draft.audit["detector"]["observed_period_s"])
             self.assertEqual(1.0, draft.audit["detector"]["track_coverage"])
             required = {

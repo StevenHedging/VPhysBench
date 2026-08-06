@@ -24,6 +24,7 @@ from physbench.datasets.vertical_spring_import import (
     load_trial_annotations,
     map_trials_to_sources,
     materialize_case,
+    select_spring_test_ids,
 )
 from physbench.io import canonical_sha256
 from physbench.splitters import build_view_b
@@ -67,10 +68,30 @@ def inventory(archive: Path, output_dir: Path) -> dict[str, object]:
         for members in members_by_content.values()
         if len(members) > 1
     )
+    duplicate_source_decisions = []
+    for (size, _), members in sorted(members_by_content.items()):
+        if len(members) < 2:
+            continue
+        ordered = sorted(
+            members,
+            key=lambda member: (
+                Path(member).stem.endswith(")"),
+                member,
+            ),
+        )
+        duplicate_source_decisions.append(
+            {
+                "canonical_member": ordered[0],
+                "excluded_members": ordered[1:],
+                "reason": "byte_identical_duplicate_source",
+                "size": size,
+            }
+        )
     payload: dict[str, object] = {
         "archive_name": archive.name,
         "workbook_member": workbook_member.filename,
         "duplicate_source_groups": duplicate_source_groups,
+        "duplicate_source_decisions": duplicate_source_decisions,
         "accepted": [
             {
                 "trial_id": item.trial.trial_id,
@@ -612,18 +633,21 @@ def build_release_v13(
     case_digest = canonical_sha256(sorted(all_case_ids))
     view_a_path = release / "views" / "view_a.json"
     view_a = json.loads(view_a_path.read_text(encoding="utf-8"))
-    by_displacement: dict[float, list[str]] = {}
     audit_by_case = {str(item["case_id"]): item for item in audits}
-    for case in spring_cases:
-        case_id = str(case["case_id"])
-        displacement = float(audit_by_case[case_id]["signed_displacement_mm"])
-        by_displacement.setdefault(displacement, []).append(case_id)
-    test_ids = {
-        sorted(ids)[0]
-        for _, ids in sorted(by_displacement.items())
-        if len(ids) >= 2
-    }
-    test_ids = set(sorted(test_ids)[:20])
+    test_ids = set(
+        select_spring_test_ids(
+            [
+                {
+                    "case_id": case_id,
+                    "direction": audit["direction"],
+                    "signed_displacement_mm": audit["signed_displacement_mm"],
+                    "source_group": audit["source_group"],
+                }
+                for case_id, audit in sorted(audit_by_case.items())
+            ],
+            limit=20,
+        )
+    )
     spring_ids = sorted(str(item["case_id"]) for item in spring_cases)
     view_a["scenes"]["vertical_spring_oscillator"] = {
         "test": sorted(test_ids),
