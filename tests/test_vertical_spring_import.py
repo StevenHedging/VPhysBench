@@ -5,11 +5,18 @@ import tempfile
 import unittest
 import zipfile
 
+import cv2
+import numpy as np
 from openpyxl import Workbook
 
 from physbench.datasets.vertical_spring_import import (
+    BallDetection,
     SourceMember,
+    TrackSample,
     TrialAnnotation,
+    ball_mask,
+    detect_ball,
+    detect_release_return,
     inventory_archive,
     load_trial_annotations,
     map_trials_to_sources,
@@ -143,6 +150,114 @@ class IntakeTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "unsupported spring ID"):
                 load_trial_annotations(workbook)
+
+
+class TrajectoryTests(unittest.TestCase):
+    @staticmethod
+    def _track(direction: str, *, irregular: bool = False) -> list[TrackSample]:
+        times = np.arange(0.0, 2.0, 1.0 / 240.0)
+        if irregular:
+            times = times + np.linspace(0.0, 0.004, len(times))
+        sign = 1.0 if direction == "below" else -1.0
+        y = 600.0 + sign * 120.0 * np.exp(-0.08 * times) * np.cos(
+            2 * np.pi * times / 0.8
+        )
+        return [
+            TrackSample(index, float(time), 400.0, float(center_y), 60.0, 1.0)
+            for index, (time, center_y) in enumerate(zip(times, y))
+        ]
+
+    def test_return_detector_selects_first_lower_return_for_below(self) -> None:
+        candidate = detect_release_return(self._track("below"), "below", 0.8)
+
+        self.assertLessEqual(abs(candidate.time_s - 0.8), 2 / 240)
+        self.assertGreater(candidate.center_y, 700.0)
+
+    def test_return_detector_selects_first_upper_return_for_above(self) -> None:
+        candidate = detect_release_return(self._track("above"), "above", 0.8)
+
+        self.assertLessEqual(abs(candidate.time_s - 0.8), 2 / 240)
+        self.assertLess(candidate.center_y, 500.0)
+
+    def test_return_detector_uses_timestamps_not_constant_fps(self) -> None:
+        candidate = detect_release_return(
+            self._track("below", irregular=True),
+            "below",
+            0.8,
+        )
+
+        self.assertLessEqual(abs(candidate.time_s - 0.8), 0.015)
+
+    def test_return_detector_accepts_regular_analysis_stride(self) -> None:
+        sampled = self._track("below")[::16]
+
+        candidate = detect_release_return(sampled, "below", 0.8)
+
+        self.assertLessEqual(abs(candidate.time_s - 0.8), 0.04)
+        self.assertEqual(1.0, candidate.track_coverage)
+
+    def test_return_detector_preserves_small_motion_at_sparse_stride(self) -> None:
+        times = np.arange(0.0, 2.0, 1.0 / 240.0)
+        y = 600.0 + 18.0 * np.cos(2 * np.pi * times / 0.8)
+        full = [
+            TrackSample(index, float(time), 400.0, float(center_y), 60.0, 1.0)
+            for index, (time, center_y) in enumerate(zip(times, y))
+        ]
+
+        candidate = detect_release_return(full[::16], "below", 0.8)
+
+        self.assertLessEqual(abs(candidate.time_s - 0.8), 0.04)
+
+    def test_return_detector_skips_source_prehold(self) -> None:
+        times = np.arange(0.0, 2.4, 1.0 / 240.0)
+        motion_time = np.maximum(times - 0.6, 0.0)
+        y = np.where(
+            times < 0.6,
+            720.0,
+            600.0
+            + 120.0
+            * np.exp(-0.08 * motion_time)
+            * np.cos(2 * np.pi * motion_time / 0.8),
+        )
+        track = [
+            TrackSample(index, float(time), 400.0, float(center_y), 60.0, 1.0)
+            for index, (time, center_y) in enumerate(zip(times, y))
+        ]
+
+        candidate = detect_release_return(track, "below", 0.8)
+
+        self.assertLessEqual(abs(candidate.time_s - 1.4), 2 / 240)
+
+    def test_return_detector_rejects_insufficient_vertical_motion(self) -> None:
+        track = [
+            TrackSample(index, index / 240.0, 400.0, 600.0, 60.0, 1.0)
+            for index in range(480)
+        ]
+
+        with self.assertRaisesRegex(ValueError, "insufficient_vertical_motion"):
+            detect_release_return(track, "below", 0.8)
+
+    def test_detect_ball_finds_synthetic_circle(self) -> None:
+        frame = np.full((480, 270, 3), 230, dtype=np.uint8)
+        cv2.circle(frame, (145, 330), 24, (40, 40, 40), 3)
+        cv2.circle(frame, (145, 330), 20, (130, 130, 130), -1)
+
+        detection = detect_ball(frame)
+
+        self.assertLessEqual(abs(detection.center_x - 145.0), 3.0)
+        self.assertLessEqual(abs(detection.center_y - 330.0), 3.0)
+        self.assertLessEqual(abs(detection.radius - 24.0), 4.0)
+
+    def test_ball_mask_is_binary_filled_disk(self) -> None:
+        detection = BallDetection(60.0, 50.0, 20.0, 1.0)
+
+        mask = ball_mask((100, 120), detection)
+
+        self.assertEqual({0, 1}, set(np.unique(mask)))
+        self.assertEqual(1, int(mask[50, 60]))
+        self.assertEqual(0, int(mask[20, 60]))
+        self.assertGreater(int(mask.sum()), 1100)
+        self.assertLess(int(mask.sum()), 1400)
 
 
 if __name__ == "__main__":

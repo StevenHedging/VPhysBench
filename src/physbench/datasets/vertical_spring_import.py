@@ -6,6 +6,8 @@ from pathlib import Path, PurePosixPath
 from typing import Literal, Sequence
 import zipfile
 
+import cv2
+import numpy as np
 from openpyxl import load_workbook
 
 
@@ -56,6 +58,35 @@ class IntakeExclusion:
 class IntakeResult:
     accepted: tuple[MappedTrial, ...]
     exclusions: tuple[IntakeExclusion, ...]
+
+
+@dataclass(frozen=True)
+class BallDetection:
+    center_x: float
+    center_y: float
+    radius: float
+    score: float
+
+
+@dataclass(frozen=True)
+class TrackSample:
+    frame_index: int
+    time_s: float
+    center_x: float
+    center_y: float
+    radius: float
+    score: float
+
+
+@dataclass(frozen=True)
+class TurningFrameCandidate:
+    frame_index: int
+    time_s: float
+    center_x: float
+    center_y: float
+    radius: float
+    observed_period_s: float
+    track_coverage: float
 
 
 def _normalized_header(value: object) -> str:
@@ -201,3 +232,182 @@ def map_trials_to_sources(
             )
         )
     return IntakeResult(tuple(accepted), tuple(exclusions))
+
+
+def detect_ball(
+    frame: np.ndarray,
+    previous: BallDetection | None = None,
+) -> BallDetection:
+    if frame.ndim != 3 or frame.shape[2] != 3:
+        raise ValueError("ball detection requires a BGR frame")
+    height, width = frame.shape[:2]
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    gray = cv2.medianBlur(gray, 5)
+    minimum_radius = max(8, round(height * 0.025))
+    maximum_radius = max(minimum_radius + 2, round(height * 0.085))
+    circles = cv2.HoughCircles(
+        gray,
+        cv2.HOUGH_GRADIENT,
+        dp=1.2,
+        minDist=max(20, height // 12),
+        param1=100,
+        param2=24,
+        minRadius=minimum_radius,
+        maxRadius=maximum_radius,
+    )
+    if circles is None:
+        raise ValueError("ball_not_detected")
+    candidates: list[BallDetection] = []
+    for center_x, center_y, radius in circles[0]:
+        if not (0.25 * width <= center_x <= 0.85 * width):
+            continue
+        if not (0.25 * height <= center_y <= 0.95 * height):
+            continue
+        if previous is None:
+            score = (
+                float(radius)
+                - abs(float(center_x) - 0.60 * width) * 0.03
+                + float(center_y) * 0.002
+            )
+        else:
+            distance = math.hypot(
+                float(center_x) - previous.center_x,
+                float(center_y) - previous.center_y,
+            )
+            radius_delta = abs(float(radius) - previous.radius)
+            score = -distance - 2.0 * radius_delta
+        candidates.append(
+            BallDetection(
+                float(center_x),
+                float(center_y),
+                float(radius),
+                float(score),
+            )
+        )
+    if not candidates:
+        raise ValueError("ball_not_detected")
+    return max(candidates, key=lambda item: item.score)
+
+
+def _median_filter(values: np.ndarray, width: int = 5) -> np.ndarray:
+    radius = width // 2
+    padded = np.pad(values, (radius, radius), mode="edge")
+    return np.asarray(
+        [np.median(padded[index : index + width]) for index in range(len(values))],
+        dtype=float,
+    )
+
+
+def _odd_window(duration_s: float, sample_interval_s: float, maximum: int) -> int:
+    width = max(1, min(maximum, round(duration_s / sample_interval_s)))
+    if width % 2 == 0:
+        width = width - 1 if width == maximum else width + 1
+    return max(1, width)
+
+
+def detect_release_return(
+    track: Sequence[TrackSample],
+    direction: Direction,
+    theoretical_period_s: float = 0.789924128416829,
+) -> TurningFrameCandidate:
+    if direction not in ("above", "below"):
+        raise ValueError(f"unsupported release direction: {direction!r}")
+    if len(track) < 3:
+        raise ValueError("insufficient_track_samples")
+    ordered = sorted(track, key=lambda item: item.frame_index)
+    times = np.asarray([item.time_s for item in ordered], dtype=float)
+    centers_y = np.asarray([item.center_y for item in ordered], dtype=float)
+    if not np.all(np.isfinite(times)) or not np.all(np.diff(times) > 0):
+        raise ValueError("invalid_track_timestamps")
+    vertical_span = float(np.ptp(centers_y))
+    if vertical_span < 10.0:
+        raise ValueError("insufficient_vertical_motion")
+    frame_deltas = np.diff([item.frame_index for item in ordered])
+    analysis_stride = max(1, round(float(np.median(frame_deltas))))
+    expected_samples = (
+        (ordered[-1].frame_index - ordered[0].frame_index) // analysis_stride
+    ) + 1
+    coverage = len(ordered) / expected_samples
+    if coverage < 0.90:
+        raise ValueError("insufficient_track_coverage")
+
+    sample_interval_s = float(np.median(np.diff(times)))
+    median_width = _odd_window(0.025, sample_interval_s, 5)
+    average_width = _odd_window(0.0375, sample_interval_s, 9)
+    smooth = _median_filter(centers_y, median_width)
+    average_radius = average_width // 2
+    smooth = np.convolve(
+        np.pad(smooth, (average_radius, average_radius), mode="edge"),
+        np.ones(average_width, dtype=float) / average_width,
+        mode="valid",
+    )
+    anchor_window = times <= times[0] + 0.25 * theoretical_period_s
+    anchor = float(np.median(smooth[anchor_window]))
+    departure = np.abs(smooth - anchor) >= max(3.0, 0.04 * vertical_span)
+    sustained = np.convolve(
+        departure.astype(np.uint8),
+        np.ones(3, dtype=np.uint8),
+        mode="valid",
+    )
+    onset_candidates = np.flatnonzero(sustained == 3)
+    if not len(onset_candidates):
+        raise ValueError("motion_onset_not_detected")
+    onset_index = max(0, int(onset_candidates[0]) - 2)
+    start_time = float(times[onset_index])
+    opposite = (times >= start_time + 0.25 * theoretical_period_s) & (
+        times <= start_time + 0.75 * theoretical_period_s
+    )
+    same_side = (times >= start_time + 0.60 * theoretical_period_s) & (
+        times <= start_time + 1.35 * theoretical_period_s
+    )
+    if not np.any(opposite) or not np.any(same_side):
+        raise ValueError("insufficient_cycle_coverage")
+    opposite_values = smooth[opposite]
+    same_values = smooth[same_side]
+    if direction == "below":
+        opposite_extreme = float(np.min(opposite_values))
+        coarse_local = int(np.argmax(same_values))
+        same_extreme = float(same_values[coarse_local])
+        separation = same_extreme - opposite_extreme
+    else:
+        opposite_extreme = float(np.max(opposite_values))
+        coarse_local = int(np.argmin(same_values))
+        same_extreme = float(same_values[coarse_local])
+        separation = opposite_extreme - same_extreme
+    if separation < max(8.0, 0.45 * vertical_span):
+        raise ValueError("insufficient_cycle_extrema")
+    same_indices = np.flatnonzero(same_side)
+    coarse_index = int(same_indices[coarse_local])
+    lower = max(0, coarse_index - 8)
+    upper = min(len(ordered), coarse_index + 9)
+    local = centers_y[lower:upper]
+    refined = lower + int(np.argmax(local) if direction == "below" else np.argmin(local))
+    selected = ordered[refined]
+    return TurningFrameCandidate(
+        frame_index=selected.frame_index,
+        time_s=selected.time_s,
+        center_x=selected.center_x,
+        center_y=selected.center_y,
+        radius=selected.radius,
+        observed_period_s=selected.time_s - start_time,
+        track_coverage=coverage,
+    )
+
+
+def ball_mask(
+    shape: tuple[int, int],
+    detection: BallDetection,
+) -> np.ndarray:
+    height, width = shape
+    if height <= 0 or width <= 0 or detection.radius <= 0:
+        raise ValueError("invalid ball mask geometry")
+    mask = np.zeros((height, width), dtype=np.uint8)
+    cv2.circle(
+        mask,
+        (round(detection.center_x), round(detection.center_y)),
+        round(detection.radius),
+        1,
+        thickness=-1,
+        lineType=cv2.LINE_8,
+    )
+    return mask
