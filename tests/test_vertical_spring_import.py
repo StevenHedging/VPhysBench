@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 import cv2
@@ -32,6 +33,7 @@ from physbench.datasets.vertical_spring_import import (
     probe_frame_timestamps,
     trim_video_exact,
 )
+from scripts.import_vertical_spring_oscillator import analyze as analyze_batch
 
 
 def _write_workbook(path: Path, rows: list[tuple[object, ...]]) -> Path:
@@ -339,6 +341,43 @@ class TrajectoryTests(unittest.TestCase):
 
 
 class MediaTests(unittest.TestCase):
+    def test_batch_analysis_retries_failed_primary_stride(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workbook = _write_workbook(
+                root / "spring.xlsx",
+                [("T001", "S01", "IMG_1518.MOV", 30.0)],
+            )
+            archive = root / "source.zip"
+            with zipfile.ZipFile(archive, "w") as handle:
+                handle.writestr("batch/IMG_1518.MOV", b"video")
+            output = root / "output"
+            recovered = VideoAnalysis(
+                candidate=TurningFrameCandidate(120, 0.5, 12, 8, 3, 0.8, 1.0),
+                full_resolution_ball=BallDetection(48, 32, 12, 1.0),
+                frame_count=480,
+                displayed_width=96,
+                displayed_height=64,
+                analysis_stride=4,
+            )
+            with patch(
+                "scripts.import_vertical_spring_oscillator.analyze_video",
+                side_effect=[ValueError("insufficient_cycle_extrema"), recovered],
+            ):
+                summary = analyze_batch(
+                    archive,
+                    workbook,
+                    output,
+                    analysis_stride=8,
+                )
+
+            candidates = [
+                json.loads(line)
+                for line in (output / "review_candidates.jsonl").read_text().splitlines()
+            ]
+            self.assertEqual(1, summary["candidate_count"])
+            self.assertEqual(4, candidates[0]["analysis_stride"])
+
     def test_physics_uses_positive_displacement_and_fixed_symbols(self) -> None:
         physics = build_physics("spring_t001", -40.0)
 

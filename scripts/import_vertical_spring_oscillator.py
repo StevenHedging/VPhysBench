@@ -183,14 +183,21 @@ def analyze(
                 "wb"
             ) as target:
                 shutil.copyfileobj(source, target)
-            try:
-                result: VideoAnalysis | Exception = analyze_video(
-                    extracted,
-                    item.trial.direction,
-                    analysis_stride=analysis_stride,
-                )
-            except (OSError, RuntimeError, ValueError) as error:
-                result = error
+            result: VideoAnalysis | Exception
+            failures = []
+            for stride in dict.fromkeys((analysis_stride, 4, 16)):
+                try:
+                    result = analyze_video(
+                        extracted,
+                        item.trial.direction,
+                        analysis_stride=stride,
+                    )
+                except (OSError, RuntimeError, ValueError) as error:
+                    failures.append(f"stride={stride}: {error}")
+                else:
+                    break
+            else:
+                result = ValueError("; ".join(failures))
         return item, result
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
