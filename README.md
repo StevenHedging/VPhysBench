@@ -166,8 +166,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ## 文档
 
 - [系统架构](docs/ARCHITECTURE.md)
-- [Dataset、Case 与划分](docs/DATASET.md)
-- [原始视频与XLSX导入规范](docs/DATASET_INGESTION.md)
+- [数据集说明与新 Scene 导入手册](datasets/README.md)
 - [新实验情景Evaluator接入指南](docs/NEW_SCENE_EVALUATOR.md)
 - [Task 与运行矩阵](docs/TASKS.md)
 - [DataAdapter 与输入策略](docs/DATA_ADAPTER.md)

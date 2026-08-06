@@ -4,7 +4,7 @@
 
 本文规定如何为一个新增实验情景实现、注册和验收 evaluator，供 AI 助手和真人共同
 执行。数据导入、XLSX 字段整理、视频清洗和 Dataset 发布不在本文重复说明；开始前必须
-先完成并通过 [`DATASET_INGESTION.md`](DATASET_INGESTION.md) 的验收。
+先完成并通过 [数据集说明与使用手册](../datasets/README.md) 的数据验收。
 
 Evaluator 的目标不是判断视频“看起来像不像”，而是回答三个可审计的问题：
 
