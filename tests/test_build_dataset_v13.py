@@ -10,6 +10,32 @@ except ImportError:
 
 
 class SpringSplitTests(unittest.TestCase):
+    def test_id_selection_balances_directions_when_limit_is_smaller_than_strata(self) -> None:
+        records = []
+        for direction in ("above", "below"):
+            for magnitude in range(10, 160, 10):
+                for index in range(2):
+                    records.append(
+                        {
+                            "case_id": f"{direction}_{magnitude}_{index}",
+                            "direction": direction,
+                            "signed_displacement_mm": (
+                                -magnitude if direction == "above" else magnitude
+                            ),
+                            "source_group": f"{direction}_{magnitude}_{index}",
+                        }
+                    )
+
+        selected = set(select_spring_test_ids(records, limit=10))
+
+        self.assertEqual(
+            {"above": 5, "below": 5},
+            {
+                direction: sum(case_id.startswith(direction) for case_id in selected)
+                for direction in ("above", "below")
+            },
+        )
+
     def test_id_selection_leaves_each_selected_stratum_in_training(self) -> None:
         records = [
             {

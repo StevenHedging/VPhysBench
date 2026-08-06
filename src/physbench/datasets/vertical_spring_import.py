@@ -130,10 +130,29 @@ def select_spring_test_ids(
         stratum: [sorted(case_ids) for _, case_ids in sorted(groups.items())]
         for stratum, groups in sorted(strata.items())
     }
+    strata_by_direction: dict[str, list[tuple[str, float]]] = {}
+    for stratum in queues:
+        strata_by_direction.setdefault(stratum[0], []).append(stratum)
+    for direction, direction_strata in strata_by_direction.items():
+        ordered = sorted(direction_strata, key=lambda item: item[1])
+        spread: list[tuple[str, float]] = []
+        while ordered:
+            spread.append(ordered.pop(0))
+            if ordered:
+                spread.append(ordered.pop())
+        strata_by_direction[direction] = spread
+    stratum_order: list[tuple[str, float]] = []
+    depth = 0
+    while any(depth < len(items) for items in strata_by_direction.values()):
+        for direction in sorted(strata_by_direction):
+            items = strata_by_direction[direction]
+            if depth < len(items):
+                stratum_order.append(items[depth])
+        depth += 1
     selected: list[str] = []
     while len(selected) < limit:
         progressed = False
-        for stratum in sorted(queues):
+        for stratum in stratum_order:
             groups = queues[stratum]
             while len(groups) > 1 and len(selected) + len(groups[0]) > limit:
                 groups.pop(0)
