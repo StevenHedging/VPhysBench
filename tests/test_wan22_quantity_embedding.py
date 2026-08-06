@@ -92,6 +92,7 @@ EXPECTED_UNITS = {
     "m/s": ("m/s", 1.0, [1, 0, -1, 0, 0, 0, 0]),
     "m/s^2": ("m/s^2", 1.0, [1, 0, -2, 0, 0, 0, 0]),
     "N": ("kg*m/s^2", 1.0, [1, 1, -2, 0, 0, 0, 0]),
+    "N/m": ("kg/s^2", 1.0, [0, 1, -2, 0, 0, 0, 0]),
     "deg": (
         "rad",
         0.017453292519943295,
@@ -360,12 +361,12 @@ class Wan22QuantityEmbeddingTests(unittest.TestCase):
 
     def test_all_current_cases_adapt_without_task_compilation(self) -> None:
         self.assertEqual("1.0.1", self.bundle.value["baseline_version"])
-        self.assertEqual(799, len(self.dataset.cases))
+        self.assertEqual(916, len(self.dataset.cases))
         adaptations = [
             self.adapter.adapt_case(case, role="eval")
             for case in self.dataset.cases
         ]
-        self.assertEqual(799, len(adaptations))
+        self.assertEqual(916, len(adaptations))
         self.assertEqual(
             {case["case_id"] for case in self.dataset.cases},
             {item["case_id"] for item in adaptations},
