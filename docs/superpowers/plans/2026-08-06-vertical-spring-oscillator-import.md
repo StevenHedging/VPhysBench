@@ -36,7 +36,9 @@
 - Produces: `TrialAnnotation`, `SourceMember`, `load_trial_annotations(workbook: Path) -> list[TrialAnnotation]`, `inventory_archive(archive: Path) -> list[SourceMember]`, and `map_trials_to_sources(...) -> IntakeResult`.
 - Consumes: the three workbook sheets and ZIP central directory without extracting videos.
 
-- [ ] **Step 1: Add the optional import dependency group**
+- [ ] **Step 1: Install local import dependencies and add the optional dependency group**
+
+Install `python3-numpy`, `python3-opencv`, and `python3-openpyxl` from the system package manager before running Task 1 tests.
 
 Add this exact group to `pyproject.toml`:
 
@@ -273,9 +275,9 @@ git commit -m "feat(dataset): materialize vertical spring cases"
 - Consumes: the source ZIP and Task 3 CLI.
 - Produces: reviewed Case assets and complete provenance used by the Dataset 13 builder.
 
-- [ ] **Step 1: Install local import dependencies and run intake**
+- [ ] **Step 1: Run intake**
 
-Install `python3-numpy`, `python3-opencv`, and `python3-openpyxl` from the system package manager, then run:
+Run:
 
 ```bash
 python3 scripts/import_vertical_spring_oscillator.py inventory \

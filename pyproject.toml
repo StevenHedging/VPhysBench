@@ -20,6 +20,11 @@ pendulum-evaluation = [
   "opencv-python-headless>=4.10",
   "torch>=2.5",
 ]
+dataset-import = [
+  "numpy>=1.26",
+  "opencv-python-headless>=4.10",
+  "openpyxl>=3.1",
+]
 
 [project.scripts]
 physbench = "physbench.cli:main"
