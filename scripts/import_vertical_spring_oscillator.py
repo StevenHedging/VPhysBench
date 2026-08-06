@@ -25,6 +25,8 @@ from physbench.datasets.vertical_spring_import import (
     map_trials_to_sources,
     materialize_case,
 )
+from physbench.io import canonical_sha256
+from physbench.splitters import build_view_b
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -447,6 +449,224 @@ def review_sheets(
     return len(cards)
 
 
+def build_release_v13(
+    repo_root: Path,
+    audits: list[dict[str, object]],
+) -> dict[str, int]:
+    datasets_root = repo_root / "datasets"
+    base_release = datasets_root / "releases" / "12.0.0"
+    release = datasets_root / "releases" / "13.0.0"
+    base_provenance = datasets_root / "provenance" / "releases" / "12.0.0"
+    provenance = datasets_root / "provenance" / "releases" / "13.0.0"
+    if release.exists() or provenance.exists():
+        raise ValueError("Dataset 13.0.0 already exists")
+    if not audits or any(
+        item.get("scene_id") != "vertical_spring_oscillator"
+        for item in audits
+    ):
+        raise ValueError("release build requires vertical spring import audits")
+
+    shutil.copytree(base_release, release)
+    provenance.mkdir(parents=True)
+    base_cases = _load_jsonl(base_release / "cases.jsonl")
+    base_provenance_cases = _load_jsonl(base_provenance / "cases.jsonl")
+    spring_cases: list[dict[str, object]] = []
+    spring_provenance: list[dict[str, object]] = []
+    for audit in sorted(audits, key=lambda item: str(item["case_id"])):
+        case_id = str(audit["case_id"])
+        relative_case = str(audit["asset_directory"])
+        if not relative_case.startswith("assets/vertical_spring_oscillator/"):
+            raise ValueError(f"invalid spring asset directory: {relative_case}")
+        case_root = datasets_root / relative_case
+        for member in ("caption.json", "physics.json"):
+            if not (case_root / member).is_file():
+                raise ValueError(f"missing spring Case member: {case_id}/{member}")
+        spring_cases.append(
+            {
+                "appearance": {
+                    "background": "laboratory_rig",
+                    "camera": "fixed_portrait",
+                    "capture_session": "20260806_vertical_spring_oscillator",
+                    "moving_objects": ["steel_ball"],
+                    "object_count": 1,
+                    "release_side": str(audit["direction"]),
+                    "spring_id": "S01",
+                },
+                "assets": {
+                    "caption": f"{relative_case}/caption.json",
+                    "first_frame": f"{relative_case}/canonical/first_frame.png",
+                    "first_frame_mask_manifest": (
+                        f"{relative_case}/canonical/masks/manifest.json"
+                    ),
+                    "physics_annotation": f"{relative_case}/physics.json",
+                    "reference_video": f"{relative_case}/canonical/reference.mp4",
+                },
+                "case_id": case_id,
+                "scene_id": "vertical_spring_oscillator",
+                "temporal": {"encoded_to_physical_speed": 1.0},
+            }
+        )
+        spring_provenance.append(
+            {
+                "alignment": audit.get("alignment", {}),
+                "case_id": case_id,
+                "detector": {
+                    "source_start_frame": audit["source_start_frame"],
+                    "source_start_time_s": audit["source_start_time_s"],
+                },
+                "review": audit.get("review", {}),
+                "scene_id": "vertical_spring_oscillator",
+                "source_locator": {
+                    "annotation_workbook": (
+                        "provenance/source_docs/"
+                        "20260806_vertical_spring_oscillator/source_workbook.xlsx"
+                    ),
+                    "archive": (
+                        "provenance/source_archives/"
+                        "20260806_vertical_spring_oscillator/"
+                        "vertical_spring_oscillator.zip"
+                    ),
+                    "member": audit["source_member"],
+                    "trial_id": audit["trial_id"],
+                    "workbook_row": audit.get("workbook_row"),
+                },
+                "temporal_metadata": {
+                    "canonical_frame_count": audit["canonical_frame_count"],
+                    "source_frame_count": audit["source_frame_count"],
+                    "time_scale": "real_time",
+                },
+            }
+        )
+
+    all_cases = [*base_cases, *spring_cases]
+    _write_jsonl(release / "cases.jsonl", all_cases)
+    descriptor = json.loads((release / "dataset.json").read_text(encoding="utf-8"))
+    descriptor.update(
+        {
+            "dataset_id": "physics_video_seven_scene_v13",
+            "release": "13.0.0",
+        }
+    )
+    _write_json(release / "dataset.json", descriptor)
+    _write_json(
+        release / "scenes" / "vertical_spring_oscillator.json",
+        {
+            "constraints": [
+                (
+                    "Canonical frame zero is the first post-cycle return to "
+                    "the release-side turning point"
+                ),
+                "The source tail is retained without spatial or temporal cropping",
+            ],
+            "display_name": "竖直弹簧振子",
+            "generalization_factors": [
+                {
+                    "category": "physical_parameter",
+                    "name": "initial_displacement",
+                    "source": "physics.objects.object_1.initial_displacement",
+                },
+                {
+                    "category": "interaction_structure",
+                    "name": "release_side",
+                    "source": "appearance.release_side",
+                },
+                {
+                    "category": "acquisition",
+                    "name": "capture_session",
+                    "source": "appearance.capture_session",
+                },
+            ],
+            "metric_spec": {
+                "common_sense_checks": [
+                    "continuous vertical oscillation",
+                    "fixed upper support",
+                    "periodic return through the equilibrium region",
+                    "no spontaneous topology change",
+                ],
+                "prediction_quantities": [
+                    "vertical trajectory",
+                    "oscillation period",
+                    "amplitude decay",
+                ],
+                "prediction_subjects": ["steel_ball", "spring"],
+                "visual_attributes": [
+                    "ball integrity",
+                    "spring attachment",
+                    "support stability",
+                ],
+            },
+            "scene_id": "vertical_spring_oscillator",
+            "schema_version": "2.0",
+            "structured_physics_parameters": [
+                "environment.gravity_acceleration",
+                "environment.natural_spring_length",
+                "environment.spring_stiffness",
+                "objects.object_1.initial_displacement",
+                "objects.object_1.mass",
+                "objects.object_1.radius",
+            ],
+        },
+    )
+
+    all_case_ids = [str(item["case_id"]) for item in all_cases]
+    case_digest = canonical_sha256(sorted(all_case_ids))
+    view_a_path = release / "views" / "view_a.json"
+    view_a = json.loads(view_a_path.read_text(encoding="utf-8"))
+    by_displacement: dict[float, list[str]] = {}
+    audit_by_case = {str(item["case_id"]): item for item in audits}
+    for case in spring_cases:
+        case_id = str(case["case_id"])
+        displacement = float(audit_by_case[case_id]["signed_displacement_mm"])
+        by_displacement.setdefault(displacement, []).append(case_id)
+    test_ids = {
+        sorted(ids)[0]
+        for _, ids in sorted(by_displacement.items())
+        if len(ids) >= 2
+    }
+    test_ids = set(sorted(test_ids)[:20])
+    spring_ids = sorted(str(item["case_id"]) for item in spring_cases)
+    view_a["scenes"]["vertical_spring_oscillator"] = {
+        "test": sorted(test_ids),
+        "train": [case_id for case_id in spring_ids if case_id not in test_ids],
+    }
+    rationale = (
+        "Independent held-out trial whose release side and displacement value "
+        "are represented in View A training."
+    )
+    for case_id in sorted(test_ids):
+        view_a["test_annotations"][case_id] = {
+            "co_varying_factors": [],
+            "generalization_regime": "id",
+            "ood_factors": [],
+            "rationale": rationale,
+        }
+    view_a["case_set_sha256"] = case_digest
+    _write_json(view_a_path, view_a)
+
+    view_b_path = release / "views" / "view_b.json"
+    view_b = json.loads(view_b_path.read_text(encoding="utf-8"))
+    generated = build_view_b(spring_cases, groups=5, seed=int(view_b["seed"]))
+    view_b["scenes"]["vertical_spring_oscillator"] = generated["scenes"][
+        "vertical_spring_oscillator"
+    ]
+    view_b["case_set_sha256"] = case_digest
+    _write_json(view_b_path, view_b)
+
+    _write_jsonl(
+        provenance / "cases.jsonl",
+        [*base_provenance_cases, *spring_provenance],
+    )
+    report = {
+        "base_case_count": len(base_cases),
+        "case_count": len(all_cases),
+        "spring_case_count": len(spring_cases),
+        "spring_test_count": len(test_ids),
+        "spring_train_count": len(spring_cases) - len(test_ids),
+    }
+    _write_json(provenance / "build.json", report)
+    return report
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Import the vertical spring oscillator Dataset Scene."
@@ -471,6 +691,9 @@ def build_parser() -> argparse.ArgumentParser:
     review_parser.add_argument("--archive", type=Path, required=True)
     review_parser.add_argument("--analysis", type=Path, required=True)
     review_parser.add_argument("--output-dir", type=Path, required=True)
+    release_parser = subparsers.add_parser("build-release")
+    release_parser.add_argument("--repo-root", type=Path, required=True)
+    release_parser.add_argument("--audit", type=Path, required=True)
     return parser
 
 
@@ -503,6 +726,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "review-sheets":
         count = review_sheets(args.archive, args.analysis, args.output_dir)
         print(json.dumps({"review_card_count": count}, sort_keys=True))
+        return 0
+    if args.command == "build-release":
+        report = build_release_v13(args.repo_root, _load_jsonl(args.audit))
+        print(json.dumps(report, sort_keys=True))
         return 0
     raise ValueError(f"unsupported command: {args.command}")
 

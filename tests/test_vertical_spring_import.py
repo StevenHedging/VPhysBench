@@ -439,6 +439,18 @@ class MediaTests(unittest.TestCase):
                 "vertical_spring_s01_x40mm_above_img_1538",
                 draft.case_id,
             )
+            self.assertEqual(
+                (
+                    "assets/vertical_spring_oscillator/"
+                    "spring_m515p6g_r25mm_x40mm_above_img1538"
+                ),
+                draft.audit["asset_directory"],
+            )
+            self.assertEqual(6, draft.audit["workbook_row"])
+            self.assertEqual(1, draft.audit["source_size"])
+            self.assertEqual(2, draft.audit["source_crc32"])
+            self.assertEqual(0.8, draft.audit["detector"]["observed_period_s"])
+            self.assertEqual(1.0, draft.audit["detector"]["track_coverage"])
             required = {
                 "caption.json",
                 "physics.json",

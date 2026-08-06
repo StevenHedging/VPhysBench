@@ -857,16 +857,32 @@ def materialize_case(
     _write_json_document(case_directory / "physics.json", build_physics(case_id, trial.displacement_mm))
     _write_json_document(case_directory / "caption.json", build_caption(case_id, trial.direction))
     audit: dict[str, object] = {
+        "asset_directory": case_directory.relative_to(
+            repo_root / "datasets"
+        ).as_posix(),
         "case_id": case_id,
         "scene_id": "vertical_spring_oscillator",
         "trial_id": trial.trial_id,
+        "workbook_row": trial.workbook_row,
         "source_member": source.member,
+        "source_size": source.size,
+        "source_crc32": source.crc32,
         "source_start_frame": analysis.candidate.frame_index,
         "source_start_time_s": analysis.candidate.time_s,
         "source_frame_count": analysis.frame_count,
         "canonical_frame_count": len(canonical_times),
         "direction": trial.direction,
         "signed_displacement_mm": trial.displacement_mm,
+        "detector": {
+            "analysis_stride": analysis.analysis_stride,
+            "full_resolution_ball_xyr": [
+                analysis.full_resolution_ball.center_x,
+                analysis.full_resolution_ball.center_y,
+                analysis.full_resolution_ball.radius,
+            ],
+            "observed_period_s": analysis.candidate.observed_period_s,
+            "track_coverage": analysis.candidate.track_coverage,
+        },
         "alignment": {
             "canonical_first_frame_event": (
                 "first return to the release-side turning point after one "
