@@ -6,7 +6,10 @@
   "media_changes": 0,
   "physics_documents": 799,
   "provenance_cases": 799,
-  "quantities": 3959,
+  "quantities": 3818,
+  "scalar_quantities": 3677,
   "schema_version": "1.0",
-  "status": "valid"
+  "source_verified_force_series": 141,
+  "status": "valid",
+  "time_series_quantities": 141
 }

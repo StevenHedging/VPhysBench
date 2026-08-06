@@ -19,13 +19,15 @@ alternate v2 reevaluation, and all 66 per-Case outcomes are recorded in
 This schema-v5 managed Baseline jointly fine-tunes a WAN2.2-TI2V-5B DiT
 LoRA and a small quantity encoder. It consumes the same first frame, Case
 prompt, and a registry-curated subset of formal physical
-fields. It does not consume every annotation, nor ask UMT5 to infer a number
+scalar fields. It does not consume every annotation, nor ask UMT5 to infer a number
 and unit from ordinary subword tokens.
 
 ## Model input
 
 `adapter.py` selects scene-specific fields from `quantity_registry_v2.json`.
 It never extracts quantities from arbitrary prose with a regular expression.
+It skips time-series quantities instead of computing summaries; for push-bottle
+Cases the current registry selects mass and height, not the complete `F(t)`.
 For every selected annotation it:
 
 1. validates the field, unit, stable symbol, and finite non-negative value;

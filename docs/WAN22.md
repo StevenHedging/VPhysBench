@@ -113,7 +113,7 @@ Driver 在 task build/validate 阶段复核文件内容，不运行时搜索“�
 case.text.prompt
 assets.first_frame
 appearance / temporal / ood
-physics[annotated=true]
+physics（全部正式标量与时序quantity）
 ```
 
 generic Baseline：
@@ -140,8 +140,9 @@ native prompt                         = case.text.prompt + audited clauses
 src/physbench/baseline_plugins/resources/six_scene_physics_clauses_v2.json
 ```
 
-Renderer只读取scene白名单内`annotated=true`的独立量，验证单位与symbol，并记录
-value/unit/symbol和渲染值。速度为非负大小，方向由原始Case prompt表达。WAN
+Renderer只读取scene白名单内含`value`的独立标量，验证单位与symbol，并记录
+value/unit/symbol和渲染值。时序quantity不会被自动压缩或拼入prompt；因此推水瓶当前
+只选择质量与高度，不选择完整`F(t)`。速度为非负大小，方向由原始Case prompt表达。WAN
 driver 只消费 TaskInstance 中已封印的最终 prompt，不再自行选择 prompt profile 或读取
 raw physics side channel。
 

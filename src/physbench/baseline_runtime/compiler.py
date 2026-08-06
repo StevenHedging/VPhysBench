@@ -12,7 +12,11 @@ from ..domain import (
     DatasetSnapshot,
     TaskSpec,
 )
-from ..datasets.physics import flat_physics_quantities
+from ..datasets.physics import (
+    flat_physics_quantities,
+    is_projected_scalar_quantity,
+    is_time_series_quantity,
+)
 from ..io import canonical_sha256
 from .input_contract import (
     FORBIDDEN_ASSET_KEYS,
@@ -401,10 +405,10 @@ class ManagedTaskBuilder(TaskBuilder):
                 not isinstance(physics, dict)
                 or not physics
                 or any(
-                    not isinstance(quantity, dict)
-                    or not {"value", "unit"} <= set(quantity) <= {
-                        "value", "unit", "symbol"
-                    }
+                    not (
+                        is_projected_scalar_quantity(quantity)
+                        or is_time_series_quantity(quantity)
+                    )
                     for quantity in physics.values()
                 )
             ):

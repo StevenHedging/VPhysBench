@@ -116,7 +116,7 @@ case.assets.physics_annotation
 `check_assets=False`时也会读取它，校验Case/Scene身份，并将`physics`物化为下游兼容的
 `case.physics`运行时API。
 
-五个已分类Scene的`physics`恰好包含`objects`和`environment`。对象编号使用
+六个Scene的`physics`都恰好包含`objects`和`environment`。对象编号使用
 `object_1`、`object_2`……，与首帧mask从左到右、从上到下的矩阵顺序一致：
 
 ```json
@@ -132,8 +132,7 @@ case.assets.physics_annotation
 }
 ```
 
-`push_bottle`的对象/环境边界暂缓单独整理，因此当前仍使用扁平quantity映射。每个
-quantity都恰好包含：
+标量quantity恰好包含：
 
 ```json
 {
@@ -142,6 +141,23 @@ quantity都恰好包含：
   "symbol": "ω"
 }
 ```
+
+时序quantity恰好包含：
+
+```json
+{
+  "samples": [
+    {"time": 0.1, "value": 0.16},
+    {"time": 0.2, "value": 0.27}
+  ],
+  "time_unit": "s",
+  "unit": "N",
+  "symbol": "F(t)"
+}
+```
+
+时序sample必须保留来源中的显式时间戳与顺序；允许时间戳重复或相邻间隔不等，不得为
+填平间隙而插值，也不得平滑、重采样或去重。正式时序值同样必须有限且非负。
 
 活动Dataset中的quantity全部是独立、可信、可作为模型输入的正式物理量；`symbol`必须
 原样出现在`case.text.prompt`中，但Dataset prompt不得包含数值。派生量、校准量、辅助
@@ -155,8 +171,8 @@ quantity都恰好包含：
 - 斜面下滑：对象含物块质量与长度；环境仅含斜面角度与重力加速度；
 - 平抛：对象含质量、半径、初始水平速度与发射高度；环境为空；
 - 匀速圆周运动：对象含各自轨道半径；环境含角速度；
-- 平抛运动：出门初速度、竖直落差、球质量与半径；光电门和斜坡相关量仅供审计；
-- 推水瓶：水瓶质量、高度、最大施力和平均施力。
+- 推水瓶：对象含水瓶质量、高度和完整外力时间序列`F(t)`；环境为空。均值和峰值是可从
+  序列派生的摘要，不再作为正式物理量。
 
 ## 6. 资产角色
 
@@ -241,7 +257,10 @@ View B：
 - 每个quantity新增稳定`symbol`，独立量符号进入英文prompt，具体数值和单位不进入；
 - 将494个碰撞有符号速度值转换为非负速度大小，方向明确写在prompt中；
 - 删除全部派生、校准、辅助或重复别名量，并删除quantity中的`annotated`字段；
-- 五个Scene按对象与环境分类，共保留3959个正式quantity；
+- 六个Scene按对象与环境分类，共保留3818个正式quantity：3677个标量和141个时序量；
+- 141条推水瓶外力序列共含4698个XLSX样本。原始记录中的62处重复时间间隔和193处
+  大于0.1秒的间隙按原样保留；746个负传感器漂移值在正式非负大小标注中截为0，原始
+  有符号值仍保存在归一化来源记录中；
 - 799个Case各自只保留一个物理文件；
 - Release只保留四类运行时内容；迁移、逐Case provenance与独立验证记录位于
   `datasets/provenance/releases/12.0.0/`。

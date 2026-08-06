@@ -118,19 +118,20 @@ class CurrentDatasetTests(unittest.TestCase):
             for case in supplement
         ))
 
-    def test_push_bottle_import_is_annotated_and_has_expected_exclusion(self) -> None:
+    def test_push_bottle_import_has_complete_force_series_and_expected_exclusion(self) -> None:
         cases = [
             case for case in self.dataset.cases
             if case["scene_id"] == "push_bottle"
         ]
         self.assertEqual(141, len(cases))
-        expected_physics = {
-            "bottle_mass",
-            "bottle_height",
-            "peak_applied_force",
-            "mean_applied_force",
-        }
-        self.assertTrue(all(set(case["physics"]) == expected_physics for case in cases))
+        self.assertTrue(all(
+            set(case["physics"]) == {"objects", "environment"}
+            and case["physics"]["environment"] == {}
+            and set(case["physics"]["objects"]["object_1"])
+            == {"mass", "height", "applied_force"}
+            and case["physics"]["objects"]["object_1"]["applied_force"]["samples"]
+            for case in cases
+        ))
         audit_path = (
             ROOT
             / "datasets/provenance/imports/"

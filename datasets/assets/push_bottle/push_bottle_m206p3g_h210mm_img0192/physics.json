@@ -1,0 +1,92 @@
+{
+  "case_id": "push_bottle_m206p3g_h210mm_fmax0p31n_fmean0p1475n_img0192",
+  "physics": {
+    "environment": {},
+    "objects": {
+      "object_1": {
+        "applied_force": {
+          "samples": [
+            {
+              "time": 0.3,
+              "value": 0.16
+            },
+            {
+              "time": 0.4,
+              "value": 0.25
+            },
+            {
+              "time": 0.5,
+              "value": 0.31
+            },
+            {
+              "time": 0.6,
+              "value": 0.25
+            },
+            {
+              "time": 0.7,
+              "value": 0.25
+            },
+            {
+              "time": 0.8,
+              "value": 0.25
+            },
+            {
+              "time": 0.9,
+              "value": 0.22
+            },
+            {
+              "time": 1.0,
+              "value": 0.22
+            },
+            {
+              "time": 1.1,
+              "value": 0.17
+            },
+            {
+              "time": 1.2,
+              "value": 0.14
+            },
+            {
+              "time": 1.5,
+              "value": 0.02
+            },
+            {
+              "time": 1.7,
+              "value": 0.02
+            },
+            {
+              "time": 2.0,
+              "value": 0.02
+            },
+            {
+              "time": 2.1,
+              "value": 0.03
+            },
+            {
+              "time": 2.3,
+              "value": 0.03
+            },
+            {
+              "time": 2.4,
+              "value": 0.02
+            }
+          ],
+          "symbol": "F(t)",
+          "time_unit": "s",
+          "unit": "N"
+        },
+        "height": {
+          "symbol": "h",
+          "unit": "m",
+          "value": 0.21
+        },
+        "mass": {
+          "symbol": "m",
+          "unit": "kg",
+          "value": 0.2063
+        }
+      }
+    }
+  },
+  "scene_id": "push_bottle"
+}

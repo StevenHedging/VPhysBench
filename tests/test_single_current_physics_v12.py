@@ -9,6 +9,7 @@ from physbench import data_layout
 from physbench.io import load_json
 from physbench.io import load_jsonl
 from physbench.tasks import load_task, plan_atomic_task
+from scripts.validate_dataset_v12 import validate_v12
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,6 +67,7 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
             "inclined_plane_slide",
             "parabolic_motion",
             "pendulum",
+            "push_bottle",
             "uniform_circular_motion",
         }
         leaf_count = 0
@@ -86,13 +88,26 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
                     for values in physics["objects"].values()
                     for quantity in values.values()
                 ] + list(physics["environment"].values())
-            else:
-                self.assertEqual("push_bottle", case["scene_id"])
-                quantities = list(physics.values())
             leaf_count += len(quantities)
             for quantity in quantities:
-                self.assertEqual({"value", "unit", "symbol"}, set(quantity))
-        self.assertEqual(3959, leaf_count)
+                self.assertIn(
+                    set(quantity),
+                    (
+                        {"value", "unit", "symbol"},
+                        {"samples", "time_unit", "unit", "symbol"},
+                    ),
+                )
+        self.assertEqual(3818, leaf_count)
+
+    def test_v12_validator_audits_push_force_series_against_source(self) -> None:
+        try:
+            report = validate_v12()
+        except (KeyError, ValueError) as error:
+            self.fail(f"V12 force-series validation failed: {error}")
+        self.assertEqual(3818, report["quantities"])
+        self.assertEqual(3677, report["scalar_quantities"])
+        self.assertEqual(141, report["time_series_quantities"])
+        self.assertEqual(141, report["source_verified_force_series"])
 
     def test_scene_classification_has_no_auxiliary_physics(self) -> None:
         for case in self.cases:
@@ -101,7 +116,7 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
             )
             physics = document["physics"]
             scene_id = case["scene_id"]
-            if scene_id != "push_bottle" and set(physics) != {
+            if set(physics) != {
                 "objects",
                 "environment",
             }:
@@ -139,6 +154,18 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
                     set(values) == {"orbit_radius"}
                     for values in physics["objects"].values()
                 ))
+            elif scene_id == "push_bottle":
+                self.assertEqual({}, physics["environment"])
+                self.assertEqual(
+                    {"mass", "height", "applied_force"},
+                    set(physics["objects"]["object_1"]),
+                )
+                series = physics["objects"]["object_1"]["applied_force"]
+                self.assertEqual(
+                    {"samples", "time_unit", "unit", "symbol"},
+                    set(series),
+                )
+                self.assertTrue(series["samples"])
 
     def test_every_indexed_case_owns_one_caption_document(self) -> None:
         caption_paths = []

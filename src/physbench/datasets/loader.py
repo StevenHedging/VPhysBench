@@ -260,10 +260,15 @@ def _validate_case(
             )
         if not isinstance(quantity, dict):
             raise ValueError(f"case {case['case_id']} physics.{name} must be an object")
+        is_series = schema_version == "5.0" and "samples" in quantity
         expected_quantity_fields = (
-            {"value", "unit", "symbol"}
-            if schema_version == "5.0"
-            else {"value", "unit", "annotated"}
+            {"samples", "time_unit", "unit", "symbol"}
+            if is_series
+            else (
+                {"value", "unit", "symbol"}
+                if schema_version == "5.0"
+                else {"value", "unit", "annotated"}
+            )
         )
         if set(quantity) != expected_quantity_fields:
             obsolete = "annotated" if "annotated" in quantity else None
@@ -272,8 +277,38 @@ def _validate_case(
                 f"{sorted(expected_quantity_fields)}"
                 + (f"; obsolete field {obsolete} is forbidden" if obsolete else "")
             )
-        value = quantity["value"]
-        if (
+        if is_series:
+            samples = quantity["samples"]
+            if not isinstance(samples, list) or not samples:
+                raise ValueError(
+                    f"case {case['case_id']} physics.{name}.samples must be non-empty"
+                )
+            if quantity["time_unit"] != "s":
+                raise ValueError(
+                    f"case {case['case_id']} physics.{name}.time_unit must be s"
+                )
+            for index, sample in enumerate(samples):
+                if not isinstance(sample, dict) or set(sample) != {"time", "value"}:
+                    raise ValueError(
+                        f"case {case['case_id']} physics.{name}.samples[{index}] "
+                        "must contain exactly time and value"
+                    )
+                for field in ("time", "value"):
+                    sample_value = sample[field]
+                    if (
+                        isinstance(sample_value, bool)
+                        or not isinstance(sample_value, (int, float))
+                        or not math.isfinite(float(sample_value))
+                        or sample_value < 0
+                    ):
+                        raise ValueError(
+                            f"case {case['case_id']} physics.{name}.samples[{index}]."
+                            f"{field} must be a finite non-negative number"
+                        )
+            value = None
+        else:
+            value = quantity["value"]
+        if not is_series and (
             isinstance(value, bool)
             or not isinstance(value, (int, float))
             or not math.isfinite(float(value))
@@ -282,7 +317,7 @@ def _validate_case(
                 f"case {case['case_id']} physics.{name}.value must be a "
                 "finite number"
             )
-        if schema_version == "5.0" and value < 0:
+        if schema_version == "5.0" and not is_series and value < 0:
             raise ValueError(
                 f"case {case['case_id']} physics.{name}.value must be non-negative"
             )

@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from physbench.datasets.loader import _validate_case, load_dataset
+from physbench.datasets.physics import flat_physics_quantities
 from physbench.evaluation.common.reference import resolve_physics_reference
 from physbench.evaluation.contracts import CaseEvaluationRequest
 from physbench.io import canonical_sha256, write_json, write_jsonl
@@ -172,6 +173,23 @@ class DatasetContractV5Tests(unittest.TestCase):
             snapshot.cases[0]["physics"]["objects"]["object_1"]["mass"]["symbol"],
         )
 
+    def test_runtime_projection_accepts_legacy_scalar_without_symbol(self) -> None:
+        case = {
+            "case_id": "pendulum_case_1",
+            "scene_id": "pendulum",
+            "physics": {
+                "bob_radius": {"value": 0.01, "unit": "m"},
+                "initial_angle": {"value": 0.2, "unit": "rad"},
+                "string_length": {"value": 0.5, "unit": "m"},
+            },
+        }
+
+        try:
+            projected = flat_physics_quantities(case)
+        except ValueError as error:
+            self.fail(f"legacy runtime projection was rejected: {error}")
+        self.assertEqual(case["physics"], projected)
+
     def test_reference_video_is_the_only_same_case_gt_role(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             descriptor = self._write_dataset(Path(temporary))
@@ -242,6 +260,60 @@ class DatasetContractV5Tests(unittest.TestCase):
         case["physics"]["objects"]["object_1"]["mass"]["annotated"] = True
         with self.assertRaisesRegex(ValueError, "annotated"):
             _validate_case(case, {"pendulum"}, schema_version="5.0")
+
+    def _push_bottle_case(self) -> dict:
+        case = self._case()
+        case["case_id"] = "push_bottle_case_1"
+        case["scene_id"] = "push_bottle"
+        case["physics"] = {
+            "objects": {
+                "object_1": {
+                    "mass": {"value": 0.2, "unit": "kg", "symbol": "m"},
+                    "height": {"value": 0.22, "unit": "m", "symbol": "h"},
+                    "applied_force": {
+                        "samples": [
+                            {"time": 0.1, "value": 0.2},
+                            {"time": 0.2, "value": 0.4},
+                        ],
+                        "time_unit": "s",
+                        "unit": "N",
+                        "symbol": "F(t)",
+                    },
+                }
+            },
+            "environment": {},
+        }
+        return case
+
+    def test_schema_5_accepts_push_bottle_force_series(self) -> None:
+        _validate_case(
+            self._push_bottle_case(),
+            {"push_bottle"},
+            schema_version="5.0",
+        )
+
+    def test_schema_5_rejects_malformed_force_series(self) -> None:
+        mutations = {
+            "empty samples": lambda series: series.__setitem__("samples", []),
+            "negative time": lambda series: series["samples"][0].__setitem__(
+                "time", -0.1
+            ),
+            "negative value": lambda series: series["samples"][0].__setitem__(
+                "value", -0.1
+            ),
+            "sample extra field": lambda series: series["samples"][0].__setitem__(
+                "sequence", 1
+            ),
+            "series extra field": lambda series: series.__setitem__(
+                "sample_period", 0.1
+            ),
+            "wrong time unit": lambda series: series.__setitem__("time_unit", "ms"),
+        }
+        for label, mutate in mutations.items():
+            case = self._push_bottle_case()
+            mutate(case["physics"]["objects"]["object_1"]["applied_force"])
+            with self.subTest(label=label), self.assertRaises(ValueError):
+                _validate_case(case, {"push_bottle"}, schema_version="5.0")
 
 
 if __name__ == "__main__":

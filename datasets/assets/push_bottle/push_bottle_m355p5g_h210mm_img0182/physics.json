@@ -1,0 +1,188 @@
+{
+  "case_id": "push_bottle_m355p5g_h210mm_fmax0p63n_fmean0p261n_img0182",
+  "physics": {
+    "environment": {},
+    "objects": {
+      "object_1": {
+        "applied_force": {
+          "samples": [
+            {
+              "time": 0.0,
+              "value": 0.02
+            },
+            {
+              "time": 0.1,
+              "value": 0.03
+            },
+            {
+              "time": 0.2,
+              "value": 0.02
+            },
+            {
+              "time": 0.3,
+              "value": 0.03
+            },
+            {
+              "time": 0.4,
+              "value": 0.04
+            },
+            {
+              "time": 0.5,
+              "value": 0.03
+            },
+            {
+              "time": 0.6,
+              "value": 0.28
+            },
+            {
+              "time": 0.7,
+              "value": 0.43
+            },
+            {
+              "time": 0.8,
+              "value": 0.4
+            },
+            {
+              "time": 0.9,
+              "value": 0.36
+            },
+            {
+              "time": 1.0,
+              "value": 0.43
+            },
+            {
+              "time": 1.1,
+              "value": 0.46
+            },
+            {
+              "time": 1.2,
+              "value": 0.59
+            },
+            {
+              "time": 1.3,
+              "value": 0.5
+            },
+            {
+              "time": 1.4,
+              "value": 0.5
+            },
+            {
+              "time": 1.5,
+              "value": 0.48
+            },
+            {
+              "time": 1.6,
+              "value": 0.56
+            },
+            {
+              "time": 1.7,
+              "value": 0.52
+            },
+            {
+              "time": 1.8,
+              "value": 0.41
+            },
+            {
+              "time": 1.9,
+              "value": 0.42
+            },
+            {
+              "time": 2.0,
+              "value": 0.6
+            },
+            {
+              "time": 2.1,
+              "value": 0.57
+            },
+            {
+              "time": 2.2,
+              "value": 0.63
+            },
+            {
+              "time": 2.3,
+              "value": 0.38
+            },
+            {
+              "time": 2.4,
+              "value": 0.35
+            },
+            {
+              "time": 2.5,
+              "value": 0.36
+            },
+            {
+              "time": 2.6,
+              "value": 0.24
+            },
+            {
+              "time": 2.7,
+              "value": 0.16
+            },
+            {
+              "time": 2.8,
+              "value": 0.17
+            },
+            {
+              "time": 2.9,
+              "value": 0.06
+            },
+            {
+              "time": 3.0,
+              "value": 0.05
+            },
+            {
+              "time": 3.1,
+              "value": 0.04
+            },
+            {
+              "time": 3.2,
+              "value": 0.03
+            },
+            {
+              "time": 3.3,
+              "value": 0.04
+            },
+            {
+              "time": 3.4,
+              "value": 0.04
+            },
+            {
+              "time": 3.5,
+              "value": 0.04
+            },
+            {
+              "time": 3.6,
+              "value": 0.05
+            },
+            {
+              "time": 3.7,
+              "value": 0.03
+            },
+            {
+              "time": 3.8,
+              "value": 0.05
+            },
+            {
+              "time": 3.9,
+              "value": 0.04
+            }
+          ],
+          "symbol": "F(t)",
+          "time_unit": "s",
+          "unit": "N"
+        },
+        "height": {
+          "symbol": "h",
+          "unit": "m",
+          "value": 0.21
+        },
+        "mass": {
+          "symbol": "m",
+          "unit": "kg",
+          "value": 0.3555
+        }
+      }
+    }
+  },
+  "scene_id": "push_bottle"
+}

@@ -6,8 +6,9 @@ schema-v5 Baseline identities:
 - `wan22_g15_sparse_motion_r32_e20_generic` uses the Case's canonical prompt
   and explicitly ignores structured physics.
 - `wan22_g15_sparse_motion_r32_e20_physics` appends the Case's formal
-  independent structured physics with `six_scene_physics_clauses_v2`, preserving
-  each quantity's non-negative value, unit and stable symbol.
+  independent scalar physics with `six_scene_physics_clauses_v2`, preserving
+  each selected quantity's non-negative value, unit and stable symbol.
+  Time-series quantities are skipped rather than summarized.
 
 The distinction is owned by each Baseline manifest's `input_policy` and
 `adapter.physics_transform`, not by the Task. Both identities share the same

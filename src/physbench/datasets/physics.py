@@ -9,9 +9,9 @@ GROUPED_PHYSICS_SCENES = frozenset({
     "inclined_plane_slide",
     "parabolic_motion",
     "pendulum",
+    "push_bottle",
     "uniform_circular_motion",
 })
-FLAT_PHYSICS_SCENE = "push_bottle"
 
 _OBJECT_PARAMETERS = {
     "collision_1d": {"mass", "radius", "initial_velocity"},
@@ -23,6 +23,7 @@ _OBJECT_PARAMETERS = {
         "launch_height",
     },
     "pendulum": {"mass", "radius", "initial_angle"},
+    "push_bottle": {"mass", "height", "applied_force"},
     "uniform_circular_motion": {"orbit_radius"},
 }
 _ENVIRONMENT_PARAMETERS = {
@@ -30,8 +31,30 @@ _ENVIRONMENT_PARAMETERS = {
     "inclined_plane_slide": {"incline_angle", "gravity_acceleration"},
     "parabolic_motion": set(),
     "pendulum": {"string_length"},
+    "push_bottle": set(),
     "uniform_circular_motion": {"angular_velocity"},
 }
+
+
+def is_scalar_quantity(value: Any) -> bool:
+    return isinstance(value, Mapping) and set(value) == {"value", "unit", "symbol"}
+
+
+def is_time_series_quantity(value: Any) -> bool:
+    return isinstance(value, Mapping) and set(value) == {
+        "samples",
+        "time_unit",
+        "unit",
+        "symbol",
+    }
+
+
+def is_projected_scalar_quantity(value: Any) -> bool:
+    return (
+        isinstance(value, Mapping)
+        and {"value", "unit"} <= set(value)
+        and set(value) <= {"value", "unit", "symbol"}
+    )
 
 
 def _semantic_object_name(scene_id: str, object_index: int, name: str) -> str:
@@ -52,6 +75,12 @@ def _semantic_object_name(scene_id: str, object_index: int, name: str) -> str:
             "radius": "bob_radius",
             "initial_angle": "initial_angle",
         }[name]
+    if scene_id == "push_bottle":
+        return {
+            "mass": "bottle_mass",
+            "height": "bottle_height",
+            "applied_force": "applied_force",
+        }[name]
     if scene_id == "uniform_circular_motion":
         return f"object_{object_index}_orbit_radius"
     raise ValueError(f"scene {scene_id} does not use grouped physics")
@@ -66,15 +95,6 @@ def iter_physics_quantities(
     physics = case.get("physics")
     if not isinstance(physics, Mapping) or not physics:
         raise ValueError(f"case {case.get('case_id')} requires structured physics")
-
-    if scene_id == FLAT_PHYSICS_SCENE:
-        for name, quantity in physics.items():
-            if not isinstance(name, str) or not name:
-                raise ValueError("push_bottle physics names must be non-empty")
-            if not isinstance(quantity, Mapping):
-                raise ValueError(f"push_bottle physics.{name} must be an object")
-            yield name, name, quantity
-        return
 
     if scene_id not in GROUPED_PHYSICS_SCENES:
         raise ValueError(f"scene {scene_id} has no current physics contract")
@@ -162,8 +182,8 @@ def flat_physics_quantities(
         and set(physics) != {"objects", "environment"}
         and physics
         and all(
-            isinstance(quantity, Mapping)
-            and {"value", "unit"} <= set(quantity) <= {"value", "unit", "symbol"}
+            is_projected_scalar_quantity(quantity)
+            or is_time_series_quantity(quantity)
             for quantity in physics.values()
         )
     ):
@@ -201,8 +221,10 @@ def flat_physics_quantities(
 
 
 __all__ = [
-    "FLAT_PHYSICS_SCENE",
     "GROUPED_PHYSICS_SCENES",
     "flat_physics_quantities",
+    "is_projected_scalar_quantity",
+    "is_scalar_quantity",
+    "is_time_series_quantity",
     "iter_physics_quantities",
 ]

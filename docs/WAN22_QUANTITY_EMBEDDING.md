@@ -15,9 +15,10 @@ Dataset:     physics_video_six_scene_v12 / View A
 
 目标是检验：相对于“不使用结构化物理量”和“把物理量直接写入 prompt”，显式编码数值、
 量纲和物理量语义是否能改善生成运动的物理一致性。它仍是 I2V：输入为 Case 首帧、
-`case.text.prompt`，并从 `case.physics[annotated=true]` 中消费由 registry 明确筛选的
-物理量子集；它不会把全部结构化标注都送入模型。当前V2 registry只选择V12中
-`annotated=true`的独立量，并保留value、unit和symbol。当前仅支持`finetune_eval`
+`case.text.prompt`，并从 `case.physics` 中消费由registry明确筛选的标量物理量子集；
+它不会把全部结构化标注都送入模型。当前V2 registry只选择V12中的独立标量，并保留
+value、unit和symbol；时序quantity不会被转成均值或峰值。推水瓶若进入支持的Task，当前
+registry只会选择质量与高度，不会选择完整`F(t)`。当前仅支持`finetune_eval`
 Task family。
 
 2026-07-28 完成的 source run 密封了 bundle `1.0.0` 和 baseline digest，并保留当时
@@ -36,7 +37,7 @@ Task schema 4.0与`scene_default_v10`；
 token 跨度不稳定和文本/结构化标注冲突。Bundle-local
 `quantity_registry_v2.json`按scene白名单读取结构化字段，校验：
 
-- `annotated=true`且数值有限、非负；
+- quantity是含`value`的标量，且数值有限、非负；
 - 字段名、单位和symbol与registry一致；
 - required 字段不缺失；
 - 渲染精度、物理量类型和来源角色固定。

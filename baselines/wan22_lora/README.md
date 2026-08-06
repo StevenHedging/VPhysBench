@@ -6,8 +6,9 @@ recipe as two schema-v5 managed Baseline identities:
 - `wan22_ti2v_5b_lora_r32_v3_generic` uses the Case's canonical prompt and
   explicitly ignores structured physics.
 - `wan22_ti2v_5b_lora_r32_v3_physics` appends the Case's formal structured
-  physics with `six_scene_physics_clauses_v2`; all current formal quantities
-  are selected, with value, unit and symbol preserved.
+  scalar physics with `six_scene_physics_clauses_v2`, with value, unit and
+  symbol preserved. Time-series quantities are skipped rather than summarized;
+  push-bottle conditioning currently uses mass and height, not `F(t)`.
 
 The distinction is Baseline-owned through `input_policy` and
 `adapter.physics_transform`; both identities can run the same `direct_eval`

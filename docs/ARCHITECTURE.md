@@ -54,9 +54,11 @@ Case资产目录保存一份，不由Task或Baseline临时生成。Release 12.0.
 轻量索引，仅含身份、运行时资产、appearance与temporal；Loader严格读取两个Case-local
 JSON并物化兼容的`case.text`和`case.physics`。逐Case来源、采集时序说明与alignment在
 `datasets/provenance/releases/12.0.0/cases.jsonl`中，不进入运行时Case。
-正式物理量只含`value/unit/symbol`，其symbol必须进入无数值英文prompt；辅助和审计量
-不进入运行时`physics`。
-所有标量为非负大小，方向由prompt表达。旧四字段quantity不再属于活动运行契约。
+正式标量只含`value/unit/symbol`；正式时序量只含
+`samples/time_unit/unit/symbol`，sample只含`time/value`。quantity的symbol必须进入
+无数值英文prompt；辅助和审计量不进入运行时`physics`。所有正式数值为非负大小，方向
+由prompt表达。推水瓶的完整`F(t)`绑定到`objects.object_1.applied_force`；旧四字段
+quantity不再属于活动运行契约。
 
 ## 3. Task 是模型无关的评测定义
 
@@ -157,8 +159,11 @@ appearance / temporal / ood
 physics 中的全部正式quantity（由Compiler投影为稳定语义名）
 ```
 
-这些quantity保留`value`、`unit`和`symbol`，使adapter能以符号为绑定键选择独立物理量；
-Dataset中的数值不会因进入conditionable Case而自动拼接到原始prompt。
+这些quantity保留其完整标量或时序结构，使adapter能以符号为绑定键选择独立物理量；
+Dataset中的数值不会因进入conditionable Case而自动拼接到原始prompt。当前内置
+structured-text和quantity-embedding adapter是标量型消费者：它们只选择含`value`的
+quantity，不会把时序量静默压缩为均值或峰值。使用完整`F(t)`的Baseline必须显式实现并
+声明trajectory、force-field或其它时序representation。
 
 它不会提供：
 

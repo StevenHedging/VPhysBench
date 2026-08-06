@@ -1,0 +1,92 @@
+{
+  "case_id": "push_bottle_m407p61g_h220mm_fmax9p218251n_fmean3p854994n_img0044",
+  "physics": {
+    "environment": {},
+    "objects": {
+      "object_1": {
+        "applied_force": {
+          "samples": [
+            {
+              "time": 0.0,
+              "value": 7.354988
+            },
+            {
+              "time": 0.1,
+              "value": 9.218251
+            },
+            {
+              "time": 0.2,
+              "value": 6.374322
+            },
+            {
+              "time": 0.3,
+              "value": 6.864655
+            },
+            {
+              "time": 0.4,
+              "value": 7.256921
+            },
+            {
+              "time": 0.5,
+              "value": 6.276256
+            },
+            {
+              "time": 0.6,
+              "value": 5.491724
+            },
+            {
+              "time": 0.7,
+              "value": 4.412992
+            },
+            {
+              "time": 0.8,
+              "value": 1.667131
+            },
+            {
+              "time": 0.9,
+              "value": 1.274865
+            },
+            {
+              "time": 1.0,
+              "value": 2.059396
+            },
+            {
+              "time": 1.1,
+              "value": 2.647795
+            },
+            {
+              "time": 1.2,
+              "value": 0.196133
+            },
+            {
+              "time": 1.4,
+              "value": 0.196133
+            },
+            {
+              "time": 1.5,
+              "value": 0.196133
+            },
+            {
+              "time": 1.7,
+              "value": 0.196133
+            }
+          ],
+          "symbol": "F(t)",
+          "time_unit": "s",
+          "unit": "N"
+        },
+        "height": {
+          "symbol": "h",
+          "unit": "m",
+          "value": 0.22
+        },
+        "mass": {
+          "symbol": "m",
+          "unit": "kg",
+          "value": 0.40761
+        }
+      }
+    }
+  },
+  "scene_id": "push_bottle"
+}

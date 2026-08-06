@@ -166,6 +166,13 @@
   ],
   "annotations_missing_video": 0,
   "excluded_missing_annotation": 1,
+  "force_series": {
+    "cases": 141,
+    "force_unit": "N",
+    "negative_sensor_drift_clamped_to_zero": 746,
+    "samples": 4698,
+    "time_unit": "s"
+  },
   "force_units": {
     "canonical_unit": "N",
     "kgf_to_N": 9.80665,
@@ -175,12 +182,11 @@
   "import_id": "push_bottle_20260804",
   "media_policy": "byte preserving; no crop, trim, resampling, or re-encode",
   "physics_fields": [
-    "bottle_mass",
-    "bottle_height",
-    "peak_applied_force",
-    "mean_applied_force"
+    "objects.object_1.mass",
+    "objects.object_1.height",
+    "objects.object_1.applied_force"
   ],
-  "prompt": "An upright bottle is pushed near its top, tips over, and falls onto its side.",
+  "prompt": "An upright bottle of mass m and height h is pushed near its top by a time-varying external force F(t), then tips and falls onto its side.",
   "release_status": "staged_not_published",
   "schema_version": "1.0",
   "source_annotation_archive": "assets/source_archives/20260804_new_data/push_bottle_physics_annotations.zip",

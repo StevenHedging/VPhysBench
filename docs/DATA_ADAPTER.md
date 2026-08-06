@@ -27,14 +27,14 @@ case_id / scene_id
 text.prompt
 appearance / temporal / ood
 允许作为生成输入的 assets
-physics[annotated=true]
+physics（全部正式标量与时序quantity）
 ```
 
 它不会给 adapter：
 
 - `reference_video`、`physics_reference_video`、`source_video`；
 - provenance、source locator 或 alignment evidence；
-- `annotated=false` 的派生量；
+- provenance中的派生、辅助或审计量；
 - evaluator reference。
 
 Adapter 本身不接收训练 target。Compiler 只在 sealed runtime source 的训练 case 中
@@ -58,7 +58,7 @@ Baseline schema 5.0 必须声明：
       "usage": "required"
     },
     "physics": {
-      "source": "case.physics[annotated=true]",
+      "source": "case.physics",
       "usage": "ignored",
       "representations": []
     }
@@ -84,7 +84,7 @@ Baseline schema 5.0 必须声明：
 ### `required`
 
 - manifest 必须列出至少一种 representation；
-- 每条 adaptation 至少使用一个 `annotated=true` 参数；
+- 每条 adaptation 至少使用一个正式参数；
 - channel 中登记的参数集合必须与 `used_parameters` 完全一致。
 
 该策略是 Baseline identity 的一部分。改变 usage、representation 或 transform，需要新的
@@ -106,7 +106,7 @@ standard_v2v_v1
 2. `temporal`：FPS、帧数与 `4n+1` 等模型约束；
 3. `paradigm`：T2V/I2V/V2V 媒体角色；
 4. `text`：读取 `case.text.prompt`；
-5. `physics`：按固定 policy 忽略或转换 annotated 物理量。
+5. `physics`：按固定 policy 忽略或转换正式物理量。
 
 当前内置物理转换：
 
@@ -123,8 +123,9 @@ standard_v2v_v1
 src/physbench/baseline_plugins/resources/six_scene_physics_clauses_v2.json
 ```
 
-Renderer 按scene白名单读取`annotated=true`独立quantity，验证单位和稳定symbol，按声明
-精度格式化，并追加到`case.text.prompt`后。它同时记录原prompt digest、最终prompt
+Renderer按scene白名单读取含`value`的独立标量quantity，验证单位和稳定symbol，按声明
+精度格式化，并追加到`case.text.prompt`后。时序quantity不会被自动求均值、峰值、插值或
+序列化；要使用完整时序必须由Python adapter声明相应representation。Renderer同时记录原prompt digest、最终prompt
 digest、字段、原值、单位、symbol和渲染值。当前速度值是非负大小，运动方向来自原始
 Case prompt。Driver只消费已经封印的`native_inputs.text.prompt`，不得再次拼接。
 
@@ -201,7 +202,7 @@ Contract 只描述模型输入如何绑定，不规定 `native_inputs` 内部形
 - generation mode 与 Baseline capability 一致；
 - media channel 与 asset whitelist 一致；
 - physics representation 已声明；
-- used parameter 存在、`annotated=true`，且值与单位未被改写；
+- used parameter是正式quantity，且值、单位、symbol未被改写；
 - 大型 control 使用 artifact reference；
 - producer fingerprint 属于当前 adapter/materializer/TaskBuilder。
 

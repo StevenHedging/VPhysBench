@@ -10,7 +10,11 @@ from pathlib import Path
 from typing import Any
 
 from physbench.datasets import load_dataset
-from physbench.datasets.physics import iter_physics_quantities
+from physbench.datasets.physics import (
+    is_scalar_quantity,
+    is_time_series_quantity,
+    iter_physics_quantities,
+)
 from physbench.io import load_json, load_jsonl, write_json
 
 
@@ -19,6 +23,13 @@ DATASETS_ROOT = ROOT / "datasets"
 V12_RELEASE_ROOT = DATASETS_ROOT / "releases" / "12.0.0"
 V12_DATASET = V12_RELEASE_ROOT / "dataset.json"
 PROVENANCE_ROOT = DATASETS_ROOT / "provenance" / "releases" / "12.0.0"
+PUSH_FORCE_SOURCE = (
+    DATASETS_ROOT
+    / "provenance"
+    / "source_docs"
+    / "20260804_push_bottle"
+    / "normalized_annotations.json"
+)
 EXPECTED_ENTRIES = {
     "dataset.json",
     "cases.jsonl",
@@ -60,6 +71,8 @@ def validate_v12(
     physics_paths: set[str] = set()
     caption_paths: set[str] = set()
     quantity_count = 0
+    scalar_quantity_count = 0
+    time_series_quantity_count = 0
     for indexed_case in indexed_cases:
         if set(indexed_case) != {
             "case_id",
@@ -116,12 +129,38 @@ def validate_v12(
         symbols: set[str] = set()
         for path, _, quantity in iter_physics_quantities(case):
             quantity_count += 1
-            value = quantity["value"]
-            if (
+            if is_scalar_quantity(quantity):
+                scalar_quantity_count += 1
+                values = [quantity["value"]]
+            elif is_time_series_quantity(quantity):
+                time_series_quantity_count += 1
+                if not quantity["samples"]:
+                    raise ValueError(f"empty series {case['case_id']}/{path}")
+                values = []
+                for sample in quantity["samples"]:
+                    if set(sample) != {"time", "value"}:
+                        raise ValueError(
+                            f"invalid series sample {case['case_id']}/{path}"
+                        )
+                    time = sample["time"]
+                    if (
+                        isinstance(time, bool)
+                        or not isinstance(time, (int, float))
+                        or not math.isfinite(float(time))
+                        or time < 0
+                    ):
+                        raise ValueError(
+                            f"invalid series time {case['case_id']}/{path}"
+                        )
+                    values.append(sample["value"])
+            else:
+                raise ValueError(f"invalid quantity shape {case['case_id']}/{path}")
+            if any(
                 isinstance(value, bool)
                 or not isinstance(value, (int, float))
                 or not math.isfinite(float(value))
                 or value < 0
+                for value in values
             ):
                 raise ValueError(f"invalid quantity {case['case_id']}/{path}")
             symbol = quantity["symbol"]
@@ -133,7 +172,9 @@ def validate_v12(
     if (
         len(caption_paths) != 799
         or len(physics_paths) != 799
-        or quantity_count != 3959
+        or quantity_count != 3818
+        or scalar_quantity_count != 3677
+        or time_series_quantity_count != 141
     ):
         raise ValueError("V12 physics coverage mismatch")
     if list(DATASETS_ROOT.glob("assets/*/*/physics.v11.json")):
@@ -170,6 +211,68 @@ def validate_v12(
     if forbidden_audit_keys(provenance_cases):
         raise ValueError("V12 provenance contains hash metadata")
 
+    provenance_by_id = {item["case_id"]: item for item in provenance_cases}
+    force_source = load_json(PUSH_FORCE_SOURCE)
+    force_records = force_source.get("records")
+    if not isinstance(force_records, list) or len(force_records) != 141:
+        raise ValueError("push-bottle force source coverage mismatch")
+    force_by_locator = {}
+    for record in force_records:
+        annotation = record.get("annotation", {})
+        locator = (
+            annotation.get("source_workbook_member"),
+            annotation.get("source_sheet"),
+        )
+        samples = record.get("force_annotation", {}).get("force_samples")
+        declared_count = record.get("force_annotation", {}).get(
+            "force_sample_count"
+        )
+        if (
+            None in locator
+            or locator in force_by_locator
+            or not isinstance(samples, list)
+            or not samples
+            or declared_count != len(samples)
+            or [sample.get("sequence") for sample in samples]
+            != list(range(1, len(samples) + 1))
+        ):
+            raise ValueError("invalid push-bottle force source record")
+        force_by_locator[locator] = record
+
+    verified_force_series = 0
+    for case in snapshot.cases:
+        if case["scene_id"] != "push_bottle":
+            continue
+        locator = provenance_by_id[case["case_id"]].get("source_locator", {})
+        if locator.get("normalized_annotation") != (
+            "provenance/source_docs/20260804_push_bottle/"
+            "normalized_annotations.json"
+        ):
+            raise ValueError(f"missing force source locator for {case['case_id']}")
+        source_key = (locator.get("annotation_workbook"), locator.get("sheet"))
+        record = force_by_locator.get(source_key)
+        if record is None:
+            raise ValueError(f"unmatched force source for {case['case_id']}")
+        source_samples = record["force_annotation"]["force_samples"]
+        expected = [
+            {
+                "time": sample["time_s"],
+                "value": max(sample["force_n"], 0.0),
+            }
+            for sample in source_samples
+        ]
+        actual = case["physics"]["objects"]["object_1"]["applied_force"]
+        if (
+            actual.get("time_unit") != "s"
+            or actual.get("unit") != "N"
+            or actual.get("symbol") != "F(t)"
+            or actual.get("samples") != expected
+        ):
+            raise ValueError(f"force-series mismatch for {case['case_id']}")
+        verified_force_series += 1
+    if verified_force_series != 141:
+        raise ValueError("push-bottle force-series Case coverage mismatch")
+
     mask_manifests = []
     for indexed_case in indexed_cases:
         relative = indexed_case["assets"].get("first_frame_mask_manifest")
@@ -184,13 +287,10 @@ def validate_v12(
                 raise ValueError(
                     f"mask object ordering mismatch for {indexed_case['case_id']}"
                 )
-            if indexed_case["scene_id"] == "push_bottle":
-                expected_keys = sorted(physics)
-            else:
-                expected_keys = sorted(
-                    f"objects.{object_id}.{name}"
-                    for name in physics["objects"][object_id]
-                )
+            expected_keys = sorted(
+                f"objects.{object_id}.{name}"
+                for name in physics["objects"][object_id]
+            )
             if instance.get("physics_keys") != expected_keys:
                 raise ValueError(
                     f"mask physics binding mismatch for {indexed_case['case_id']}"
@@ -217,7 +317,10 @@ def validate_v12(
         "physics_documents": 799,
         "provenance_cases": 799,
         "mask_manifests": 797,
-        "quantities": 3959,
+        "quantities": 3818,
+        "scalar_quantities": 3677,
+        "time_series_quantities": 141,
+        "source_verified_force_series": verified_force_series,
         "media_changes": 0,
     }
     if write_report:

@@ -69,9 +69,7 @@
       "parameter_outro": ".",
       "parameter_clauses": [
         {"name": "bottle_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "m is {value} kilograms"},
-        {"name": "bottle_height", "required": true, "expected_unit": "m", "precision": 3, "template": "h is {value} meters"},
-        {"name": "mean_applied_force", "required": true, "expected_unit": "N", "precision": 5, "template": "F_mean is {value} newtons"},
-        {"name": "peak_applied_force", "required": true, "expected_unit": "N", "precision": 5, "template": "F_peak is {value} newtons"}
+        {"name": "bottle_height", "required": true, "expected_unit": "m", "precision": 3, "template": "h is {value} meters"}
       ]
     },
     "uniform_circular_motion": {

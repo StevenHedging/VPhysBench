@@ -17,8 +17,10 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 `physics`。schema与annotation source不在799个Case中重复。12.0.0的轻量Case索引通过`assets.caption`和
 `assets.physics_annotation`引用二者，Loader读取后物化`case.text`与`case.physics`。
 媒体通常被Git忽略，Case根部的两个JSON属于受版本控制的Dataset元数据。
-正式quantity只含`value/unit/symbol`。五个已分类Scene按`objects.object_N`与
-`environment`组织，`object_N`与mask manifest中的矩阵编号一致；辅助和审计信息只进入
+正式标量quantity只含`value/unit/symbol`；正式时序quantity只含
+`samples/time_unit/unit/symbol`，其中sample只含`time/value`。六个Scene均按
+`objects.object_N`与`environment`组织，`object_N`与mask manifest中的矩阵编号一致；
+推水瓶完整外力序列位于`objects.object_1.applied_force`，辅助和审计信息只进入
 provenance。
 
 Canonical规则：

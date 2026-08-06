@@ -7,7 +7,7 @@ from physbench.baseline_api import load_baseline_bundle, load_baseline_plugin
 from physbench.baseline_runtime.adapter_loader import load_data_adapter
 from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
-from physbench.datasets.physics import flat_physics_quantities
+from physbench.datasets.physics import flat_physics_quantities, is_scalar_quantity
 from physbench.io import load_json
 
 
@@ -64,7 +64,8 @@ class SymbolicConsumerTests(unittest.TestCase):
                 name
                 for case in self.dataset.cases
                 if case["scene_id"] == scene_id
-                for name in flat_physics_quantities(case)
+                for name, quantity in flat_physics_quantities(case).items()
+                if is_scalar_quantity(quantity)
             }
             causal_names = {
                 item["name"]
@@ -86,7 +87,11 @@ class SymbolicConsumerTests(unittest.TestCase):
         ).task_builder.data_adapter
         for case in self.dataset.cases:
             projected = flat_physics_quantities(case)
-            expected = set(projected)
+            expected = {
+                name
+                for name, value in projected.items()
+                if is_scalar_quantity(value)
+            }
             causal = causal_adapter.adapt_case(case, role="eval")
             quantity = quantity_adapter.adapt_case(case, role="eval")
             self.assertEqual(expected, set(causal["used_parameters"]), case["case_id"])
@@ -98,6 +103,27 @@ class SymbolicConsumerTests(unittest.TestCase):
                     self.assertEqual(projected[name]["symbol"], audit["symbol"])
             for item in quantity["native_inputs"]["physics"]["quantities"]:
                 self.assertEqual(projected[item["name"]]["symbol"], item["symbol"])
+
+    def test_scalar_adapters_do_not_summarize_push_force_series(self) -> None:
+        case = next(
+            case for case in self.dataset.cases
+            if case["scene_id"] == "push_bottle"
+        )
+        causal = load_data_adapter(load_baseline_bundle(CAUSAL_MANIFEST)).adapt_case(
+            case, role="eval"
+        )
+        quantity = load_baseline_plugin(
+            load_baseline_bundle(QUANTITY_MANIFEST)
+        ).task_builder.data_adapter.adapt_case(case, role="eval")
+        for adaptation in (causal, quantity):
+            self.assertEqual(
+                {"bottle_mass", "bottle_height"},
+                set(adaptation["used_parameters"]),
+            )
+            serialized = str(adaptation)
+            self.assertNotIn("applied_force", serialized)
+            self.assertNotIn("mean_applied_force", serialized)
+            self.assertNotIn("peak_applied_force", serialized)
 
 
 if __name__ == "__main__":

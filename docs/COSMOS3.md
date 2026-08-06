@@ -61,7 +61,7 @@ Benchmark orchestration 使用 `phybench` 环境；Cosmos subprocess 使用
 ```text
 case.text.prompt
 assets.first_frame
-physics[annotated=true]
+physics（全部正式标量与时序quantity）
 ```
 
 generic：
@@ -88,7 +88,8 @@ Renderer 使用：
 src/physbench/baseline_plugins/resources/six_scene_physics_clauses_v2.json
 ```
 
-它只选择V12中`annotated=true`的独立量，验证字段、单位和symbol。Cosmos driver只读取TaskInstance的最终
+它只选择V12中的独立标量，验证字段、单位和symbol；时序quantity不会被压成摘要，
+推水瓶当前只使用质量和高度。Cosmos driver只读取TaskInstance的最终
 `native_inputs.text.prompt`，不读取 raw physics 或另一个 prompt profile。
 
 ## 4. I2V 与时间规格

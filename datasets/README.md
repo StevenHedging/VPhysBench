@@ -24,10 +24,12 @@ releases/12.0.0/dataset.json
 逐Case来源、原始媒体定位、采集时序说明与alignment统一位于
 `provenance/releases/12.0.0/cases.jsonl`；当前GT的唯一资产角色是`reference_video`。
 
-12.0.0只保留正式物理量。每个quantity恰好包含`value`、`unit`和`symbol`，标量统一为
-非负大小，方向只写入prompt；所有保留符号都必须进入prompt但具体数值不得进入。
-除暂缓细分的`push_bottle`外，`physics`按`objects.object_N`和`environment`分组，
-`object_N`与首帧mask的矩阵顺序一致。
+12.0.0只保留正式物理量。标量quantity恰好包含`value`、`unit`和`symbol`；时序quantity
+恰好包含`samples`、`time_unit`、`unit`和`symbol`，每个sample显式保存`time/value`。
+所有正式数值统一为非负大小，方向只写入prompt；所有保留符号都必须进入prompt但具体
+数值不得进入。六个scene的`physics`均按`objects.object_N`和`environment`分组，
+`object_N`与首帧mask的矩阵顺序一致。推水瓶的`applied_force`属于`object_1`，保留XLSX
+中的完整采样顺序与时间戳，不插值、不平滑、不去重。
 
 12.0.0的Release目录只包含运行时必需的四类内容：`dataset.json`、`cases.jsonl`、
 `scenes/`和`views/`。迁移与独立

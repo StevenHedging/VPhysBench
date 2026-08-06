@@ -9,8 +9,14 @@
 直接解释文件格式。
 成员文件本身不重复携带schema、language或annotation source；Baseline也不应依赖这些
 已删除字段。当前GT的唯一Dataset角色是`assets.reference_video`。
-每个正式quantity都保留非负`value`、`unit`和稳定`symbol`；方向来自Case prompt，不能
-再从数值正负号推断。辅助、派生和审计量不进入运行时`case.physics`。
+正式标量quantity保留非负`value`、`unit`和稳定`symbol`；正式时序quantity保留
+`samples/time_unit/unit/symbol`。方向来自Case prompt，不能再从数值正负号推断。
+辅助、派生和审计量不进入运行时`case.physics`。
+
+当前内置structured-text与quantity-embedding adapter只支持标量。它们会跳过时序
+quantity，不会自行计算均值、峰值或插值；因此在推水瓶scene中当前只使用质量`m`和高度
+`h`。若Baseline要消费完整外力`F(t)`，必须使用Python adapter明确声明时序
+representation，并在`used_parameters`和physics channel中登记原序列。
 
 ## 1. 先确定 Baseline identity
 

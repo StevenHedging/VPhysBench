@@ -1,0 +1,120 @@
+{
+  "case_id": "push_bottle_m196p8g_h220mm_fmax5p099458n_fmean2p703693n_img0060",
+  "physics": {
+    "environment": {},
+    "objects": {
+      "object_1": {
+        "applied_force": {
+          "samples": [
+            {
+              "time": 0.1,
+              "value": 0.588399
+            },
+            {
+              "time": 0.2,
+              "value": 2.941995
+            },
+            {
+              "time": 0.3,
+              "value": 3.530394
+            },
+            {
+              "time": 0.4,
+              "value": 4.609125
+            },
+            {
+              "time": 0.5,
+              "value": 5.099458
+            },
+            {
+              "time": 0.6,
+              "value": 4.609125
+            },
+            {
+              "time": 0.7,
+              "value": 4.412992
+            },
+            {
+              "time": 0.8,
+              "value": 4.118793
+            },
+            {
+              "time": 0.9,
+              "value": 3.726527
+            },
+            {
+              "time": 1.0,
+              "value": 4.314926
+            },
+            {
+              "time": 1.1,
+              "value": 4.118793
+            },
+            {
+              "time": 1.2,
+              "value": 5.099458
+            },
+            {
+              "time": 1.2,
+              "value": 5.099458
+            },
+            {
+              "time": 1.3,
+              "value": 3.62846
+            },
+            {
+              "time": 1.4,
+              "value": 3.236194
+            },
+            {
+              "time": 1.5,
+              "value": 2.843928
+            },
+            {
+              "time": 1.6,
+              "value": 2.157463
+            },
+            {
+              "time": 1.7,
+              "value": 0.882598
+            },
+            {
+              "time": 1.8,
+              "value": 0.588399
+            },
+            {
+              "time": 1.9,
+              "value": 0.490333
+            },
+            {
+              "time": 2.0,
+              "value": 0.588399
+            },
+            {
+              "time": 2.1,
+              "value": 0.196133
+            },
+            {
+              "time": 2.4,
+              "value": 0.196133
+            }
+          ],
+          "symbol": "F(t)",
+          "time_unit": "s",
+          "unit": "N"
+        },
+        "height": {
+          "symbol": "h",
+          "unit": "m",
+          "value": 0.22
+        },
+        "mass": {
+          "symbol": "m",
+          "unit": "kg",
+          "value": 0.1968
+        }
+      }
+    }
+  },
+  "scene_id": "push_bottle"
+}

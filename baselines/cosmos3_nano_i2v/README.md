@@ -7,7 +7,8 @@ the same `nvidia/Cosmos3-Nano` checkpoint and managed driver:
   explicitly ignores structured physics.
 - `cosmos3_nano_i2v_physics` appends the Case's formal structured physics
   to that same prompt with `six_scene_physics_clauses_v2`, selecting only
-  independent quantities and preserving value, unit and symbol.
+  independent scalar quantities and preserving value, unit and symbol.
+  Time-series quantities are skipped rather than reduced to summaries.
 
 The distinction is Baseline-owned through `input_policy` and
 `adapter.physics_transform`; Tasks no longer select a generic/physics arm.

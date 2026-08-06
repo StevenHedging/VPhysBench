@@ -2,15 +2,15 @@
   "annotation_archive": "/root/Steven/推水瓶实验物理标注.zip",
   "annotations_missing_video": [],
   "field_decisions": {
-    "sheet force time series": "preserved in provenance in its source unit and normalized N",
-    "sheet 平均值": "physics.mean_applied_force; source N retained or kgf converted to N",
-    "sheet 最大值": "physics.peak_applied_force; source N retained or kgf converted to N",
-    "workbook filename height": "physics.bottle_height; cm converted to m",
-    "workbook filename mass": "physics.bottle_mass; g converted to kg"
+    "sheet force time series": "physics.objects.object_1.applied_force; explicit source times and N magnitudes, with negative sensor drift clamped to zero",
+    "sheet 平均值": "provenance only; derived summary removed from formal physics",
+    "sheet 最大值": "provenance only; derived summary removed from formal physics",
+    "workbook filename height": "physics.objects.object_1.height; cm converted to m",
+    "workbook filename mass": "physics.objects.object_1.mass; g converted to kg"
   },
   "intake_id": "push_bottle_20260804",
   "matched_record_count": 141,
-  "prompt": "An upright bottle is pushed near its top, tips over, and falls onto its side.",
+  "prompt": "An upright bottle of mass m and height h is pushed near its top by a time-varying external force F(t), then tips and falls onto its side.",
   "records": [
     {
       "alignment": {

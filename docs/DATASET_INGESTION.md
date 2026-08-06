@@ -67,6 +67,8 @@ Task选择Dataset、View、scene、test范围、seed和评估协议。Task不决
     必须进入prompt。
 11. 结构化标量只保存有限、非负的大小。速度等有方向量的方向由prompt表达，不能依赖
     正负号或屏幕坐标系暗示。
+12. 随时间变化且每个采样点都有物理意义的信号必须保存完整时序，不得用均值、峰值等
+    派生摘要替代；显式时间戳与样本顺序必须按来源保留。
 
 ## 4. 标准工作流与停机点
 
@@ -101,6 +103,7 @@ Task选择Dataset、View、scene、test范围、seed和评估协议。Task不决
 | 有初速度球数 | 2 | 实验形式 | `appearance.collision_structure` | 规范枚举 |
 | 视频文件名 | IMG_0123.MOV | 来源键 | `provenance.source_locator` | 用于确定映射 |
 | 备注 | “本次碰歪” | 质量信息 | ingest audit | 决定排除或复核 |
+| 外力时序 | 0.1 s, 0.16 N | 正式时序物理量 | `physics.objects.object_1.applied_force` | 保留每个时间戳与样本顺序 |
 
 字段分成四类，而不是只分成两类：
 
@@ -140,6 +143,11 @@ Task选择Dataset、View、scene、test范围、seed和评估协议。Task不决
 - “初速度”“高度”“长度”等存在多个合理物理定义；
 - 标注与视频明显矛盾，但无法判断哪一方正确；
 - 公式、缩写或实验装置含义完全无法理解。
+
+若XLSX记录时间序列，标准化中间表还必须逐样本保留原序号、原时间、原值、原单位和归一化
+值。不得根据“应当每0.1秒采样”重建时间轴；重复时间戳和缺口是来源事实，应原样保留并在
+导入摘要中统计。传感器零点漂移造成的负值若按scene语义只代表非负大小，正式标注可截为
+零，但有符号原值必须继续留在provenance。
 
 ### 阶段2：建立视频—标注一一对应
 
@@ -245,15 +253,31 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 目录名简要编码主要结构化物理量和唯一身份后缀，用于人工区分；不得编码背景、颜色、
 视角、实验室或其它环境信息。`case_id`一经发布保持稳定，不把可变路径当身份。
 
-五个已分类Scene使用`physics.objects.object_N`与`physics.environment`两组；对象编号必须
+六个Scene均使用`physics.objects.object_N`与`physics.environment`两组；对象编号必须
 与首帧mask从左到右、从上到下的矩阵顺序一致。每个正式物理量使用：
 
 ```json
 {"value": 0.03313, "unit": "kg", "symbol": "m_1"}
 ```
 
+需要保留完整信号的时序物理量使用：
+
+```json
+{
+  "samples": [
+    {"time": 0.1, "value": 0.16},
+    {"time": 0.2, "value": 0.27}
+  ],
+  "time_unit": "s",
+  "unit": "N",
+  "symbol": "F(t)"
+}
+```
+
 - 统一使用scene约定单位，优先SI；
 - `value`必须是有限且非负的标量大小；方向单独写入prompt；
+- 时序的`time`与`value`必须是有限且非负的数值，`samples`非空并保持来源顺序；不得
+  插值、平滑、去重、重采样或用派生摘要替换；
 - `symbol`必须是非空字符串、在同一Case内唯一，并与scene级注册表一致；
 - `physics`只保存可信、独立、可作为模型条件的正式物理量，其symbol必须进入prompt；
 - 派生审计量、辅助装置量、可信度不足的量和重复别名只进入provenance；
@@ -286,7 +310,7 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 `case.text`与`case.physics`。
 
 Case-local成员不重复写schema或annotation source；这些由当前Dataset契约和provenance表达。
-新导入只能生成`value/unit/symbol`三字段quantity，不得创建版本后缀物理文件。
+新导入只能生成上述严格标量或时序quantity，不得创建版本后缀物理文件。
 新导入不能继续生成或覆盖这些历史文件。
 
 ### 阶段7：设计View A的train/ID test

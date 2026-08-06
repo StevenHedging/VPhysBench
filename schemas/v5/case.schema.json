@@ -63,29 +63,13 @@
   },
   "additionalProperties": false,
   "allOf": [
-    {
-      "if": {
-        "properties": {"scene_id": {"const": "push_bottle"}},
-        "required": ["scene_id"]
-      },
-      "then": {
-        "properties": {"physics": {"$ref": "#/$defs/flatPhysics"}}
-      },
-      "else": {
-        "properties": {"physics": {"$ref": "#/$defs/groupedPhysics"}}
-      }
-    }
+    {"properties": {"physics": {"$ref": "#/$defs/groupedPhysics"}}}
   ],
   "$defs": {
     "assetPath": {
       "type": "string",
       "minLength": 1,
       "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+"
-    },
-    "flatPhysics": {
-      "type": "object",
-      "minProperties": 1,
-      "additionalProperties": {"$ref": "#/$defs/quantity"}
     },
     "groupedPhysics": {
       "type": "object",
@@ -111,10 +95,39 @@
       "additionalProperties": false
     },
     "quantity": {
+      "oneOf": [
+        {"$ref": "#/$defs/scalarQuantity"},
+        {"$ref": "#/$defs/timeSeriesQuantity"}
+      ]
+    },
+    "scalarQuantity": {
       "type": "object",
       "required": ["value", "unit", "symbol"],
       "properties": {
         "value": {"type": "number", "minimum": 0},
+        "unit": {"type": "string", "minLength": 1},
+        "symbol": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "timeSeriesQuantity": {
+      "type": "object",
+      "required": ["samples", "time_unit", "unit", "symbol"],
+      "properties": {
+        "samples": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["time", "value"],
+            "properties": {
+              "time": {"type": "number", "minimum": 0},
+              "value": {"type": "number", "minimum": 0}
+            },
+            "additionalProperties": false
+          }
+        },
+        "time_unit": {"const": "s"},
         "unit": {"type": "string", "minLength": 1},
         "symbol": {"type": "string", "minLength": 1}
       },

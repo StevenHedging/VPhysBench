@@ -20,7 +20,8 @@ Dataset release 是
 Case-local成员后，向Baseline和Evaluator提供兼容的`case.text`与`case.physics`运行时
 接口。Release目录只保留`dataset.json`、`cases.jsonl`、`scenes/`和`views/`；迁移与验证证据位于
 `datasets/provenance/releases/12.0.0/`。每个quantity包含稳定`symbol`；独立量的符号
-必须出现在无数值prompt中。所有标量保存为非负大小，运动方向由prompt表达。V1–V11
+必须出现在无数值prompt中。标量使用`value/unit/symbol`，推水瓶外力使用带显式时间戳的
+`samples/time_unit/unit/symbol`；所有正式数值保存为非负大小，运动方向由prompt表达。V1–V11
 不再保留为活动运行目录；历史结果依靠Git历史和provenance追溯。
 
 ## 设计原则
