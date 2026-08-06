@@ -72,6 +72,7 @@ Registry 会发现每个 Bundle 目录下的 `baseline.json` 与 `*.baseline.jso
 | `wan22_ti2v_5b_lora_r32_v3_generic` | `ignored` | `finetune_eval`, `direct_eval` | WAN2.2 + LoRA |
 | `wan22_ti2v_5b_lora_r32_v3_physics` | `required` / `structured_text` | `finetune_eval`, `direct_eval` | 同模型，追加结构化物理文本 |
 | `wan22_ti2v_5b_lora_r32_quantity_embedding_v1` | `required` / `quantity_token_embedding_v1` | `finetune_eval` | WAN2.2 + LoRA，SI 数值/量纲编码 |
+| `wan22_ti2v_5b_lora_r32_symbol_value_cross_attention_v1` | `required` / `symbol_value_cross_attention_v1` | `finetune_eval` | WAN2.2 + LoRA，symbol/value 词空间交叉注意力 |
 | `cosmos3_nano_i2v_generic` | `ignored` | `direct_eval` | Cosmos3-Nano base |
 | `cosmos3_nano_i2v_physics` | `required` / `structured_text` | `direct_eval` | 同模型，追加结构化物理文本 |
 | `wan22_g15_sparse_motion_r32_e20_generic` | `ignored` | `direct_eval` | G15 step-2840，诊断型 |
@@ -177,6 +178,7 @@ PYTHONPATH=src python -m physbench \
 - [场景评估协议](docs/EVALUATION.md)
 - [WAN2.2 Baseline](docs/WAN22.md)
 - [WAN2.2 物理量编码 Baseline](docs/WAN22_QUANTITY_EMBEDDING.md)
+- [WAN2.2 Symbol–Value Cross-Attention Baseline](docs/WAN22_SYMBOL_VALUE_CROSS_ATTENTION.md)
 - [WAN2.2 物理量编码五场景实验报告](docs/experiments/WAN22_QUANTITY_EMBEDDING_20260728.md)
 - [碰撞评估器 v4 与可观测性审计](docs/experiments/COLLISION_EVALUATOR_V4_20260730.md)
 - [Cosmos3-Nano Baseline](docs/COSMOS3.md)

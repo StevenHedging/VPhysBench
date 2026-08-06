@@ -28,6 +28,14 @@ baselines/wan22_quantity_embedding/
 ├── driver.py
 ├── quantity_registry.json             # 历史V1资源
 └── quantity_registry_v2.json          # 当前V13独立量资源
+
+baselines/wan22_symbol_value_cross_attention/
+├── baseline.json                 # ..._symbol_value_cross_attention_v1
+├── baseline.local.example.json
+├── baseline.local.json           # 本机部署，Git ignored
+├── adapter.py
+├── driver.py
+└── quantity_registry.json        # 当前V13 symbol/value 资源
 ```
 
 | Baseline ID | Task family | 物理策略 | 用途 |
@@ -35,6 +43,7 @@ baselines/wan22_quantity_embedding/
 | `wan22_ti2v_5b_lora_r32_v3_generic` | `finetune_eval`, `direct_eval` | `ignored` | 正式 WAN LoRA |
 | `wan22_ti2v_5b_lora_r32_v3_physics` | `finetune_eval`, `direct_eval` | `required/structured_text` | 同模型，物理文本追加 |
 | `wan22_ti2v_5b_lora_r32_quantity_embedding_v1` | `finetune_eval` | `required/quantity_token_embedding_v1` | SI 数值/量纲编码 |
+| `wan22_ti2v_5b_lora_r32_symbol_value_cross_attention_v1` | `finetune_eval` | `required/symbol_value_cross_attention_v1` | symbol/value 词空间交叉注意力 |
 | `wan22_g15_sparse_motion_r32_e20_generic` | `direct_eval` | `ignored` | 冻结 G15，诊断型 |
 | `wan22_g15_sparse_motion_r32_e20_physics` | `direct_eval` | `required/structured_text` | 冻结 G15，诊断型 |
 
@@ -56,6 +65,10 @@ Quantity Baseline 使用专有 Python adapter 和 managed execution engine，从
 中读取 registry 明确筛选的物理量子集，并在冻结 UMT5 输出与 DiT
 cross-attention 之间注入编码。算法、命令、审计产物与结果模板见
 [WAN2.2 物理量编码 Baseline](WAN22_QUANTITY_EMBEDDING.md)。
+
+Symbol–Value Baseline 保留原始 caption，分别编码符号和 SI value/unit，在 UMT5 后用
+低秩 cross-attention 融合。实现与七 scene 实验命令见
+[WAN2.2 Symbol–Value Cross-Attention Baseline](WAN22_SYMBOL_VALUE_CROSS_ATTENTION.md)。
 
 模型专有兼容层仍复用既有 WAN 训练/推理代码，但 canonical plan、Case projection、
 input policy、adapter audit、TaskInstance seal 和 run identity 由当前公共 runtime
@@ -259,6 +272,9 @@ PYTHONPATH=src python -m physbench \
 
 PYTHONPATH=src python -m physbench \
   baseline validate wan22_ti2v_5b_lora_r32_quantity_embedding_v1
+
+PYTHONPATH=src python -m physbench \
+  baseline validate wan22_ti2v_5b_lora_r32_symbol_value_cross_attention_v1
 
 PYTHONPATH=src python -m physbench \
   baseline validate wan22_g15_sparse_motion_r32_e20_generic

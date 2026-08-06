@@ -32,6 +32,8 @@ from physbench.baseline_api import (
 )
 from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
+from physbench.tasks import load_task
+from physbench.evaluation import load_evaluation_protocol
 
 
 REGISTRY = (
@@ -46,6 +48,7 @@ BASELINE = (
     / "wan22_symbol_value_cross_attention"
     / "baseline.json"
 )
+TASK = ROOT / "tasks" / "experiments" / "seven_scene_symbol_value_finetune_eval.json"
 
 
 def _small_conditioner_config() -> dict:
@@ -354,6 +357,57 @@ class SymbolValueBaselineIntegrationTests(unittest.TestCase):
             ROOT / "src" / "physbench" / "baseline_runtime" / "drivers" / "wan22_symbol_value.py",
         ]
         self.assertTrue(all(path.is_file() for path in expected))
+
+
+class SevenSceneTaskTests(unittest.TestCase):
+    def test_task_compiles_every_view_a_train_and_test_case(self) -> None:
+        dataset = load_dataset(LATEST_DATASET, check_assets=False)
+        task = load_task(TASK)
+        plugin = load_baseline_plugin(load_baseline_bundle(BASELINE))
+
+        instance = plugin.task_builder.build(dataset, task)
+
+        expected = {
+            "pendulum": (80, 20),
+            "collision_1d": (310, 20),
+            "inclined_plane_slide": (80, 15),
+            "uniform_circular_motion": (30, 6),
+            "parabolic_motion": (82, 15),
+            "push_bottle": (127, 14),
+            "vertical_spring_oscillator": (97, 20),
+        }
+        train_ids = set(instance.canonical_plan.train_case_ids)
+        self.assertEqual(806, len(train_ids))
+        self.assertEqual(110, len(instance.canonical_plan.jobs))
+        self.assertFalse(train_ids & {
+            job["case_id"] for job in instance.canonical_plan.jobs
+        })
+        by_id = {case["case_id"]: case for case in dataset.cases}
+        for scene_id, (train_count, test_count) in expected.items():
+            self.assertEqual(
+                train_count,
+                sum(by_id[case_id]["scene_id"] == scene_id
+                    for case_id in train_ids),
+            )
+            self.assertEqual(
+                test_count,
+                sum(job["scene_id"] == scene_id
+                    for job in instance.canonical_plan.jobs),
+            )
+
+    def test_protocol_scores_five_scenes_and_marks_two_unsupported(self) -> None:
+        protocol = load_evaluation_protocol(
+            "scene_default_v10_seven_scene_unscored"
+        )
+
+        self.assertEqual(
+            {"push_bottle", "vertical_spring_oscillator"},
+            {
+                scene_id for scene_id, config in protocol["scenes"].items()
+                if config["type"] == "unsupported"
+            },
+        )
+        self.assertEqual("pendulum_state_v7", protocol["scenes"]["pendulum"]["type"])
 
 
 def _case() -> dict:
