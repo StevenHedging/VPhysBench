@@ -21,3 +21,4 @@ datasets/assets/*/*/*
 datasets/provenance/alignment/
 datasets/provenance/source_archives/
 cache/
+.worktrees/
