@@ -456,10 +456,16 @@ def detect_release_return(
         raise ValueError("insufficient_cycle_extrema")
     same_indices = np.flatnonzero(same_side)
     coarse_index = int(same_indices[coarse_local])
-    lower = max(0, coarse_index - 8)
-    upper = min(len(ordered), coarse_index + 9)
-    local = centers_y[lower:upper]
-    refined = lower + int(np.argmax(local) if direction == "below" else np.argmin(local))
+    coarse_frame = ordered[coarse_index].frame_index
+    local_indices = [
+        index
+        for index, sample in enumerate(ordered)
+        if abs(sample.frame_index - coarse_frame) <= 8
+    ]
+    local = centers_y[local_indices]
+    refined = local_indices[
+        int(np.argmax(local) if direction == "below" else np.argmin(local))
+    ]
     selected = ordered[refined]
     return TurningFrameCandidate(
         frame_index=selected.frame_index,

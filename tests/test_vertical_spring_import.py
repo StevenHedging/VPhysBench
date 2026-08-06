@@ -207,6 +207,21 @@ class TrajectoryTests(unittest.TestCase):
         self.assertLessEqual(abs(candidate.time_s - 0.8), 0.04)
         self.assertEqual(1.0, candidate.track_coverage)
 
+    def test_sparse_refinement_window_is_measured_in_source_frames(self) -> None:
+        times = np.arange(0.0, 1.5, 1.0 / 240.0)
+        y = 600.0 - 120.0 * np.exp(-0.2 * times) * np.cos(
+            2 * np.pi * times / 0.5
+        )
+        full = [
+            TrackSample(index, float(time), 400.0, float(center_y), 60.0, 1.0)
+            for index, (time, center_y) in enumerate(zip(times, y))
+        ]
+
+        candidate = detect_release_return(full[::16], "above", 0.5)
+
+        self.assertGreater(candidate.frame_index, 0)
+        self.assertLessEqual(abs(candidate.time_s - 0.5), 0.08)
+
     def test_return_detector_preserves_small_motion_at_sparse_stride(self) -> None:
         times = np.arange(0.0, 2.0, 1.0 / 240.0)
         y = 600.0 + 18.0 * np.cos(2 * np.pi * times / 0.8)
@@ -238,6 +253,46 @@ class TrajectoryTests(unittest.TestCase):
         candidate = detect_release_return(track, "below", 0.8)
 
         self.assertLessEqual(abs(candidate.time_s - 1.4), 2 / 240)
+
+    def test_sparse_return_refinement_cannot_jump_into_source_prehold(self) -> None:
+        times = np.arange(0.0, 2.4, 1.0 / 240.0)
+        motion_time = np.maximum(times - 0.6, 0.0)
+        y = np.where(
+            times < 0.6,
+            720.0,
+            600.0
+            + 120.0
+            * np.exp(-0.08 * motion_time)
+            * np.cos(2 * np.pi * motion_time / 0.8),
+        )
+        full = [
+            TrackSample(index, float(time), 400.0, float(center_y), 60.0, 1.0)
+            for index, (time, center_y) in enumerate(zip(times, y))
+        ]
+
+        candidate = detect_release_return(full[::16], "below", 0.8)
+
+        self.assertGreaterEqual(candidate.observed_period_s, 0.6 * 0.8)
+        self.assertLessEqual(candidate.observed_period_s, 1.35 * 0.8)
+        self.assertLessEqual(abs(candidate.time_s - 1.4), 0.08)
+
+    def test_sparse_return_refinement_uses_source_frame_radius(self) -> None:
+        sampled = self._track("below")[::16]
+        distractor = sampled[4]
+        sampled[4] = TrackSample(
+            distractor.frame_index,
+            distractor.time_s,
+            distractor.center_x,
+            760.0,
+            distractor.radius,
+            distractor.score,
+        )
+
+        candidate = detect_release_return(sampled, "below", 0.8)
+
+        self.assertGreaterEqual(candidate.observed_period_s, 0.6 * 0.8)
+        self.assertLessEqual(candidate.observed_period_s, 1.35 * 0.8)
+        self.assertLessEqual(abs(candidate.time_s - 0.8), 0.08)
 
     def test_return_detector_rejects_insufficient_vertical_motion(self) -> None:
         track = [
