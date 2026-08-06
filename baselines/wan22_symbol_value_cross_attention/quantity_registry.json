@@ -1,0 +1,74 @@
+{
+  "schema_version": "1.0",
+  "registry_id": "seven_scene_symbol_value_cross_attention_v1",
+  "description": "Independent scalar symbol/value annotations for word-space cross-attention.",
+  "dimension_basis": ["L", "M", "T", "I", "Theta", "N_amount", "J_luminous"],
+  "quantity_types": {"unknown": 0, "length": 1, "radius": 2, "angle": 3, "mass": 4, "velocity": 5, "acceleration": 6, "coefficient": 7, "force": 8, "angular_velocity": 9},
+  "unit_ids": {"1": 0, "m": 1, "kg": 2, "m/s": 3, "m/s^2": 4, "N": 5, "N/m": 6, "deg": 7, "deg/s": 8},
+  "units": {
+    "1": {"canonical_si_unit": "1", "si_scale": 1.0, "dimension": [0, 0, 0, 0, 0, 0, 0]},
+    "m": {"canonical_si_unit": "m", "si_scale": 1.0, "dimension": [1, 0, 0, 0, 0, 0, 0]},
+    "kg": {"canonical_si_unit": "kg", "si_scale": 1.0, "dimension": [0, 1, 0, 0, 0, 0, 0]},
+    "m/s": {"canonical_si_unit": "m/s", "si_scale": 1.0, "dimension": [1, 0, -1, 0, 0, 0, 0]},
+    "m/s^2": {"canonical_si_unit": "m/s^2", "si_scale": 1.0, "dimension": [1, 0, -2, 0, 0, 0, 0]},
+    "N": {"canonical_si_unit": "kg*m/s^2", "si_scale": 1.0, "dimension": [1, 1, -2, 0, 0, 0, 0]},
+    "N/m": {"canonical_si_unit": "kg/s^2", "si_scale": 1.0, "dimension": [0, 1, -2, 0, 0, 0, 0]},
+    "deg": {"canonical_si_unit": "rad", "si_scale": 0.017453292519943295, "dimension": [0, 0, 0, 0, 0, 0, 0]},
+    "deg/s": {"canonical_si_unit": "rad/s", "si_scale": 0.017453292519943295, "dimension": [0, 0, -1, 0, 0, 0, 0]}
+  },
+  "scenes": {
+    "pendulum": {"parameters": [
+      {"name": "string_length", "source_role": "independent", "required": true, "unit": "m", "precision": 3, "quantity_type": "length"},
+      {"name": "bob_radius", "source_role": "independent", "required": true, "unit": "m", "precision": 3, "quantity_type": "radius"},
+      {"name": "initial_angle", "source_role": "independent", "required": true, "unit": "deg", "precision": 1, "quantity_type": "angle"},
+      {"name": "bob_mass", "source_role": "independent", "required": false, "unit": "kg", "precision": 5, "quantity_type": "mass"}
+    ]},
+    "free_fall": {"parameters": [
+      {"name": "initial_height", "source_role": "independent", "required": true, "unit": "m", "precision": 2, "quantity_type": "length"},
+      {"name": "ball_radius", "source_role": "independent", "required": true, "unit": "m", "precision": 4, "quantity_type": "radius"},
+      {"name": "ball_mass", "source_role": "independent", "required": false, "unit": "kg", "precision": 5, "quantity_type": "mass"},
+      {"name": "initial_velocity", "source_role": "independent", "required": false, "unit": "m/s", "precision": 3, "quantity_type": "velocity"}
+    ]},
+    "collision_1d": {"parameters": [
+      {"name": "ball_1_initial_velocity", "source_role": "independent", "required": true, "unit": "m/s", "precision": 4, "quantity_type": "velocity"},
+      {"name": "ball_1_mass", "source_role": "independent", "required": true, "unit": "kg", "precision": 5, "quantity_type": "mass"},
+      {"name": "ball_1_radius", "source_role": "independent", "required": true, "unit": "m", "precision": 5, "quantity_type": "radius"},
+      {"name": "ball_2_initial_velocity", "source_role": "independent", "required": true, "unit": "m/s", "precision": 4, "quantity_type": "velocity"},
+      {"name": "ball_2_mass", "source_role": "independent", "required": true, "unit": "kg", "precision": 5, "quantity_type": "mass"},
+      {"name": "ball_2_radius", "source_role": "independent", "required": true, "unit": "m", "precision": 5, "quantity_type": "radius"},
+      {"name": "ball_3_initial_velocity", "source_role": "independent", "required": false, "unit": "m/s", "precision": 4, "quantity_type": "velocity"},
+      {"name": "ball_3_mass", "source_role": "independent", "required": false, "unit": "kg", "precision": 5, "quantity_type": "mass"},
+      {"name": "ball_3_radius", "source_role": "independent", "required": false, "unit": "m", "precision": 5, "quantity_type": "radius"}
+    ]},
+    "inclined_plane_slide": {"parameters": [
+      {"name": "incline_angle", "source_role": "independent", "required": true, "unit": "deg", "precision": 1, "quantity_type": "angle"},
+      {"name": "block_length", "source_role": "independent", "required": true, "unit": "m", "precision": 3, "quantity_type": "length"},
+      {"name": "block_mass", "source_role": "independent", "required": true, "unit": "kg", "precision": 5, "quantity_type": "mass"},
+      {"name": "gravity_acceleration", "source_role": "independent", "required": true, "unit": "m/s^2", "precision": 5, "quantity_type": "acceleration"}
+    ]},
+    "parabolic_motion": {"parameters": [
+      {"name": "initial_horizontal_velocity", "source_role": "independent", "required": true, "unit": "m/s", "precision": 4, "quantity_type": "velocity"},
+      {"name": "launch_height", "source_role": "independent", "required": true, "unit": "m", "precision": 3, "quantity_type": "length"},
+      {"name": "ball_radius", "source_role": "independent", "required": true, "unit": "m", "precision": 5, "quantity_type": "radius"},
+      {"name": "ball_mass", "source_role": "independent", "required": true, "unit": "kg", "precision": 5, "quantity_type": "mass"}
+    ]},
+    "push_bottle": {"parameters": [
+      {"name": "bottle_mass", "source_role": "independent", "required": true, "unit": "kg", "precision": 5, "quantity_type": "mass"},
+      {"name": "bottle_height", "source_role": "independent", "required": true, "unit": "m", "precision": 3, "quantity_type": "length"}
+    ]},
+    "uniform_circular_motion": {"parameters": [
+      {"name": "angular_velocity", "source_role": "independent", "required": true, "unit": "deg/s", "precision": 2, "quantity_type": "angular_velocity"},
+      {"name": "object_1_orbit_radius", "source_role": "independent", "required": true, "unit": "m", "precision": 2, "quantity_type": "radius"},
+      {"name": "object_2_orbit_radius", "source_role": "independent", "required": false, "unit": "m", "precision": 2, "quantity_type": "radius"}
+    ]},
+    "vertical_spring_oscillator": {"parameters": [
+      {"name": "initial_displacement", "source_role": "independent", "required": true, "unit": "m", "precision": 3, "quantity_type": "length"},
+      {"name": "oscillator_mass", "source_role": "independent", "required": true, "unit": "kg", "precision": 4, "quantity_type": "mass"},
+      {"name": "ball_radius", "source_role": "independent", "required": true, "unit": "m", "precision": 3, "quantity_type": "radius"},
+      {"name": "gravity_acceleration", "source_role": "independent", "required": true, "unit": "m/s^2", "precision": 5, "quantity_type": "acceleration"},
+      {"name": "natural_spring_length", "source_role": "independent", "required": true, "unit": "m", "precision": 3, "quantity_type": "length"},
+      {"name": "spring_stiffness", "source_role": "independent", "required": true, "unit": "N/m", "precision": 5, "quantity_type": "coefficient"}
+    ]}
+  }
+}
+
