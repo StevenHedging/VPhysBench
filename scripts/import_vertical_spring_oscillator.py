@@ -267,6 +267,8 @@ def materialize(
     repo_root: Path,
     *,
     workers: int = 1,
+    prior_exclusions_path: Path | None = None,
+    inventory_path: Path | None = None,
 ) -> dict[str, int]:
     if workers < 1:
         raise ValueError("workers must be positive")
@@ -276,6 +278,11 @@ def materialize(
     }
     audits: list[dict[str, object]] = []
     exclusions: list[dict[str, object]] = []
+    if prior_exclusions_path is not None:
+        prior_payload = json.loads(
+            prior_exclusions_path.read_text(encoding="utf-8")
+        )
+        exclusions.extend(prior_payload.get("excluded", []))
     approved: list[tuple[dict[str, object], dict[str, object]]] = []
     for candidate in candidates:
         trial_id = str(candidate["trial_id"])
@@ -376,6 +383,32 @@ def materialize(
         "accepted_count": len(audits),
         "excluded_count": len(exclusions),
     }
+    if inventory_path is not None:
+        inventory_payload = json.loads(inventory_path.read_text(encoding="utf-8"))
+        source_members = {
+            str(item["member"])
+            for item in inventory_payload.get("source_members", [])
+        }
+        mapped_members = {
+            str(item["source_member"])
+            for item in inventory_payload.get("accepted", [])
+        }
+        unreferenced = sorted(source_members - mapped_members)
+        source_audit = {
+            "duplicate_source_decisions": inventory_payload.get(
+                "duplicate_source_decisions", []
+            ),
+            "unreferenced_source_members": unreferenced,
+        }
+        _write_json(
+            import_root
+            / "vertical_spring_oscillator_20260806_source_audit.json",
+            source_audit,
+        )
+        summary["source_trial_count"] = int(
+            inventory_payload.get("summary", {}).get("trial_count", 0)
+        )
+        summary["source_video_member_count"] = len(source_members)
     _write_json(
         import_root / "vertical_spring_oscillator_20260806_summary.json",
         summary,
@@ -468,6 +501,41 @@ def review_sheets(
             ] = card
         cv2.imwrite(str(output_dir / f"review_page_{page_index:03d}.png"), page)
     return len(cards)
+
+
+def record_review(
+    analysis_path: Path,
+    output_path: Path,
+    reviewer: str,
+    rejected: list[str],
+) -> int:
+    if not reviewer.strip():
+        raise ValueError("reviewer must be non-empty")
+    rejection_reasons: dict[str, str] = {}
+    for item in rejected:
+        trial_id, separator, reason = item.partition(":")
+        if not separator or not trial_id or not reason:
+            raise ValueError("rejections must use TRIAL_ID:reason")
+        rejection_reasons[trial_id] = reason
+    candidates = _load_jsonl(analysis_path)
+    candidate_ids = {str(item["trial_id"]) for item in candidates}
+    unknown = set(rejection_reasons) - candidate_ids
+    if unknown:
+        raise ValueError(f"review rejects unknown Trial IDs: {sorted(unknown)}")
+    decisions = []
+    for candidate in candidates:
+        trial_id = str(candidate["trial_id"])
+        decision: dict[str, object] = {
+            "reviewer": reviewer,
+            "status": "approved",
+            "trial_id": trial_id,
+        }
+        if trial_id in rejection_reasons:
+            decision["status"] = "rejected"
+            decision["reason"] = rejection_reasons[trial_id]
+        decisions.append(decision)
+    _write_jsonl(output_path, decisions)
+    return len(decisions)
 
 
 def build_release_v13(
@@ -711,6 +779,8 @@ def build_parser() -> argparse.ArgumentParser:
     materialize_parser.add_argument("--review", type=Path, required=True)
     materialize_parser.add_argument("--repo-root", type=Path, required=True)
     materialize_parser.add_argument("--workers", type=int, default=1)
+    materialize_parser.add_argument("--prior-exclusions", type=Path)
+    materialize_parser.add_argument("--inventory", type=Path)
     review_parser = subparsers.add_parser("review-sheets")
     review_parser.add_argument("--archive", type=Path, required=True)
     review_parser.add_argument("--analysis", type=Path, required=True)
@@ -718,6 +788,11 @@ def build_parser() -> argparse.ArgumentParser:
     release_parser = subparsers.add_parser("build-release")
     release_parser.add_argument("--repo-root", type=Path, required=True)
     release_parser.add_argument("--audit", type=Path, required=True)
+    record_parser = subparsers.add_parser("record-review")
+    record_parser.add_argument("--analysis", type=Path, required=True)
+    record_parser.add_argument("--output", type=Path, required=True)
+    record_parser.add_argument("--reviewer", required=True)
+    record_parser.add_argument("--reject", action="append", default=[])
     return parser
 
 
@@ -744,6 +819,8 @@ def main(argv: list[str] | None = None) -> int:
             args.review,
             args.repo_root,
             workers=args.workers,
+            prior_exclusions_path=args.prior_exclusions,
+            inventory_path=args.inventory,
         )
         print(json.dumps(summary, sort_keys=True))
         return 0
@@ -754,6 +831,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "build-release":
         report = build_release_v13(args.repo_root, _load_jsonl(args.audit))
         print(json.dumps(report, sort_keys=True))
+        return 0
+    if args.command == "record-review":
+        count = record_review(
+            args.analysis,
+            args.output,
+            args.reviewer,
+            args.reject,
+        )
+        print(json.dumps({"review_decision_count": count}, sort_keys=True))
         return 0
     raise ValueError(f"unsupported command: {args.command}")
 

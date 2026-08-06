@@ -641,6 +641,33 @@ class MediaTests(unittest.TestCase):
                 "status": "approved",
                 "reviewer": "visual_review",
             }) + "\n")
+            prior_exclusions = root / "analysis_exclusions.json"
+            prior_exclusions.write_text(json.dumps({
+                "excluded": [
+                    {
+                        "trial_id": "T000",
+                        "reason": "workbook_video_missing_from_archive",
+                    }
+                ],
+                "excluded_count": 1,
+            }) + "\n")
+            inventory = root / "normalized_annotations.json"
+            inventory.write_text(json.dumps({
+                "accepted": [{"source_member": "batch/IMG_1538.MOV"}],
+                "duplicate_source_decisions": [
+                    {
+                        "canonical_member": "batch/IMG_1538.MOV",
+                        "excluded_members": ["batch/IMG_1538(1).MOV"],
+                        "reason": "byte_identical_duplicate_source",
+                        "size": video.stat().st_size,
+                    }
+                ],
+                "source_members": [
+                    {"member": "batch/IMG_1538.MOV"},
+                    {"member": "batch/IMG_1538(1).MOV"},
+                ],
+                "summary": {"trial_count": 2, "accepted_count": 1},
+            }) + "\n")
 
             subprocess.run(
                 [
@@ -657,6 +684,10 @@ class MediaTests(unittest.TestCase):
                     str(root),
                     "--workers",
                     "2",
+                    "--prior-exclusions",
+                    str(prior_exclusions),
+                    "--inventory",
+                    str(inventory),
                 ],
                 check=True,
                 env={"PYTHONPATH": "src"},
@@ -670,6 +701,24 @@ class MediaTests(unittest.TestCase):
             self.assertEqual(
                 ["vertical_spring_s01_x40mm_above_img_1538"],
                 [row["case_id"] for row in rows],
+            )
+            provenance_root = root / "datasets/provenance/imports"
+            summary = json.loads(
+                (provenance_root / (
+                    "vertical_spring_oscillator_20260806_summary.json"
+                )).read_text()
+            )
+            self.assertEqual(1, summary["accepted_count"])
+            self.assertEqual(1, summary["excluded_count"])
+            self.assertEqual(2, summary["source_trial_count"])
+            source_audit = json.loads(
+                (provenance_root / (
+                    "vertical_spring_oscillator_20260806_source_audit.json"
+                )).read_text()
+            )
+            self.assertEqual(
+                ["batch/IMG_1538(1).MOV"],
+                source_audit["unreferenced_source_members"],
             )
 
     def test_review_sheets_cli_renders_candidate_overlay(self) -> None:
@@ -733,6 +782,57 @@ class MediaTests(unittest.TestCase):
             self.assertIsNotNone(image)
             self.assertGreater(image.shape[0], 100)
             self.assertGreater(image.shape[1], 100)
+
+    def test_record_review_cli_writes_complete_decision_set(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            analysis = root / "review_candidates.jsonl"
+            analysis.write_text(
+                "\n".join(
+                    json.dumps({"trial_id": trial_id})
+                    for trial_id in ("T001", "T002")
+                )
+                + "\n"
+            )
+            output = root / "review_decisions.jsonl"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/import_vertical_spring_oscillator.py",
+                    "record-review",
+                    "--analysis",
+                    str(analysis),
+                    "--output",
+                    str(output),
+                    "--reviewer",
+                    "codex_visual_review",
+                    "--reject",
+                    "T002:release_tool_visible",
+                ],
+                check=True,
+                env={"PYTHONPATH": "src"},
+            )
+
+            decisions = [
+                json.loads(line) for line in output.read_text().splitlines()
+            ]
+            self.assertEqual(
+                [
+                    {
+                        "reviewer": "codex_visual_review",
+                        "status": "approved",
+                        "trial_id": "T001",
+                    },
+                    {
+                        "reason": "release_tool_visible",
+                        "reviewer": "codex_visual_review",
+                        "status": "rejected",
+                        "trial_id": "T002",
+                    },
+                ],
+                decisions,
+            )
 
 
 if __name__ == "__main__":
