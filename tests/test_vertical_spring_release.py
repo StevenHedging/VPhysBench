@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
-
-from scripts.import_vertical_spring_oscillator import build_release_v13
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -77,7 +77,23 @@ class VerticalSpringReleaseTests(unittest.TestCase):
                     }
                 )
 
-            report = build_release_v13(repo, audits)
+            audit_path = repo / "spring_import_audit.jsonl"
+            audit_path.write_text(
+                "".join(json.dumps(item) + "\n" for item in audits),
+                encoding="utf-8",
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/build_dataset_v13.py",
+                    "--repo-root",
+                    str(repo),
+                    "--audit",
+                    str(audit_path),
+                ],
+                check=True,
+                env={"PYTHONPATH": "src"},
+            )
 
             release = repo / "datasets/releases/13.0.0"
             descriptor = json.loads((release / "dataset.json").read_text())
@@ -86,6 +102,9 @@ class VerticalSpringReleaseTests(unittest.TestCase):
                 for line in (release / "cases.jsonl").read_text().splitlines()
             ]
             view_a = json.loads((release / "views/view_a.json").read_text())
+            report = json.loads(
+                (repo / "datasets/provenance/releases/13.0.0/build.json").read_text()
+            )
             spring = view_a["scenes"]["vertical_spring_oscillator"]
             self.assertEqual("13.0.0", descriptor["release"])
             self.assertEqual("physics_video_seven_scene_v13", descriptor["dataset_id"])
