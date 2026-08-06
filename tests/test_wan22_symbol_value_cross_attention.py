@@ -10,6 +10,16 @@ from _paths import ROOT
 from baselines.wan22_symbol_value_cross_attention.adapter import (
     SymbolValueRegistry,
 )
+import torch
+from torch import nn
+
+from physbench.baselines.wan22_symbol_value_model import (
+    NUMERIC_FEATURE_NAMES,
+    SymbolValueConditioner,
+    numeric_features,
+    pool_symbol_embeddings,
+    symbol_value_inference_conditioning,
+)
 
 
 REGISTRY = (
@@ -18,6 +28,163 @@ REGISTRY = (
     / "wan22_symbol_value_cross_attention"
     / "quantity_registry.json"
 )
+
+
+def _small_conditioner_config() -> dict:
+    return {
+        "numeric_feature_size": len(NUMERIC_FEATURE_NAMES),
+        "numeric_hidden_size": 12,
+        "numeric_embedding_size": 8,
+        "dimension_size": 7,
+        "dimension_hidden_size": 8,
+        "dimension_embedding_size": 6,
+        "unit_count": 9,
+        "unit_embedding_size": 4,
+        "value_fusion_hidden_size": 16,
+        "text_hidden_size": 8,
+        "attention_hidden_size": 4,
+        "attention_heads": 2,
+        "dropout": 0.0,
+        "residual_gate_init": 1.0,
+    }
+
+
+def _records() -> list[dict]:
+    return [
+        {
+            "name": "length",
+            "symbol": "x_0",
+            "si_value": 0.1,
+            "dimension": [1, 0, 0, 0, 0, 0, 0],
+            "unit_id": 1,
+            "raw_value": 0.1,
+            "raw_unit": "m",
+            "canonical_si_unit": "m",
+        },
+        {
+            "name": "mass",
+            "symbol": "m",
+            "si_value": 0.5,
+            "dimension": [0, 1, 0, 0, 0, 0, 0],
+            "unit_id": 2,
+            "raw_value": 0.5,
+            "raw_unit": "kg",
+            "canonical_si_unit": "kg",
+        },
+    ]
+
+
+class _SymbolTokenizer:
+    pad_token_id = 0
+
+    def __call__(self, symbols, **kwargs):
+        del kwargs
+        mapping = {"x_0": [1, 2], "m": [3]}
+        rows = [mapping[symbol] for symbol in symbols]
+        width = max(map(len, rows))
+        ids = [row + [0] * (width - len(row)) for row in rows]
+        mask = [[1] * len(row) + [0] * (width - len(row)) for row in rows]
+        return {
+            "input_ids": torch.tensor(ids, dtype=torch.long),
+            "attention_mask": torch.tensor(mask, dtype=torch.long),
+        }
+
+
+class _SymbolWrapper:
+    def __init__(self):
+        self.tokenizer = _SymbolTokenizer()
+
+
+class SymbolValueModelTests(unittest.TestCase):
+    def test_numeric_features_are_hand_derived(self) -> None:
+        self.assertEqual(
+            (1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+            numeric_features(0.0),
+        )
+        ten = numeric_features(10.0)
+        self.assertEqual(0.0, ten[0])
+        self.assertEqual(1.0, ten[1])
+        self.assertAlmostEqual(math.log(11.0), ten[2])
+        self.assertAlmostEqual(0.1, ten[5])
+        self.assertAlmostEqual(1.0 / 12.0, ten[6])
+        self.assertAlmostEqual(1.0 / 11.0, ten[7])
+        negative = numeric_features(-0.1)
+        self.assertEqual(-1.0, negative[1])
+        self.assertLess(negative[3], 0.0)
+        self.assertLess(negative[5], 0.0)
+
+    def test_pool_symbol_embeddings_means_only_non_padding_subwords(self) -> None:
+        embedding = nn.Embedding(4, 3, padding_idx=0)
+        with torch.no_grad():
+            embedding.weight.copy_(torch.tensor([
+                [0.0, 0.0, 0.0],
+                [1.0, 2.0, 3.0],
+                [3.0, 4.0, 5.0],
+                [2.0, 0.0, 0.0],
+            ]))
+
+        pooled, audit = pool_symbol_embeddings(
+            _SymbolWrapper(),
+            embedding,
+            _records(),
+        )
+
+        self.assertTrue(torch.equal(torch.tensor([2.0, 3.0, 4.0]), pooled[0]))
+        self.assertTrue(torch.equal(torch.tensor([2.0, 0.0, 0.0]), pooled[1]))
+        self.assertEqual([1, 2], audit[0]["symbol_token_ids"])
+        self.assertEqual([3], audit[1]["symbol_token_ids"])
+        self.assertFalse(pooled.requires_grad)
+
+    def test_conditioner_builds_one_additive_token_per_record(self) -> None:
+        torch.manual_seed(7)
+        conditioner = SymbolValueConditioner(_small_conditioner_config())
+        symbols = torch.randn(2, 8)
+
+        tokens = conditioner.build_physics_tokens(symbols, _records())
+
+        self.assertEqual((2, 8), tuple(tokens.shape))
+        self.assertTrue(bool(torch.isfinite(tokens).all()))
+        self.assertTrue(torch.allclose(
+            tokens,
+            conditioner.fusion_norm(
+                conditioner.symbol_norm(symbols)
+                + conditioner.encode_value_records(_records())
+            ),
+        ))
+
+    def test_cross_attention_changes_valid_text_and_zeros_padding(self) -> None:
+        torch.manual_seed(11)
+        conditioner = SymbolValueConditioner(_small_conditioner_config())
+        conditioner.eval()
+        context = torch.randn(1, 4, 8)
+        mask = torch.tensor([[1, 1, 1, 0]], dtype=torch.long)
+        symbols = torch.randn(2, 8)
+
+        output, attention = conditioner(
+            context,
+            mask,
+            symbols,
+            _records(),
+        )
+
+        self.assertEqual((1, 4, 8), tuple(output.shape))
+        self.assertEqual((1, 2, 4, 2), tuple(attention.shape))
+        self.assertFalse(torch.allclose(output[:, :3], context[:, :3]))
+        self.assertTrue(torch.equal(torch.zeros(1, 8), output[:, 3]))
+
+    def test_inference_binding_is_positive_branch_only_and_restores_state(self) -> None:
+        pipe = SimpleNamespace(existing="kept")
+
+        with symbol_value_inference_conditioning(pipe, _records()):
+            self.assertEqual(
+                _records(),
+                pipe._active_symbol_value_conditioning["positive_quantities"],
+            )
+            self.assertIsNone(
+                pipe._active_symbol_value_conditioning["negative_quantities"]
+            )
+
+        self.assertFalse(hasattr(pipe, "_active_symbol_value_conditioning"))
 
 
 def _case() -> dict:
