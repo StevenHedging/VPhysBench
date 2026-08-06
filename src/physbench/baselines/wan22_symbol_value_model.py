@@ -9,6 +9,8 @@ from typing import Any, Iterable
 import torch
 from torch import nn
 
+from ..io import canonical_sha256
+
 
 SYMBOL_VALUE_CHECKPOINT_PREFIX = "pipe.symbol_value_conditioner."
 NUMERIC_FEATURE_NAMES = (
@@ -435,13 +437,249 @@ def install_symbol_value_prompt_unit(
     pipe.units[2] = WanVideoUnitSymbolValuePromptEmbedder()
 
 
+def _conditioner_state_dict(
+    state: dict[str, torch.Tensor],
+) -> dict[str, torch.Tensor]:
+    extracted = {
+        key[len(SYMBOL_VALUE_CHECKPOINT_PREFIX):]: value
+        for key, value in state.items()
+        if key.startswith(SYMBOL_VALUE_CHECKPOINT_PREFIX)
+    }
+    if not extracted:
+        alternate = "symbol_value_conditioner."
+        extracted = {
+            key[len(alternate):]: value
+            for key, value in state.items()
+            if key.startswith(alternate)
+        }
+    return extracted
+
+
+def _validate_conditioner_state_dict(
+    conditioner: SymbolValueConditioner,
+    state: dict[str, torch.Tensor],
+) -> None:
+    expected = conditioner.state_dict()
+    if set(state) != set(expected):
+        missing = sorted(set(expected) - set(state))
+        unexpected = sorted(set(state) - set(expected))
+        raise ValueError(
+            "symbol-value conditioner checkpoint topology mismatch: "
+            f"missing={missing}, unexpected={unexpected}"
+        )
+    for key, tensor in state.items():
+        if tuple(tensor.shape) != tuple(expected[key].shape):
+            raise ValueError(
+                "symbol-value conditioner checkpoint shape mismatch: "
+                f"{key}={tuple(tensor.shape)}, expected={tuple(expected[key].shape)}"
+            )
+        if not tensor.is_floating_point():
+            raise ValueError(f"conditioner tensor must be floating point: {key}")
+        if not bool(torch.isfinite(tensor).all()):
+            raise ValueError(f"conditioner tensor contains non-finite values: {key}")
+
+
+def load_symbol_value_conditioner_checkpoint(
+    conditioner: SymbolValueConditioner,
+    path: str,
+    *,
+    required: bool,
+) -> dict[str, Any]:
+    from safetensors.torch import load_file
+
+    combined = load_file(str(path), device="cpu")
+    keys = {
+        key for key in combined
+        if key.startswith(SYMBOL_VALUE_CHECKPOINT_PREFIX)
+        or key.startswith("symbol_value_conditioner.")
+    }
+    if not keys:
+        if required:
+            raise ValueError(f"checkpoint has no symbol-value conditioner: {path}")
+        return {"loaded": False, "tensor_count": 0}
+    prefixes = {
+        SYMBOL_VALUE_CHECKPOINT_PREFIX
+        if key.startswith(SYMBOL_VALUE_CHECKPOINT_PREFIX)
+        else "symbol_value_conditioner."
+        for key in keys
+    }
+    if len(prefixes) != 1:
+        raise ValueError("checkpoint mixes symbol-value conditioner prefixes")
+    state = _conditioner_state_dict(combined)
+    _validate_conditioner_state_dict(conditioner, state)
+    missing, unexpected = conditioner.load_state_dict(state, strict=True)
+    if missing or unexpected:
+        raise ValueError(
+            f"conditioner load mismatch: missing={missing}, unexpected={unexpected}"
+        )
+    return {"loaded": True, "tensor_count": len(state)}
+
+
+def _load_combined_symbol_value_checkpoint_state(
+    pipe,
+    conditioner: SymbolValueConditioner,
+    state: dict[str, torch.Tensor],
+    source: str,
+    *,
+    lora_alpha: float,
+) -> dict[str, Any]:
+    alpha = float(lora_alpha)
+    if not math.isfinite(alpha):
+        raise ValueError(f"LoRA alpha must be finite, got {lora_alpha!r}")
+    conditioner_keys = {
+        key for key in state
+        if key.startswith(SYMBOL_VALUE_CHECKPOINT_PREFIX)
+        or key.startswith("symbol_value_conditioner.")
+    }
+    if not conditioner_keys:
+        raise ValueError(f"checkpoint has no symbol-value conditioner: {source}")
+    prefixes = {
+        SYMBOL_VALUE_CHECKPOINT_PREFIX
+        if key.startswith(SYMBOL_VALUE_CHECKPOINT_PREFIX)
+        else "symbol_value_conditioner."
+        for key in conditioner_keys
+    }
+    if len(prefixes) != 1:
+        raise ValueError("combined checkpoint mixes conditioner prefixes")
+    conditioner_state = _conditioner_state_dict(state)
+    _validate_conditioner_state_dict(conditioner, conditioner_state)
+    lora = {key: value for key, value in state.items() if key not in conditioner_keys}
+    if not lora:
+        raise ValueError(f"checkpoint has no DiT LoRA tensors: {source}")
+    from .wan22_quantity_model import _validate_dit_lora_state_dict
+
+    validated_targets = _validate_dit_lora_state_dict(pipe.dit, lora)
+    # Both independent states are fully checked before either model is mutated.
+    missing, unexpected = conditioner.load_state_dict(
+        conditioner_state,
+        strict=True,
+    )
+    if missing or unexpected:
+        raise ValueError(
+            f"conditioner load mismatch: missing={missing}, unexpected={unexpected}"
+        )
+    pipe.load_lora(pipe.dit, state_dict=lora, alpha=alpha)
+    return {
+        "symbol_value_conditioner_tensor_count": len(conditioner_state),
+        "dit_lora_tensor_count": len(lora),
+        "dit_lora_validated_layer_count": len(validated_targets),
+        "dit_lora_fused_layer_count": len(validated_targets),
+    }
+
+
+def load_combined_symbol_value_checkpoint(
+    pipe,
+    conditioner: SymbolValueConditioner,
+    path: str,
+    *,
+    lora_alpha: float,
+) -> dict[str, Any]:
+    from safetensors.torch import load_file
+
+    return _load_combined_symbol_value_checkpoint_state(
+        pipe,
+        conditioner,
+        load_file(str(path), device="cpu"),
+        str(path),
+        lora_alpha=lora_alpha,
+    )
+
+
+def verify_symbol_value_checkpoint_manifest(
+    checkpoint_path: str,
+    manifest_path: str,
+) -> dict[str, Any]:
+    from .wan22_quantity_model import verify_quantity_checkpoint_manifest
+
+    return verify_quantity_checkpoint_manifest(checkpoint_path, manifest_path)
+
+
+def load_verified_combined_symbol_value_checkpoint(
+    pipe,
+    conditioner: SymbolValueConditioner,
+    checkpoint_path: str,
+    manifest_path: str,
+    *,
+    lora_alpha: float,
+) -> dict[str, Any]:
+    from .wan22_quantity_model import _read_verified_quantity_checkpoint
+    from safetensors.torch import load
+
+    checkpoint_bytes, verification = _read_verified_quantity_checkpoint(
+        checkpoint_path,
+        manifest_path,
+    )
+    state = load(checkpoint_bytes)
+    del checkpoint_bytes
+    result = _load_combined_symbol_value_checkpoint_state(
+        pipe,
+        conditioner,
+        state,
+        verification["checkpoint"],
+        lora_alpha=lora_alpha,
+    )
+    return {
+        **result,
+        "checkpoint_verification": verification,
+        "load_boundary_verified": True,
+        "checkpoint_load_mode": "manifest_hash_and_safetensors_same_bytes",
+    }
+
+
+def symbol_value_pipeline_shared_config(job: dict[str, Any]) -> dict[str, Any]:
+    checkpoint = job.get("checkpoint")
+    manifest = job.get("checkpoint_manifest")
+    wan22 = job.get("wan22")
+    if not isinstance(checkpoint, str) or not checkpoint:
+        raise ValueError("symbol-value job requires checkpoint")
+    if not isinstance(manifest, str) or not manifest:
+        raise ValueError("symbol-value job requires checkpoint manifest")
+    if not isinstance(wan22, dict):
+        raise ValueError("symbol-value job requires wan22 configuration")
+    runtime = wan22.get("runtime")
+    conditioner = wan22.get("symbol_value_conditioner")
+    generation = wan22.get("generation")
+    if not all(isinstance(value, dict) for value in (
+        runtime, conditioner, generation
+    )):
+        raise ValueError("symbol-value WAN configuration is incomplete")
+    alpha = float(generation.get("lora_alpha", 1.0))
+    if not math.isfinite(alpha):
+        raise ValueError("LoRA alpha must be finite")
+    per_call = {
+        "cfg_scale", "fps", "height", "negative_prompt", "num_frames",
+        "num_inference_steps", "quality", "tiled", "width",
+    }
+    shared_generation = {
+        key: value for key, value in generation.items() if key not in per_call
+    }
+    shared_generation["lora_alpha"] = alpha
+    return {
+        "checkpoint": checkpoint,
+        "checkpoint_manifest": manifest,
+        "runtime": runtime,
+        "symbol_value_conditioner": conditioner,
+        "pipeline_generation": shared_generation,
+    }
+
+
+def symbol_value_pipeline_shared_fingerprint(job: dict[str, Any]) -> str:
+    return canonical_sha256(symbol_value_pipeline_shared_config(job))
+
+
 __all__ = [
     "NUMERIC_FEATURE_NAMES",
     "SYMBOL_VALUE_CHECKPOINT_PREFIX",
     "SymbolValueConditioner",
     "encode_symbol_value_prompt",
     "install_symbol_value_prompt_unit",
+    "load_combined_symbol_value_checkpoint",
+    "load_symbol_value_conditioner_checkpoint",
+    "load_verified_combined_symbol_value_checkpoint",
     "numeric_features",
     "pool_symbol_embeddings",
+    "symbol_value_pipeline_shared_config",
+    "symbol_value_pipeline_shared_fingerprint",
     "symbol_value_inference_conditioning",
+    "verify_symbol_value_checkpoint_manifest",
 ]

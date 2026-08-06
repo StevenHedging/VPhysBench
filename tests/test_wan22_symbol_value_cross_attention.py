@@ -3,6 +3,8 @@ from __future__ import annotations
 import copy
 import math
 import unittest
+from unittest.mock import patch
+from types import ModuleType
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,6 +18,9 @@ from torch import nn
 from physbench.baselines.wan22_symbol_value_model import (
     NUMERIC_FEATURE_NAMES,
     SymbolValueConditioner,
+    SYMBOL_VALUE_CHECKPOINT_PREFIX,
+    load_combined_symbol_value_checkpoint,
+    load_symbol_value_conditioner_checkpoint,
     numeric_features,
     pool_symbol_embeddings,
     symbol_value_inference_conditioning,
@@ -72,6 +77,16 @@ def _records() -> list[dict]:
             "canonical_si_unit": "kg",
         },
     ]
+
+
+def _fake_safetensors_modules(state: dict[str, torch.Tensor]) -> dict[str, ModuleType]:
+    package = ModuleType("safetensors")
+    torch_module = ModuleType("safetensors.torch")
+    torch_module.load_file = lambda _path, device="cpu": {
+        key: value.to(device) for key, value in state.items()
+    }
+    package.torch = torch_module
+    return {"safetensors": package, "safetensors.torch": torch_module}
 
 
 class _SymbolTokenizer:
@@ -185,6 +200,95 @@ class SymbolValueModelTests(unittest.TestCase):
             )
 
         self.assertFalse(hasattr(pipe, "_active_symbol_value_conditioning"))
+
+
+class SymbolValueCheckpointTests(unittest.TestCase):
+    def setUp(self) -> None:
+        torch.manual_seed(17)
+        self.conditioner = SymbolValueConditioner(_small_conditioner_config())
+        self.conditioner_state = {
+            f"{SYMBOL_VALUE_CHECKPOINT_PREFIX}{key}": value.detach().clone()
+            for key, value in self.conditioner.state_dict().items()
+        }
+
+    def test_conditioner_checkpoint_requires_exact_finite_topology(self) -> None:
+        with patch.dict(
+            "sys.modules",
+            _fake_safetensors_modules(self.conditioner_state),
+        ):
+            result = load_symbol_value_conditioner_checkpoint(
+                self.conditioner,
+                "fixture.safetensors",
+                required=True,
+            )
+        self.assertTrue(result["loaded"])
+        self.assertEqual(len(self.conditioner.state_dict()), result["tensor_count"])
+
+        missing = dict(self.conditioner_state)
+        missing.pop(next(iter(missing)))
+        with patch.dict("sys.modules", _fake_safetensors_modules(missing)):
+            with self.assertRaisesRegex(ValueError, "topology"):
+                load_symbol_value_conditioner_checkpoint(
+                    self.conditioner,
+                    "fixture.safetensors",
+                    required=True,
+                )
+
+        non_finite = dict(self.conditioner_state)
+        key = next(iter(non_finite))
+        non_finite[key] = non_finite[key].clone()
+        non_finite[key].view(-1)[0] = float("nan")
+        with patch.dict("sys.modules", _fake_safetensors_modules(non_finite)):
+            with self.assertRaisesRegex(ValueError, "non-finite"):
+                load_symbol_value_conditioner_checkpoint(
+                    self.conditioner,
+                    "fixture.safetensors",
+                    required=True,
+                )
+
+    def test_combined_checkpoint_validates_both_states_before_mutation(self) -> None:
+        state = {**self.conditioner_state, "fake_lora": torch.ones(1)}
+        pipe = SimpleNamespace(
+            dit=nn.Linear(1, 1),
+            load_lora=lambda *args, **kwargs: setattr(pipe, "loaded", kwargs),
+        )
+        validator = (
+            "physbench.baselines.wan22_quantity_model."
+            "_validate_dit_lora_state_dict"
+        )
+        with (
+            patch.dict("sys.modules", _fake_safetensors_modules(state)),
+            patch(validator, return_value=("layer",)) as validate_lora,
+        ):
+            result = load_combined_symbol_value_checkpoint(
+                pipe,
+                self.conditioner,
+                "fixture.safetensors",
+                lora_alpha=1.0,
+            )
+        validate_lora.assert_called_once()
+        self.assertEqual(1, result["dit_lora_tensor_count"])
+        self.assertTrue(hasattr(pipe, "loaded"))
+
+        invalid = dict(state)
+        invalid.pop(next(iter(self.conditioner_state)))
+        untouched = SimpleNamespace(
+            dit=nn.Linear(1, 1),
+            load_lora=lambda *args, **kwargs: setattr(untouched, "loaded", True),
+        )
+        with (
+            patch.dict("sys.modules", _fake_safetensors_modules(invalid)),
+            patch(validator) as validate_lora,
+        ):
+            with self.assertRaisesRegex(ValueError, "topology"):
+                load_combined_symbol_value_checkpoint(
+                    untouched,
+                    self.conditioner,
+                    "fixture.safetensors",
+                    lora_alpha=1.0,
+                )
+        validate_lora.assert_not_called()
+        self.assertFalse(hasattr(untouched, "loaded"))
 
 
 def _case() -> dict:
