@@ -245,13 +245,13 @@ tests/test_<scene>_evaluator.py
 当前通用审计入口为：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
+PYTHONPATH=src python \
   scripts/audit_open_world_evaluator_v6.py \
   --dataset datasets/releases/12.0.0/dataset.json \
   --protocol scene_default_v10 \
   --scene parabolic_motion \
   --self-check \
-  --output /mnt/nvme1/physics_video_benchmark/audits/<audit_id>
+  --output audits/<audit_id>
 ```
 
 审计期间不得修改 evaluator、protocol 或 schema。报告中的 source-tree digest 必须显示

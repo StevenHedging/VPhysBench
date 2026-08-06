@@ -154,17 +154,17 @@ worker，8 卡部署创建两个并行 worker。各 worker 使用互不相交的
 ## 6. 验证与运行
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline validate cosmos3_nano_i2v_generic
 
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline validate cosmos3_nano_i2v_physics
 ```
 
 单 case dry-run：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   atomic-run \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
@@ -178,7 +178,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 同 Task 对照矩阵：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   matrix-run \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \

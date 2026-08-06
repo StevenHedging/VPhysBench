@@ -5,19 +5,19 @@
 Benchmark：
 
 ```text
-/root/miniconda3/envs/phybench
+./.venv
 ```
 
 WAN 模型进程通常使用：
 
 ```text
-/root/miniconda3/envs/dlp
+../external/envs/dlp
 ```
 
 Cosmos 模型进程通常使用其工程虚拟环境：
 
 ```text
-/root/Nico/cosmos/packages/cosmos3/.venv
+../external/cosmos/packages/cosmos3/.venv
 ```
 
 `phybench` 环境负责 Dataset、Registry、TaskBuilder、run orchestration 和 evaluator；
@@ -27,23 +27,23 @@ Cosmos 模型进程通常使用其工程虚拟环境：
 ## 2. 安装与测试
 
 ```bash
-cd /root/Steven/physics_video_benchmark
+cd VPhysBench
 
-/root/miniconda3/envs/phybench/bin/pip install -e ".[scene-evaluation]"
-/root/miniconda3/envs/phybench/bin/pip install -e /root/Jensen/Eval/sam2-main
+python -m pip install -e ".[scene-evaluation]"
+python -m pip install -e ../sam2
 ```
 
 完整测试：
 
 ```bash
-PYTHONPATH=src:tests /root/miniconda3/envs/phybench/bin/python \
+PYTHONPATH=src:tests python \
   -m unittest discover -s tests -v
 ```
 
 静态检查：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
+PYTHONPATH=src python \
   -m compileall -q src tests baselines
 
 git diff --check
@@ -54,7 +54,7 @@ git diff --check
 快速检查 metadata 与资产存在性：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   validate-dataset \
   --dataset datasets/releases/12.0.0/dataset.json \
   --check-assets
@@ -63,7 +63,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 发布或迁移机器前执行完整哈希验收：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   validate-dataset \
   --dataset datasets/releases/12.0.0/dataset.json \
   --check-asset-hashes
@@ -94,7 +94,7 @@ cp baselines/wan22_lora/baseline.local.example.json \
 ## 5. Baseline 发现与部署验收
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline list
 ```
 
@@ -102,10 +102,10 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 检查解析结果：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline inspect wan22_ti2v_5b_lora_r32_v3_generic
 
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline inspect wan22_ti2v_5b_lora_r32_v3_physics
 ```
 
@@ -121,7 +121,7 @@ for baseline_id in \
   wan22_g15_sparse_motion_r32_e20_generic \
   wan22_g15_sparse_motion_r32_e20_physics
 do
-  PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+  PYTHONPATH=src python -m physbench \
     baseline validate "$baseline_id"
 done
 ```
@@ -138,23 +138,23 @@ Dataset/Task入口是`6.0.0`与`six_scene_*`；只有已实现并声明
 Direct-eval：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   task-build \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
-  --output /tmp/cosmos3_generic_task_instance.json
+  --output results/cosmos3_generic_task_instance.json
 ```
 
 Fine-tune + eval：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   task-build \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
-  --output /tmp/wan22_physics_finetune_task_instance.json
+  --output results/wan22_physics_finetune_task_instance.json
 ```
 
 重复构建相同 Dataset + Task + Baseline deployment 时，TaskInstance digest 必须稳定。
@@ -166,7 +166,7 @@ generation shape 与 identity。
 不执行模型的 dry-run：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   atomic-run \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
@@ -182,7 +182,7 @@ Dry-run 会冻结 plan/TaskInstance、展开 adapter、写 job 与 planned predi
 加 `--execute`：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   atomic-run \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
@@ -204,7 +204,7 @@ Task score。
 ## 8. 同 Task 的 Baseline 矩阵
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   matrix-run \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
@@ -295,9 +295,9 @@ SHA-256。
 外部视频必须复制进 run：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   prediction-import \
-  --source /path/to/existing_prediction.mp4 \
+  --source ../external/existing_prediction.mp4 \
   --run-dir run/RUN_ID \
   --baseline-id BASELINE_ID \
   --case-id CASE_ID \
@@ -313,7 +313,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 当前 AtomicRun 必须显式指定协议和本次 evaluation ID：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   evaluate \
   --run-dir run/RUN_ID \
   --protocol-id scene_default_v2 \
@@ -418,7 +418,7 @@ run/<run_id>/reevaluations/<protocol>/<fingerprint>/<evaluation_id>/
 例如：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   evaluate \
   --run-dir run/RUN_ID \
   --protocol-id scene_default_v8 \
@@ -436,10 +436,10 @@ digest；重评的 `artifact_manifest.json` 还会覆盖整个 visualization bun
 
 ```bash
 CUDA_VISIBLE_DEVICES=1 HF_HUB_OFFLINE=1 PYTHONPATH=src \
-  /root/miniconda3/envs/phybench/bin/python \
+  python \
   scripts/audit_collision_evaluator_v4.py \
   --device cuda \
-  --output /mnt/nvme1/physics_video_benchmark/evaluation_audits/\
+  --output evaluation_audits/\
 collision_reference_observability_audit.json
 ```
 
@@ -496,7 +496,7 @@ TaskInstance 构建后 manifest、local override、driver、adapter、checkpoint
 
 ### `managed output must be inside run predictions`
 
-Driver 把视频写到了模型工程或 `/tmp`。改为
+Driver 把视频写到了模型工程或系统临时目录。改为
 `run_dir / "predictions" / ...`。
 
 ### `prediction_video_missing`

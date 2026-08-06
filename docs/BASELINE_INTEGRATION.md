@@ -62,15 +62,15 @@ Legacy evaluator 只消费已有产物做兼容性重评，不能编译新 Task 
 
 ```bash
 # 标准 I2V
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline init my_i2v --backend managed-i2v
 
 # 标准 V2V 协议模板
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline init my_v2v --backend managed-v2v
 
 # 已有输出
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline init my_outputs --backend submission
 ```
 
@@ -368,7 +368,7 @@ TaskInstance。`baseline.local.json` 指向外部 JSONL：
 ```json
 {
   "runtime": {
-    "submission_manifest": "/absolute/path/to/submission.jsonl"
+    "submission_manifest": "../external/submission.jsonl"
   }
 }
 ```
@@ -380,7 +380,7 @@ TaskInstance。`baseline.local.json` 指向外部 JSONL：
   "job_id": "five_scene_direct_eval_v5__case_id__seed000042",
   "case_id": "case_id",
   "seed": 42,
-  "video_path": "/external/output/case_id.mp4"
+  "video_path": "../external/output/case_id.mp4"
 }
 ```
 
@@ -402,11 +402,11 @@ TaskInstance。`baseline.local.json` 指向外部 JSONL：
 ```json
 {
   "model": {
-    "checkpoint": "/absolute/path/to/checkpoint"
+    "checkpoint": "../external/checkpoint"
   },
   "runtime": {
-    "python": "/absolute/path/to/python",
-    "project_root": "/absolute/path/to/model/repo"
+    "python": "../external/python",
+    "project_root": "../external/model/repo"
   }
 }
 ```
@@ -442,14 +442,14 @@ schema v5 会自动纳入 Bundle 内所有 Python 文件；其它资源用
 ### 发现
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline list
 ```
 
 ### 检查解析结果
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline inspect my_i2v_generic
 ```
 
@@ -459,25 +459,25 @@ TaskBuilder/DataAdapter fingerprint。
 ### 验证部署
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline validate my_i2v_generic
 ```
 
 ### 编译 TaskInstance
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   task-build \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline my_i2v_generic \
-  --output /tmp/my_i2v_generic_task.json
+  --output results/my_i2v_generic_task.json
 ```
 
 ### 单 case dry-run
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   atomic-run \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \

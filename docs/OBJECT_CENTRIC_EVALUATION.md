@@ -701,7 +701,7 @@ ID/lifecycle 审计写入所属 evaluation 的
 四个新 scene 的定向真实/反例审计统一使用
 `scripts/audit_open_world_evaluator_v6.py`；collision 2.2 继续使用冻结的
 `scripts/audit_collision_evaluator_v5.py`。前者支持重复传入
-`--prediction CASE_ID=/absolute/video.mp4` 与 `--self-check`，并把 runtime device
+`--prediction CASE_ID=../external/video.mp4` 与 `--self-check`，并把 runtime device
 override、协议 fingerprint 和各 scene evaluator fingerprint 一并写入 report。
 
 ## 10. 方法来源

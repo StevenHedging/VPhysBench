@@ -1,4 +1,4 @@
-# Physics Video Benchmark
+# VPhysBench
 
 Physics Video Benchmark 是一个面向物理视频生成模型的六场景、训推一体评测框架。当前
 Dataset release 是
@@ -85,16 +85,16 @@ G15 的训练源与 Dataset 底层 trial 有重叠，不能进入无泄漏排名
 Benchmark 环境：
 
 ```text
-/root/miniconda3/envs/phybench
+./.venv
 ```
 
 ```bash
-cd /root/Steven/physics_video_benchmark
+cd VPhysBench
 
-PYTHONPATH=src:tests:. /root/miniconda3/envs/phybench/bin/python \
+PYTHONPATH=src:tests:. python \
   -m unittest tests.test_current_dataset tests.test_single_current_physics_v12 -v
 
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   validate-dataset \
   --dataset datasets/releases/12.0.0/dataset.json \
   --check-assets
@@ -106,8 +106,8 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 Scene evaluator 需要额外安装：
 
 ```bash
-/root/miniconda3/envs/phybench/bin/pip install -e ".[scene-evaluation]"
-/root/miniconda3/envs/phybench/bin/pip install -e /root/Jensen/Eval/sam2-main
+python -m pip install -e ".[scene-evaluation]"
+python -m pip install -e ../sam2
 ```
 
 ## 快速开始
@@ -118,28 +118,28 @@ Scene evaluator 需要额外安装：
 发现并验证 Baseline：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline list
 
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline validate wan22_ti2v_5b_lora_r32_v3_generic
 ```
 
 编译一份 sealed TaskInstance：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   task-build \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
-  --output /tmp/wan22_generic_task_instance.json
+  --output results/wan22_generic_task_instance.json
 ```
 
 创建 AtomicRun；不加 `--execute` 时只冻结并展开计划：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   atomic-run \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
@@ -150,7 +150,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 在同一 Task 上成对比较两个 Baseline：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   matrix-run \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
@@ -182,7 +182,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 ## 仓库结构
 
 ```text
-physics_video_benchmark/
+VPhysBench/
 ├── datasets/                 # 唯一权威数据根；12.0.0是当前release
 ├── tasks/official/           # direct_eval 与 finetune_eval 两份模型无关 Task
 ├── baselines/                # schema v5 Bundle、adapter/driver 与本机配置模板

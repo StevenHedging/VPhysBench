@@ -640,6 +640,18 @@ class ManagedBaselineTests(unittest.TestCase):
                     backend=backend,
                     root=root,
                 )
+                example = load_json(
+                    directory / "baseline.local.example.json"
+                )
+                self.assertFalse(
+                    Path(example["model"]["checkpoint"]).is_absolute()
+                )
+                if backend == "submission":
+                    self.assertFalse(
+                        Path(
+                            example["runtime"]["submission_manifest"]
+                        ).is_absolute()
+                    )
                 plugin = load_baseline_plugin(
                     load_baseline_bundle(directory)
                 )

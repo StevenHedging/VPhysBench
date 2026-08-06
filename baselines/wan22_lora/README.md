@@ -42,8 +42,8 @@ The frozen step-410 checkpoint is identified by SHA-256
 The driver refuses a configured checkpoint whose digest is missing or differs.
 
 ```bash
-/root/miniconda3/envs/phybench/bin/physbench baseline validate \
+physbench baseline validate \
   wan22_ti2v_5b_lora_r32_v3_generic
-/root/miniconda3/envs/phybench/bin/physbench baseline validate \
+physbench baseline validate \
   wan22_ti2v_5b_lora_r32_v3_physics
 ```

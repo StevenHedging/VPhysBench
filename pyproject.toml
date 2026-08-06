@@ -1,5 +1,5 @@
 [project]
-name = "physics-video-benchmark"
+name = "vphysbench"
 version = "0.1.0"
 description = "Train/evaluate integrated benchmark scaffold for physical video generation"
 requires-python = ">=3.10"

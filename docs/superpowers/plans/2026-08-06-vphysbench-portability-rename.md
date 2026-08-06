@@ -1,6 +1,6 @@
 # VPhysBench Portability Rename Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Rename the complete working repository to `VPhysBench` and remove machine-specific absolute paths from its active publication surface without rewriting historical provenance or generated artifacts.
 
@@ -31,7 +31,7 @@
 - Consumes: Git tracked-path inventory and `create_baseline_scaffold(...) -> Path`
 - Produces: `RepositoryPortabilityTest` and relative scaffold-example regression coverage
 
-- [ ] **Step 1: Add the repository portability test**
+- [x] **Step 1: Add the repository portability test**
 
 Create `tests/test_repository_portability.py` with a tracked-text scanner that excludes `tests/`, `docs/superpowers/`, `datasets/provenance/`, `docs/experiments/`, and frozen protocol files v4-v7. Decode only UTF-8 tracked files and assert that every remaining file lacks `/root/`, `/mnt/`, `/absolute/`, and `physics_video_benchmark`. Add separate assertions that `ROOT.name == "VPhysBench"`, README starts with `# VPhysBench`, and `tomllib.loads(pyproject)["project"]["name"] == "vphysbench"`.
 
@@ -43,7 +43,7 @@ FROZEN_PROTOCOLS = {
 }
 ```
 
-- [ ] **Step 2: Add the scaffold portability assertion**
+- [x] **Step 2: Add the scaffold portability assertion**
 
 In `ManagedBaselineTests.test_scaffolds_pass_registry_validation`, load each generated `baseline.local.example.json` and assert:
 
@@ -55,7 +55,7 @@ if backend == "submission":
     )
 ```
 
-- [ ] **Step 3: Run both tests and verify the intended red state**
+- [x] **Step 3: Run both tests and verify the intended red state**
 
 Run:
 
@@ -97,23 +97,23 @@ Expected: repository assertions list current machine paths, old branding, and ol
 - Consumes: forbidden-token policy from Task 1
 - Produces: portable user-facing commands and `vphysbench` distribution metadata
 
-- [ ] **Step 1: Migrate public branding**
+- [x] **Step 1: Migrate public branding**
 
 Change the root README heading to `# VPhysBench`, its repository tree root to `VPhysBench/`, and the `[project].name` value in `pyproject.toml` to `vphysbench`. Preserve `physbench = "physbench.cli:main"` and the `src/physbench` package.
 
-- [ ] **Step 2: Replace environment-bound Python commands**
+- [x] **Step 2: Replace environment-bound Python commands**
 
 In the listed README and current docs, replace `/root/miniconda3/envs/phybench/bin/python` with `python`, its `pip` with `python -m pip`, and absolute `physbench` executables with `physbench`. Replace old absolute `cd` commands with `cd VPhysBench` where repository entry is instructional; otherwise remove redundant `cd` lines.
 
-- [ ] **Step 3: Replace active audit-output and external-checkout examples**
+- [x] **Step 3: Replace active audit-output and external-checkout examples**
 
 Use repository-relative output paths such as `evaluation_audits/<audit_id>` and `evaluator_audits/<audit_id>`. Replace the SAM2 checkout example with `../sam2` and other generic `/absolute/...` documentation examples with `../external/...` values.
 
-- [ ] **Step 4: Make all five local override examples relative**
+- [x] **Step 4: Make all five local override examples relative**
 
 Change each `/absolute/path/to/...` value in the five tracked `baseline.local.example.json` files to a purpose-specific path below `../external/`, retaining every JSON field and `null` value.
 
-- [ ] **Step 5: Run the portability test and inspect remaining failures**
+- [x] **Step 5: Run the portability test and inspect remaining failures**
 
 Run the Task 1 test command. Expected: only the physical basename assertion and scaffold-generated example assertions remain red.
 
@@ -127,11 +127,11 @@ Run the Task 1 test command. Expected: only the physical basename assertion and 
 - Consumes: scaffold portability assertion from Task 1
 - Produces: relative `baseline.local.example.json` values from `create_baseline_scaffold`
 
-- [ ] **Step 1: Change scaffold placeholders**
+- [x] **Step 1: Change scaffold placeholders**
 
 Set the generated model checkpoint to `../external/checkpoint` and the submission manifest to `../external/submission.jsonl`. Do not change portable `baseline.json` or runtime resolution semantics.
 
-- [ ] **Step 2: Verify scaffold green and repository basename still red**
+- [x] **Step 2: Verify scaffold green and repository basename still red**
 
 Run the Task 1 command. Expected: scaffold test passes; repository test fails only because the physical directory is still named `physics_video_benchmark`.
 
@@ -144,11 +144,11 @@ Run the Task 1 command. Expected: scaffold test passes; repository test fails on
 - Consumes: portable tracked tree from Tasks 1-3
 - Produces: Git root `/root/Steven/VPhysBench`
 
-- [ ] **Step 1: Run rename preflight**
+- [x] **Step 1: Run rename preflight**
 
 Verify the source is the current Git root, `/root/Steven/VPhysBench` does not exist, branch is `main`, and status contains no staged or untracked generated artifacts. The pre-existing untracked physical-response-loss plan must remain untracked and preserved.
 
-- [ ] **Step 2: Atomically rename the repository directory**
+- [x] **Step 2: Atomically rename the repository directory**
 
 Run from `/root/Steven`:
 
@@ -156,11 +156,11 @@ Run from `/root/Steven`:
 mv -- /root/Steven/physics_video_benchmark /root/Steven/VPhysBench
 ```
 
-- [ ] **Step 3: Verify the moved Git workspace**
+- [x] **Step 3: Verify the moved Git workspace**
 
 From `/root/Steven/VPhysBench`, confirm `git rev-parse --show-toplevel`, `git remote -v`, branch, `run/`, Dataset, cache, ignored local overrides, and relative Dataset source-archive symlink. Confirm the old directory is absent.
 
-- [ ] **Step 4: Run the portability tests green**
+- [x] **Step 4: Run the portability tests green**
 
 Run the Task 1 command from the new root. Expected: all selected tests pass.
 
@@ -174,7 +174,7 @@ Run the Task 1 command from the new root. Expected: all selected tests pass.
 - Consumes: renamed workspace and green portability contracts
 - Produces: verified migration commit without the temporary design document
 
-- [ ] **Step 1: Validate Dataset v12**
+- [x] **Step 1: Validate Dataset v12**
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src \
@@ -183,7 +183,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src \
 
 Expected: `status=valid`, 799 cases, 3,818 quantities, and `media_changes=0`.
 
-- [ ] **Step 2: Verify baseline discovery and focused runtime contracts**
+- [x] **Step 2: Verify baseline discovery and focused runtime contracts**
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src \
@@ -202,7 +202,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:tests:. \
 
 Expected: nine baseline identities; mandatory focused tests pass with only explicitly unconfigured real deployments skipped.
 
-- [ ] **Step 3: Run the complete test suite and classify results**
+- [x] **Step 3: Run the complete test suite and classify results**
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:tests:. \
@@ -211,11 +211,11 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:tests:. \
 
 Compare with the known pre-migration baseline of 531 tests, 17 failures, 14 errors, and 13 skips. Any new failure touching portability, root resolution, Dataset validation, baseline discovery, run root, or scaffold output blocks completion.
 
-- [ ] **Step 4: Delete the approved design document**
+- [x] **Step 4: Delete the approved design document**
 
 Use `apply_patch` to delete `docs/superpowers/specs/2026-08-06-vphysbench-portability-rename-design.md`, then run `git diff --check` and the portability test again.
 
-- [ ] **Step 5: Stage only migration files and commit**
+- [x] **Step 5: Stage only migration files and commit**
 
 Explicitly stage the files listed in Tasks 1-5 and this plan. Verify no `run/`, Dataset media, cache, `baseline.local.json`, or unrelated untracked plan is staged. Commit:
 
@@ -223,6 +223,6 @@ Explicitly stage the files listed in Tasks 1-5 and this plan. Verify no `run/`, 
 git commit -m "refactor: rename benchmark to VPhysBench"
 ```
 
-- [ ] **Step 6: Report final state**
+- [x] **Step 6: Report final state**
 
 Report the new filesystem root, commit, preserved interfaces, scoped path-gate result, Dataset and focused-test evidence, exact full-suite status, and any remaining GitHub publication blockers. Do not push.

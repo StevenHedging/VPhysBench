@@ -1,12 +1,12 @@
 {
   "model": {
-    "frozen_lora_checkpoint": "/absolute/path/to/step-410.safetensors"
+    "frozen_lora_checkpoint": "../external/step-410.safetensors"
   },
   "runtime": {
-    "project_root": "/absolute/path/to/wan22_pipeline",
-    "python": "/absolute/path/to/model/environment/bin/python",
-    "model_base": "/absolute/path/to/wan22_pipeline/models",
+    "project_root": "../external/wan22_pipeline",
+    "python": "../external/model/environment/bin/python",
+    "model_base": "../external/wan22_pipeline/models",
     "cuda_visible_devices": "0,1,2,3,4,5,6,7",
-    "accelerate_config": "/absolute/path/to/wan22_pipeline/configs/accelerate/lora_8gpu.yaml"
+    "accelerate_config": "../external/wan22_pipeline/configs/accelerate/lora_8gpu.yaml"
   }
 }

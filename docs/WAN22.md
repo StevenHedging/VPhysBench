@@ -251,37 +251,37 @@ evaluation
 ## 8. 验证
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline validate wan22_ti2v_5b_lora_r32_v3_generic
 
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline validate wan22_ti2v_5b_lora_r32_v3_physics
 
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline validate wan22_ti2v_5b_lora_r32_quantity_embedding_v1
 
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline validate wan22_g15_sparse_motion_r32_e20_generic
 
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline validate wan22_g15_sparse_motion_r32_e20_physics
 ```
 
 编译 fine-tune Task：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   task-build \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
-  --output /tmp/wan22_physics_finetune_task.json
+  --output results/wan22_physics_finetune_task.json
 ```
 
 同 Task 的 direct-eval 对照矩阵：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   matrix-run \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \

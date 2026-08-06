@@ -61,17 +61,17 @@ jointly, then generates every frozen ID-test job; the current Dataset no longer
 defines OOD or mixed test subsets:
 
 ```bash
-cd /root/Steven/physics_video_benchmark
+cd VPhysBench
 test -e baselines/wan22_quantity_embedding/baseline.local.json || \
   cp baselines/wan22_quantity_embedding/baseline.local.example.json \
     baselines/wan22_quantity_embedding/baseline.local.json
 # Edit baseline.local.json for the WAN checkout, model root, Python,
 # Accelerate config, and GPUs.
 
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline validate wan22_ti2v_5b_lora_r32_quantity_embedding_v1
 
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   atomic-run \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
@@ -151,7 +151,7 @@ macro-result projections, and training-evidence indexes from a terminal
 `complete`, `inference_incomplete`, or `failed` AtomicRun with:
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
+PYTHONPATH=src python \
   scripts/summarize_quantity_run.py \
   --run-dir run/<run_id> \
   --output-dir results/<run_id>/<summary_id>
@@ -195,7 +195,7 @@ For a controlled three-way comparison, run the generic, structured-text, and
 quantity-embedding identities on the same frozen View A Task:
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   matrix-run \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \

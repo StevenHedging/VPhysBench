@@ -131,13 +131,13 @@ def create_baseline_scaffold(
         }
     write_json(target / "baseline.json", value)
     write_json(target / "baseline.local.example.json", {
-        "model": {"checkpoint": "/absolute/path/to/checkpoint"},
+        "model": {"checkpoint": "../external/checkpoint"},
         "runtime": (
             {}
             if backend in {"managed-i2v", "managed-v2v"}
             else {
                 "submission_manifest": (
-                    "/absolute/path/to/submission.jsonl"
+                    "../external/submission.jsonl"
                 )
             }
         ),

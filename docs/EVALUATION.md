@@ -1589,16 +1589,16 @@ Baseline。禁止用 symlink 将 visualization bundle 逃逸到 AtomicRun 外部
 四个新 scene 可用统一审计入口；v7 必须显式传入 `--protocol`：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
+PYTHONPATH=src python \
   scripts/audit_open_world_evaluator_v6.py \
   --protocol scene_default_v7 \
   --case-id freefall_r2_l_h060cm --self-check \
   --run-id RUN_ID \
-  --output /mnt/nvme1/physics_video_benchmark/evaluation_audits/my_v7_audit
+  --output evaluation_audits/my_v7_audit
 ```
 
 实际 prediction 使用可重复的
-`--prediction CASE_ID=/absolute/prediction.mp4`。collision 2.2 仍由
+`--prediction CASE_ID=../external/prediction.mp4`。collision 2.2 仍由
 `scripts/audit_collision_evaluator_v5.py` 审计，避免修改冻结链路。独立审计入口不生成
 过程视频；需要可视化 Baseline 任务结果时必须通过 AtomicRun CLI。
 
@@ -1928,10 +1928,10 @@ GT-self、真实生成 extra/missing/OOD 审计，并要求 0 evaluator error。
 实现或修改 evaluator 后至少执行：
 
 ```bash
-PYTHONPATH=src:tests /root/miniconda3/envs/phybench/bin/python \
+PYTHONPATH=src:tests python \
   -m unittest discover -s tests -p 'test_scene_evaluation.py' -v
 
-PYTHONPATH=src:tests /root/miniconda3/envs/phybench/bin/python \
+PYTHONPATH=src:tests python \
   -m unittest discover -s tests -v
 ```
 
@@ -1939,10 +1939,10 @@ v4 还提供真实 reference 可观测性审计：
 
 ```bash
 CUDA_VISIBLE_DEVICES=1 HF_HUB_OFFLINE=1 PYTHONPATH=src \
-  /root/miniconda3/envs/phybench/bin/python \
+  python \
   scripts/audit_collision_evaluator_v4.py \
   --device cuda \
-  --output /mnt/nvme1/physics_video_benchmark/evaluation_audits/\
+  --output evaluation_audits/\
 collision_reference_observability_audit.json
 ```
 
@@ -1954,19 +1954,19 @@ v5 的审计脚本可同时运行 reference self-check 和指定 prediction：
 
 ```bash
 CUDA_VISIBLE_DEVICES=1 HF_HUB_OFFLINE=1 PYTHONPATH=src \
-  /root/miniconda3/envs/phybench/bin/python \
+  python \
   scripts/audit_collision_evaluator_v5.py \
   --device cuda \
   --case-id CASE_ID \
   --self-check \
-  --prediction CASE_ID=/absolute/path/to/prediction.mp4 \
-  --output /mnt/nvme1/physics_video_benchmark/evaluator_audits/AUDIT_ID
+  --prediction CASE_ID=../external/prediction.mp4 \
+  --output evaluator_audits/AUDIT_ID
 ```
 
 最终审计报告位于：
 
 ```text
-/mnt/nvme1/physics_video_benchmark/evaluator_audits/
+evaluator_audits/
 ├── collision_v5_null_assignment_r7_20260730/audit_report.json
 └── collision_v5_quantity_r8_20260730/audit_report.json
 ```
@@ -1987,7 +1987,7 @@ prediction SHA-256 和限制见
 本次评估 ID：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   evaluate \
   --run-dir run/RUN_ID \
   --protocol-id scene_default_v3 \

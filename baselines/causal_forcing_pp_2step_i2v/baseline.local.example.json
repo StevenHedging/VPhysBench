@@ -1,12 +1,12 @@
 {
   "model": {
-    "checkpoint": "/absolute/path/to/Causal-Forcing",
-    "base_model": "/absolute/path/to/Wan2.1-T2V-1.3B"
+    "checkpoint": "../external/Causal-Forcing",
+    "base_model": "../external/Wan2.1-T2V-1.3B"
   },
   "runtime": {
-    "framework_root": "/absolute/path/to/Causal-Forcing",
-    "python": "/absolute/path/to/causal_forcing/bin/python",
-    "hf_home": "/absolute/path/to/huggingface-cache",
+    "framework_root": "../external/Causal-Forcing",
+    "python": "../external/causal_forcing/bin/python",
+    "hf_home": "../external/huggingface-cache",
     "cuda_visible_devices": "0,1,2,3,4,5,6,7"
   }
 }

@@ -177,7 +177,7 @@ QuantityEncoder gradient finite；最终 safetensors 会验证完整 payload 布
 先配置本机部署：
 
 ```bash
-cd /root/Steven/physics_video_benchmark
+cd VPhysBench
 test -e baselines/wan22_quantity_embedding/baseline.local.json || \
   cp baselines/wan22_quantity_embedding/baseline.local.example.json \
     baselines/wan22_quantity_embedding/baseline.local.json
@@ -185,15 +185,15 @@ test -e baselines/wan22_quantity_embedding/baseline.local.json || \
 
 在 Git-ignored 的 `baseline.local.json` 中填写 WAN 工程、模型根目录、模型 Python、
 GPU 和 Accelerate 配置。Benchmark 编排环境是
-`/root/miniconda3/envs/phybench`；实际 WAN 进程使用 local 配置中的 Python。
+`./.venv`；实际 WAN 进程使用 local 配置中的 Python。
 
 验证和 dry-run：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   baseline validate wan22_ti2v_5b_lora_r32_quantity_embedding_v1
 
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   atomic-run \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
@@ -205,7 +205,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 完整训练、推理和评估必须使用新的 run ID：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   atomic-run \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
@@ -229,7 +229,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 | `..._quantity_embedding_v1` | 消费 | sentinel slot 中的 `z_phys` |
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   matrix-run \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
@@ -379,7 +379,7 @@ AtomicRun 进入 `complete`、`inference_incomplete` 或 `failed` 终态后，�
 `null`/`N/A`，不会被补成 0：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python \
+PYTHONPATH=src python \
   scripts/summarize_quantity_run.py \
   --run-dir run/<run_id> \
   --output-dir results/<run_id>/<summary_id>

@@ -36,8 +36,8 @@ manifests. The frozen checkpoint is verified against the portable SHA-256
 before task compilation.
 
 ```bash
-/root/miniconda3/envs/phybench/bin/physbench baseline validate \
+physbench baseline validate \
   wan22_g15_sparse_motion_r32_e20_generic
-/root/miniconda3/envs/phybench/bin/physbench baseline validate \
+physbench baseline validate \
   wan22_g15_sparse_motion_r32_e20_physics
 ```

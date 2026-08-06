@@ -196,12 +196,12 @@ binding 都会改变或破坏 digest。
 ## 7. 编译 TaskInstance
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   task-build \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
-  --output /tmp/wan22_physics_task_instance.json
+  --output results/wan22_physics_task_instance.json
 ```
 
 `--baseline` 接受 Baseline ID、Bundle 目录或具体 manifest 路径。目录引用默认解析
@@ -213,7 +213,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 不加 `--execute` 时冻结计划、展开 adapter 与 job，但不启动模型：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   atomic-run \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
@@ -252,7 +252,7 @@ Direct-eval 工程 smoke 可加：
 同一 Task 比较 generic/physics Baseline：
 
 ```bash
-PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
+PYTHONPATH=src python -m physbench \
   matrix-run \
   --dataset datasets/releases/12.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
