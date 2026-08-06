@@ -465,6 +465,11 @@ class MediaTests(unittest.TestCase):
             )
             mask_payload = np.load(draft.case_directory / "canonical/masks/01.npz")
             self.assertEqual((1, 64, 96), mask_payload["masks"].shape)
+            manifest = json.loads(
+                (draft.case_directory / "canonical/masks/manifest.json").read_text()
+            )
+            self.assertTrue(manifest["source_first_frame"].startswith("assets/"))
+            self.assertTrue(manifest["instances"][0]["asset"].startswith("assets/"))
             self.assertEqual(
                 0.04,
                 json.loads((draft.case_directory / "physics.json").read_text())[

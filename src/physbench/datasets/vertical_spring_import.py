@@ -796,7 +796,7 @@ def materialize_case(
     )
     ys, xs = np.nonzero(binary)
     bbox = [int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())]
-    relative_case = case_directory.relative_to(repo_root).as_posix()
+    relative_case = case_directory.relative_to(repo_root / "datasets").as_posix()
     manifest = {
         "case_id": case_id,
         "frame_index": 0,
