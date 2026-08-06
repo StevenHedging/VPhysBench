@@ -7,6 +7,7 @@ import unittest
 
 from physbench.data_layout import LATEST_DATASET, V12_DATASET
 from physbench.datasets import load_dataset
+from physbench.io import load_jsonl
 from physbench.tasks import load_task, plan_atomic_task
 
 
@@ -27,6 +28,13 @@ class CurrentDatasetTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.dataset = load_dataset(V12_DATASET, check_assets=True)
         cls.view = cls.dataset.views["view_a"]
+        cls.provenance = {
+            case["case_id"]: case
+            for case in load_jsonl(
+                ROOT
+                / "datasets/provenance/releases/12.0.0/cases.jsonl"
+            )
+        }
 
     def test_v12_is_current_and_complete(self) -> None:
         self.assertEqual(V12_DATASET, LATEST_DATASET)
@@ -92,18 +100,21 @@ class CurrentDatasetTests(unittest.TestCase):
             },
         )
         self.assertTrue(all(
-            case["alignment"]["canonical_first_frame_event"]
+            self.provenance[case["case_id"]]["alignment"][
+                "canonical_first_frame_event"
+            ]
             == "initial release point"
             for case in pendulum
         ))
         supplement = [
             case for case in pendulum
-            if case["provenance"].get("import_id")
+            if self.provenance[case["case_id"]].get("import_id")
             == "pendulum_supplement_20260804"
         ]
         self.assertEqual(65, len(supplement))
         self.assertTrue(all(
-            case["alignment"]["trim_purpose"] == "remove_person_hand_only"
+            self.provenance[case["case_id"]]["alignment"]["trim_purpose"]
+            == "remove_person_hand_only"
             for case in supplement
         ))
 

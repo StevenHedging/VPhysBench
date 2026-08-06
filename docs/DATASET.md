@@ -31,7 +31,7 @@ datasets/
 │   ├── source_archives/
 │   ├── imports/
 │   ├── source_docs/
-│   └── releases/12.0.0/         # 单文件迁移与独立验证证据
+│   └── releases/12.0.0/         # 逐Case来源及迁移、验证记录
 └── releases/
     └── 12.0.0/                  # 唯一活动运行快照
         ├── dataset.json          # 当前运行默认入口
@@ -42,27 +42,29 @@ datasets/
 
 原始压缩包按字节保存在 `provenance/source_archives/`；冻结release仍可通过兼容路径
 `assets/source_archives/` 访问。Case 的
-`provenance.source_locator` 记录 archive/member。供运行和评估使用的 canonical
+`provenance/releases/12.0.0/cases.jsonl`记录逐Case的archive/member、原始媒体和时间
+对齐信息。供运行和评估使用的canonical
 视频、首帧等按 scene/描述性物理目录存放，路径稳定。
 
 ## 3. Case schema 5.0
 
-`cases.jsonl`每行保存Case身份、资产路径、非物理元数据、时序和来源，但不重复保存caption
-或physics。Loader通过资产引用读取Case-local成员，然后返回完整的schema 5.0 Case。
+`cases.jsonl`每行只保存Case身份、运行时资产路径、非物理元数据和时序，不重复保存caption、
+physics或来源审核信息。Loader通过资产引用读取Case-local成员，然后返回完整的schema 5.0 Case。
 物化后的核心字段：
 
 | 字段 | 语义 |
 | --- | --- |
 | `case_id` | 全 Dataset 唯一稳定 ID |
 | `scene_id` | 六个正式 scene 之一 |
-| `text` | Loader从`caption.json`物化的prompt、语言与标注来源 |
-| `assets` | 首帧、reference、source archive、mask、`caption`及`physics_annotation`等 |
+| `text` | Loader从`caption.json`物化的唯一`prompt` |
+| `assets` | `caption`、首帧、`physics_annotation`、`reference_video`及可选mask manifest |
 | `physics` | 结构化物理量及其可信状态 |
 | `appearance` | 非结构化物理量的情景、外观、环境、实验形式与采集信息 |
-| `temporal` | encoded time 与物理时间关系 |
-| `provenance` | 来源、parent case 与原始成员定位 |
-| `alignment` | 可选的时间对齐审核 |
-| `has_real_reference_video` | 是否有真实 reference |
+| `temporal` | 仅保存运行时所需的`encoded_to_physical_speed` |
+
+来源、原始成员定位、采集时序说明和时间对齐审核不进入运行时Case，统一保存在
+`datasets/provenance/releases/12.0.0/cases.jsonl`。当前每条Case都有同试次GT，
+`assets.reference_video`是唯一reference角色。
 
 Case 不包含 Task partition、模型分辨率、runner 参数或模型原生输入。当前View A只包含
 train和ID test；历史release中的OOD字段仅用于复现旧结果，不能重新带入当前划分。
@@ -84,12 +86,9 @@ case.assets.caption
 
 ```json
 {
-  "schema_version": "1.0",
   "case_id": "<case_id>",
   "scene_id": "pendulum",
-  "caption": "A pendulum bob of mass m and radius r is released ...",
-  "language": "en",
-  "annotation_source": "symbolic_physics_prompt_v1"
+  "caption": "A pendulum bob of mass m and radius r is released ..."
 }
 ```
 
@@ -113,7 +112,7 @@ assets/<scene_id>/<case_directory>/physics.json
 case.assets.physics_annotation
 ```
 
-文件必须恰好包含`schema_version`、`case_id`、`scene_id`和`physics`。Loader即使在
+文件必须恰好包含`case_id`、`scene_id`和`physics`。Loader即使在
 `check_assets=False`时也会读取它，校验Case/Scene身份，并将`physics`物化为下游兼容的
 `case.physics`运行时API。
 
@@ -169,7 +168,8 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 - 12.0.0 的目录名只编码 scene 的主要结构化物理量与唯一身份后缀，不使用背景、
   颜色或采集环境；
 - I2V 使用显式 `assets.first_frame`，不在运行时从 GT 临时补首帧；
-- reference/source/provenance 属于 evaluator 或数据审计，不交给生成 driver；
+- `reference_video`只供训练监督或evaluator使用，不交给评测阶段的生成driver；
+- source、alignment与来源定位只保存在provenance，不进入运行时Case；
 - 尺寸、FPS、帧数、抽帧和特征派生物只能进入 immutable cache 或 run。
 
 斜面下滑的 canonical 视频已经过启动时刻清洗。新增平抛和碰撞视频均从球刚穿过
@@ -183,7 +183,7 @@ reference与源MOV逐字节一致，首帧由该reference第0帧解码得到。
 
 V2V 必须另外登记独立输入视频资产，例如 `assets.input_video`。其中
 `conditioning_video` 只是 adapter 对该输入媒体 channel 的角色名，不表示 Task
-层的物理信息分组；reference、physics reference 和 source video 均禁止充当 V2V 输入。
+层的物理信息分组；reference和source video均禁止充当V2V输入。
 当前12.0.0 Release没有正式`assets.input_video`，因此V2V Bundle只是接口能力，
 不能直接运行官方数据。
 
@@ -225,12 +225,12 @@ View B：
 12.0.0将V11的完整已校正内容固化为唯一当前标注，是官方默认：
 
 - 保持799条Case、全部View成员、媒体角色、媒体字节和来源事实不变；
-- 每条Case只保留一个文档schema 2.0的`physics.json`，Case使用schema 5.0；
+- 每条Case只保留一个无版本冗余字段的`physics.json`，Case由Dataset descriptor声明schema 5.0；
 - 每个quantity新增稳定`symbol`，独立量符号进入英文prompt，具体数值和单位不进入；
 - 将494个碰撞有符号速度值转换为非负速度大小，方向明确写在prompt中；
 - 将715个派生、校准、辅助或重复别名量降为`annotated=false`审计量；
 - 799个Case各自只保留一个物理文件；
-- Release仍只保留七类运行时内容；迁移与独立验证证据位于
+- Release只保留四类运行时内容；迁移、逐Case provenance与独立验证记录位于
   `datasets/provenance/releases/12.0.0/`。
 
 独立验证：

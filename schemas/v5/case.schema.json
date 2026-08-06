@@ -3,19 +3,15 @@
   "title": "Materialized symbolic physical-video Case returned by the Dataset Loader",
   "type": "object",
   "required": [
-    "schema_version",
     "case_id",
     "scene_id",
     "text",
     "assets",
     "physics",
     "appearance",
-    "temporal",
-    "provenance",
-    "has_real_reference_video"
+    "temporal"
   ],
   "properties": {
-    "schema_version": {"const": "5.0"},
     "case_id": {
       "type": "string",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
@@ -26,32 +22,28 @@
     },
     "text": {
       "type": "object",
-      "required": [
-        "schema_version",
-        "prompt",
-        "language",
-        "annotation_source"
-      ],
+      "required": ["prompt"],
       "properties": {
-        "schema_version": {"const": "1.0"},
-        "prompt": {"type": "string", "minLength": 1},
-        "language": {"type": "string", "minLength": 1},
-        "annotation_source": {"type": "string", "minLength": 1}
+        "prompt": {"type": "string", "minLength": 1}
       },
       "additionalProperties": false
     },
     "assets": {
       "type": "object",
-      "additionalProperties": {
-        "oneOf": [
-          {"type": "null"},
-          {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+"
-          }
-        ]
-      }
+      "required": [
+        "caption",
+        "first_frame",
+        "physics_annotation",
+        "reference_video"
+      ],
+      "properties": {
+        "caption": {"$ref": "#/$defs/assetPath"},
+        "first_frame": {"$ref": "#/$defs/assetPath"},
+        "first_frame_mask_manifest": {"$ref": "#/$defs/assetPath"},
+        "physics_annotation": {"$ref": "#/$defs/assetPath"},
+        "reference_video": {"$ref": "#/$defs/assetPath"}
+      },
+      "additionalProperties": false
     },
     "physics": {
       "type": "object",
@@ -62,10 +54,7 @@
       "type": "object",
       "description": "Non-physics scenario, appearance, environment, setup-form and acquisition metadata."
     },
-    "temporal": {"type": "object"},
-    "alignment": {"type": ["object", "null"]},
-    "provenance": {"type": "object"},
-    "has_real_reference_video": {"type": "boolean"}
+    "temporal": {"type": "object"}
   },
   "not": {
     "anyOf": [
@@ -78,6 +67,11 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "assetPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+"
+    },
     "quantity": {
       "type": "object",
       "required": ["value", "unit", "annotated", "symbol"],

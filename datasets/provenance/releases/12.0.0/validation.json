@@ -2,8 +2,10 @@
   "caption_documents": 799,
   "cases": 799,
   "dataset_id": "physics_video_six_scene_v12",
+  "mask_manifests": 797,
   "media_changes": 0,
   "physics_documents": 799,
+  "provenance_cases": 799,
   "quantities": 5286,
   "schema_version": "1.0",
   "status": "valid"

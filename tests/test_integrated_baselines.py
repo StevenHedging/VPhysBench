@@ -395,7 +395,7 @@ class IntegratedBaselineTests(unittest.TestCase):
                 else:
                     job = load_json(jobs[0])
                     self.assertIsNone(
-                        job["media_adaptation"]["physics_reference"]
+                        job["media_adaptation"]["reference"]
                     )
                     generation_frames = job["wan22"]["generation"][
                         "num_frames"

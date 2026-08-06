@@ -226,47 +226,18 @@ class PendulumCaseEvaluator:
         self, request: CaseEvaluationRequest
     ) -> tuple[Path, str, str | None]:
         case = request.case
-        value = case["assets"].get("physics_reference_video")
+        value = case["assets"].get("reference_video")
         if not value:
             raise VideoProtocolError(
                 "no_trustworthy_physics_reference",
-                "case has no physics reference video",
+                "case has no reference_video",
             )
-        parent_id = case.get("provenance", {}).get("parent_case_id")
-        if case.get("ood", {}).get("level") == "ood1":
-            if not parent_id:
-                raise VideoProtocolError(
-                    "ood_parent_missing",
-                    "OOD1 pendulum case has no parent case",
-                )
-            parent = request.case_catalog.get(parent_id)
-            if parent is None:
-                raise VideoProtocolError(
-                    "ood_parent_missing",
-                    f"OOD1 parent case is absent from dataset: {parent_id}",
-                )
-            if parent.get("physics") != case.get("physics"):
-                raise VideoProtocolError(
-                    "ood_parent_physics_mismatch",
-                    "OOD1 case and parent do not have identical physics labels",
-                )
-            parent_reference = parent.get("assets", {}).get(
-                "physics_reference_video"
-            )
-            if value != parent_reference:
-                raise VideoProtocolError(
-                    "ood_parent_reference_mismatch",
-                    "OOD1 physics reference is not the parent reference",
-                )
-            mode = "parent_physics_reference"
-        else:
-            mode = "same_case_reference"
         path = self._resolve_asset(request.asset_root, value)
         if not path.is_file():
             raise VideoProtocolError(
                 "reference_video_missing", f"reference video not found: {path}"
             )
-        return path, mode, parent_id
+        return path, "same_case_reference", None
 
     def evaluate(self, request: CaseEvaluationRequest) -> CaseEvaluationResult:
         if self.robust_subject:

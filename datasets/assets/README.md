@@ -13,8 +13,8 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
     └── masks/               # 逐主体manifest、PNG和NPZ
 ```
 
-`caption.json`保存Case/Scene身份、caption、语言和标注来源；`physics.json`保存
-Case/Scene身份及`physics`。12.0.0的轻量Case索引通过`assets.caption`和
+`caption.json`只保存Case/Scene身份和caption；`physics.json`只保存Case/Scene身份及
+`physics`。schema与annotation source不在799个Case中重复。12.0.0的轻量Case索引通过`assets.caption`和
 `assets.physics_annotation`引用二者，Loader读取后物化`case.text`与`case.physics`。
 媒体通常被Git忽略，Case根部的两个JSON属于受版本控制的Dataset元数据。
 
@@ -32,4 +32,4 @@ Canonical规则：
 
 批量压缩来源只在`provenance/source_archives/<batch>/`保存一次；
 `assets/source_archives`是冻结Release的兼容链接。来源与审核信息位于
-`../provenance/`。
+`../provenance/`，其中逐Case记录位于`../provenance/releases/12.0.0/cases.jsonl`。

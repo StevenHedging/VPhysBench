@@ -33,8 +33,11 @@ Case只记录与该试次本身有关的事实：
 - `physics`：有用、具体、可解释的物理量；
 - `appearance`：背景、环境、颜色、材质、实验形式、对象组成、机位和采集批次等；
 - `text`：简洁且无歧义的物理过程描述；
-- `assets`、`temporal`、`alignment`和`provenance`：媒体与来源；
-- `has_real_reference_video`：是否存在同一试次的真实参考视频。
+- `assets`、`temporal`：运行所需媒体角色与物理时间信息；
+- `datasets/provenance/releases/<version>/cases.jsonl`：来源、映射和alignment审核。
+
+正式Case必须有同一试次的`assets.reference_video`；不再另设
+`has_real_reference_video`或`physics_reference_video`。
 
 Case不得记录`train/test`。划分属于View，不是样本的固有属性。
 
@@ -173,7 +176,7 @@ Task选择Dataset、View、scene、test范围、seed和评估协议。Task不决
 - 裁剪后主体整个有效运动区间尽可能保留，不能过度裁到过程未完成；
 - 画幅要适合主体轨迹，但不得以改变物理过程为代价；
 - 空间裁剪框、源起止帧、源视频probe和输出probe全部写入alignment audit；
-- canonical `first_frame.png`必须由最终reference视频的第0帧解码得到并逐像素/哈希核验。
+- canonical `first_frame.png`必须由最终reference视频的第0帧解码得到并进行视觉一致性核验。
 
 当前特别规则：
 
@@ -258,11 +261,10 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 - 多主体字段的编号必须与首帧从左到右/scene定义一致，并在provenance中记录映射依据；
 - 规格球等复用对象必须先查权威catalog，不能为同一规格创建多个别名。
 
-当前Case-local文件名为`physics.json`，使用以下自描述包裹格式：
+当前Case-local文件名为`physics.json`，使用以下最小包裹格式：
 
 ```json
 {
-  "schema_version": "2.0",
   "case_id": "<case_id>",
   "scene_id": "<scene_id>",
   "physics": {}
@@ -273,12 +275,9 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 
 ```json
 {
-  "schema_version": "1.0",
   "case_id": "<case_id>",
   "scene_id": "<scene_id>",
-  "caption": "<无数值文本描述>",
-  "language": "en",
-  "annotation_source": "<source_id>"
+  "caption": "<无数值文本描述>"
 }
 ```
 
@@ -286,7 +285,8 @@ assets/<scene_id>/<descriptive_physical_case_directory>/
 再内联`text`或`physics`。发布Loader会严格读取两份Case-local文件，并物化出下游使用的
 `case.text`与`case.physics`。
 
-新导入不得生成文档schema 1.0或三字段quantity，也不得创建版本后缀物理文件。
+Case-local成员不重复写schema或annotation source；这些由当前Dataset契约和provenance表达。
+新导入不得生成三字段quantity，也不得创建版本后缀物理文件。
 新导入不能继续生成或覆盖这些历史文件。
 
 ### 阶段7：设计View A的train/ID test
@@ -399,7 +399,7 @@ PYTHONPATH=src /root/miniconda3/envs/phybench/bin/python -m physbench \
 - prompt数值/单位/背景/颜色/视角禁词检查；
 - `physics`中背景/颜色/环境字段检查；
 - View A完整覆盖、互斥、全部test为ID且每scene不超过约定上限；
-- Case-local `caption.json`与`physics.json`的身份、文档schema、唯一引用以及Loader
+- Case-local `caption.json`与`physics.json`的最小字段、身份、唯一引用以及Loader
   物化结果检查；
 - 所有quantity值有限且非负，symbol非空且Case内唯一；全部独立量symbol出现在prompt，
   审计量symbol不出现在prompt，速度方向由prompt无歧义表达。

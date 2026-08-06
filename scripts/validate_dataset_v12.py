@@ -7,6 +7,7 @@ import argparse
 import math
 import re
 from pathlib import Path
+from typing import Any
 
 from physbench.datasets import load_dataset
 from physbench.io import load_json, load_jsonl, write_json
@@ -53,15 +54,42 @@ def validate_v12(
         raise ValueError("V12 must not use an asset lock")
 
     indexed_cases = load_jsonl(V12_RELEASE_ROOT / "cases.jsonl")
+    provenance_cases = load_jsonl(PROVENANCE_ROOT / "cases.jsonl")
     loaded_by_id = {case["case_id"]: case for case in snapshot.cases}
     physics_paths: set[str] = set()
     caption_paths: set[str] = set()
     quantity_count = 0
     for indexed_case in indexed_cases:
-        if "text" in indexed_case or "physics" in indexed_case:
+        if set(indexed_case) != {
+            "case_id",
+            "scene_id",
+            "assets",
+            "appearance",
+            "temporal",
+        }:
             raise ValueError(
-                f"inline member remains in Case index: {indexed_case['case_id']}"
+                f"non-runtime field remains in Case index: {indexed_case['case_id']}"
             )
+        if set(indexed_case["temporal"]) != {"encoded_to_physical_speed"}:
+            raise ValueError(
+                f"non-runtime temporal field remains for {indexed_case['case_id']}"
+            )
+        allowed_assets = {
+            "caption",
+            "first_frame",
+            "first_frame_mask_manifest",
+            "physics_annotation",
+            "reference_video",
+        }
+        if not {
+            "caption",
+            "first_frame",
+            "physics_annotation",
+            "reference_video",
+        } <= set(indexed_case["assets"]) or not set(
+            indexed_case["assets"]
+        ) <= allowed_assets:
+            raise ValueError(f"invalid runtime assets for {indexed_case['case_id']}")
         case = loaded_by_id[indexed_case["case_id"]]
         caption_relative = indexed_case["assets"].get("caption")
         if (
@@ -71,12 +99,18 @@ def validate_v12(
         ):
             raise ValueError(f"invalid caption path for {case['case_id']}")
         caption_paths.add(caption_relative)
+        caption_document = load_json(DATASETS_ROOT / caption_relative)
+        if set(caption_document) != {"case_id", "scene_id", "caption"}:
+            raise ValueError(f"caption is not minimal for {case['case_id']}")
         relative = case["assets"].get("physics_annotation")
         if not isinstance(relative, str) or not relative.endswith("/physics.json"):
             raise ValueError(f"invalid physics path for {case['case_id']}")
         if "physics.v" in relative or relative in physics_paths:
             raise ValueError(f"versioned or duplicate physics path: {relative}")
         physics_paths.add(relative)
+        physics_document = load_json(DATASETS_ROOT / relative)
+        if set(physics_document) != {"case_id", "scene_id", "physics"}:
+            raise ValueError(f"physics document is not minimal for {case['case_id']}")
         prompt = case["text"]["prompt"]
         symbols: set[str] = set()
         for name, quantity in case["physics"].items():
@@ -109,6 +143,41 @@ def validate_v12(
     if len(list(DATASETS_ROOT.glob("assets/*/*/caption.json"))) != 799:
         raise ValueError("V12 does not have exactly 799 caption.json files")
 
+    if (
+        len(provenance_cases) != 799
+        or {item["case_id"] for item in provenance_cases} != set(loaded_by_id)
+        or any("temporal_metadata" not in item for item in provenance_cases)
+    ):
+        raise ValueError("V12 provenance Case coverage mismatch")
+
+    def forbidden_audit_keys(value: Any) -> list[str]:
+        if isinstance(value, list):
+            return [
+                key
+                for child in value
+                for key in forbidden_audit_keys(child)
+            ]
+        if not isinstance(value, dict):
+            return []
+        return [
+            key for key in value if "sha256" in key.lower() or "digest" in key.lower()
+        ] + [
+            key
+            for child in value.values()
+            for key in forbidden_audit_keys(child)
+        ]
+
+    if forbidden_audit_keys(provenance_cases):
+        raise ValueError("V12 provenance contains hash metadata")
+
+    mask_manifests = [
+        load_json(DATASETS_ROOT / case["assets"]["first_frame_mask_manifest"])
+        for case in indexed_cases
+        if "first_frame_mask_manifest" in case["assets"]
+    ]
+    if len(mask_manifests) != 797 or forbidden_audit_keys(mask_manifests):
+        raise ValueError("V12 mask manifests contain invalid audit metadata")
+
     evidence = load_json(PROVENANCE_ROOT / "migration.json")
     if evidence["counts"] != {
         "caption_documents_created": 799,
@@ -125,6 +194,8 @@ def validate_v12(
         "cases": 799,
         "caption_documents": 799,
         "physics_documents": 799,
+        "provenance_cases": 799,
+        "mask_manifests": 797,
         "quantities": 5286,
         "media_changes": 0,
     }

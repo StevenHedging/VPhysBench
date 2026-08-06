@@ -150,11 +150,7 @@ class ManagedTaskBuilder(TaskBuilder):
         """Project source data embedded in the runnable TaskInstance."""
         projected = ManagedTaskBuilder._adapter_case(case)
         if training_target:
-            target_key = (
-                "reference_video"
-                if case["assets"].get("reference_video")
-                else "physics_reference_video"
-            )
+            target_key = "reference_video"
             target = case["assets"].get(target_key)
             if not target:
                 raise ValueError(
@@ -438,8 +434,7 @@ class ManagedTaskBuilder(TaskBuilder):
                 or not isinstance(target["video"], dict)
                 or set(target["video"])
                 != {"asset_key", "asset", "role"}
-                or target["video"].get("asset_key")
-                not in {"reference_video", "physics_reference_video"}
+                or target["video"].get("asset_key") != "reference_video"
                 or not isinstance(target["video"].get("asset"), str)
                 or not target["video"]["asset"]
                 or target["video"].get("role") != "training_target_only"

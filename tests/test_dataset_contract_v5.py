@@ -6,20 +6,18 @@ import unittest
 from pathlib import Path
 
 from physbench.datasets.loader import _validate_case, load_dataset
+from physbench.evaluation.common.reference import resolve_physics_reference
+from physbench.evaluation.contracts import CaseEvaluationRequest
 from physbench.io import canonical_sha256, write_json, write_jsonl
 
 
 class DatasetContractV5Tests(unittest.TestCase):
     def _case(self) -> dict:
         return {
-            "schema_version": "5.0",
             "case_id": "pendulum_case_1",
             "scene_id": "pendulum",
             "text": {
-                "schema_version": "1.0",
                 "prompt": "A bob of mass m swings about a fixed pivot.",
-                "language": "en",
-                "annotation_source": "symbolic_physics_prompt_v1",
             },
             "assets": {
                 "first_frame": "frame.bin",
@@ -36,9 +34,6 @@ class DatasetContractV5Tests(unittest.TestCase):
             },
             "appearance": {},
             "temporal": {},
-            "alignment": None,
-            "provenance": {},
-            "has_real_reference_video": True,
         }
 
     def _write_dataset(
@@ -46,31 +41,27 @@ class DatasetContractV5Tests(unittest.TestCase):
         root: Path,
         *,
         case: dict | None = None,
-        document_schema: str = "2.0",
+        include_document_schema: bool = False,
         caption_case_id: str | None = None,
     ) -> Path:
         case = copy.deepcopy(case or self._case())
         assets = root / "assets"
         assets.mkdir(parents=True)
         (assets / "frame.bin").write_bytes(b"asset\n")
-        write_json(
-            assets / "physics.json",
-            {
-                "schema_version": document_schema,
-                "case_id": case["case_id"],
-                "scene_id": case["scene_id"],
-                "physics": case["physics"],
-            },
-        )
+        physics_document = {
+            "case_id": case["case_id"],
+            "scene_id": case["scene_id"],
+            "physics": case["physics"],
+        }
+        if include_document_schema:
+            physics_document["schema_version"] = "2.0"
+        write_json(assets / "physics.json", physics_document)
         write_json(
             assets / "caption.json",
             {
-                "schema_version": "1.0",
                 "case_id": caption_case_id or case["case_id"],
                 "scene_id": case["scene_id"],
                 "caption": case["text"]["prompt"],
-                "language": case["text"]["language"],
-                "annotation_source": case["text"]["annotation_source"],
             },
         )
         indexed_case = copy.deepcopy(case)
@@ -139,7 +130,7 @@ class DatasetContractV5Tests(unittest.TestCase):
         )
         return root / "dataset.json"
 
-    def test_schema_5_case_and_matching_schema_2_document_load(self) -> None:
+    def test_current_case_materializes_minimal_caption_and_physics(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             snapshot = load_dataset(
                 self._write_dataset(Path(temporary)),
@@ -149,7 +140,36 @@ class DatasetContractV5Tests(unittest.TestCase):
             "A bob of mass m swings about a fixed pivot.",
             snapshot.cases[0]["text"]["prompt"],
         )
+        self.assertEqual({"prompt"}, set(snapshot.cases[0]["text"]))
+        self.assertNotIn("schema_version", snapshot.cases[0])
         self.assertEqual("m", snapshot.cases[0]["physics"]["bob_mass"]["symbol"])
+
+    def test_reference_video_is_the_only_same_case_gt_role(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            descriptor = self._write_dataset(Path(temporary))
+            snapshot = load_dataset(descriptor, check_assets=False)
+            case = snapshot.cases[0]
+            request = CaseEvaluationRequest(
+                job={},
+                case=case,
+                case_catalog={case["case_id"]: case},
+                prediction=None,
+                asset_root=snapshot.asset_root,
+                artifact_dir=Path(temporary) / "artifacts",
+                evaluator_config={},
+            )
+            path, mode, parent_id = resolve_physics_reference(request)
+        self.assertEqual("frame.bin", path.name)
+        self.assertEqual("same_case_reference", mode)
+        self.assertIsNone(parent_id)
+
+    def test_current_case_rejects_retired_asset_roles(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            case = self._case()
+            case["assets"]["physics_reference_video"] = "frame.bin"
+            descriptor = self._write_dataset(Path(temporary), case=case)
+            with self.assertRaisesRegex(ValueError, "invalid current assets"):
+                load_dataset(descriptor, check_assets=False)
 
     def test_schema_5_rejects_caption_bound_to_another_case(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -171,21 +191,15 @@ class DatasetContractV5Tests(unittest.TestCase):
             case = self._case()
             mutate(case["physics"]["bob_mass"])
             with self.subTest(label=label), self.assertRaises(ValueError):
-                _validate_case(case, {"pendulum"})
+                _validate_case(case, {"pendulum"}, schema_version="5.0")
 
-    def test_schema_5_requires_schema_2_physics_document(self) -> None:
+    def test_current_physics_document_rejects_obsolete_schema_field(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             descriptor = self._write_dataset(
-                Path(temporary), document_schema="1.0"
+                Path(temporary), include_document_schema=True
             )
-            with self.assertRaisesRegex(ValueError, "schema must be 2.0"):
+            with self.assertRaisesRegex(ValueError, "physics annotation fields"):
                 load_dataset(descriptor, check_assets=False)
-
-    def test_schema_4_rejects_symbol(self) -> None:
-        case = self._case()
-        case["schema_version"] = "4.0"
-        with self.assertRaisesRegex(ValueError, "fields must be"):
-            _validate_case(case, {"pendulum"})
 
 
 if __name__ == "__main__":

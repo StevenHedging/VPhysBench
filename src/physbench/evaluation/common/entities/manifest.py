@@ -742,6 +742,11 @@ def _case_physics(case: Mapping[str, Any]) -> Mapping[str, Any]:
 
 
 def _reference_capability(case: Mapping[str, Any]) -> ReferenceCapability:
+    assets = case.get("assets", {})
+    if isinstance(assets, Mapping) and assets.get("reference_video"):
+        return ReferenceCapability.SAME_CASE_GT
+    # Older Dataset schemas remain readable, but current releases use only
+    # assets.reference_video and do not carry reference/provenance flags.
     if case.get("has_real_reference_video") is True:
         return ReferenceCapability.SAME_CASE_GT
     provenance = case.get("provenance", {})
@@ -943,7 +948,12 @@ def _collision_entities(
             if attribute.name == "initial_velocity"
         )
         schema_version = case.get("schema_version")
-        if schema_version == "5.0":
+        current_contract = schema_version == "5.0" or (
+            schema_version is None
+            and "has_real_reference_video" not in case
+            and "provenance" not in case
+        )
+        if current_contract:
             disagrees = (
                 abs(alias.value) != abs(striker_velocity.value)
                 or alias.unit != striker_velocity.unit

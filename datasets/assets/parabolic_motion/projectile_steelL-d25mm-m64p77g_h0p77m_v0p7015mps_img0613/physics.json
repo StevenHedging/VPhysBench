@@ -38,6 +38,5 @@
       "value": 0.012
     }
   },
-  "scene_id": "parabolic_motion",
-  "schema_version": "2.0"
+  "scene_id": "parabolic_motion"
 }

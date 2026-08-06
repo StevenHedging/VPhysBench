@@ -17,7 +17,12 @@ releases/12.0.0/dataset.json
 12.0.0的`cases.jsonl`是轻量索引，不重复保存caption或physics。每条记录通过
 `assets.caption`和`assets.physics_annotation`指向Case目录中的`caption.json`与
 `physics.json`。Loader严格读取两份成员文件，并物化出下游兼容的`case.text`和
-`case.physics`。
+`case.physics`。两份成员文件只保留Case/Scene身份和实际内容，不逐Case重复schema、
+语言或annotation source。
+
+运行时索引每条记录只含`case_id`、`scene_id`、`assets`、`appearance`和`temporal`。
+逐Case来源、原始媒体定位、采集时序说明与alignment统一位于
+`provenance/releases/12.0.0/cases.jsonl`；当前GT的唯一资产角色是`reference_video`。
 
 12.0.0的quantity包含稳定`symbol`，并将标量统一为非负大小；方向只写入prompt。
 `annotated=true`表示独立可条件化量，其符号必须进入prompt但具体数值不得进入。
@@ -25,7 +30,7 @@ releases/12.0.0/dataset.json
 12.0.0的Release目录只包含运行时必需的四类内容：`dataset.json`、`cases.jsonl`、
 `scenes/`和`views/`。迁移与独立
 验证报告位于`provenance/releases/12.0.0/`。全局`masks.jsonl`未复制，因为当前运行时
-不消费它；逐Case mask manifest和对象mask资产仍全部保留并锁定。
+不消费它；逐Case mask manifest和对象mask资产仍全部保留。
 
 `assets/source_archives` 是指向 `provenance/source_archives` 的兼容链接，供冻结
 Release继续解析原有相对路径；原始压缩包的权威物理位置属于provenance。

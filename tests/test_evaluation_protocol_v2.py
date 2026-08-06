@@ -241,7 +241,7 @@ class EvaluationProtocolV2Tests(unittest.TestCase):
             self.skipTest("canonical pendulum assets are not materialized")
         config = self.v2["scenes"]["pendulum"]
         paths = sorted({
-            dataset.asset_root / case["assets"]["physics_reference_video"]
+            dataset.asset_root / case["assets"]["reference_video"]
             for case in dataset.cases
             if case["scene_id"] == "pendulum"
         })
@@ -281,7 +281,7 @@ class EvaluationProtocolV2Tests(unittest.TestCase):
         )
         path = (
             dataset.asset_root
-            / case["assets"]["physics_reference_video"]
+            / case["assets"]["reference_video"]
         )
         if not path.is_file():
             self.skipTest("canonical HEVC asset is not materialized")

@@ -1,8 +1,5 @@
 {
-  "annotation_source": "symbolic_physics_prompt_v1",
   "caption": "Two objects follow circular orbits of radii r_1 and r_2 with angular speed ω.",
   "case_id": "circular_r1_silver02cm_wood08cm_img_0399",
-  "language": "en",
-  "scene_id": "uniform_circular_motion",
-  "schema_version": "1.0"
+  "scene_id": "uniform_circular_motion"
 }

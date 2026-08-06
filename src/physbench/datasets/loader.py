@@ -29,6 +29,24 @@ REQUIRED_CASE_KEYS_V3 = {
     "has_real_reference_video",
 }
 REQUIRED_CASE_KEYS_V4 = REQUIRED_CASE_KEYS_V3 - {"ood"}
+REQUIRED_CASE_KEYS_V5 = {
+    "case_id",
+    "scene_id",
+    "assets",
+    "text",
+    "physics",
+    "appearance",
+    "temporal",
+}
+REQUIRED_ASSET_KEYS_V5 = {
+    "caption",
+    "first_frame",
+    "physics_annotation",
+    "reference_video",
+}
+ALLOWED_ASSET_KEYS_V5 = REQUIRED_ASSET_KEYS_V5 | {
+    "first_frame_mask_manifest",
+}
 GENERALIZATION_REGIMES = {"id", "ood", "mixed"}
 GENERALIZATION_FACTOR_CATEGORIES = {
     "physical_parameter",
@@ -159,17 +177,23 @@ def _assert_no_model_payload(case: dict[str, Any]) -> None:
             stack.extend(((*path, str(index)), child) for index, child in enumerate(value))
 
 
-def _validate_case(case: dict[str, Any], known_scenes: set[str]) -> None:
-    schema_version = case.get("schema_version")
+def _validate_case(
+    case: dict[str, Any],
+    known_scenes: set[str],
+    *,
+    schema_version: str | None = None,
+) -> None:
+    schema_version = schema_version or case.get("schema_version")
     if schema_version not in {"3.0", "4.0", "5.0"}:
         raise ValueError(
             f"case {case.get('case_id')} must use schema_version=3.0, 4.0, or 5.0"
         )
-    required = (
-        REQUIRED_CASE_KEYS_V3
-        if schema_version == "3.0"
-        else REQUIRED_CASE_KEYS_V4
-    )
+    if schema_version == "3.0":
+        required = REQUIRED_CASE_KEYS_V3
+    elif schema_version == "4.0":
+        required = REQUIRED_CASE_KEYS_V4
+    else:
+        required = REQUIRED_CASE_KEYS_V5
     missing = sorted(required - set(case))
     if missing:
         raise ValueError(
@@ -180,7 +204,11 @@ def _validate_case(case: dict[str, Any], known_scenes: set[str]) -> None:
             f"dataset v4+ case {case.get('case_id')} must not contain view-relative ood"
         )
     if schema_version in {"4.0", "5.0"}:
-        allowed = REQUIRED_CASE_KEYS_V4 | {"alignment"}
+        allowed = (
+            REQUIRED_CASE_KEYS_V4 | {"alignment"}
+            if schema_version == "4.0"
+            else REQUIRED_CASE_KEYS_V5
+        )
         unknown = sorted(set(case) - allowed)
         if unknown:
             raise ValueError(
@@ -195,22 +223,21 @@ def _validate_case(case: dict[str, Any], known_scenes: set[str]) -> None:
     text = case["text"]
     if not isinstance(text, dict):
         raise ValueError(f"case {case['case_id']} text must be an object")
-    expected_text_fields = {
-        "schema_version",
-        "prompt",
-        "language",
-        "annotation_source",
-    }
+    expected_text_fields = (
+        {"prompt"}
+        if schema_version == "5.0"
+        else {"schema_version", "prompt", "language", "annotation_source"}
+    )
     if set(text) != expected_text_fields:
         raise ValueError(
             f"case {case['case_id']} text fields must be "
             f"{sorted(expected_text_fields)}"
         )
-    if text["schema_version"] != "1.0":
+    if schema_version != "5.0" and text["schema_version"] != "1.0":
         raise ValueError(
             f"case {case['case_id']} text.schema_version must be 1.0"
         )
-    for key in ("prompt", "language", "annotation_source"):
+    for key in expected_text_fields - {"schema_version"}:
         if not isinstance(text[key], str) or not text[key].strip():
             raise ValueError(
                 f"case {case['case_id']} text.{key} must be non-empty"
@@ -267,6 +294,14 @@ def _validate_case(case: dict[str, Any], known_scenes: set[str]) -> None:
             )
     if not isinstance(case["assets"], dict):
         raise ValueError(f"case {case['case_id']} assets must be an object")
+    if schema_version == "5.0":
+        missing_assets = sorted(REQUIRED_ASSET_KEYS_V5 - set(case["assets"]))
+        unknown_assets = sorted(set(case["assets"]) - ALLOWED_ASSET_KEYS_V5)
+        if missing_assets or unknown_assets:
+            raise ValueError(
+                f"case {case['case_id']} has invalid current assets: "
+                f"missing={missing_assets}, unknown={unknown_assets}"
+            )
     for name, value in case["assets"].items():
         if not isinstance(name, str) or not name:
             raise ValueError(
@@ -286,17 +321,28 @@ def _validate_case(case: dict[str, Any], known_scenes: set[str]) -> None:
                     f"case {case['case_id']} assets.{name} must be a "
                     f"relative path inside asset_root: {value}"
                 )
-    if not isinstance(case["has_real_reference_video"], bool):
+    if schema_version != "5.0" and not isinstance(
+        case["has_real_reference_video"], bool
+    ):
         raise ValueError(
             f"case {case['case_id']} has_real_reference_video must be boolean"
         )
-    for field in ("appearance", "temporal", "provenance"):
+    object_fields = (
+        ("appearance", "temporal")
+        if schema_version == "5.0"
+        else ("appearance", "temporal", "provenance")
+    )
+    for field in object_fields:
         if not isinstance(case[field], dict):
             raise ValueError(
                 f"case {case['case_id']} {field} must be an object"
             )
     alignment = case.get("alignment")
-    if alignment is not None and not isinstance(alignment, dict):
+    if (
+        schema_version != "5.0"
+        and alignment is not None
+        and not isinstance(alignment, dict)
+    ):
         raise ValueError(
             f"case {case['case_id']} alignment must be null or an object"
         )
@@ -730,20 +776,11 @@ def _materialize_v5_case_members(
         )
 
     caption = load_json(_case_member_path(indexed_case, asset_root, "caption"))
-    caption_fields = {
-        "schema_version",
-        "case_id",
-        "scene_id",
-        "caption",
-        "language",
-        "annotation_source",
-    }
+    caption_fields = {"case_id", "scene_id", "caption"}
     if not isinstance(caption, dict) or set(caption) != caption_fields:
         raise ValueError(
             f"case {case_id} caption fields must be {sorted(caption_fields)}"
         )
-    if caption["schema_version"] != "1.0":
-        raise ValueError(f"case {case_id} caption schema must be 1.0")
     if caption["case_id"] != case_id:
         raise ValueError(f"case {case_id} caption Case mismatch")
     if caption["scene_id"] != scene_id:
@@ -752,7 +789,7 @@ def _materialize_v5_case_members(
     physics_document = load_json(
         _case_member_path(indexed_case, asset_root, "physics_annotation")
     )
-    physics_fields = {"schema_version", "case_id", "scene_id", "physics"}
+    physics_fields = {"case_id", "scene_id", "physics"}
     if (
         not isinstance(physics_document, dict)
         or set(physics_document) != physics_fields
@@ -761,20 +798,13 @@ def _materialize_v5_case_members(
             f"case {case_id} physics annotation fields must be "
             f"{sorted(physics_fields)}"
         )
-    if physics_document["schema_version"] != "2.0":
-        raise ValueError(f"case {case_id} physics annotation schema must be 2.0")
     if physics_document["case_id"] != case_id:
         raise ValueError(f"case {case_id} physics annotation Case mismatch")
     if physics_document["scene_id"] != scene_id:
         raise ValueError(f"case {case_id} physics annotation Scene mismatch")
 
     case = dict(indexed_case)
-    case["text"] = {
-        "schema_version": caption["schema_version"],
-        "prompt": caption["caption"],
-        "language": caption["language"],
-        "annotation_source": caption["annotation_source"],
-    }
+    case["text"] = {"prompt": caption["caption"]}
     case["physics"] = physics_document["physics"]
     return case
 
@@ -815,9 +845,15 @@ def load_dataset(
             _validate_scene_v2(scene)
     seen: set[str] = set()
     for case in cases:
-        _validate_case(case, set(scene_configs))
-        expected_case_schema = descriptor_schema
-        if case.get("schema_version") != expected_case_schema:
+        _validate_case(
+            case,
+            set(scene_configs),
+            schema_version=descriptor_schema,
+        )
+        if (
+            descriptor_schema != "5.0"
+            and case.get("schema_version") != descriptor_schema
+        ):
             raise ValueError(
                 f"dataset descriptor schema {descriptor_schema} cannot contain "
                 f"case schema {case.get('schema_version')}"

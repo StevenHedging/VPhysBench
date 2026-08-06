@@ -26,6 +26,5 @@
       "value": 0.12
     }
   },
-  "scene_id": "pendulum",
-  "schema_version": "2.0"
+  "scene_id": "pendulum"
 }

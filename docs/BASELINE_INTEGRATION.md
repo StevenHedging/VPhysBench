@@ -7,6 +7,8 @@
 `physics.json`。Loader将它们物化为`case.text`和`case.physics`；Baseline应使用
 `case.text.prompt`与`case.physics[annotated=true]`这两个稳定运行时API，不应绕过Loader
 直接解释文件格式。
+成员文件本身不重复携带schema、language或annotation source；Baseline也不应依赖这些
+已删除字段。当前GT的唯一Dataset角色是`assets.reference_video`。
 每个独立quantity都保留非负`value`、`unit`和稳定`symbol`；方向来自Case prompt，不能
 再从数值正负号推断。`annotated=false`字段只供Evaluator和审计使用。
 

@@ -37,11 +37,11 @@ class SubjectComparison:
 
 
 def infer_reference_mode(case: dict[str, Any]) -> str:
-    return (
-        "same_case_reference"
-        if case.get("has_real_reference_video", False)
-        else "parent_physics_reference"
-    )
+    if case.get("assets", {}).get("reference_video"):
+        return "same_case_reference"
+    if case.get("has_real_reference_video", False):
+        return "same_case_reference"
+    return "parent_physics_reference"
 
 
 def _safe_score(value: float) -> float:

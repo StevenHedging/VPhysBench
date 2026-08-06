@@ -20,6 +20,5 @@
       "value": 0.04
     }
   },
-  "scene_id": "uniform_circular_motion",
-  "schema_version": "2.0"
+  "scene_id": "uniform_circular_motion"
 }

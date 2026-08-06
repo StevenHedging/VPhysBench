@@ -244,7 +244,6 @@ class StandardDataAdapter(DataAdapter):
                 )
             if asset_key in {
                 "reference_video",
-                "physics_reference_video",
                 "source_video",
             }:
                 raise ValueError(

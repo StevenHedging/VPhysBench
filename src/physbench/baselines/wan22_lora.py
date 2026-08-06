@@ -287,7 +287,7 @@ class Wan22LoraAdapter(BaselineAdapter):
         for case_id in train_ids:
             case = cases[case_id]
             self._check_scene(case["scene_id"])
-            source_value = case.get("assets", {}).get("reference_video") or case.get("assets", {}).get("physics_reference_video")
+            source_value = case.get("assets", {}).get("reference_video")
             if not source_value:
                 raise ValueError(f"training case {case_id} has no video asset")
             source = self._source(source_value, run_dir)
@@ -371,12 +371,11 @@ class Wan22LoraAdapter(BaselineAdapter):
         assets = case.get("assets", {})
         views = case.get("input_views", {})
         first_value = views.get("i2v", {}).get("first_frame") or assets.get("first_frame")
-        physics_reference_value = assets.get("physics_reference_video")
-        visual_reference_value = assets.get("reference_video") if case.get("has_real_reference_video") else None
+        reference_value = assets.get("reference_video")
 
         first_source_is_video = False
-        if not first_value and physics_reference_value:
-            first_value = physics_reference_value
+        if not first_value and reference_value:
+            first_value = reference_value
             first_source_is_video = True
         if not first_value and self.config.get("require_image_condition", True):
             raise ValueError(f"case {case['case_id']} cannot provide or derive a WAN first frame")
@@ -399,37 +398,18 @@ class Wan22LoraAdapter(BaselineAdapter):
 
         reference_record = None
         normalized_reference = None
-        if physics_reference_value:
-            source = self._source(physics_reference_value, run_dir)
+        if reference_value:
+            source = self._source(reference_value, run_dir)
             normalized_reference = self._media_output(
-                cache / "evaluation_references" / f"{case['case_id']}__physics.mp4",
+                cache / "evaluation_references" / f"{case['case_id']}.mp4",
                 category="evaluation_references",
-                filename=f"{case['case_id']}__physics.mp4",
+                filename=f"{case['case_id']}.mp4",
             )
             reference_record = self.media.normalize_video(
                 source, normalized_reference, materialize=self.execute,
                 speed_factor=self._speed_factor(case),
                 scene_id=case["scene_id"],
             )
-
-        visual_record = None
-        normalized_visual = None
-        if visual_reference_value:
-            if visual_reference_value == physics_reference_value:
-                normalized_visual = normalized_reference
-                visual_record = reference_record
-            else:
-                source = self._source(visual_reference_value, run_dir)
-                normalized_visual = self._media_output(
-                    cache / "evaluation_references" / f"{case['case_id']}__visual.mp4",
-                    category="evaluation_references",
-                    filename=f"{case['case_id']}__visual.mp4",
-                )
-                visual_record = self.media.normalize_video(
-                    source, normalized_visual, materialize=self.execute,
-                    speed_factor=self._speed_factor(case),
-                    scene_id=case["scene_id"],
-                )
 
         # Inference length belongs to the Baseline recipe, not to the GT.
         # Evaluation later compares only the physical-time overlap.
@@ -455,11 +435,10 @@ class Wan22LoraAdapter(BaselineAdapter):
             "checkpoint": checkpoint,
             "checkpoint_manifest": str(self._checkpoint_manifest(run_dir)),
             "evaluation_reference_video": str(normalized_reference) if normalized_reference else None,
-            "visual_reference_video": str(normalized_visual) if normalized_visual else None,
+            "visual_reference_video": str(normalized_reference) if normalized_reference else None,
             "media_adaptation": {
                 "first_frame": first_record,
-                "physics_reference": reference_record,
-                "visual_reference": visual_record,
+                "reference": reference_record,
             },
             "wan22": {
                 "runtime": self.runtime,

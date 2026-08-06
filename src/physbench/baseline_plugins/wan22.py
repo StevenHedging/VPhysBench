@@ -143,55 +143,27 @@ class Wan22ExecutionEngine:
         }
 
     @staticmethod
-    def _legacy_case(
-        case: dict[str, Any], *, asset_root: Path, train_case_ids: set[str]
-    ) -> dict[str, Any]:
+    def _legacy_case(case: dict[str, Any]) -> dict[str, Any]:
         assets = dict(case["assets"])
         supervised = case.get("supervised_targets", {}).get("video")
         if isinstance(supervised, dict):
             assets[supervised["asset_key"]] = supervised["asset"]
-        legacy_ood = case.get("ood", {"level": "id", "factors": []})
-        split = (
-            "train"
-            if case["case_id"] in train_case_ids
-            else (
-                "test_ood1"
-                if legacy_ood.get("level") == "ood1"
-                else "test_id"
-            )
-        )
         input_views: dict[str, dict[str, Any]] = {}
         if assets.get("first_frame"):
             input_views["i2v"] = {"first_frame": assets["first_frame"]}
         else:
             input_views["t2v"] = {}
         return {
-            "schema_version": "1.0",
             "case_id": case["case_id"],
             "scene_id": case["scene_id"],
-            "view_a_split": split,
             "physical_parameters": case.get("physics", {}),
             "appearance": case["appearance"],
             "temporal": case["temporal"],
-            "alignment": case.get("alignment"),
             "assets": assets,
-            "has_real_reference_video": case.get(
-                "has_real_reference_video", False
-            ),
-            "ood": legacy_ood,
-            "provenance": case.get(
-                "provenance",
-                {
-                    "source_kind": "managed_runtime_projection",
-                    "parent_case_id": None,
-                },
-            ),
             "text": {
-                "description": case["text"]["prompt"],
                 "prompt": case["text"]["prompt"],
             },
             "input_views": input_views,
-            "_dataset_asset_root": str(asset_root),
         }
 
     def _parallel_generate(self, run_dir: Path, planned_jobs: int) -> list[dict[str, Any]]:
@@ -277,11 +249,8 @@ class Wan22ExecutionEngine:
         plan = instance.canonical_plan
         source_cases = instance_value["source"]["cases"]
         asset_root = Path(instance_value["source"]["asset_root"])
-        train_ids = set(plan.train_case_ids)
         legacy_cases = [
-            self._legacy_case(
-                case, asset_root=asset_root, train_case_ids=train_ids
-            )
+            self._legacy_case(case)
             for case in source_cases
         ]
         write_jsonl(run_dir / "frozen_cases.jsonl", legacy_cases)

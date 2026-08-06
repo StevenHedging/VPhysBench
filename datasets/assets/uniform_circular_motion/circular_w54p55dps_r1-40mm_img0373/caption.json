@@ -1,8 +1,5 @@
 {
-  "annotation_source": "symbolic_physics_prompt_v1",
   "caption": "An object follows a circular orbit of radius r_1 with angular speed ω.",
   "case_id": "circular_r1_silver04cm_img_0373",
-  "language": "en",
-  "scene_id": "uniform_circular_motion",
-  "schema_version": "1.0"
+  "scene_id": "uniform_circular_motion"
 }

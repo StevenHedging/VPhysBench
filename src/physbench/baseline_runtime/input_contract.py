@@ -24,7 +24,6 @@ NATIVE_INPUT_BINDING_PREFIX = "native_inputs."
 
 FORBIDDEN_ASSET_KEYS = frozenset({
     "reference_video",
-    "physics_reference_video",
     "source_video",
 })
 LARGE_PHYSICS_REPRESENTATIONS = frozenset({

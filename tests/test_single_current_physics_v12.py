@@ -22,6 +22,7 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.cases = load_jsonl(RELEASE_ROOT / "cases.jsonl")
+        cls.provenance_cases = load_jsonl(PROVENANCE_ROOT / "cases.jsonl")
         cls.loaded_cases = {
             case["case_id"]: case
             for case in load_dataset(RELEASE_ROOT / "dataset.json").cases
@@ -39,7 +40,7 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
             evidence["legacy_coverage"],
         )
 
-    def test_every_case_has_one_matching_schema_2_physics_document(self) -> None:
+    def test_every_case_has_one_minimal_physics_document(self) -> None:
         self.assertEqual(799, len(self.cases))
         paths = []
         for case in self.cases:
@@ -47,7 +48,10 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
             self.assertTrue(relative.endswith("/physics.json"))
             paths.append(relative)
             document = load_json(DATASETS_ROOT / relative)
-            self.assertEqual("2.0", document["schema_version"])
+            self.assertEqual(
+                {"case_id", "scene_id", "physics"},
+                set(document),
+            )
             self.assertEqual(case["case_id"], document["case_id"])
             self.assertEqual(case["scene_id"], document["scene_id"])
             self.assertEqual(
@@ -66,14 +70,7 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
             caption_paths.append(relative)
             document = load_json(DATASETS_ROOT / relative)
             self.assertEqual(
-                {
-                    "annotation_source",
-                    "caption",
-                    "case_id",
-                    "language",
-                    "scene_id",
-                    "schema_version",
-                },
+                {"caption", "case_id", "scene_id"},
                 set(document),
             )
             self.assertEqual(case["case_id"], document["case_id"])
@@ -84,6 +81,104 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
                 self.loaded_cases[case["case_id"]]["text"]["prompt"],
             )
         self.assertEqual(799, len(set(caption_paths)))
+
+    def test_case_index_contains_only_runtime_fields_and_assets(self) -> None:
+        required_assets = {
+            "caption",
+            "first_frame",
+            "physics_annotation",
+            "reference_video",
+        }
+        allowed_assets = required_assets | {"first_frame_mask_manifest"}
+        for case in self.cases:
+            self.assertEqual(
+                {"case_id", "scene_id", "assets", "appearance", "temporal"},
+                set(case),
+            )
+            self.assertEqual(
+                {"encoded_to_physical_speed"},
+                set(case["temporal"]),
+            )
+            self.assertTrue(required_assets <= set(case["assets"]))
+            self.assertTrue(set(case["assets"]) <= allowed_assets)
+            self.assertTrue(all(value for value in case["assets"].values()))
+
+            loaded = self.loaded_cases[case["case_id"]]
+            self.assertEqual(set(case) | {"text", "physics"}, set(loaded))
+            self.assertEqual({"prompt"}, set(loaded["text"]))
+
+    def test_case_audit_metadata_lives_only_in_provenance(self) -> None:
+        self.assertEqual(799, len(self.provenance_cases))
+        self.assertEqual(
+            {case["case_id"] for case in self.cases},
+            {case["case_id"] for case in self.provenance_cases},
+        )
+        self.assertEqual(
+            763,
+            sum("alignment" in case for case in self.provenance_cases),
+        )
+        self.assertEqual(
+            568,
+            sum(
+                "source_video" in case.get("source_assets", {})
+                for case in self.provenance_cases
+            ),
+        )
+        self.assertEqual(
+            732,
+            sum(
+                "archive" in case.get("source_locator", {})
+                for case in self.provenance_cases
+            ),
+        )
+        self.assertEqual(
+            141,
+            sum(
+                "annotation_archive" in case.get("source_locator", {})
+                for case in self.provenance_cases
+            ),
+        )
+        self.assertTrue(all(
+            set(case.get("source_assets", {})) <= {"source_video"}
+            for case in self.provenance_cases
+        ))
+        self.assertTrue(all(
+            "temporal_metadata" in case
+            for case in self.provenance_cases
+        ))
+        self.assertTrue(all(
+            "source_member" not in case and "source_workbook_row" not in case
+            for case in self.provenance_cases
+        ))
+
+        def forbidden_keys(value: object):
+            if isinstance(value, list):
+                return [
+                    key
+                    for child in value
+                    for key in forbidden_keys(child)
+                ]
+            if not isinstance(value, dict):
+                return []
+            return [
+                key
+                for key in value
+                if "sha256" in key or "digest" in key
+            ] + [
+                key
+                for child in value.values()
+                for key in forbidden_keys(child)
+            ]
+
+        self.assertEqual([], forbidden_keys(self.provenance_cases))
+
+    def test_active_mask_manifests_do_not_record_checkpoint_hashes(self) -> None:
+        for case in self.cases:
+            relative = case["assets"].get("first_frame_mask_manifest")
+            if relative is None:
+                continue
+            manifest = load_json(DATASETS_ROOT / relative)
+            self.assertNotIn("checkpoint_sha256", manifest.get("generator", {}))
 
     def test_published_release_is_minimal_with_case_local_members(self) -> None:
         self.assertEqual(

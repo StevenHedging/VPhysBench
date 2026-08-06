@@ -1,8 +1,5 @@
 {
-  "annotation_source": "symbolic_physics_prompt_v1",
   "caption": "The left ball has mass m_1, radius r_1, and initial speed v_1, the middle ball has mass m_2, radius r_2, and initial speed v_2, and the right ball has mass m_3, radius r_3, and initial speed v_3. The left ball moves right while the middle and right balls are initially stationary, and the left ball first undergoes a one-dimensional central collision with the middle ball.",
   "case_id": "collision_r2_large_steel_large_steel_large_steel_v04462",
-  "language": "en",
-  "scene_id": "collision_1d",
-  "schema_version": "1.0"
+  "scene_id": "collision_1d"
 }

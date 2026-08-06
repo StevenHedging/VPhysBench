@@ -75,12 +75,7 @@ class ArchitectureV4Tests(unittest.TestCase):
         for case in self.dataset.cases:
             self.assertFalse(forbidden & set(case), case["case_id"])
             self.assertEqual(
-                {
-                    "schema_version",
-                    "prompt",
-                    "language",
-                    "annotation_source",
-                },
+                {"prompt"},
                 set(case["text"]),
             )
             self.assertTrue(case["text"]["prompt"].strip())

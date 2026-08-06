@@ -6,7 +6,7 @@
 
 | 对象 | 所有者 | 负责 | 不负责 |
 | --- | --- | --- | --- |
-| DatasetSnapshot / Case | Dataset | 原始 prompt、媒体、物理/环境标注、View、来源与哈希 | 模型输入格式、推理参数 |
+| DatasetSnapshot / Case | Dataset | 原始 prompt、媒体、物理/环境标注与View | 模型输入格式、推理参数 |
 | TaskSpec | Benchmark | family、选择、seed、报告策略、评估协议 | 是否使用物理信息、prompt拼接、模型路径 |
 | CanonicalTaskPlan | Benchmark | 训练 case、评测 job、partition 与 seed 主表 | native model input |
 | Baseline Bundle | Baseline | 模型身份、能力、input policy、adapter、trainer、runner/driver | 改写数据划分和正式评分 |
@@ -45,14 +45,15 @@ Dataset和Loader物化后的Case使用schema 5.0。每个Case同时拥有：
 - `assets.first_frame` 等媒体；
 - `physics`：从Case-local `physics.json`读取的结构化物理量；
 - `assets.caption`：Case-local `caption.json`；
-- `assets.physics_annotation`：文档schema 2.0的Case-local
-  `physics.json`；
+- `assets.physics_annotation`：最小Case-local `physics.json`；
 - `appearance`、`temporal`；
-- evaluator-only reference 与 provenance。
+- evaluator-only `assets.reference_video`。
 
 划分不属于Case字段；当前View A只包含train和ID test。原始caption与物理标注均只在
 Case资产目录保存一份，不由Task或Baseline临时生成。Release 12.0.0的`cases.jsonl`是
-轻量索引；Loader严格读取两个Case-local JSON并物化兼容的`case.text`和`case.physics`。
+轻量索引，仅含身份、运行时资产、appearance与temporal；Loader严格读取两个Case-local
+JSON并物化兼容的`case.text`和`case.physics`。逐Case来源、采集时序说明与alignment在
+`datasets/provenance/releases/12.0.0/cases.jsonl`中，不进入运行时Case。
 独立量使用`annotated=true`且其symbol必须进入无数值英文prompt；审计量使用false。
 所有标量为非负大小，方向由prompt表达。旧三字段quantity不再属于活动运行契约。
 
@@ -160,7 +161,7 @@ Dataset中的数值不会因进入conditionable Case而自动拼接到原始prom
 
 它不会提供：
 
-- evaluator reference、physics reference 或 source video；
+- evaluator reference或source video；
 - provenance、原始定位和 alignment 证据；
 - `annotated=false` 的派生物理量；
 - training target。Compiler 只在 sealed runtime source 的训练 case 中另加
@@ -207,7 +208,7 @@ fingerprint 及 Baseline capability，但不解释模型专有 `native_inputs`�
 
 V2V 中的 `conditioning_video` 是媒体 channel 的角色名，表示“作为模型输入的视频”，
 不是 Task 层的物理注入实验臂。它必须来自明确的独立输入资产或经审计的派生 artifact，
-禁止使用 `reference_video`、`physics_reference_video` 或 `source_video` 冒充输入。
+禁止使用`reference_video`或`source_video`冒充输入。
 
 大型控制表示必须使用
 `artifact://sha256/<digest>` 或 `cache://sha256/<digest>`，并登记内容、producer 与
