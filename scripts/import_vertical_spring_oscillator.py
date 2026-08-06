@@ -2,17 +2,28 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 import shutil
 import tempfile
 import zipfile
 
+import cv2
+import numpy as np
+
 from physbench.datasets.vertical_spring_import import (
+    BallDetection,
+    MappedTrial,
+    SourceMember,
+    TrialAnnotation,
+    TurningFrameCandidate,
+    VideoAnalysis,
     analyze_video,
     inventory_archive,
     load_trial_annotations,
     map_trials_to_sources,
+    materialize_case,
 )
 
 
@@ -109,7 +120,10 @@ def analyze(
     output_dir: Path,
     *,
     analysis_stride: int,
+    workers: int = 1,
 ) -> dict[str, int]:
+    if workers < 1:
+        raise ValueError("workers must be positive")
     trials = load_trial_annotations(workbook)
     sources = inventory_archive(archive)
     intake = map_trials_to_sources(trials, sources)
@@ -123,33 +137,41 @@ def analyze(
         }
         for item in intake.exclusions
     ]
-    with zipfile.ZipFile(archive) as handle:
-        for item in intake.accepted:
-            with tempfile.TemporaryDirectory(
-                prefix="vphysbench_vertical_spring_"
-            ) as directory:
-                extracted = Path(directory) / item.source.basename
-                with handle.open(item.source.member) as source, extracted.open(
-                    "wb"
-                ) as target:
-                    shutil.copyfileobj(source, target)
-                try:
-                    result = analyze_video(
-                        extracted,
-                        item.trial.direction,
-                        analysis_stride=analysis_stride,
-                    )
-                except (OSError, RuntimeError, ValueError) as error:
-                    exclusions.append(
-                        {
-                            "trial_id": item.trial.trial_id,
-                            "video_name": item.trial.video_name,
-                            "source_member": item.source.member,
-                            "reason": "trajectory_analysis_failed",
-                            "details": [str(error)],
-                        }
-                    )
-                    continue
+    def analyze_item(
+        item: MappedTrial,
+    ) -> tuple[MappedTrial, VideoAnalysis | Exception]:
+        with zipfile.ZipFile(archive) as handle, tempfile.TemporaryDirectory(
+            prefix="vphysbench_vertical_spring_"
+        ) as directory:
+            extracted = Path(directory) / item.source.basename
+            with handle.open(item.source.member) as source, extracted.open(
+                "wb"
+            ) as target:
+                shutil.copyfileobj(source, target)
+            try:
+                result: VideoAnalysis | Exception = analyze_video(
+                    extracted,
+                    item.trial.direction,
+                    analysis_stride=analysis_stride,
+                )
+            except (OSError, RuntimeError, ValueError) as error:
+                result = error
+        return item, result
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        analyzed = executor.map(analyze_item, intake.accepted)
+        for item, result in analyzed:
+            if isinstance(result, Exception):
+                exclusions.append(
+                    {
+                        "trial_id": item.trial.trial_id,
+                        "video_name": item.trial.video_name,
+                        "source_member": item.source.member,
+                        "reason": "trajectory_analysis_failed",
+                        "details": [str(result)],
+                    }
+                )
+                continue
             candidates.append(
                 {
                     "status": "pending",
@@ -195,6 +217,210 @@ def analyze(
     return summary
 
 
+def _load_jsonl(path: Path) -> list[dict[str, object]]:
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def materialize(
+    archive: Path,
+    analysis_path: Path,
+    review_path: Path,
+    repo_root: Path,
+) -> dict[str, int]:
+    candidates = _load_jsonl(analysis_path)
+    decisions = {
+        str(item["trial_id"]): item for item in _load_jsonl(review_path)
+    }
+    audits: list[dict[str, object]] = []
+    exclusions: list[dict[str, object]] = []
+    with zipfile.ZipFile(archive) as handle:
+        for candidate in candidates:
+            trial_id = str(candidate["trial_id"])
+            decision = decisions.get(trial_id)
+            if decision is None:
+                exclusions.append(
+                    {"trial_id": trial_id, "reason": "missing_review_decision"}
+                )
+                continue
+            if decision.get("status") != "approved":
+                exclusions.append(
+                    {
+                        "trial_id": trial_id,
+                        "reason": "visual_review_rejected",
+                        "details": [str(decision.get("reason", "unspecified"))],
+                    }
+                )
+                continue
+            values = dict(candidate)
+            overrides = decision.get("overrides", {})
+            if isinstance(overrides, dict):
+                values.update(overrides)
+            source_member = str(values["source_member"])
+            source = SourceMember(
+                source_member,
+                str(values["video_name"]),
+                int(values["source_size"]),
+                int(values["source_crc32"]),
+            )
+            trial = TrialAnnotation(
+                trial_id,
+                str(values["spring_id"]),
+                str(values["video_name"]),
+                float(values["signed_displacement_mm"]),
+                int(values["workbook_row"]),
+            )
+            analysis_ball = [float(value) for value in values["analysis_ball_xyr"]]
+            full_ball = [
+                float(value) for value in values["full_resolution_ball_xyr"]
+            ]
+            analysis = VideoAnalysis(
+                candidate=TurningFrameCandidate(
+                    int(values["source_start_frame"]),
+                    float(values["source_start_time_s"]),
+                    analysis_ball[0],
+                    analysis_ball[1],
+                    analysis_ball[2],
+                    float(values["observed_period_s"]),
+                    float(values["track_coverage"]),
+                ),
+                full_resolution_ball=BallDetection(
+                    full_ball[0], full_ball[1], full_ball[2], 1.0
+                ),
+                frame_count=int(values["source_frame_count"]),
+                displayed_width=int(values["displayed_width"]),
+                displayed_height=int(values["displayed_height"]),
+                analysis_stride=int(values["analysis_stride"]),
+            )
+            with tempfile.TemporaryDirectory(
+                prefix="vphysbench_vertical_spring_materialize_"
+            ) as directory:
+                extracted = Path(directory) / source.basename
+                with handle.open(source.member) as source_handle, extracted.open(
+                    "wb"
+                ) as target:
+                    shutil.copyfileobj(source_handle, target)
+                draft = materialize_case(
+                    extracted,
+                    trial,
+                    source,
+                    analysis,
+                    repo_root,
+                )
+            audit = dict(draft.audit)
+            audit["review"] = decision
+            audits.append(audit)
+    import_root = repo_root / "datasets" / "provenance" / "imports"
+    _write_jsonl(
+        import_root
+        / "vertical_spring_oscillator_20260806_import_audit.jsonl",
+        audits,
+    )
+    _write_json(
+        import_root / "vertical_spring_oscillator_20260806_exclusions.json",
+        {"excluded": exclusions, "excluded_count": len(exclusions)},
+    )
+    summary = {
+        "accepted_count": len(audits),
+        "excluded_count": len(exclusions),
+    }
+    _write_json(
+        import_root / "vertical_spring_oscillator_20260806_summary.json",
+        summary,
+    )
+    return summary
+
+
+def review_sheets(
+    archive: Path,
+    analysis_path: Path,
+    output_dir: Path,
+) -> int:
+    candidates = _load_jsonl(analysis_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    cards: list[np.ndarray] = []
+    with zipfile.ZipFile(archive) as handle:
+        for candidate in candidates:
+            member = str(candidate["source_member"])
+            with tempfile.TemporaryDirectory(
+                prefix="vphysbench_vertical_spring_review_"
+            ) as directory:
+                extracted = Path(directory) / Path(member).name
+                with handle.open(member) as source, extracted.open("wb") as target:
+                    shutil.copyfileobj(source, target)
+                capture = cv2.VideoCapture(str(extracted))
+                start = int(candidate["source_start_frame"])
+                frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+                indices = [max(0, start - 8), start, min(frame_count - 1, start + 8)]
+                panels: list[np.ndarray] = []
+                selected_original_shape: tuple[int, int] | None = None
+                for frame_index in indices:
+                    capture.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+                    ok, frame = capture.read()
+                    if not ok:
+                        raise ValueError(
+                            f"could not decode review frame {frame_index} for {member}"
+                        )
+                    if frame_index == start:
+                        selected_original_shape = frame.shape[:2]
+                    panels.append(
+                        cv2.resize(frame, (270, 480), interpolation=cv2.INTER_AREA)
+                    )
+                capture.release()
+            overlay = panels[1].copy()
+            if selected_original_shape is None:
+                raise ValueError("selected review frame was not decoded")
+            height, width = selected_original_shape
+            center_x, center_y, radius = [
+                float(value) for value in candidate["full_resolution_ball_xyr"]
+            ]
+            cv2.circle(
+                overlay,
+                (round(center_x * 270 / width), round(center_y * 480 / height)),
+                round(radius * min(270 / width, 480 / height)),
+                (0, 0, 255),
+                3,
+            )
+            body = np.hstack([*panels, overlay])
+            label = np.full((44, body.shape[1], 3), 255, dtype=np.uint8)
+            cv2.putText(
+                label,
+                (
+                    f"{candidate['trial_id']} {candidate['direction']} "
+                    f"x={candidate['signed_displacement_mm']}mm frame={start}"
+                ),
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.75,
+                (0, 0, 0),
+                2,
+                cv2.LINE_AA,
+            )
+            cards.append(np.vstack([label, body]))
+    cards_per_page = 8
+    columns = 2
+    for page_index, offset in enumerate(range(0, len(cards), cards_per_page), start=1):
+        page_cards = cards[offset : offset + cards_per_page]
+        cell_height, cell_width = page_cards[0].shape[:2]
+        rows = (len(page_cards) + columns - 1) // columns
+        page = np.full(
+            (rows * cell_height, columns * cell_width, 3),
+            245,
+            dtype=np.uint8,
+        )
+        for cell_index, card in enumerate(page_cards):
+            row, column = divmod(cell_index, columns)
+            page[
+                row * cell_height : (row + 1) * cell_height,
+                column * cell_width : (column + 1) * cell_width,
+            ] = card
+        cv2.imwrite(str(output_dir / f"review_page_{page_index:03d}.png"), page)
+    return len(cards)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Import the vertical spring oscillator Dataset Scene."
@@ -208,6 +434,16 @@ def build_parser() -> argparse.ArgumentParser:
     analyze_parser.add_argument("--workbook", type=Path, required=True)
     analyze_parser.add_argument("--output-dir", type=Path, required=True)
     analyze_parser.add_argument("--analysis-stride", type=int, default=8)
+    analyze_parser.add_argument("--workers", type=int, default=1)
+    materialize_parser = subparsers.add_parser("materialize")
+    materialize_parser.add_argument("--archive", type=Path, required=True)
+    materialize_parser.add_argument("--analysis", type=Path, required=True)
+    materialize_parser.add_argument("--review", type=Path, required=True)
+    materialize_parser.add_argument("--repo-root", type=Path, required=True)
+    review_parser = subparsers.add_parser("review-sheets")
+    review_parser.add_argument("--archive", type=Path, required=True)
+    review_parser.add_argument("--analysis", type=Path, required=True)
+    review_parser.add_argument("--output-dir", type=Path, required=True)
     return parser
 
 
@@ -223,8 +459,22 @@ def main(argv: list[str] | None = None) -> int:
             args.workbook,
             args.output_dir,
             analysis_stride=args.analysis_stride,
+            workers=args.workers,
         )
         print(json.dumps(summary, sort_keys=True))
+        return 0
+    if args.command == "materialize":
+        summary = materialize(
+            args.archive,
+            args.analysis,
+            args.review,
+            args.repo_root,
+        )
+        print(json.dumps(summary, sort_keys=True))
+        return 0
+    if args.command == "review-sheets":
+        count = review_sheets(args.archive, args.analysis, args.output_dir)
+        print(json.dumps({"review_card_count": count}, sort_keys=True))
         return 0
     raise ValueError(f"unsupported command: {args.command}")
 

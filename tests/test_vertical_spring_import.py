@@ -533,6 +533,8 @@ class MediaTests(unittest.TestCase):
                     str(output),
                     "--analysis-stride",
                     "4",
+                    "--workers",
+                    "2",
                 ],
                 check=True,
                 env={"PYTHONPATH": "src"},
@@ -631,6 +633,68 @@ class MediaTests(unittest.TestCase):
                 ["vertical_spring_s01_x40mm_above_img_1538"],
                 [row["case_id"] for row in rows],
             )
+
+    def test_review_sheets_cli_renders_candidate_overlay(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            video = root / "IMG_1538.MOV"
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-v",
+                    "error",
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=gray:size=96x64:rate=12",
+                    "-frames:v",
+                    "12",
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    str(video),
+                ],
+                check=True,
+            )
+            archive = root / "source.zip"
+            with zipfile.ZipFile(archive, "w") as handle:
+                handle.write(video, "batch/IMG_1538.MOV")
+            analysis = root / "review_candidates.jsonl"
+            analysis.write_text(json.dumps({
+                "status": "pending",
+                "trial_id": "T001",
+                "source_member": "batch/IMG_1538.MOV",
+                "source_start_frame": 4,
+                "full_resolution_ball_xyr": [48.0, 32.0, 12.0],
+                "direction": "below",
+                "signed_displacement_mm": 30.0,
+            }) + "\n")
+            output = root / "review"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/import_vertical_spring_oscillator.py",
+                    "review-sheets",
+                    "--archive",
+                    str(archive),
+                    "--analysis",
+                    str(analysis),
+                    "--output-dir",
+                    str(output),
+                ],
+                check=True,
+                env={"PYTHONPATH": "src"},
+            )
+
+            pages = sorted(output.glob("review_page_*.png"))
+            self.assertEqual(1, len(pages))
+            image = cv2.imread(str(pages[0]))
+            self.assertIsNotNone(image)
+            self.assertGreater(image.shape[0], 100)
+            self.assertGreater(image.shape[1], 100)
 
 
 if __name__ == "__main__":
