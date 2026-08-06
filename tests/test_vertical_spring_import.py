@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -14,12 +17,20 @@ from physbench.datasets.vertical_spring_import import (
     SourceMember,
     TrackSample,
     TrialAnnotation,
+    TurningFrameCandidate,
+    VideoAnalysis,
+    analyze_video,
     ball_mask,
+    build_caption,
+    build_physics,
     detect_ball,
     detect_release_return,
     inventory_archive,
     load_trial_annotations,
     map_trials_to_sources,
+    materialize_case,
+    probe_frame_timestamps,
+    trim_video_exact,
 )
 
 
@@ -248,6 +259,18 @@ class TrajectoryTests(unittest.TestCase):
         self.assertLessEqual(abs(detection.center_y - 330.0), 3.0)
         self.assertLessEqual(abs(detection.radius - 24.0), 4.0)
 
+    def test_detect_ball_does_not_follow_small_ring_distractor(self) -> None:
+        frame = np.full((480, 270, 3), 230, dtype=np.uint8)
+        cv2.circle(frame, (145, 200), 14, (40, 40, 40), 3)
+        cv2.circle(frame, (165, 350), 26, (40, 40, 40), 3)
+        cv2.circle(frame, (165, 350), 22, (130, 130, 130), -1)
+        stale_ring = BallDetection(145.0, 200.0, 14.0, 1.0)
+
+        detection = detect_ball(frame, stale_ring)
+
+        self.assertGreater(detection.radius, 18.0)
+        self.assertLessEqual(abs(detection.center_y - 350.0), 4.0)
+
     def test_ball_mask_is_binary_filled_disk(self) -> None:
         detection = BallDetection(60.0, 50.0, 20.0, 1.0)
 
@@ -258,6 +281,356 @@ class TrajectoryTests(unittest.TestCase):
         self.assertEqual(0, int(mask[20, 60]))
         self.assertGreater(int(mask.sum()), 1100)
         self.assertLess(int(mask.sum()), 1400)
+
+
+class MediaTests(unittest.TestCase):
+    def test_physics_uses_positive_displacement_and_fixed_symbols(self) -> None:
+        physics = build_physics("spring_t001", -40.0)
+
+        objects = physics["physics"]["objects"]
+        environment = physics["physics"]["environment"]
+        self.assertEqual(
+            0.04,
+            objects["object_1"]["initial_displacement"]["value"],
+        )
+        quantities = [*objects["object_1"].values(), *environment.values()]
+        self.assertTrue(all(quantity["value"] >= 0 for quantity in quantities))
+        self.assertEqual(
+            {"m", "r", "x_0", "k", "L_0", "g"},
+            {quantity["symbol"] for quantity in quantities},
+        )
+
+    def test_caption_direction_and_symbols_match_physics(self) -> None:
+        caption = build_caption("spring_t001", "above")["caption"]
+
+        self.assertIn("above equilibrium", caption)
+        self.assertNotIn("below equilibrium", caption)
+        for symbol in ("m", "r", "x_0", "k", "L_0", "g"):
+            self.assertIn(symbol, caption)
+
+    def test_exact_trim_retains_frames_and_presentation_intervals(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.mp4"
+            target = root / "target.mp4"
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-v",
+                    "error",
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc2=size=96x64:rate=12",
+                    "-frames:v",
+                    "12",
+                    "-vf",
+                    "setpts=if(lt(N\\,6)\\,N/(12*TB)\\,(0.5+(N-6)/6)/TB)",
+                    "-vsync",
+                    "0",
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    str(source),
+                ],
+                check=True,
+            )
+            source_times = probe_frame_timestamps(source)
+
+            trim_video_exact(source, 4, target)
+
+            target_times = probe_frame_timestamps(target)
+            self.assertEqual(8, len(target_times))
+            self.assertAlmostEqual(0.0, target_times[0], places=5)
+            expected_deltas = np.diff(source_times[4:])
+            actual_deltas = np.diff(target_times)
+            np.testing.assert_allclose(actual_deltas, expected_deltas, atol=1e-4)
+
+    def test_inventory_cli_writes_trial_source_mapping(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workbook = _write_workbook(
+                root / "spring.xlsx",
+                [("T001", "S01", "IMG_1518.MOV", 30.0)],
+            )
+            archive = root / "source.zip"
+            with zipfile.ZipFile(archive, "w") as handle:
+                handle.write(workbook, "batch/spring.xlsx")
+                handle.writestr("batch/IMG_1518.MOV", b"video")
+            output = root / "output"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/import_vertical_spring_oscillator.py",
+                    "inventory",
+                    "--archive",
+                    str(archive),
+                    "--output-dir",
+                    str(output),
+                ],
+                check=True,
+                env={"PYTHONPATH": "src"},
+            )
+
+            payload = json.loads(
+                (output / "normalized_annotations.json").read_text()
+            )
+            self.assertEqual(1, payload["summary"]["accepted_count"])
+            self.assertEqual("T001", payload["accepted"][0]["trial_id"])
+            self.assertEqual(
+                "batch/IMG_1518.MOV",
+                payload["accepted"][0]["source_member"],
+            )
+
+    def test_materialize_case_writes_atomic_case_members(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_video = root / "source.mp4"
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-v",
+                    "error",
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=gray:size=96x64:rate=12",
+                    "-frames:v",
+                    "12",
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    str(source_video),
+                ],
+                check=True,
+            )
+            trial = TrialAnnotation("T001", "S01", "IMG_1538.MOV", -40.0, 6)
+            source = SourceMember("batch/IMG_1538.MOV", "IMG_1538.MOV", 1, 2)
+            analysis = VideoAnalysis(
+                candidate=TurningFrameCandidate(4, 4 / 12, 48, 32, 12, 0.8, 1.0),
+                full_resolution_ball=BallDetection(48, 32, 12, 1.0),
+                frame_count=12,
+                displayed_width=96,
+                displayed_height=64,
+                analysis_stride=1,
+            )
+
+            draft = materialize_case(
+                source_video,
+                trial,
+                source,
+                analysis,
+                root,
+            )
+
+            self.assertEqual(
+                "vertical_spring_s01_x40mm_above_img_1538",
+                draft.case_id,
+            )
+            required = {
+                "caption.json",
+                "physics.json",
+                "canonical/reference.mp4",
+                "canonical/first_frame.png",
+                "canonical/masks/01.png",
+                "canonical/masks/01.npz",
+                "canonical/masks/manifest.json",
+            }
+            self.assertTrue(
+                all((draft.case_directory / path).is_file() for path in required)
+            )
+            mask_payload = np.load(draft.case_directory / "canonical/masks/01.npz")
+            self.assertEqual((1, 64, 96), mask_payload["masks"].shape)
+            self.assertEqual(
+                0.04,
+                json.loads((draft.case_directory / "physics.json").read_text())[
+                    "physics"
+                ]["objects"]["object_1"]["initial_displacement"]["value"],
+            )
+
+    def test_analyze_video_refines_first_post_cycle_turning_frame(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            video = Path(directory) / "oscillator.mp4"
+            writer = cv2.VideoWriter(
+                str(video),
+                cv2.VideoWriter_fourcc(*"mp4v"),
+                120.0,
+                (270, 480),
+            )
+            self.assertTrue(writer.isOpened())
+            for frame_index in range(240):
+                time_s = frame_index / 120.0
+                motion_time = max(0.0, time_s - 0.2)
+                center_y = (
+                    330.0
+                    if time_s < 0.2
+                    else 270.0 + 60.0 * np.cos(2 * np.pi * motion_time / 0.8)
+                )
+                frame = np.full((480, 270, 3), 230, dtype=np.uint8)
+                cv2.circle(frame, (150, round(center_y)), 24, (30, 30, 30), 3)
+                cv2.circle(frame, (150, round(center_y)), 20, (130, 130, 130), -1)
+                writer.write(frame)
+            writer.release()
+
+            analysis = analyze_video(
+                video,
+                "below",
+                analysis_stride=4,
+                theoretical_period_s=0.8,
+            )
+
+            self.assertLessEqual(abs(analysis.candidate.time_s - 1.0), 2 / 120)
+            self.assertLessEqual(abs(analysis.full_resolution_ball.center_x - 150), 4)
+            self.assertLessEqual(abs(analysis.full_resolution_ball.center_y - 330), 4)
+
+    def test_analyze_cli_writes_pending_review_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workbook = _write_workbook(
+                root / "spring.xlsx",
+                [("T001", "S01", "IMG_1518.MOV", 30.0)],
+            )
+            video = root / "IMG_1518.MOV"
+            writer = cv2.VideoWriter(
+                str(video),
+                cv2.VideoWriter_fourcc(*"mp4v"),
+                120.0,
+                (270, 480),
+            )
+            for frame_index in range(180):
+                time_s = frame_index / 120.0
+                motion_time = max(0.0, time_s - 0.2)
+                center_y = (
+                    330.0
+                    if time_s < 0.2
+                    else 270.0 + 60.0 * np.cos(2 * np.pi * motion_time / 0.8)
+                )
+                frame = np.full((480, 270, 3), 230, dtype=np.uint8)
+                cv2.circle(frame, (150, round(center_y)), 24, (30, 30, 30), 3)
+                cv2.circle(frame, (150, round(center_y)), 20, (130, 130, 130), -1)
+                writer.write(frame)
+            writer.release()
+            archive = root / "source.zip"
+            with zipfile.ZipFile(archive, "w") as handle:
+                handle.write(video, "batch/IMG_1518.MOV")
+            output = root / "output"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/import_vertical_spring_oscillator.py",
+                    "analyze",
+                    "--archive",
+                    str(archive),
+                    "--workbook",
+                    str(workbook),
+                    "--output-dir",
+                    str(output),
+                    "--analysis-stride",
+                    "4",
+                ],
+                check=True,
+                env={"PYTHONPATH": "src"},
+            )
+
+            rows = [
+                json.loads(line)
+                for line in (output / "review_candidates.jsonl").read_text().splitlines()
+            ]
+            self.assertEqual(1, len(rows))
+            self.assertEqual("pending", rows[0]["status"])
+            self.assertEqual("T001", rows[0]["trial_id"])
+            self.assertLessEqual(abs(rows[0]["source_start_time_s"] - 1.0), 0.02)
+
+    def test_materialize_cli_uses_only_approved_reviews(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            video = root / "IMG_1538.MOV"
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-v",
+                    "error",
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=gray:size=96x64:rate=12",
+                    "-frames:v",
+                    "12",
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    str(video),
+                ],
+                check=True,
+            )
+            archive = root / "source.zip"
+            with zipfile.ZipFile(archive, "w") as handle:
+                handle.write(video, "batch/IMG_1538.MOV")
+            analysis_path = root / "review_candidates.jsonl"
+            analysis_path.write_text(json.dumps({
+                "status": "pending",
+                "trial_id": "T001",
+                "spring_id": "S01",
+                "workbook_row": 6,
+                "video_name": "IMG_1538.MOV",
+                "source_member": "batch/IMG_1538.MOV",
+                "source_size": video.stat().st_size,
+                "source_crc32": 123,
+                "signed_displacement_mm": -40.0,
+                "direction": "above",
+                "source_start_frame": 4,
+                "source_start_time_s": 4 / 12,
+                "observed_period_s": 0.8,
+                "track_coverage": 1.0,
+                "analysis_ball_xyr": [12.0, 8.0, 3.0],
+                "full_resolution_ball_xyr": [48.0, 32.0, 12.0],
+                "source_frame_count": 12,
+                "displayed_width": 96,
+                "displayed_height": 64,
+                "analysis_stride": 1,
+            }) + "\n")
+            review_path = root / "review_decisions.jsonl"
+            review_path.write_text(json.dumps({
+                "trial_id": "T001",
+                "status": "approved",
+                "reviewer": "visual_review",
+            }) + "\n")
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/import_vertical_spring_oscillator.py",
+                    "materialize",
+                    "--archive",
+                    str(archive),
+                    "--analysis",
+                    str(analysis_path),
+                    "--review",
+                    str(review_path),
+                    "--repo-root",
+                    str(root),
+                ],
+                check=True,
+                env={"PYTHONPATH": "src"},
+            )
+
+            audit = root / (
+                "datasets/provenance/imports/"
+                "vertical_spring_oscillator_20260806_import_audit.jsonl"
+            )
+            rows = [json.loads(line) for line in audit.read_text().splitlines()]
+            self.assertEqual(
+                ["vertical_spring_s01_x40mm_above_img_1538"],
+                [row["case_id"] for row in rows],
+            )
 
 
 if __name__ == "__main__":

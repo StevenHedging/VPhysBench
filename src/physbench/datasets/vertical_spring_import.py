@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+import json
 import math
 from pathlib import Path, PurePosixPath
+import subprocess
 from typing import Literal, Sequence
 import zipfile
 
@@ -87,6 +89,23 @@ class TurningFrameCandidate:
     radius: float
     observed_period_s: float
     track_coverage: float
+
+
+@dataclass(frozen=True)
+class VideoAnalysis:
+    candidate: TurningFrameCandidate
+    full_resolution_ball: BallDetection
+    frame_count: int
+    displayed_width: int
+    displayed_height: int
+    analysis_stride: int
+
+
+@dataclass(frozen=True)
+class CaseDraft:
+    case_id: str
+    case_directory: Path
+    audit: dict[str, object]
 
 
 def _normalized_header(value: object) -> str:
@@ -243,8 +262,8 @@ def detect_ball(
     height, width = frame.shape[:2]
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     gray = cv2.medianBlur(gray, 5)
-    minimum_radius = max(8, round(height * 0.025))
-    maximum_radius = max(minimum_radius + 2, round(height * 0.085))
+    minimum_radius = max(8, round(width * 0.07))
+    maximum_radius = max(minimum_radius + 2, round(width * 0.15))
     circles = cv2.HoughCircles(
         gray,
         cv2.HOUGH_GRADIENT,
@@ -411,3 +430,452 @@ def ball_mask(
         lineType=cv2.LINE_8,
     )
     return mask
+
+
+def build_physics(case_id: str, signed_displacement_mm: float) -> dict[str, object]:
+    displacement_m = abs(float(signed_displacement_mm)) / 1000.0
+    if not case_id or not math.isfinite(displacement_m) or displacement_m <= 0:
+        raise ValueError("physics requires a Case ID and positive displacement")
+    return {
+        "case_id": case_id,
+        "physics": {
+            "environment": {
+                "gravity_acceleration": {
+                    "symbol": "g",
+                    "unit": "m/s^2",
+                    "value": 9.80665,
+                },
+                "natural_spring_length": {
+                    "symbol": "L_0",
+                    "unit": "m",
+                    "value": 0.068,
+                },
+                "spring_stiffness": {
+                    "symbol": "k",
+                    "unit": "N/m",
+                    "value": 32.6213467096774,
+                },
+            },
+            "objects": {
+                "object_1": {
+                    "initial_displacement": {
+                        "symbol": "x_0",
+                        "unit": "m",
+                        "value": displacement_m,
+                    },
+                    "mass": {
+                        "symbol": "m",
+                        "unit": "kg",
+                        "value": 0.5156,
+                    },
+                    "radius": {
+                        "symbol": "r",
+                        "unit": "m",
+                        "value": 0.025,
+                    },
+                }
+            },
+        },
+        "scene_id": "vertical_spring_oscillator",
+    }
+
+
+def build_caption(case_id: str, direction: Direction) -> dict[str, str]:
+    if not case_id:
+        raise ValueError("caption requires a Case ID")
+    if direction not in ("above", "below"):
+        raise ValueError(f"unsupported release direction: {direction!r}")
+    return {
+        "case_id": case_id,
+        "scene_id": "vertical_spring_oscillator",
+        "caption": (
+            "A vertically suspended oscillator of total moving mass m and ball "
+            "radius r is attached to a spring with stiffness k and natural "
+            "length L_0 under gravitational acceleration g. At the first "
+            f"frame, the oscillator is at displacement x_0 {direction} "
+            "equilibrium and starts from rest, then undergoes vertical free "
+            "oscillation."
+        ),
+    }
+
+
+def probe_frame_timestamps(video: Path) -> list[float]:
+    completed = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "frame=best_effort_timestamp_time",
+            "-of",
+            "json",
+            str(video),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(completed.stdout)
+    timestamps = [
+        float(frame["best_effort_timestamp_time"])
+        for frame in payload.get("frames", [])
+        if "best_effort_timestamp_time" in frame
+    ]
+    if not timestamps or not all(
+        later > earlier for earlier, later in zip(timestamps, timestamps[1:])
+    ):
+        raise ValueError(f"video has invalid presentation timestamps: {video}")
+    return timestamps
+
+
+def trim_video_exact(source: Path, start_frame: int, target: Path) -> None:
+    if start_frame < 0:
+        raise ValueError("start frame must be non-negative")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-y",
+            "-i",
+            str(source),
+            "-map",
+            "0:v:0",
+            "-vf",
+            f"trim=start_frame={start_frame},setpts=PTS-STARTPTS",
+            "-vsync",
+            "0",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "medium",
+            "-crf",
+            "18",
+            "-pix_fmt",
+            "yuv420p",
+            "-an",
+            "-metadata:s:v:0",
+            "rotate=0",
+            str(target),
+        ],
+        check=True,
+    )
+
+
+def analyze_video(
+    video: Path,
+    direction: Direction,
+    *,
+    analysis_stride: int = 8,
+    theoretical_period_s: float = 0.789924128416829,
+) -> VideoAnalysis:
+    if analysis_stride < 1:
+        raise ValueError("analysis stride must be positive")
+    timestamps = probe_frame_timestamps(video)
+    capture = cv2.VideoCapture(str(video))
+    if not capture.isOpened():
+        raise ValueError(f"could not open video: {video}")
+    track: list[TrackSample] = []
+    previous: BallDetection | None = None
+    source_index = 0
+    analysis_width = 270
+    analysis_height = 480
+    while source_index < len(timestamps):
+        ok, frame = capture.read()
+        if not ok:
+            break
+        if source_index % analysis_stride == 0:
+            small = cv2.resize(
+                frame,
+                (analysis_width, analysis_height),
+                interpolation=cv2.INTER_AREA,
+            )
+            try:
+                detected = detect_ball(small, previous)
+            except ValueError:
+                pass
+            else:
+                previous = detected
+                track.append(
+                    TrackSample(
+                        source_index,
+                        timestamps[source_index],
+                        detected.center_x,
+                        detected.center_y,
+                        detected.radius,
+                        detected.score,
+                    )
+                )
+        source_index += 1
+    capture.release()
+    if source_index != len(timestamps):
+        raise ValueError(
+            f"decoded frame count {source_index} does not match timestamps "
+            f"{len(timestamps)}"
+        )
+    candidate = detect_release_return(
+        track,
+        direction,
+        theoretical_period_s,
+    )
+
+    refinement_start = max(0, candidate.frame_index - analysis_stride)
+    refinement_end = min(
+        len(timestamps) - 1,
+        candidate.frame_index + analysis_stride,
+    )
+    capture = cv2.VideoCapture(str(video))
+    capture.set(cv2.CAP_PROP_POS_FRAMES, refinement_start)
+    refined: list[TrackSample] = []
+    seed = BallDetection(
+        candidate.center_x,
+        candidate.center_y,
+        candidate.radius,
+        1.0,
+    )
+    for frame_index in range(refinement_start, refinement_end + 1):
+        ok, frame = capture.read()
+        if not ok:
+            break
+        small = cv2.resize(
+            frame,
+            (analysis_width, analysis_height),
+            interpolation=cv2.INTER_AREA,
+        )
+        try:
+            detected = detect_ball(small, seed)
+        except ValueError:
+            continue
+        refined.append(
+            TrackSample(
+                frame_index,
+                timestamps[frame_index],
+                detected.center_x,
+                detected.center_y,
+                detected.radius,
+                detected.score,
+            )
+        )
+    capture.release()
+    if not refined:
+        raise ValueError("turning_frame_refinement_failed")
+    selected = (
+        max(refined, key=lambda item: item.center_y)
+        if direction == "below"
+        else min(refined, key=lambda item: item.center_y)
+    )
+    candidate = replace(
+        candidate,
+        frame_index=selected.frame_index,
+        time_s=selected.time_s,
+        center_x=selected.center_x,
+        center_y=selected.center_y,
+        radius=selected.radius,
+    )
+
+    capture = cv2.VideoCapture(str(video))
+    capture.set(cv2.CAP_PROP_POS_FRAMES, candidate.frame_index)
+    ok, full_frame = capture.read()
+    capture.release()
+    if not ok:
+        raise ValueError("could not decode selected full-resolution frame")
+    displayed_height, displayed_width = full_frame.shape[:2]
+    full_seed = BallDetection(
+        candidate.center_x * displayed_width / analysis_width,
+        candidate.center_y * displayed_height / analysis_height,
+        candidate.radius
+        * min(
+            displayed_width / analysis_width,
+            displayed_height / analysis_height,
+        ),
+        candidate.track_coverage,
+    )
+    full_detection = detect_ball(full_frame, full_seed)
+    return VideoAnalysis(
+        candidate=candidate,
+        full_resolution_ball=full_detection,
+        frame_count=len(timestamps),
+        displayed_width=displayed_width,
+        displayed_height=displayed_height,
+        analysis_stride=analysis_stride,
+    )
+
+
+def _number_token(value: float) -> str:
+    if float(value).is_integer():
+        return str(int(value))
+    return f"{value:g}".replace("-", "m").replace(".", "p")
+
+
+def _source_number(source: SourceMember) -> str:
+    stem = PurePosixPath(source.basename).stem
+    normalized = stem.split("(", 1)[0]
+    if normalized.upper().startswith("IMG_"):
+        normalized = normalized[4:]
+    if not normalized.isdigit():
+        raise ValueError(f"source member has no IMG number: {source.basename}")
+    return normalized
+
+
+def _write_json_document(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def materialize_case(
+    source_video: Path,
+    trial: TrialAnnotation,
+    source: SourceMember,
+    analysis: VideoAnalysis,
+    repo_root: Path,
+) -> CaseDraft:
+    magnitude = _number_token(abs(trial.displacement_mm))
+    image_number = _source_number(source)
+    case_id = (
+        f"vertical_spring_s01_x{magnitude}mm_{trial.direction}_img_"
+        f"{image_number}"
+    )
+    directory_name = (
+        f"spring_m515p6g_r25mm_x{magnitude}mm_{trial.direction}_img"
+        f"{image_number}"
+    )
+    case_directory = (
+        repo_root
+        / "datasets"
+        / "assets"
+        / "vertical_spring_oscillator"
+        / directory_name
+    )
+    canonical = case_directory / "canonical"
+    masks = canonical / "masks"
+    masks.mkdir(parents=True, exist_ok=True)
+    reference = canonical / "reference.mp4"
+    trim_video_exact(
+        source_video,
+        analysis.candidate.frame_index,
+        reference,
+    )
+    source_times = probe_frame_timestamps(source_video)
+    canonical_times = probe_frame_timestamps(reference)
+    expected_count = len(source_times) - analysis.candidate.frame_index
+    if len(canonical_times) != expected_count:
+        raise ValueError(
+            f"canonical frame count {len(canonical_times)} != {expected_count}"
+        )
+    capture = cv2.VideoCapture(str(reference))
+    ok, first_frame = capture.read()
+    capture.release()
+    if not ok:
+        raise ValueError("could not decode canonical frame zero")
+    first_frame_path = canonical / "first_frame.png"
+    if not cv2.imwrite(str(first_frame_path), first_frame):
+        raise ValueError("could not write canonical first frame")
+    frame_height, frame_width = first_frame.shape[:2]
+    scale_x = frame_width / analysis.displayed_width
+    scale_y = frame_height / analysis.displayed_height
+    detection = BallDetection(
+        analysis.full_resolution_ball.center_x * scale_x,
+        analysis.full_resolution_ball.center_y * scale_y,
+        analysis.full_resolution_ball.radius * min(scale_x, scale_y),
+        analysis.full_resolution_ball.score,
+    )
+    binary = ball_mask((frame_height, frame_width), detection)
+    cv2.imwrite(str(masks / "01.png"), binary * 255)
+    np.savez_compressed(
+        masks / "01.npz",
+        masks=binary[np.newaxis, ...],
+        mask_ids=np.asarray(["01"]),
+        object_ids=np.asarray(["object_1"]),
+        frame_index=np.asarray(0, dtype=np.int64),
+    )
+    ys, xs = np.nonzero(binary)
+    bbox = [int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())]
+    relative_case = case_directory.relative_to(repo_root).as_posix()
+    manifest = {
+        "case_id": case_id,
+        "frame_index": 0,
+        "frame_scope": "first_frame_only",
+        "generator": {
+            "id": "reviewed_hough_circle_steel_ball_v1",
+            "model": "geometric circle fit",
+        },
+        "image_shape_hw": [frame_height, frame_width],
+        "instances": [
+            {
+                "area_pixels": int(binary.sum()),
+                "asset": f"{relative_case}/canonical/masks/01.png",
+                "bbox_xyxy": bbox,
+                "centroid_xy": [float(xs.mean()), float(ys.mean())],
+                "entity_class": "steel_ball",
+                "mask_id": "01",
+                "npz_asset": f"{relative_case}/canonical/masks/01.npz",
+                "object_id": "object_1",
+                "physics_keys": [
+                    "objects.object_1.initial_displacement",
+                    "objects.object_1.mass",
+                    "objects.object_1.radius",
+                ],
+                "segmentation": {
+                    "anchor_circle_xyr": [
+                        detection.center_x,
+                        detection.center_y,
+                        detection.radius,
+                    ]
+                },
+            }
+        ],
+        "ordering": "single_object",
+        "scene_id": "vertical_spring_oscillator",
+        "schema_version": "1.2",
+        "source_first_frame": f"{relative_case}/canonical/first_frame.png",
+        "storage": {
+            "model": {
+                "array_key": "masks",
+                "asset_pattern": (
+                    f"{relative_case}/canonical/masks/{{mask_id}}.npz"
+                ),
+                "dtype": "uint8",
+                "layout": "1HW",
+                "values": [0, 1],
+            },
+            "visualization": {
+                "asset_pattern": (
+                    f"{relative_case}/canonical/masks/{{mask_id}}.png"
+                ),
+                "dtype": "uint8",
+                "values": [0, 255],
+            },
+        },
+    }
+    _write_json_document(masks / "manifest.json", manifest)
+    _write_json_document(case_directory / "physics.json", build_physics(case_id, trial.displacement_mm))
+    _write_json_document(case_directory / "caption.json", build_caption(case_id, trial.direction))
+    audit: dict[str, object] = {
+        "case_id": case_id,
+        "scene_id": "vertical_spring_oscillator",
+        "trial_id": trial.trial_id,
+        "source_member": source.member,
+        "source_start_frame": analysis.candidate.frame_index,
+        "source_start_time_s": analysis.candidate.time_s,
+        "source_frame_count": analysis.frame_count,
+        "canonical_frame_count": len(canonical_times),
+        "direction": trial.direction,
+        "signed_displacement_mm": trial.displacement_mm,
+        "alignment": {
+            "canonical_first_frame_event": (
+                "first return to the release-side turning point after one "
+                "complete oscillation"
+            ),
+            "source_end_frame_exclusive": analysis.frame_count,
+            "source_start_frame": analysis.candidate.frame_index,
+            "spatial_crop": None,
+            "tail_trim": None,
+        },
+    }
+    return CaseDraft(case_id, case_directory, audit)
