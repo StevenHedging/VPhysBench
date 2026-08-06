@@ -11,6 +11,7 @@ GROUPED_PHYSICS_SCENES = frozenset({
     "pendulum",
     "push_bottle",
     "uniform_circular_motion",
+    "vertical_spring_oscillator",
 })
 
 _OBJECT_PARAMETERS = {
@@ -25,6 +26,7 @@ _OBJECT_PARAMETERS = {
     "pendulum": {"mass", "radius", "initial_angle"},
     "push_bottle": {"mass", "height", "applied_force"},
     "uniform_circular_motion": {"orbit_radius"},
+    "vertical_spring_oscillator": {"initial_displacement", "mass", "radius"},
 }
 _ENVIRONMENT_PARAMETERS = {
     "collision_1d": set(),
@@ -33,6 +35,11 @@ _ENVIRONMENT_PARAMETERS = {
     "pendulum": {"string_length"},
     "push_bottle": set(),
     "uniform_circular_motion": {"angular_velocity"},
+    "vertical_spring_oscillator": {
+        "gravity_acceleration",
+        "natural_spring_length",
+        "spring_stiffness",
+    },
 }
 
 
@@ -83,6 +90,12 @@ def _semantic_object_name(scene_id: str, object_index: int, name: str) -> str:
         }[name]
     if scene_id == "uniform_circular_motion":
         return f"object_{object_index}_orbit_radius"
+    if scene_id == "vertical_spring_oscillator":
+        return {
+            "initial_displacement": "initial_displacement",
+            "mass": "oscillator_mass",
+            "radius": "ball_radius",
+        }[name]
     raise ValueError(f"scene {scene_id} does not use grouped physics")
 
 

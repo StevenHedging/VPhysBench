@@ -149,7 +149,40 @@ def select_spring_test_ids(
             if depth < len(items):
                 stratum_order.append(items[depth])
         depth += 1
+    directions = sorted(strata_by_direction)
+    direction_targets = {
+        direction: limit // len(directions) + (index < limit % len(directions))
+        for index, direction in enumerate(directions)
+    }
+    direction_counts = {direction: 0 for direction in directions}
+    direction_cursors = {direction: 0 for direction in directions}
     selected: list[str] = []
+    while len(selected) < limit:
+        progressed = False
+        for direction in directions:
+            if direction_counts[direction] >= direction_targets[direction]:
+                continue
+            ordered = strata_by_direction[direction]
+            cursor = direction_cursors[direction]
+            for offset in range(len(ordered)):
+                index = (cursor + offset) % len(ordered)
+                groups = queues[ordered[index]]
+                if len(groups) <= 1:
+                    continue
+                group = groups[0]
+                if (
+                    direction_counts[direction] + len(group)
+                    > direction_targets[direction]
+                    or len(selected) + len(group) > limit
+                ):
+                    continue
+                selected.extend(groups.pop(0))
+                direction_counts[direction] += len(group)
+                direction_cursors[direction] = (index + 1) % len(ordered)
+                progressed = True
+                break
+        if not progressed:
+            break
     while len(selected) < limit:
         progressed = False
         for stratum in stratum_order:

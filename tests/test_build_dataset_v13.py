@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 import unittest
 
 
@@ -10,6 +11,32 @@ except ImportError:
 
 
 class SpringSplitTests(unittest.TestCase):
+    def test_id_selection_balances_directions_with_uneven_stratum_counts(self) -> None:
+        records = []
+        for direction, magnitudes, per_stratum in (
+            ("above", (20, 40), 6),
+            ("below", (10, 20, 30, 40, 50, 60), 2),
+        ):
+            for magnitude in magnitudes:
+                for index in range(per_stratum):
+                    records.append(
+                        {
+                            "case_id": f"{direction}_{magnitude}_{index}",
+                            "direction": direction,
+                            "signed_displacement_mm": (
+                                -magnitude if direction == "above" else magnitude
+                            ),
+                            "source_group": f"{direction}_{magnitude}_{index}",
+                        }
+                    )
+
+        selected = select_spring_test_ids(records, limit=8)
+
+        self.assertEqual(
+            {"above": 4, "below": 4},
+            dict(Counter(case_id.split("_", 1)[0] for case_id in selected)),
+        )
+
     def test_id_selection_balances_directions_when_limit_is_smaller_than_strata(self) -> None:
         records = []
         for direction in ("above", "below"):

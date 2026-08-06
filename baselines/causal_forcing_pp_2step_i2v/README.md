@@ -106,14 +106,14 @@ Compile or dry-run the current five-evaluator-scene task:
 ```bash
 PYTHONPATH=src python -m physbench \
   task-build \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline causal_forcing_pp_2step_i2v_physics \
   --output results/causal_forcing_pp_physics.task.json
 
 PYTHONPATH=src python -m physbench \
   atomic-run \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline causal_forcing_pp_2step_i2v_physics \
   --output-root run

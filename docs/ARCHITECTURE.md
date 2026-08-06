@@ -36,7 +36,7 @@ Dataset 不认识具体模型；Task 不携带模型输入策略；Baseline 不�
 当前入口：
 
 ```text
-datasets/releases/12.0.0/dataset.json
+datasets/releases/13.0.0/dataset.json
 ```
 
 Dataset和Loader物化后的Case使用schema 5.0。每个Case同时拥有：
@@ -50,10 +50,10 @@ Dataset和Loader物化后的Case使用schema 5.0。每个Case同时拥有：
 - evaluator-only `assets.reference_video`。
 
 划分不属于Case字段；当前View A只包含train和ID test。原始caption与物理标注均只在
-Case资产目录保存一份，不由Task或Baseline临时生成。Release 12.0.0的`cases.jsonl`是
+Case资产目录保存一份，不由Task或Baseline临时生成。Release 13.0.0的`cases.jsonl`是
 轻量索引，仅含身份、运行时资产、appearance与temporal；Loader严格读取两个Case-local
 JSON并物化兼容的`case.text`和`case.physics`。逐Case来源、采集时序说明与alignment在
-`datasets/provenance/releases/12.0.0/cases.jsonl`中，不进入运行时Case。
+`datasets/provenance/releases/13.0.0/cases.jsonl`中，不进入运行时Case。
 正式标量只含`value/unit/symbol`；正式时序量只含
 `samples/time_unit/unit/symbol`，sample只含`time/value`。quantity的symbol必须进入
 无数值英文prompt；辅助和审计量不进入运行时`physics`。所有正式数值为非负大小，方向

@@ -9,17 +9,17 @@ from physbench import data_layout
 from physbench.io import load_json
 from physbench.io import load_jsonl
 from physbench.tasks import load_task, plan_atomic_task
-from scripts.validate_dataset_v12 import validate_v12
+from scripts.validate_dataset_v13 import validate_v13
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DATASETS_ROOT = ROOT / "datasets"
-RELEASE_ROOT = DATASETS_ROOT / "releases" / "12.0.0"
-PROVENANCE_ROOT = DATASETS_ROOT / "provenance" / "releases" / "12.0.0"
-DATASET_ID = "physics_video_six_scene_v12"
+RELEASE_ROOT = DATASETS_ROOT / "releases" / "13.0.0"
+PROVENANCE_ROOT = DATASETS_ROOT / "provenance" / "releases" / "13.0.0"
+DATASET_ID = "physics_video_seven_scene_v13"
 
 
-class SingleCurrentPhysicsV12Tests(unittest.TestCase):
+class SingleCurrentPhysicsV13Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.cases = load_jsonl(RELEASE_ROOT / "cases.jsonl")
@@ -29,20 +29,20 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
             for case in load_dataset(RELEASE_ROOT / "dataset.json").cases
         }
 
-    def test_v11_content_coverage_is_preserved_as_migration_evidence(self) -> None:
+    def test_v12_content_and_spring_addition_are_migration_evidence(self) -> None:
         evidence = load_json(PROVENANCE_ROOT / "migration.json")
         self.assertEqual(
             {
-                "quantities": 5286,
-                "negative_values_normalized": 494,
-                "annotated_flags_corrected": 715,
-                "symbols_added": 5286,
+                "base_cases_preserved": 799,
+                "cases": 916,
+                "media_changes": 0,
+                "spring_cases_added": 117,
             },
-            evidence["legacy_coverage"],
+            evidence["counts"],
         )
 
     def test_every_case_has_one_minimal_physics_document(self) -> None:
-        self.assertEqual(799, len(self.cases))
+        self.assertEqual(916, len(self.cases))
         paths = []
         for case in self.cases:
             relative = case["assets"]["physics_annotation"]
@@ -59,7 +59,7 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
                 self.loaded_cases[case["case_id"]]["physics"],
                 document["physics"],
             )
-        self.assertEqual(799, len(set(paths)))
+        self.assertEqual(916, len(set(paths)))
 
     def test_formal_physics_is_grouped_without_annotation_flags(self) -> None:
         grouped_scenes = {
@@ -69,6 +69,7 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
             "pendulum",
             "push_bottle",
             "uniform_circular_motion",
+            "vertical_spring_oscillator",
         }
         leaf_count = 0
         for case in self.cases:
@@ -97,17 +98,17 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
                         {"samples", "time_unit", "unit", "symbol"},
                     ),
                 )
-        self.assertEqual(3818, leaf_count)
+        self.assertEqual(4520, leaf_count)
 
-    def test_v12_validator_audits_push_force_series_against_source(self) -> None:
+    def test_v13_validator_audits_push_force_series_against_source(self) -> None:
         try:
-            report = validate_v12()
+            report = validate_v13()
         except (KeyError, ValueError) as error:
-            self.fail(f"V12 force-series validation failed: {error}")
-        self.assertEqual(3818, report["quantities"])
-        self.assertEqual(3677, report["scalar_quantities"])
+            self.fail(f"V13 force-series validation failed: {error}")
+        self.assertEqual(4520, report["quantities"])
+        self.assertEqual(4379, report["scalar_quantities"])
         self.assertEqual(141, report["time_series_quantities"])
-        self.assertEqual(141, report["source_verified_force_series"])
+        self.assertEqual(141, report.get("source_verified_force_series"))
 
     def test_scene_classification_has_no_auxiliary_physics(self) -> None:
         for case in self.cases:
@@ -166,6 +167,19 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
                     set(series),
                 )
                 self.assertTrue(series["samples"])
+            elif scene_id == "vertical_spring_oscillator":
+                self.assertEqual(
+                    {
+                        "gravity_acceleration",
+                        "natural_spring_length",
+                        "spring_stiffness",
+                    },
+                    set(physics["environment"]),
+                )
+                self.assertEqual(
+                    {"initial_displacement", "mass", "radius"},
+                    set(physics["objects"]["object_1"]),
+                )
 
     def test_every_indexed_case_owns_one_caption_document(self) -> None:
         caption_paths = []
@@ -187,7 +201,7 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
                 document["caption"],
                 self.loaded_cases[case["case_id"]]["text"]["prompt"],
             )
-        self.assertEqual(799, len(set(caption_paths)))
+        self.assertEqual(916, len(set(caption_paths)))
 
     def test_case_index_contains_only_runtime_fields_and_assets(self) -> None:
         required_assets = {
@@ -215,13 +229,13 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
             self.assertEqual({"prompt"}, set(loaded["text"]))
 
     def test_case_audit_metadata_lives_only_in_provenance(self) -> None:
-        self.assertEqual(799, len(self.provenance_cases))
+        self.assertEqual(916, len(self.provenance_cases))
         self.assertEqual(
             {case["case_id"] for case in self.cases},
             {case["case_id"] for case in self.provenance_cases},
         )
         self.assertEqual(
-            763,
+            880,
             sum("alignment" in case for case in self.provenance_cases),
         )
         self.assertEqual(
@@ -232,7 +246,7 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            732,
+            849,
             sum(
                 "archive" in case.get("source_locator", {})
                 for case in self.provenance_cases
@@ -299,7 +313,7 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
         )
         snapshot = load_dataset(RELEASE_ROOT / "dataset.json")
         self.assertEqual(DATASET_ID, snapshot.dataset_id)
-        self.assertEqual(799, len(snapshot.cases))
+        self.assertEqual(916, len(snapshot.cases))
         self.assertIsNone(snapshot.asset_lock)
         self.assertNotIn("asset_lock", snapshot.descriptor)
         self.assertNotIn("release_manifest", snapshot.descriptor)
@@ -309,17 +323,17 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
         ))
         self.assertFalse(list(DATASETS_ROOT.glob("assets/*/*/physics.v11.json")))
         self.assertEqual(
-            799,
+            916,
             len(list(DATASETS_ROOT.glob("assets/*/*/physics.json"))),
         )
         self.assertEqual(
-            799,
+            916,
             len(list(DATASETS_ROOT.glob("assets/*/*/caption.json"))),
         )
 
     def test_release_records_zero_media_changes(self) -> None:
         evidence = load_json(PROVENANCE_ROOT / "migration.json")
-        self.assertEqual(799, evidence["counts"]["physics_documents_renamed"])
+        self.assertEqual(117, evidence["counts"]["spring_cases_added"])
         self.assertEqual(0, evidence["counts"]["media_changes"])
 
         def forbidden_keys(value: object):
@@ -339,7 +353,7 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
         self.assertEqual([], forbidden_keys(evidence))
 
     def test_current_cases_do_not_reference_retired_runtime_releases(self) -> None:
-        retired = re.compile(r"^releases/(?:[1-9]|10|11)\.0\.0(?:/|$)")
+        retired = re.compile(r"^releases/(?:[1-9]|10|11|12)\.0\.0(?:/|$)")
 
         def strings(value: object):
             if isinstance(value, str):
@@ -359,7 +373,7 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
         ]
         self.assertEqual([], offenders)
 
-    def test_v12_is_the_only_active_release_and_official_task_target(self) -> None:
+    def test_v13_is_the_only_active_release_and_official_task_target(self) -> None:
         self.assertEqual(
             RELEASE_ROOT / "dataset.json",
             data_layout.LATEST_DATASET,
@@ -369,11 +383,11 @@ class SingleCurrentPhysicsV12Tests(unittest.TestCase):
             for path in data_layout.RELEASES_ROOT.iterdir()
             if path.is_dir() and not path.name.startswith(".")
         }
-        self.assertEqual({"12.0.0"}, release_dirs)
+        self.assertEqual({"13.0.0"}, release_dirs)
         snapshot = load_dataset(data_layout.LATEST_DATASET)
         for filename, task_id, jobs in (
-            ("five_scene_finetune_eval.json", "five_scene_finetune_eval_v12", 76),
-            ("five_scene_direct_eval.json", "five_scene_direct_eval_v12", 658),
+            ("five_scene_finetune_eval.json", "five_scene_finetune_eval_v13", 76),
+            ("five_scene_direct_eval.json", "five_scene_direct_eval_v13", 658),
         ):
             task = load_task(ROOT / "tasks" / "official" / filename)
             self.assertEqual(task_id, task.task_id)

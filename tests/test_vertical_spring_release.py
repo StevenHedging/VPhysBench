@@ -22,12 +22,60 @@ class VerticalSpringReleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
             shutil.copytree(
-                ROOT / "datasets/releases/12.0.0",
+                ROOT / "datasets/releases/13.0.0",
                 repo / "datasets/releases/12.0.0",
             )
-            shutil.copytree(
-                ROOT / "datasets/provenance/releases/12.0.0",
-                repo / "datasets/provenance/releases/12.0.0",
+            base_release = repo / "datasets/releases/12.0.0"
+            all_cases = [
+                json.loads(line)
+                for line in (base_release / "cases.jsonl").read_text().splitlines()
+            ]
+            spring_ids = {
+                case["case_id"]
+                for case in all_cases
+                if case["scene_id"] == "vertical_spring_oscillator"
+            }
+            base_cases = [
+                case
+                for case in all_cases
+                if case["scene_id"] != "vertical_spring_oscillator"
+            ]
+            (base_release / "cases.jsonl").write_text(
+                "".join(json.dumps(item) + "\n" for item in base_cases),
+                encoding="utf-8",
+            )
+            descriptor = json.loads((base_release / "dataset.json").read_text())
+            descriptor.update(
+                {"dataset_id": "physics_video_six_scene_v12", "release": "12.0.0"}
+            )
+            _write_json(base_release / "dataset.json", descriptor)
+            (base_release / "scenes/vertical_spring_oscillator.json").unlink()
+            for name in ("view_a", "view_b"):
+                path = base_release / f"views/{name}.json"
+                view = json.loads(path.read_text())
+                view["scenes"].pop("vertical_spring_oscillator")
+                if name == "view_a":
+                    view["test_annotations"] = {
+                        case_id: value
+                        for case_id, value in view["test_annotations"].items()
+                        if case_id not in spring_ids
+                    }
+                _write_json(path, view)
+            provenance_root = repo / "datasets/provenance/releases/12.0.0"
+            provenance_root.mkdir(parents=True)
+            current_provenance = [
+                json.loads(line)
+                for line in (
+                    ROOT / "datasets/provenance/releases/13.0.0/cases.jsonl"
+                ).read_text().splitlines()
+            ]
+            provenance_root.joinpath("cases.jsonl").write_text(
+                "".join(
+                    json.dumps(item) + "\n"
+                    for item in current_provenance
+                    if item["scene_id"] != "vertical_spring_oscillator"
+                ),
+                encoding="utf-8",
             )
             audits = []
             for trial, image in (("T001", "1538"), ("T002", "1539")):
@@ -105,11 +153,19 @@ class VerticalSpringReleaseTests(unittest.TestCase):
             report = json.loads(
                 (repo / "datasets/provenance/releases/13.0.0/build.json").read_text()
             )
+            migration_path = (
+                repo / "datasets/provenance/releases/13.0.0/migration.json"
+            )
+            self.assertTrue(migration_path.is_file())
+            migration = json.loads(migration_path.read_text())
             spring = view_a["scenes"]["vertical_spring_oscillator"]
             self.assertEqual("13.0.0", descriptor["release"])
             self.assertEqual("physics_video_seven_scene_v13", descriptor["dataset_id"])
             self.assertEqual(801, len(cases))
             self.assertEqual(801, report["case_count"])
+            self.assertEqual("physics_video_six_scene_v12", migration["base"]["dataset_id"])
+            self.assertEqual("physics_video_seven_scene_v13", migration["output"]["dataset_id"])
+            self.assertEqual(2, migration["counts"]["spring_cases_added"])
             self.assertEqual(1, len(spring["test"]))
             self.assertEqual(1, len(spring["train"]))
             spring_case = next(

@@ -1,8 +1,8 @@
 # VPhysBench
 
-Physics Video Benchmark 是一个面向物理视频生成模型的六场景、训推一体评测框架。当前
+Physics Video Benchmark 是一个面向物理视频生成模型的七场景、训推一体评测框架。当前
 Dataset release 是
-`datasets/releases/12.0.0/dataset.json`，包含799个case：
+`datasets/releases/13.0.0/dataset.json`，包含916个case：
 
 - 单摆 `pendulum`
 - 一维对心碰撞 `collision_1d`
@@ -10,18 +10,19 @@ Dataset release 是
 - 匀速圆周运动 `uniform_circular_motion`
 - 平抛运动 `parabolic_motion`
 - 推水瓶 `push_bottle`
+- 竖直弹簧振子 `vertical_spring_oscillator`
 
 当前官方Task为`five_scene_finetune_eval.json`和`five_scene_direct_eval.json`，均指向
-12.0.0 Dataset。推水瓶已进入Dataset，但专用评估器尚未完成，因此暂不进入这两份正式
-计分Task。
+13.0.0 Dataset。推水瓶和竖直弹簧振子已进入Dataset，但专用评估器尚未完成，因此暂不
+进入这两份正式计分Task。
 
-12.0.0在每个Case资产目录中只保存一份`caption.json`和一份`physics.json`，并由
+13.0.0在每个Case资产目录中只保存一份`caption.json`和一份`physics.json`，并由
 `cases.jsonl`中的`assets.caption`与`assets.physics_annotation`引用。Loader读取这两个
 Case-local成员后，向Baseline和Evaluator提供兼容的`case.text`与`case.physics`运行时
 接口。Release目录只保留`dataset.json`、`cases.jsonl`、`scenes/`和`views/`；迁移与验证证据位于
-`datasets/provenance/releases/12.0.0/`。每个quantity包含稳定`symbol`；独立量的符号
+`datasets/provenance/releases/13.0.0/`。每个quantity包含稳定`symbol`；独立量的符号
 必须出现在无数值prompt中。标量使用`value/unit/symbol`，推水瓶外力使用带显式时间戳的
-`samples/time_unit/unit/symbol`；所有正式数值保存为非负大小，运动方向由prompt表达。V1–V11
+`samples/time_unit/unit/symbol`；所有正式数值保存为非负大小，运动方向由prompt表达。V1–V12
 不再保留为活动运行目录；历史结果依靠Git历史和provenance追溯。
 
 ## 设计原则
@@ -92,12 +93,14 @@ Benchmark 环境：
 cd VPhysBench
 
 PYTHONPATH=src:tests:. python \
-  -m unittest tests.test_current_dataset tests.test_single_current_physics_v12 -v
+  -m unittest tests.test_current_dataset tests.test_single_current_physics_v13 -v
 
 PYTHONPATH=src python -m physbench \
   validate-dataset \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --check-assets
+
+PYTHONPATH=src python scripts/validate_dataset_v13.py
 ```
 
 这是当前release的正式数据/Task回归入口。`make test`运行当前Dataset门禁，完整测试使用
@@ -112,8 +115,8 @@ python -m pip install -e ../sam2
 
 ## 快速开始
 
-下面三条命令使用当前12.0.0 Dataset和已有评估器的五场景官方Task。推水瓶需等专用
-评估器和协议接入后再加入正式Task。
+下面三条命令使用当前13.0.0 Dataset和已有评估器的五场景官方Task。推水瓶和竖直弹簧
+振子需等专用评估器和协议接入后再加入正式Task。
 
 发现并验证 Baseline：
 
@@ -130,7 +133,7 @@ PYTHONPATH=src python -m physbench \
 ```bash
 PYTHONPATH=src python -m physbench \
   task-build \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --output results/wan22_generic_task_instance.json
@@ -141,7 +144,7 @@ PYTHONPATH=src python -m physbench \
 ```bash
 PYTHONPATH=src python -m physbench \
   atomic-run \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
   --output-root run
@@ -152,7 +155,7 @@ PYTHONPATH=src python -m physbench \
 ```bash
 PYTHONPATH=src python -m physbench \
   matrix-run \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
   --baseline cosmos3_nano_i2v_physics \
@@ -183,7 +186,7 @@ PYTHONPATH=src python -m physbench \
 
 ```text
 VPhysBench/
-├── datasets/                 # 唯一权威数据根；12.0.0是当前release
+├── datasets/                 # 唯一权威数据根；13.0.0是当前release
 ├── tasks/official/           # direct_eval 与 finetune_eval 两份模型无关 Task
 ├── baselines/                # schema v5 Bundle、adapter/driver 与本机配置模板
 ├── configs/evaluation/       # scene evaluator 协议
@@ -193,7 +196,7 @@ VPhysBench/
 ├── src/physbench/            # planner、runtime、评估与 CLI
 ├── tests/                    # 回归测试
 ├── docs/                     # 架构和操作文档
-└── run/                  # 当前 AtomicRun 输出
+└── run/                      # 当前 AtomicRun 输出
 ```
 
 权威数据资产只能写入 `datasets/`。缩放、抽帧、特征、模型缓存和预测必须进入内容寻址

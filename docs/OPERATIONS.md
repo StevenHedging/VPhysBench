@@ -56,7 +56,7 @@ git diff --check
 ```bash
 PYTHONPATH=src python -m physbench \
   validate-dataset \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --check-assets
 ```
 
@@ -65,7 +65,7 @@ PYTHONPATH=src python -m physbench \
 ```bash
 PYTHONPATH=src python -m physbench \
   validate-dataset \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --check-asset-hashes
 ```
 
@@ -140,7 +140,7 @@ Direct-eval：
 ```bash
 PYTHONPATH=src python -m physbench \
   task-build \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
   --output results/cosmos3_generic_task_instance.json
@@ -151,7 +151,7 @@ Fine-tune + eval：
 ```bash
 PYTHONPATH=src python -m physbench \
   task-build \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
   --output results/wan22_physics_finetune_task_instance.json
@@ -168,7 +168,7 @@ generation shape 与 identity。
 ```bash
 PYTHONPATH=src python -m physbench \
   atomic-run \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
   --scene-id pendulum \
@@ -184,7 +184,7 @@ Dry-run 会冻结 plan/TaskInstance、展开 adapter、写 job 与 planned predi
 ```bash
 PYTHONPATH=src python -m physbench \
   atomic-run \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
   --scene-id pendulum \
@@ -206,7 +206,7 @@ Task score。
 ```bash
 PYTHONPATH=src python -m physbench \
   matrix-run \
-  --dataset datasets/releases/12.0.0/dataset.json \
+  --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
   --baseline cosmos3_nano_i2v_generic \
   --baseline cosmos3_nano_i2v_physics \

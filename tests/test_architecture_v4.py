@@ -86,7 +86,7 @@ class ArchitectureV4Tests(unittest.TestCase):
 
     def test_dataset_release_does_not_use_an_asset_lock(self) -> None:
         self.assertIsNone(self.dataset.asset_lock)
-        self.assertEqual("12.0.0", self.dataset.descriptor["release"])
+        self.assertEqual("13.0.0", self.dataset.descriptor["release"])
 
     def test_tasks_and_canonical_plans_are_model_agnostic(self) -> None:
         for path in (DIRECT_TASK, FINETUNE_TASK):

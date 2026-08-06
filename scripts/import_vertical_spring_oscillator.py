@@ -771,6 +771,27 @@ def build_release_v13(
         "spring_train_count": len(spring_cases) - len(test_ids),
     }
     _write_json(provenance / "build.json", report)
+    _write_json(
+        provenance / "migration.json",
+        {
+            "base": {
+                "dataset_id": "physics_video_six_scene_v12",
+                "release": "12.0.0",
+            },
+            "counts": {
+                "base_cases_preserved": len(base_cases),
+                "cases": len(all_cases),
+                "media_changes": 0,
+                "spring_cases_added": len(spring_cases),
+            },
+            "migration": "vertical_spring_oscillator_v13",
+            "output": {
+                "dataset_id": "physics_video_seven_scene_v13",
+                "release": "13.0.0",
+            },
+            "schema_version": "1.0",
+        },
+    )
     return report
 
 

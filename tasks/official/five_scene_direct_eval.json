@@ -1,8 +1,8 @@
 {
   "schema_version": "4.0",
-  "task_id": "five_scene_direct_eval_v12",
+  "task_id": "five_scene_direct_eval_v13",
   "family": "direct_eval",
-  "dataset_id": "physics_video_six_scene_v12",
+  "dataset_id": "physics_video_seven_scene_v13",
   "dataset_view": "view_b",
   "selection": {
     "scene_ids": [
