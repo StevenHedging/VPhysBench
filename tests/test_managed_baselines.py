@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import csv
 import copy
-import sys
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from _paths import ROOT
@@ -16,7 +13,6 @@ from physbench.baseline_api import (
     load_baseline_plugin,
 )
 from physbench.baseline_runtime import create_baseline_scaffold
-from physbench.baseline_runtime.drivers.wan22 import Wan22ManagedDriver
 from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
 from physbench.domain import TaskSpec
@@ -200,6 +196,9 @@ class ManagedBaselineTests(unittest.TestCase):
         value["selection"]["scene_ids"] = [case["scene_id"]]
         value["selection"]["case_ids"] = [case["case_id"]]
         return TaskSpec(source.path, value, canonical_sha256(value))
+
+    def test_release_tree_has_no_integrated_baselines(self) -> None:
+        self.assertEqual({}, discover_baseline_bundles(ROOT / "baselines"))
 
     def test_v5_managed_and_submission_are_discovered_without_endpoints(
         self,
@@ -427,116 +426,6 @@ class ManagedBaselineTests(unittest.TestCase):
                                 execute=False,
                                 stop_after_training=False,
                             )
-
-    def test_wan_lora_finetune_dry_run_plans_metadata_and_predictions(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            parent = Path(temporary)
-            bundle_root = parent / "wan22_lora"
-            bundle_root.mkdir()
-            source_root = ROOT / "baselines" / "wan22_lora"
-            manifest = load_json(source_root / "baseline.json")
-            manifest["model"]["frozen_lora_checkpoint"] = None
-            manifest["runtime"].update({
-                "project_root": str(parent / "wan_project"),
-                "python": sys.executable,
-                "model_base": str(parent / "models"),
-                "cuda_visible_devices": "0",
-                "accelerate_config": None,
-            })
-            write_json(bundle_root / "baseline.json", manifest)
-            (bundle_root / "driver.py").write_text(
-                (source_root / "driver.py").read_text(encoding="utf-8"),
-                encoding="utf-8",
-            )
-            plugin = load_baseline_plugin(
-                load_baseline_bundle(bundle_root)
-            )
-
-            task_value = copy.deepcopy(self.finetune.value)
-            task_value["task_id"] = "pendulum_finetune_dry_run"
-            task_value["selection"]["scene_ids"] = ["pendulum"]
-            task = TaskSpec(
-                self.finetune.path,
-                task_value,
-                canonical_sha256(task_value),
-            )
-            instance = plugin.task_builder.build(self.dataset, task)
-            run_dir = parent / "run"
-            _create_run_directories(run_dir)
-            training, predictions = plugin.run_task(
-                instance=instance,
-                run_dir=run_dir,
-                execute=False,
-                stop_after_training=False,
-            )
-
-            self.assertEqual("planned", training["status"])
-            metadata_path = Path(training["metadata"])
-            self.assertTrue(metadata_path.is_file())
-            with metadata_path.open(
-                newline="", encoding="utf-8"
-            ) as handle:
-                reader = csv.DictReader(handle)
-                metadata_rows = list(reader)
-                self.assertIn("text_transform_id", reader.fieldnames)
-                self.assertNotIn(
-                    "prompt_profile_id", reader.fieldnames
-                )
-            self.assertTrue(metadata_rows)
-            self.assertTrue(all(row["prompt"] for row in metadata_rows))
-
-            frozen_jobs = {
-                job["job_id"]: job
-                for job in instance.value["inference"]["jobs"]
-            }
-            self.assertEqual(set(frozen_jobs), {
-                prediction["job_id"] for prediction in predictions
-            })
-            forbidden = {
-                "conditioning",
-                "prompt_profile_id",
-                "evaluation_reference_video",
-                "visual_reference_video",
-                "reference_video",
-                "physics_reference_video",
-            }
-            for prediction in predictions:
-                job = frozen_jobs[prediction["job_id"]]
-                self.assertEqual(int(job["seed"]), prediction["seed"])
-                self.assertEqual("planned", prediction["status"])
-                self.assertIsNone(prediction["video_path"])
-                self.assertFalse(forbidden & set(prediction))
-
-    def test_wan_frozen_checkpoint_requires_and_verifies_digest(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            checkpoint = Path(temporary) / "checkpoint.safetensors"
-            checkpoint.write_bytes(b"frozen-checkpoint")
-            model = {
-                "frozen_lora_checkpoint": str(checkpoint),
-                "checkpoint_sha256": None,
-            }
-            bundle = SimpleNamespace(value={
-                "model": model,
-                "runtime": {"python": sys.executable},
-            })
-            driver = Wan22ManagedDriver(bundle)
-
-            with self.assertRaisesRegex(
-                ValueError, "requires model.checkpoint_sha256"
-            ):
-                driver.validate_deployment()
-
-            model["checkpoint_sha256"] = "0" * 64
-            with self.assertRaisesRegex(ValueError, "digest mismatch"):
-                driver.validate_deployment()
-
-            model["checkpoint_sha256"] = (
-                "eb34e0c243f4f0947df3c07e185e05a43b87b3f"
-                "353a31fb5c018293d2ff2f138"
-            )
-            driver.validate_deployment()
 
     def test_submission_requires_exact_identity_and_imports_run_local(
         self,

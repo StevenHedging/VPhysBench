@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from _baseline_fixtures import create_generic_baseline_pair
 from _paths import ROOT
 from physbench.baseline_api import load_baseline_bundle, load_baseline_plugin
 from physbench.data_layout import LATEST_DATASET
@@ -21,20 +22,6 @@ DIRECT_TASK = (
 FINETUNE_TASK = (
     ROOT / "tasks" / "official" / "five_scene_finetune_eval.json"
 )
-GENERIC_BASELINE = (
-    ROOT
-    / "baselines"
-    / "wan22_g15_sparse_motion"
-    / "baseline.json"
-)
-PHYSICS_BASELINE = (
-    ROOT
-    / "baselines"
-    / "wan22_g15_sparse_motion"
-    / "physics.baseline.json"
-)
-
-
 def _contains_key(value: object, target: str) -> bool:
     if isinstance(value, dict):
         return target in value or any(
@@ -48,12 +35,17 @@ def _contains_key(value: object, target: str) -> bool:
 class ArchitectureV4Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.dataset = load_dataset(LATEST_DATASET, check_assets=True)
+        cls.temporary = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.temporary.cleanup)
+        generic_path, physics_path = create_generic_baseline_pair(
+            Path(cls.temporary.name)
+        )
+        cls.dataset = load_dataset(LATEST_DATASET, check_assets=False)
         cls.task = load_task(DIRECT_TASK)
 
-        cls.generic_bundle = load_baseline_bundle(GENERIC_BASELINE)
+        cls.generic_bundle = load_baseline_bundle(generic_path)
         cls.generic_plugin = load_baseline_plugin(cls.generic_bundle)
-        cls.physics_bundle = load_baseline_bundle(PHYSICS_BASELINE)
+        cls.physics_bundle = load_baseline_bundle(physics_path)
         cls.physics_plugin = load_baseline_plugin(cls.physics_bundle)
 
     def _pendulum_case(self) -> dict:
@@ -156,9 +148,9 @@ class ArchitectureV4Tests(unittest.TestCase):
             "runtime_dependency_fingerprints"
         ]
         self.assertIn(
-            "src/physbench/baselines/wan22_media.py", dependencies
+            "src/physbench/baseline_runtime/drivers/subprocess_i2v.py",
+            dependencies,
         )
-        self.assertIn("scripts/wan22_generate_batch.py", dependencies)
 
     def test_generic_adapter_uses_case_prompt_and_ignores_physics(
         self,

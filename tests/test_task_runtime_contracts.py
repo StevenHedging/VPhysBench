@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from _baseline_fixtures import create_generic_baseline_pair
 from _paths import ROOT
 from physbench.baseline_api import (
     load_baseline_bundle,
@@ -29,23 +30,20 @@ DIRECT_TASK = (
 FINETUNE_TASK = (
     ROOT / "tasks" / "official" / "five_scene_finetune_eval.json"
 )
-GENERIC_BASELINE = (
-    ROOT / "baselines" / "wan22_lora" / "baseline.json"
-)
-PHYSICS_BASELINE = (
-    ROOT / "baselines" / "wan22_lora" / "physics.baseline.json"
-)
-
-
 class TaskRuntimeContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
+        cls.temporary = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.temporary.cleanup)
+        cls.generic_path, cls.physics_path = create_generic_baseline_pair(
+            Path(cls.temporary.name)
+        )
         cls.dataset = load_dataset(LATEST_DATASET, check_assets=False)
         cls.direct = load_task(DIRECT_TASK)
         cls.finetune = load_task(FINETUNE_TASK)
-        cls.generic_bundle = load_baseline_bundle(GENERIC_BASELINE)
+        cls.generic_bundle = load_baseline_bundle(cls.generic_path)
         cls.generic_plugin = load_baseline_plugin(cls.generic_bundle)
-        cls.physics_bundle = load_baseline_bundle(PHYSICS_BASELINE)
+        cls.physics_bundle = load_baseline_bundle(cls.physics_path)
 
     def _one_case_value(self, *, task_id: str = "one_case_direct") -> dict:
         value = copy.deepcopy(self.direct.value)
@@ -89,14 +87,22 @@ class TaskRuntimeContractTests(unittest.TestCase):
 
         value = copy.deepcopy(self.direct.value)
         value["ood2"] = {"enabled": 1}
-        invalid_documents.append(("ood2_boolean", value, "must be a boolean"))
+        invalid_documents.append((
+            "ood2_boolean",
+            value,
+            "outside the model-agnostic contract",
+        ))
 
         value = copy.deepcopy(self.direct.value)
         value["ood2"] = {
             "enabled": False,
             "heldout_scenes": ["pendulum"],
         }
-        invalid_documents.append(("ood2_disabled", value, "omitted or empty"))
+        invalid_documents.append((
+            "ood2_disabled",
+            value,
+            "outside the model-agnostic contract",
+        ))
 
         value = copy.deepcopy(self.direct.value)
         value["seeds"]["training"] = [7]
@@ -119,7 +125,7 @@ class TaskRuntimeContractTests(unittest.TestCase):
         value = copy.deepcopy(self.finetune.value)
         value["selection"]["eval_partitions"] = ["test_id", "invented"]
         invalid_documents.append(
-            ("eval_partition", value, "may only contain")
+            ("eval_partition", value, "unknown fields")
         )
 
         with tempfile.TemporaryDirectory() as temporary:
@@ -160,7 +166,7 @@ class TaskRuntimeContractTests(unittest.TestCase):
                 run_atomic(
                     dataset_path=LATEST_DATASET,
                     task_path=task_path,
-                    baseline_path=GENERIC_BASELINE,
+                    baseline_path=self.generic_path,
                     output_root=output,
                     run_id="../escaped-run",
                     execute=False,
@@ -174,8 +180,8 @@ class TaskRuntimeContractTests(unittest.TestCase):
                     dataset_path=LATEST_DATASET,
                     task_path=task_path,
                     baseline_paths=[
-                        GENERIC_BASELINE,
-                        PHYSICS_BASELINE,
+                        self.generic_path,
+                        self.physics_path,
                     ],
                     output_root=output,
                     matrix_id="../escaped-matrix",
@@ -247,6 +253,13 @@ class TaskRuntimeContractTests(unittest.TestCase):
     def test_one_case_dry_matrix_records_plan_and_orchestration_status(
         self,
     ) -> None:
+        first_frame = (
+            ROOT
+            / "datasets"
+            / self.dataset.cases[0]["assets"]["first_frame"]
+        )
+        if not first_frame.is_file():
+            self.skipTest("full Dataset assets are not present")
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             task_path = root / "one-case.json"
@@ -258,7 +271,7 @@ class TaskRuntimeContractTests(unittest.TestCase):
             run_dirs = run_matrix(
                 dataset_path=LATEST_DATASET,
                 task_path=task_path,
-                baseline_paths=[GENERIC_BASELINE, PHYSICS_BASELINE],
+                baseline_paths=[self.generic_path, self.physics_path],
                 output_root=output,
                 matrix_id="matrix-dry",
                 execute=False,
@@ -291,6 +304,13 @@ class TaskRuntimeContractTests(unittest.TestCase):
                 )
 
     def test_matrix_failure_is_persisted_as_orchestration_failure(self) -> None:
+        first_frame = (
+            ROOT
+            / "datasets"
+            / self.dataset.cases[0]["assets"]["first_frame"]
+        )
+        if not first_frame.is_file():
+            self.skipTest("full Dataset assets are not present")
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             task_path = root / "one-case.json"
@@ -308,8 +328,8 @@ class TaskRuntimeContractTests(unittest.TestCase):
                         dataset_path=LATEST_DATASET,
                         task_path=task_path,
                         baseline_paths=[
-                            GENERIC_BASELINE,
-                            PHYSICS_BASELINE,
+                            self.generic_path,
+                            self.physics_path,
                         ],
                         output_root=output,
                         matrix_id="matrix-failure",

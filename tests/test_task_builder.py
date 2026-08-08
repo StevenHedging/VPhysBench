@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from pathlib import Path
 
+from _baseline_fixtures import create_generic_baseline_pair
 from _paths import ROOT
 from physbench.baseline_api import load_baseline_bundle, load_baseline_plugin
 from physbench.data_layout import LATEST_DATASET
@@ -20,14 +22,6 @@ DIRECT_TASK = (
 FINETUNE_TASK = (
     ROOT / "tasks" / "official" / "five_scene_finetune_eval.json"
 )
-GENERIC_BASELINE = (
-    ROOT / "baselines" / "wan22_lora" / "baseline.json"
-)
-PHYSICS_BASELINE = (
-    ROOT / "baselines" / "wan22_lora" / "physics.baseline.json"
-)
-
-
 def _contains_key(value: object, target: str) -> bool:
     if isinstance(value, dict):
         return target in value or any(
@@ -41,13 +35,18 @@ def _contains_key(value: object, target: str) -> bool:
 class TaskBuilderContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
+        cls.temporary = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.temporary.cleanup)
+        cls.generic_path, cls.physics_path = create_generic_baseline_pair(
+            Path(cls.temporary.name)
+        )
         cls.dataset_path = LATEST_DATASET
         cls.dataset = load_dataset(
-            cls.dataset_path, check_assets=True
+            cls.dataset_path, check_assets=False
         )
-        cls.generic_bundle = load_baseline_bundle(GENERIC_BASELINE)
+        cls.generic_bundle = load_baseline_bundle(cls.generic_path)
         cls.generic_plugin = load_baseline_plugin(cls.generic_bundle)
-        cls.physics_bundle = load_baseline_bundle(PHYSICS_BASELINE)
+        cls.physics_bundle = load_baseline_bundle(cls.physics_path)
         cls.physics_plugin = load_baseline_plugin(cls.physics_bundle)
 
     def test_builder_is_deterministic_and_instance_is_sealed(self) -> None:
@@ -212,16 +211,20 @@ class TaskBuilderContractTests(unittest.TestCase):
             for case in self.dataset.cases
             if case["scene_id"] == "pendulum"
         )
+        first_frame = ROOT / "datasets" / pendulum["assets"]["first_frame"]
+        if not first_frame.is_file():
+            self.skipTest("full Dataset assets are not present")
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = run_atomic(
                 dataset_path=self.dataset_path,
                 task_path=DIRECT_TASK,
-                baseline_path=GENERIC_BASELINE,
+                baseline_path=self.generic_path,
                 output_root=temporary,
                 run_id="task-builder-dryrun",
                 execute=False,
                 scene_ids=["pendulum"],
                 case_ids=[pendulum["case_id"]],
+                check_assets=False,
             )
             manifest = load_json(
                 run_dir / "task_instance" / "manifest.json"
