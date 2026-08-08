@@ -1,12 +1,26 @@
-.PHONY: test full-test smoke release-check
+.PHONY: test data-test full-test smoke smoke-interface smoke-data release-check
 
 test:
-	PYTHONPATH=src:tests:. python3 -m unittest tests.test_current_dataset tests.test_single_current_physics_v13 -v
+	PYTHONPATH=src:tests:. python3 -m unittest \
+		tests.test_current_dataset \
+		tests.test_huggingface_dataset_binding \
+		tests.test_managed_baselines \
+		tests.test_clean_baseline_smoke \
+		tests.test_release_audit -v
+
+data-test:
+	PYTHONPATH=src:tests:. python3 -m physbench validate-dataset \
+		--dataset datasets/releases/13.0.0/dataset.json --check-assets
 
 full-test:
 	PYTHONPATH=src:tests:. python3 -m unittest discover -s tests -v
 
-smoke:
+smoke: smoke-interface
+
+smoke-interface:
+	PYTHONPATH=src:tests:. python3 scripts/smoke_custom_baseline.py --metadata-only
+
+smoke-data:
 	@set -eu; \
 	smoke_root="$$(mktemp -d -t physbench-smoke.XXXXXX)"; \
 	trap 'rm -r "$$smoke_root"' EXIT; \
