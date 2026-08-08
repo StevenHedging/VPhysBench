@@ -14,6 +14,7 @@ from .baseline_api import (
 )
 from .io import load_json, load_jsonl, write_json
 from .datasets import load_dataset
+from .dataset_hub import diagnose_project, diagnostics_succeeded, pull_dataset
 from .orchestration import (
     build_task_instance,
     reevaluate_atomic_variant,
@@ -128,6 +129,27 @@ def _validate_dataset(args: argparse.Namespace) -> int:
         f"scenes={len(dataset.scene_configs)} digest={dataset.digest}"
     )
     return 0
+
+
+def _dataset_pull(args: argparse.Namespace) -> int:
+    descriptor = pull_dataset(
+        args.binding,
+        local_dir=args.local_dir,
+        check_assets=not args.skip_asset_check,
+    )
+    print(descriptor)
+    return 0
+
+
+def _doctor(args: argparse.Namespace) -> int:
+    diagnostics = diagnose_project(args.project_root, level=args.level)
+    for item in diagnostics:
+        print(json.dumps({
+            "name": item.name,
+            "status": item.status,
+            "detail": item.detail,
+        }, ensure_ascii=False, sort_keys=True))
+    return 0 if diagnostics_succeeded(diagnostics) else 1
 
 
 def _atomic_run(args: argparse.Namespace) -> int:
@@ -312,6 +334,41 @@ def build_parser() -> argparse.ArgumentParser:
         help="also verify every referenced asset against assets.lock.json",
     )
     validate_v2.set_defaults(func=_validate_dataset)
+
+    dataset = sub.add_parser(
+        "dataset", help="download the immutable bound Dataset release"
+    )
+    dataset_sub = dataset.add_subparsers(
+        dest="dataset_command", required=True
+    )
+    dataset_pull = dataset_sub.add_parser(
+        "pull", help="download and validate the bound Hugging Face Dataset"
+    )
+    dataset_pull.add_argument(
+        "--binding",
+        default=str(PROJECT_ROOT / "datasets" / "huggingface.json"),
+    )
+    dataset_pull.add_argument(
+        "--local-dir",
+        default=str(PROJECT_ROOT / "datasets"),
+    )
+    dataset_pull.add_argument(
+        "--skip-asset-check",
+        action="store_true",
+        help="download without the final full-asset validation",
+    )
+    dataset_pull.set_defaults(func=_dataset_pull)
+
+    doctor = sub.add_parser(
+        "doctor", help="diagnose metadata or full evaluation readiness"
+    )
+    doctor.add_argument(
+        "--level",
+        choices=["metadata", "evaluation"],
+        default="metadata",
+    )
+    doctor.add_argument("--project-root", default=str(PROJECT_ROOT))
+    doctor.set_defaults(func=_doctor)
 
     atomic = sub.add_parser(
         "atomic-run", help="run Dataset × one atomic Task × Baseline"
