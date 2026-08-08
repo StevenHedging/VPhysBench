@@ -9,6 +9,22 @@
 2. 当一个新 Scene 只提供原始视频和粗糙 XLSX 标注表时，怎样把它整理成可训练、可评测、
    可追溯的数据。
 
+## Hugging Face 私有同步仓库
+
+当前 Git 仓库通过 [`huggingface.json`](huggingface.json) 绑定私有 Hugging Face Dataset
+`StevenHedging/VPhysBench`。绑定固定到不可变 Hub commit，并同时校验 Dataset ID 与
+release；访问凭证只保存在用户级 Hugging Face credential cache，不能写入仓库文件。
+
+当前远端已同步 Dataset 13.0.0 的轻量 release 索引，媒体资产仍待单独上传。已获授权的
+协作者可按绑定 revision 下载到本地 `datasets/`：
+
+```bash
+hf download StevenHedging/VPhysBench \
+  --repo-type dataset \
+  --revision 04ef16102216a3231f045152ab3a996f5f353f63 \
+  --local-dir datasets
+```
+
 数据导入的核心不是“把文件复制进目录”，而是可靠地建立以下关系：
 
 ```text
