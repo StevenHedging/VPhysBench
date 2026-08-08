@@ -1,4 +1,4 @@
-.PHONY: test full-test smoke
+.PHONY: test full-test smoke release-check
 
 test:
 	PYTHONPATH=src:tests:. python3 -m unittest tests.test_current_dataset tests.test_single_current_physics_v13 -v
@@ -19,3 +19,6 @@ smoke:
 		--case-id circular_r1_silver02cm_img_0370 \
 		--run-id smoke \
 		--output-root "$$smoke_root/runs" >/dev/null
+
+release-check:
+	PYTHONPATH=src:tests:. python3 scripts/release_audit.py .
