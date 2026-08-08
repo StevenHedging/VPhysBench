@@ -3,6 +3,7 @@
 test:
 	PYTHONPATH=src:tests:. python3 -m unittest \
 		tests.test_current_dataset \
+		tests.test_dataset_contract_v4 \
 		tests.test_huggingface_dataset_binding \
 		tests.test_dataset_hub_cli \
 		tests.test_managed_baselines \
@@ -10,7 +11,8 @@ test:
 		tests.test_release_audit \
 		tests.test_release_documentation \
 		tests.test_repository_portability \
-		tests.test_release_archive -v
+		tests.test_release_archive \
+		tests.test_validation -v
 
 data-test:
 	PYTHONPATH=src:tests:. python3 -m physbench validate-dataset \
