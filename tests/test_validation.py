@@ -13,6 +13,14 @@ class ValidationTests(unittest.TestCase):
         self.path = FIXTURES / "cases.jsonl"
         self.cases = load_jsonl(self.path)
         self.scenes = load_scene_configs(SCENES)
+        # The legacy validation fixture includes one synthetic free-fall family;
+        # keep its unit-level scene contract local instead of expanding the
+        # release scene catalog.
+        self.scenes["free_fall"] = {
+            "scene_id": "free_fall",
+            "id_parameters": ["ball_radius", "initial_height"],
+            "ood1_factors": ["background", "ball_material"],
+        }
 
     def test_fixture_is_valid(self) -> None:
         self.assertEqual([], errors(validate_cases(self.cases, manifest_path=self.path, scene_configs=self.scenes)))

@@ -7,6 +7,7 @@ from physbench.data_layout import LATEST_DATASET
 from physbench.datasets.loader import (
     _validate_case,
     _validate_views,
+    iter_physics_quantities,
     load_dataset,
 )
 
@@ -15,26 +16,39 @@ class DatasetContractV4Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.dataset = load_dataset(LATEST_DATASET)
+        cls.schema_version = cls.dataset.descriptor["schema_version"]
         cls.known_scenes = set(cls.dataset.scene_configs)
 
     def test_physics_quantity_types_are_strict(self) -> None:
         case = copy.deepcopy(self.dataset.cases[0])
-        quantity = next(iter(case["physics"].values()))
-        quantity["annotated"] = "true"
-        with self.assertRaisesRegex(ValueError, "annotated must be boolean"):
-            _validate_case(case, self.known_scenes)
+        quantity = next(iter_physics_quantities(case))[2]
+        quantity["symbol"] = ""
+        with self.assertRaisesRegex(ValueError, "symbol must be non-empty"):
+            _validate_case(
+                case,
+                self.known_scenes,
+                schema_version=self.schema_version,
+            )
 
         case = copy.deepcopy(self.dataset.cases[0])
-        quantity = next(iter(case["physics"].values()))
+        quantity = next(iter_physics_quantities(case))[2]
         quantity["value"] = True
         with self.assertRaisesRegex(ValueError, "value must be a finite number"):
-            _validate_case(case, self.known_scenes)
+            _validate_case(
+                case,
+                self.known_scenes,
+                schema_version=self.schema_version,
+            )
 
     def test_case_asset_paths_cannot_escape_asset_root(self) -> None:
         case = copy.deepcopy(self.dataset.cases[0])
         case["assets"]["first_frame"] = "../outside.png"
         with self.assertRaisesRegex(ValueError, "relative path inside asset_root"):
-            _validate_case(case, self.known_scenes)
+            _validate_case(
+                case,
+                self.known_scenes,
+                schema_version=self.schema_version,
+            )
 
     def test_view_scene_bucket_must_match_case_scene(self) -> None:
         view = copy.deepcopy(self.dataset.views["view_b"])
