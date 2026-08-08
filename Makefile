@@ -1,4 +1,4 @@
-.PHONY: test data-test full-test smoke smoke-interface smoke-data release-check release-archive-check
+.PHONY: test data-test smoke smoke-interface smoke-data release-check release-archive-check
 
 test:
 	PYTHONPATH=src:tests:. python3 -m unittest \
@@ -17,9 +17,6 @@ test:
 data-test:
 	PYTHONPATH=src:tests:. python3 -m physbench validate-dataset \
 		--dataset datasets/releases/13.0.0/dataset.json --check-assets
-
-full-test:
-	PYTHONPATH=src:tests:. python3 -m unittest discover -s tests -v
 
 smoke: smoke-interface
 
