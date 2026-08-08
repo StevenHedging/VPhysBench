@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "branch": "2026-08-08",
+  "source_commit": "b1a624e1005a24a3bb43f53aa5499b48cc1a2462",
+  "dataset": {
+    "repo_id": "StevenHedging/VPhysBench",
+    "revision": "04ef16102216a3231f045152ab3a996f5f353f63",
+    "dataset_id": "physics_video_seven_scene_v13",
+    "release": "13.0.0"
+  },
+  "evaluation_protocol": "scene_default_v10",
+  "official_tasks": [
+    "tasks/official/five_scene_direct_eval.json",
+    "tasks/official/five_scene_finetune_eval.json"
+  ],
+  "scored_scenes": [
+    "pendulum",
+    "collision_1d",
+    "inclined_plane_slide",
+    "uniform_circular_motion",
+    "parabolic_motion"
+  ],
+  "preview_scenes": [
+    "push_bottle",
+    "vertical_spring_oscillator"
+  ],
+  "integrated_baselines": 0,
+  "baseline_root": "baselines",
+  "run_root": "run",
+  "sam2_source_revision": "2b90b9f5ceec907a1c18123530e92e794ad901a4",
+  "verification": [
+    "make test",
+    "make smoke-interface",
+    "make release-check",
+    "make data-test"
+  ]
+}

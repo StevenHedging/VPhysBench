@@ -18,12 +18,7 @@ FROZEN_PROTOCOLS = {
     f"configs/evaluation/protocols/scene_default_v{version}.json"
     for version in range(4, 8)
 }
-PRESERVED_PREFIXES = (
-    "tests/",
-    "docs/superpowers/",
-    "datasets/provenance/",
-    "docs/experiments/",
-)
+PRESERVED_PREFIXES = ("tests/",)
 
 
 def _active_tracked_text() -> list[tuple[str, str]]:
@@ -43,6 +38,8 @@ def _active_tracked_text() -> list[tuple[str, str]]:
         ):
             continue
         path = ROOT / relative
+        if path.is_symlink() or not path.is_file():
+            continue
         try:
             text = path.read_text(encoding="utf-8")
         except (UnicodeDecodeError, IsADirectoryError):
@@ -69,8 +66,8 @@ class RepositoryPortabilityTest(unittest.TestCase):
         self.assertTrue(readme.startswith("# VPhysBench\n"))
         self.assertEqual("vphysbench", pyproject["project"]["name"])
 
-    def test_repository_directory_is_vphysbench(self) -> None:
-        self.assertEqual("VPhysBench", ROOT.name)
+    def test_checkout_root_contains_the_python_project(self) -> None:
+        self.assertTrue((ROOT / "pyproject.toml").is_file())
 
 
 if __name__ == "__main__":

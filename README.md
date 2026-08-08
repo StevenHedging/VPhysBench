@@ -1,205 +1,84 @@
 # VPhysBench
 
-Physics Video Benchmark 是一个面向物理视频生成模型的七场景、训推一体评测框架。当前
-Dataset release 是
-`datasets/releases/13.0.0/dataset.json`，包含916个case：
+VPhysBench 是面向物理视频生成模型的训练与评测框架。日期分支
+`2026-08-08` 是供协作者使用的干净近似发行版：它保留 Dataset、Task、Evaluator、
+通用 baseline 接口和 submission 导入能力，但不集成任何生成算法、模型配置或权重。
 
-- 单摆 `pendulum`
-- 一维对心碰撞 `collision_1d`
-- 斜面下滑 `inclined_plane_slide`
-- 匀速圆周运动 `uniform_circular_motion`
-- 平抛运动 `parabolic_motion`
-- 推水瓶 `push_bottle`
-- 竖直弹簧振子 `vertical_spring_oscillator`
+Dataset 13.0.0 包含 916 个 case、7 个场景。其中 5 个场景进入正式计分 Task：
 
-当前官方Task为`five_scene_finetune_eval.json`和`five_scene_direct_eval.json`，均指向
-13.0.0 Dataset。推水瓶和竖直弹簧振子已进入Dataset，但专用评估器尚未完成，因此暂不
-进入这两份正式计分Task。
+- `pendulum`
+- `collision_1d`
+- `inclined_plane_slide`
+- `uniform_circular_motion`
+- `parabolic_motion`
 
-13.0.0在每个Case资产目录中只保存一份`caption.json`和一份`physics.json`，并由
-`cases.jsonl`中的`assets.caption`与`assets.physics_annotation`引用。Loader读取这两个
-Case-local成员后，向Baseline和Evaluator提供兼容的`case.text`与`case.physics`运行时
-接口。Release目录只保留`dataset.json`、`cases.jsonl`、`scenes/`和`views/`；迁移与验证证据位于
-`datasets/provenance/releases/13.0.0/`。每个quantity包含稳定`symbol`；独立量的符号
-必须出现在无数值prompt中。标量使用`value/unit/symbol`，推水瓶外力使用带显式时间戳的
-`samples/time_unit/unit/symbol`；所有正式数值保存为非负大小，运动方向由prompt表达。V1–V12
-不再保留为活动运行目录；历史结果依靠Git历史和provenance追溯。
-
-## 设计原则
-
-数据、任务和模型输入策略各有唯一所有者：
-
-| 对象 | 负责 |
-| --- | --- |
-| Dataset / Case | 原始 `text.prompt`、首帧、结构化物理与环境标注、参考资产、View |
-| Task | `family`、数据选择、seed、诊断报告策略、评估协议 |
-| Baseline | 模型身份、I2V/V2V 等输入范式、是否使用物理信息、物理表示与 adapter |
-| Evaluator | 参考解析、时空对齐、scene-local 物理评分与 Task 汇总 |
-
-因此 Task 不再区分“带/不带物理注入”。所有 Baseline 都接收同一种可条件化 Case，
-再由固定的 `input_policy.physics.usage` 决定 `ignored`、`optional` 或 `required`。
-例如 WAN generic 与 WAN physics 是两个 Baseline identity；前者原样使用
-`case.text.prompt`，后者在 Baseline-owned adapter 中追加经审计的结构化物理量。
-
-```text
-DatasetSnapshot + model-agnostic TaskSpec
-                    │
-                    ▼
-            CanonicalTaskPlan
-                    │
-       ┌────────────┴────────────┐
-       ▼                         ▼
-generic Baseline          physics Baseline
-       │                         │
-       └── sealed BaselineTaskInstance
-                          │
-                          ▼
-                     AtomicRun
-                          │
-                          ▼
-                 scene-local evaluation
-```
-
-同一 Task 对多个 Baseline 的 canonical plan 必须完全相同；差异只能来自各 Baseline
-的模型、adapter、训练或推理实现。
-
-## 当前 Baseline
-
-Registry 会发现每个 Bundle 目录下的 `baseline.json` 与 `*.baseline.json`：
-
-| Baseline ID | 物理策略 | 支持 Task family | 说明 |
-| --- | --- | --- | --- |
-| `wan22_ti2v_5b_lora_r32_v3_generic` | `ignored` | `finetune_eval`, `direct_eval` | WAN2.2 + LoRA |
-| `wan22_ti2v_5b_lora_r32_v3_physics` | `required` / `structured_text` | `finetune_eval`, `direct_eval` | 同模型，追加结构化物理文本 |
-| `wan22_ti2v_5b_lora_r32_quantity_embedding_v1` | `required` / `quantity_token_embedding_v1` | `finetune_eval` | WAN2.2 + LoRA，SI 数值/量纲编码 |
-| `wan22_ti2v_5b_lora_r32_symbol_value_cross_attention_v1` | `required` / `symbol_value_cross_attention_v1` | `finetune_eval` | WAN2.2 + LoRA，symbol/value 词空间交叉注意力 |
-| `cosmos3_nano_i2v_generic` | `ignored` | `direct_eval` | Cosmos3-Nano base |
-| `cosmos3_nano_i2v_physics` | `required` / `structured_text` | `direct_eval` | 同模型，追加结构化物理文本 |
-| `wan22_g15_sparse_motion_r32_e20_generic` | `ignored` | `direct_eval` | G15 step-2840，诊断型 |
-| `wan22_g15_sparse_motion_r32_e20_physics` | `required` / `structured_text` | `direct_eval` | G15 step-2840，诊断型 |
-
-G15 的训练源与 Dataset 底层 trial 有重叠，不能进入无泄漏排名。审计见
-`baselines/wan22_g15_sparse_motion/provenance/benchmark_overlap_v3.json`；4.0.0 没有
-改变 3.0.0 的 case 或媒体集合，所以该 source-aware 结论仍成立。
-
-## 环境与验证
-
-Benchmark 环境：
-
-```text
-./.venv
-```
-
-```bash
-cd VPhysBench
-
-PYTHONPATH=src:tests:. python \
-  -m unittest tests.test_current_dataset tests.test_single_current_physics_v13 -v
-
-PYTHONPATH=src python -m physbench \
-  validate-dataset \
-  --dataset datasets/releases/13.0.0/dataset.json \
-  --check-assets
-
-PYTHONPATH=src python scripts/validate_dataset_v13.py
-```
-
-这是当前release的正式数据/Task回归入口。`make test`运行当前Dataset门禁，完整测试使用
-`make full-test`；仓库不再提供依赖旧Release目录的运行门禁。
-
-Scene evaluator 需要额外安装：
-
-```bash
-python -m pip install -e ".[scene-evaluation]"
-python -m pip install -e ../sam2
-```
+`push_bottle` 和 `vertical_spring_oscillator` 是 preview/data-only 场景，不进入正式总分。
 
 ## 快速开始
 
-下面三条命令使用当前13.0.0 Dataset和已有评估器的五场景官方Task。推水瓶和竖直弹簧
-振子需等专用评估器和协议接入后再加入正式Task。
-
-发现并验证 Baseline：
+需要 Python 3.11、Git、ffmpeg/ffprobe，以及对私有 Hugging Face Dataset 的访问权。
 
 ```bash
-PYTHONPATH=src python -m physbench \
-  baseline list
+python3.11 -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[hub]"
 
-PYTHONPATH=src python -m physbench \
-  baseline validate wan22_ti2v_5b_lora_r32_v3_generic
+hf auth login
+physbench dataset pull
+physbench doctor --level evaluation
+
+make smoke-interface
+physbench baseline list
 ```
 
-编译一份 sealed TaskInstance：
+干净 checkout 中 `baseline list` 应输出空数组。创建自己的 I2V 接入：
 
 ```bash
-PYTHONPATH=src python -m physbench \
-  task-build \
+physbench baseline init my_model --backend managed-i2v
+physbench baseline validate my_model
+```
+
+脚手架位于 `baselines/my_model/`。把其中的通用命令替换为自己的推理入口后，先运行
+一个 case：
+
+```bash
+physbench atomic-run \
   --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_direct_eval.json \
-  --baseline wan22_ti2v_5b_lora_r32_v3_generic \
-  --output results/wan22_generic_task_instance.json
+  --baseline baselines/my_model \
+  --case-id circular_r1_silver02cm_img_0370 \
+  --run-id my_model_smoke \
+  --output-root run \
+  --execute
 ```
 
-创建 AtomicRun；不加 `--execute` 时只冻结并展开计划：
+所有预测、日志和评测结果都属于 `run/<run_id>/`；生成视频位于
+`run/<run_id>/predictions/`。不要把运行结果写入 Dataset。
 
-```bash
-PYTHONPATH=src python -m physbench \
-  atomic-run \
-  --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval.json \
-  --baseline cosmos3_nano_i2v_generic \
-  --output-root run
+## 仓库边界
+
+```text
+datasets/          Dataset 元数据与固定 Hugging Face 绑定
+tasks/official/    模型无关的正式 Task
+baselines/         用户算法接入目录；初始只有 README
+configs/           场景与评测协议
+schemas/           Dataset、Task、Baseline 和 Run 契约
+src/physbench/     CLI、运行时和 evaluator
+examples/          未注册的协议夹具
+tests/             CPU 元数据、接口和 evaluator 回归
+run/               唯一运行输出根；初始只有 README
 ```
-
-在同一 Task 上成对比较两个 Baseline：
-
-```bash
-PYTHONPATH=src python -m physbench \
-  matrix-run \
-  --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval.json \
-  --baseline cosmos3_nano_i2v_generic \
-  --baseline cosmos3_nano_i2v_physics \
-  --matrix-id cosmos3_generic_vs_physics \
-  --output-root run
-```
-
-加 `--execute` 才会启动模型。每个矩阵元素仍是独立
-`run/<matrix_id>__<baseline_id>/` AtomicRun。
 
 ## 文档
 
-- [系统架构](docs/ARCHITECTURE.md)
-- [数据集说明与新 Scene 导入手册](datasets/README.md)
-- [新实验情景Evaluator接入指南](docs/NEW_SCENE_EVALUATOR.md)
-- [Task 与运行矩阵](docs/TASKS.md)
-- [DataAdapter 与输入策略](docs/DATA_ADAPTER.md)
-- [自定义 Baseline 集成](docs/BASELINE_INTEGRATION.md)
-- [场景评估协议](docs/EVALUATION.md)
-- [WAN2.2 Baseline](docs/WAN22.md)
-- [WAN2.2 物理量编码 Baseline](docs/WAN22_QUANTITY_EMBEDDING.md)
-- [WAN2.2 Symbol–Value Cross-Attention Baseline](docs/WAN22_SYMBOL_VALUE_CROSS_ATTENTION.md)
-- [WAN2.2 物理量编码五场景实验报告](docs/experiments/WAN22_QUANTITY_EMBEDDING_20260728.md)
-- [碰撞评估器 v4 与可观测性审计](docs/experiments/COLLISION_EVALUATOR_V4_20260730.md)
-- [Cosmos3-Nano Baseline](docs/COSMOS3.md)
-- [运行、验证与故障排查](docs/OPERATIONS.md)
+- [安装与首个运行](docs/GETTING_STARTED.md)
+- [接入自定义 I2V/V2V 算法](docs/CUSTOM_BASELINE_QUICKSTART.md)
+- [导入已有预测视频](docs/SUBMISSION_QUICKSTART.md)
+- [Benchmark 协议](docs/BENCHMARK_PROTOCOL.md)
+- [Run 目录契约](docs/RUN_LAYOUT.md)
+- [复现实验](docs/REPRODUCIBILITY.md)
+- [完整 baseline 接口](docs/BASELINE_INTEGRATION.md)
+- [Evaluator 细节](docs/EVALUATION.md)
 
-## 仓库结构
-
-```text
-VPhysBench/
-├── datasets/                 # 唯一权威数据根；13.0.0是当前release
-├── tasks/official/           # direct_eval 与 finetune_eval 两份模型无关 Task
-├── baselines/                # schema v5 Bundle、adapter/driver 与本机配置模板
-├── configs/evaluation/       # scene evaluator 协议
-├── schemas/v3/               # 历史Dataset、Case、Task及当前TaskInstance
-├── schemas/v4/               # 当前Task与历史Dataset/Case
-├── schemas/v5/               # 当前Dataset/Case与Baseline Bundle
-├── src/physbench/            # planner、runtime、评估与 CLI
-├── tests/                    # 回归测试
-├── docs/                     # 架构和操作文档
-└── run/                      # 当前 AtomicRun 输出
-```
-
-权威数据资产只能写入 `datasets/`。缩放、抽帧、特征、模型缓存和预测必须进入内容寻址
-cache 或当前 run，不能回写 Dataset。
+`examples/dummy_i2v_command.py` 只验证命令和视频协议，不是参考算法，其分数没有研究意义。
