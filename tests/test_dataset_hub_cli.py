@@ -11,7 +11,7 @@ from physbench.cli import build_parser
 from physbench.dataset_hub import diagnose_project, pull_dataset
 
 
-REVISION = "04ef16102216a3231f045152ab3a996f5f353f63"
+REVISION = "520a86a64e87642e357b82d52037ee708ede5243"
 
 
 class DatasetHubTests(unittest.TestCase):

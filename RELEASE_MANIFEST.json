@@ -4,7 +4,7 @@
   "source_commit": "b1a624e1005a24a3bb43f53aa5499b48cc1a2462",
   "dataset": {
     "repo_id": "StevenHedging/VPhysBench",
-    "revision": "04ef16102216a3231f045152ab3a996f5f353f63",
+    "revision": "520a86a64e87642e357b82d52037ee708ede5243",
     "dataset_id": "physics_video_seven_scene_v13",
     "release": "13.0.0"
   },
