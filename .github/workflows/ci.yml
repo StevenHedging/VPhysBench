@@ -1,0 +1,32 @@
+name: clean-release
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  interface-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install interface dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ffmpeg
+          python -m pip install --upgrade pip
+          python -m pip install --editable ".[hub]"
+      - name: Run metadata and interface tests
+        run: make test
+      - name: Run unregistered-baseline smoke test
+        run: make smoke-interface
+      - name: Audit tracked release contents
+        run: make release-check
+      - name: Verify exported archive
+        run: make release-archive-check

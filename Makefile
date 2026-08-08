@@ -1,12 +1,16 @@
-.PHONY: test data-test full-test smoke smoke-interface smoke-data release-check
+.PHONY: test data-test full-test smoke smoke-interface smoke-data release-check release-archive-check
 
 test:
 	PYTHONPATH=src:tests:. python3 -m unittest \
 		tests.test_current_dataset \
 		tests.test_huggingface_dataset_binding \
+		tests.test_dataset_hub_cli \
 		tests.test_managed_baselines \
 		tests.test_clean_baseline_smoke \
-		tests.test_release_audit -v
+		tests.test_release_audit \
+		tests.test_release_documentation \
+		tests.test_repository_portability \
+		tests.test_release_archive -v
 
 data-test:
 	PYTHONPATH=src:tests:. python3 -m physbench validate-dataset \
@@ -36,3 +40,6 @@ smoke-data:
 
 release-check:
 	PYTHONPATH=src:tests:. python3 scripts/release_audit.py .
+
+release-archive-check:
+	PYTHONPATH=src:tests:. python3 scripts/verify_release_archive.py
