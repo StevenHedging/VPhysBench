@@ -30,6 +30,7 @@ LOCAL_ONLY_NAMES = {"baseline.local.json"}
 CONTENT_POLICY_FILES = {
     "scripts/release_audit.py",
     "tests/test_release_audit.py",
+    "tests/test_release_documentation.py",
     "tests/test_repository_portability.py",
 }
 _CREDENTIAL = re.compile(
