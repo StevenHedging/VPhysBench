@@ -147,9 +147,7 @@ class EvaluationProtocolV6Tests(unittest.TestCase):
                 )
                 visualization = config["visualization"]
                 self.assertTrue(visualization["enabled"])
-                self.assertTrue(
-                    visualization["external_root"].startswith("/mnt/nvme1/")
-                )
+                self.assertNotIn("external_root", visualization)
                 self.assertEqual(
                     "visualizations", visualization["repository_link"]
                 )

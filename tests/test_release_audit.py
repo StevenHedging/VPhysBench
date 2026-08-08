@@ -60,8 +60,18 @@ class ReleaseAuditTests(unittest.TestCase):
         self.assertEqual([], self.issues())
 
     def test_policy_files_may_name_forbidden_markers(self) -> None:
-        self.write("scripts/release_audit.py", "FORBIDDEN = 'wan22'\n")
-        self.write("tests/test_release_audit.py", "MARKER = 'cosmos3'\n")
+        self.write(
+            "scripts/release_audit.py",
+            "FORBIDDEN = ('wan22', '/root/', 'hf_" + "a" * 32 + "')\n",
+        )
+        self.write(
+            "tests/test_release_audit.py",
+            "MARKER = ('cosmos3', '/mnt/')\n",
+        )
+        self.write(
+            "tests/test_repository_portability.py",
+            "FORBIDDEN = ('/root/', '/mnt/')\n",
+        )
         self.assertEqual([], self.issues())
 
 

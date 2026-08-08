@@ -3,6 +3,15 @@ __pycache__/
 .pytest_cache/
 build/
 *.egg-info/
+baselines/**/baseline.local.json
+baselines/**/__pycache__/
+baselines/**/*.bin
+baselines/**/*.ckpt
+baselines/**/*.gguf
+baselines/**/*.onnx
+baselines/**/*.pt
+baselines/**/*.pth
+baselines/**/*.safetensors
 run/*
 !run/README.md
 results/*
@@ -18,7 +27,6 @@ datasets/assets/*/*
 datasets/assets/*/*/*
 !datasets/assets/*/*/caption.json
 !datasets/assets/*/*/physics.json
-datasets/provenance/alignment/
-datasets/provenance/source_archives/
+datasets/provenance/
 cache/
 .worktrees/

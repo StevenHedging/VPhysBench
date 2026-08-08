@@ -175,7 +175,6 @@
       },
       "visualization": {
         "enabled": true,
-        "external_root": "/mnt/nvme1/physics_video_benchmark/evaluation_visualizations",
         "external_root_env": "PHYSBENCH_VISUALIZATION_ROOT",
         "repository_link": "visualizations",
         "namespace": "scene_default_v4",

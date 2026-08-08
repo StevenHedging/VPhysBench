@@ -1,6 +1,7 @@
 # AtomicRun Outputs
 
-`run/` 是当前唯一的 AtomicRun 与 matrix 输出根目录。
+`run/` 是当前唯一的 AtomicRun 与 matrix 输出根目录。干净 checkout 中本目录
+只包含这份说明；运行内容由 CLI 按 `run/<run_id>/` 创建且不提交到 Git。
 
 每个子目录是一个不可混合的：
 

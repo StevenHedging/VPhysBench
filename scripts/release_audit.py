@@ -27,9 +27,10 @@ FORBIDDEN_MODEL_MARKERS = {
     "symbol_value_cross_attention",
 }
 LOCAL_ONLY_NAMES = {"baseline.local.json"}
-MODEL_MARKER_POLICY_FILES = {
+CONTENT_POLICY_FILES = {
     "scripts/release_audit.py",
     "tests/test_release_audit.py",
+    "tests/test_repository_portability.py",
 }
 _CREDENTIAL = re.compile(
     r"hf_[A-Za-z0-9]{20,}|BEGIN (?:RSA|OPENSSH|EC) PRIVATE KEY"
@@ -90,7 +91,7 @@ def audit_release(
             issues.append(f"local-only file is tracked: {normalized}")
         if Path(normalized).suffix.casefold() in WEIGHT_SUFFIXES:
             issues.append(f"model weight or checkpoint is tracked: {normalized}")
-        checks_model_markers = normalized not in MODEL_MARKER_POLICY_FILES
+        checks_model_markers = normalized not in CONTENT_POLICY_FILES
         if checks_model_markers and any(
             marker in lowered for marker in FORBIDDEN_MODEL_MARKERS
         ):
@@ -98,6 +99,8 @@ def audit_release(
 
         content = _read_text(path)
         if content is None:
+            continue
+        if normalized in CONTENT_POLICY_FILES:
             continue
         content_lowered = content.casefold()
         if checks_model_markers and any(
