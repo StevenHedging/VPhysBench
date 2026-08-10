@@ -60,7 +60,7 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
         prepared.update({
             "adapter": self.config.get(
                 "conditioning_adapter_id",
-                "wan22_quantity_embedding",
+                self.config.get("adapter", "wan22_quantity_embedding"),
             ),
             "quantity_encoder": self.config["quantity_encoder"],
             "checkpoint_format": (
@@ -727,7 +727,10 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
                 ],
                 "conditioning_adapter_id": self.config.get(
                     "conditioning_adapter_id",
-                    "wan22_quantity_embedding",
+                    self.config.get(
+                        "adapter",
+                        "wan22_quantity_embedding",
+                    ),
                 ),
                 "encoder_type": encoder.encoder_type,
                 "base_model_assets": str(

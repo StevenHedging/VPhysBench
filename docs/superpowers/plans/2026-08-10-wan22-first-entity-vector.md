@@ -192,7 +192,7 @@ git commit -m "feat: seal entity-vector WAN checkpoints"
 
 - [ ] **Step 1: Write failing bundle discovery/validation/task tests**
 
-Assert exact model, adapter, trainer, runner, seven-scene, seed, epoch, save-step, and protocol identities. Compile the task and assert 582 training cases, 110 inference jobs, and seed 42.
+Assert exact model, adapter, trainer, runner, seven-scene, seed, epoch, save-step, and protocol identities. Compile the task and assert 806 training cases, 110 inference jobs, and seed 42. The world-aligned scene balancer expands those 806 unique cases to 2,184 rows per epoch, which produces 273 optimizer steps per epoch across eight ranks and 2,184 total steps over eight epochs.
 
 - [ ] **Step 2: Verify RED**
 

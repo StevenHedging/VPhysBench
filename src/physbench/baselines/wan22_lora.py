@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import os
 import re
 import subprocess
@@ -156,24 +157,56 @@ class Wan22LoraAdapter(BaselineAdapter):
     ) -> list[dict[str, Any]]:
         policy = self.config.get("lora", {}).get("scene_balancing", "none")
         input_counts = Counter(row["scene_id"] for row in rows)
+        world_size = len(
+            str(self.runtime.get("cuda_visible_devices", "0")).split(",")
+        )
+        alignment: int | None = None
+        target: int | None = None
         if policy == "none":
             balanced = list(rows)
-        elif policy == "oversample_each_scene_to_largest":
+        elif policy in {
+            "oversample_each_scene_to_largest",
+            "oversample_each_scene_to_largest_world_aligned",
+        }:
             by_scene: dict[str, list[dict[str, Any]]] = defaultdict(list)
             for row in rows:
                 by_scene[row["scene_id"]].append(row)
-            target = max((len(items) for items in by_scene.values()), default=0)
+            largest = max(
+                (len(items) for items in by_scene.values()),
+                default=0,
+            )
+            if policy == "oversample_each_scene_to_largest_world_aligned":
+                scene_count = len(by_scene)
+                alignment = world_size // math.gcd(world_size, scene_count)
+                target = (
+                    (largest + alignment - 1) // alignment
+                ) * alignment
+            else:
+                target = largest
             balanced = []
             for scene_id in sorted(by_scene):
                 items = sorted(by_scene[scene_id], key=lambda row: row["case_id"])
                 balanced.extend(dict(items[index % len(items)]) for index in range(target))
         else:
             raise ValueError(f"unsupported lora.scene_balancing policy: {policy}")
+        if (
+            policy == "oversample_each_scene_to_largest_world_aligned"
+            and len(balanced) % world_size
+        ):
+            raise AssertionError(
+                "world-aligned balancing did not divide world size"
+            )
         output_counts = Counter(row["scene_id"] for row in balanced)
         dataset_repeat = int(self.config.get("lora", {}).get("dataset_repeat", 10))
         num_epochs = int(self.config.get("lora", {}).get("num_epochs", 5))
-        world_size = len(str(self.runtime.get("cuda_visible_devices", "0")).split(","))
-        write_json(artifact_root / "training_sampling_plan.json", {
+        expected_steps = (
+            len(balanced) * dataset_repeat // world_size
+            if policy == "oversample_each_scene_to_largest_world_aligned"
+            else (
+                len(balanced) * dataset_repeat + world_size - 1
+            ) // world_size
+        )
+        plan = {
             "policy": policy,
             "unique_case_count": len(rows),
             "metadata_row_count": len(balanced),
@@ -182,14 +215,21 @@ class Wan22LoraAdapter(BaselineAdapter):
             "dataset_repeat": dataset_repeat,
             "num_epochs": num_epochs,
             "world_size": world_size,
-            "expected_optimizer_steps_per_epoch": (
-                len(balanced) * dataset_repeat + world_size - 1
-            ) // world_size,
-            "expected_total_optimizer_steps": (
-                ((len(balanced) * dataset_repeat + world_size - 1) // world_size)
-                * num_epochs
-            ),
-        })
+            "expected_optimizer_steps_per_epoch": expected_steps,
+            "expected_total_optimizer_steps": expected_steps * num_epochs,
+        }
+        if policy == "oversample_each_scene_to_largest_world_aligned":
+            plan.update({
+                "per_scene_target": target,
+                "world_alignment": alignment,
+                "shuffle": True,
+                "sampler_seed": int(
+                    self.config.get("lora", {}).get("seed", 42)
+                ),
+                "sampler_generator": "torch.Generator",
+                "sampler_binding": "DataLoader(generator=...)",
+            })
+        write_json(artifact_root / "training_sampling_plan.json", plan)
         return balanced
 
     def _training_metadata_path(self, dataset_dir: Path) -> Path:

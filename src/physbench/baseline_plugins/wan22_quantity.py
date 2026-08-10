@@ -26,7 +26,10 @@ class Wan22QuantityExecutionEngine(Wan22ExecutionEngine):
     ) -> dict[str, Any]:
         config = super()._legacy_config(instance_value)
         config.update({
-            "adapter": "wan22_quantity_embedding",
+            "adapter": self.bundle.value["adapter"]["config"].get(
+                "conditioning_adapter_id",
+                "wan22_quantity_embedding",
+            ),
             "quantity_encoder": self.bundle.value["model"][
                 "quantity_encoder"
             ],

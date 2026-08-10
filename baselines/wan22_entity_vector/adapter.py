@@ -18,6 +18,37 @@ ENTITY_VECTOR_COMPONENTS = (
 )
 _SIZE_FIELDS = ("radius", "length", "height", "orbit_radius")
 _VELOCITY_FIELDS = ("initial_velocity", "initial_horizontal_velocity")
+_PROJECTED_OBJECT_ONE_FIELDS = {
+    "collision_1d": {
+        "mass": "ball_1_mass",
+        "radius": "ball_1_radius",
+        "initial_velocity": "ball_1_initial_velocity",
+    },
+    "inclined_plane_slide": {
+        "mass": "block_mass",
+        "length": "block_length",
+    },
+    "parabolic_motion": {
+        "mass": "ball_mass",
+        "radius": "ball_radius",
+        "initial_horizontal_velocity": "initial_horizontal_velocity",
+    },
+    "pendulum": {
+        "mass": "bob_mass",
+        "radius": "bob_radius",
+    },
+    "push_bottle": {
+        "mass": "bottle_mass",
+        "height": "bottle_height",
+    },
+    "uniform_circular_motion": {
+        "orbit_radius": "object_1_orbit_radius",
+    },
+    "vertical_spring_oscillator": {
+        "mass": "oscillator_mass",
+        "radius": "ball_radius",
+    },
+}
 
 
 def _read_nonnegative_quantity(
@@ -99,17 +130,36 @@ def extract_first_entity_vector(case: dict[str, Any]) -> dict[str, Any]:
     physics = case.get("physics")
     if not isinstance(physics, dict):
         raise ValueError(f"case {case_id} requires physics")
-    objects = physics.get("objects")
-    if not isinstance(objects, dict):
-        raise ValueError(f"case {case_id} requires physics.objects")
-    object_1 = objects.get("object_1")
-    if not isinstance(object_1, dict):
-        raise ValueError(
-            f"case {case_id} requires physics.objects.object_1"
-        )
-    environment = physics.get("environment", {})
-    if not isinstance(environment, dict):
-        raise ValueError(f"case {case_id} physics.environment must be an object")
+    if set(physics) == {"objects", "environment"}:
+        objects = physics.get("objects")
+        if not isinstance(objects, dict):
+            raise ValueError(f"case {case_id} requires physics.objects")
+        object_1 = objects.get("object_1")
+        if not isinstance(object_1, dict):
+            raise ValueError(
+                f"case {case_id} requires physics.objects.object_1"
+            )
+        environment = physics.get("environment", {})
+        if not isinstance(environment, dict):
+            raise ValueError(
+                f"case {case_id} physics.environment must be an object"
+            )
+    else:
+        scene_id = str(case.get("scene_id"))
+        try:
+            projected_fields = _PROJECTED_OBJECT_ONE_FIELDS[scene_id]
+        except KeyError as exc:
+            raise ValueError(
+                f"case {case_id} has no object_1 projection for {scene_id}"
+            ) from exc
+        object_1 = {
+            field: physics[semantic_name]
+            for field, semantic_name in projected_fields.items()
+            if semantic_name in physics
+        }
+        environment = {
+            "angular_velocity": physics["angular_velocity"]
+        } if "angular_velocity" in physics else {}
 
     source_fields: list[str | None] = []
     provenance: list[str] = []
@@ -335,8 +385,7 @@ class FirstEntityVectorDataAdapter(DataAdapter):
             "representation": REPRESENTATION,
             "binding": "native_inputs.physics.entity_vector",
             "transport": "inline_json",
-            "source_object": "object_1",
-            "components": list(ENTITY_VECTOR_COMPONENTS),
+            "used_parameters": [],
         })
         return base
 

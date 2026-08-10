@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import json
 import struct
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,6 +16,8 @@ from baselines.wan22_entity_vector.adapter import (
 from _paths import ROOT
 from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
+from physbench.baseline_api import load_baseline_bundle
+from physbench.orchestration import build_task_instance
 from physbench.baselines.wan22_quantity import Wan22QuantityLoraAdapter
 from physbench.baselines.wan22_quantity_model import (
     QUANTITY_CHECKPOINT_PREFIX,
@@ -327,6 +330,106 @@ class FirstEntityVectorEncoderTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "619 tensors"):
             Wan22QuantityLoraAdapter._checkpoint_inventory_bytes(payload)
+
+
+class FirstEntityVectorRegistrationTests(unittest.TestCase):
+    baseline_path = (
+        ROOT / "baselines" / "wan22_entity_vector" / "baseline.json"
+    )
+    task_path = (
+        ROOT
+        / "tasks"
+        / "experiments"
+        / "seven_scene_entity_vector_finetune_eval.json"
+    )
+
+    def test_bundle_freezes_the_requested_training_recipe(self) -> None:
+        bundle = load_baseline_bundle(self.baseline_path)
+        value = bundle.value
+        self.assertEqual(
+            value["baseline_id"],
+            "wan22_ti2v_5b_lora_r32_physics_text_entity_vector_v1",
+        )
+        self.assertEqual(
+            value["input_policy"]["physics"]["representations"],
+            ["structured_text", "first_entity_vector_mlp_v1"],
+        )
+        self.assertEqual(
+            value["model"]["quantity_encoder"]["encoder_type"],
+            "first_entity_vector_mlp_v1",
+        )
+        trainer = value["trainer"]["config"]
+        self.assertEqual(trainer["dataset_repeat"], 1)
+        self.assertEqual(trainer["num_epochs"], 8)
+        self.assertEqual(trainer["save_steps"], 273)
+        self.assertEqual(trainer["rank"], 32)
+        self.assertEqual(trainer["seed"], 42)
+        self.assertEqual(
+            trainer["scene_balancing"],
+            "oversample_each_scene_to_largest_world_aligned",
+        )
+
+    def test_task_compiles_806_train_cases_and_110_jobs(self) -> None:
+        instance = build_task_instance(
+            dataset_path=LATEST_DATASET,
+            task_path=self.task_path,
+            baseline_path=self.baseline_path,
+            check_assets=False,
+        )
+        plan = instance.canonical_plan
+        self.assertEqual(len(plan.train_case_ids), 806)
+        self.assertEqual(len(plan.jobs), 110)
+        self.assertEqual(
+            {job["seed"] for job in plan.jobs},
+            {42},
+        )
+        self.assertEqual(
+            json.loads(self.task_path.read_text())["evaluation"]["protocol"],
+            "scene_default_v14",
+        )
+
+    def test_world_aligned_balancing_reproduces_2184_steps(self) -> None:
+        adapter = object.__new__(Wan22QuantityLoraAdapter)
+        adapter.config = {
+            "lora": {
+                "scene_balancing": (
+                    "oversample_each_scene_to_largest_world_aligned"
+                ),
+                "dataset_repeat": 1,
+                "num_epochs": 8,
+                "seed": 42,
+            }
+        }
+        adapter.runtime = {
+            "cuda_visible_devices": "0,1,2,3,4,5,6,7"
+        }
+        scene_counts = {
+            "collision_1d": 310,
+            "inclined_plane_slide": 80,
+            "parabolic_motion": 82,
+            "pendulum": 80,
+            "push_bottle": 127,
+            "uniform_circular_motion": 30,
+            "vertical_spring_oscillator": 97,
+        }
+        rows = [
+            {"scene_id": scene, "case_id": f"{scene}_{index:04d}"}
+            for scene, count in scene_counts.items()
+            for index in range(count)
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            balanced = adapter._balance_training_rows(
+                rows,
+                Path(directory),
+            )
+            plan = json.loads(
+                (Path(directory) / "training_sampling_plan.json").read_text()
+            )
+        self.assertEqual(len(rows), 806)
+        self.assertEqual(len(balanced), 2184)
+        self.assertEqual(plan["per_scene_target"], 312)
+        self.assertEqual(plan["expected_optimizer_steps_per_epoch"], 273)
+        self.assertEqual(plan["expected_total_optimizer_steps"], 2184)
 
 
 if __name__ == "__main__":
