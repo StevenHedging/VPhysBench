@@ -222,6 +222,36 @@ class QuantityEncoder(nn.Module):
     def __init__(self, config: dict[str, Any]):
         super().__init__()
         self.config = dict(config)
+        self.encoder_type = str(
+            config.get("encoder_type", "si_quantity_token_mlp_v1")
+        )
+        if self.encoder_type == "first_entity_vector_mlp_v1":
+            input_size = int(config.get("input_size", 0))
+            hidden_sizes = config.get("hidden_sizes")
+            text_hidden = int(config.get("text_hidden_size", 0))
+            if input_size != 3:
+                raise ValueError("first-entity vector input_size must be 3")
+            if hidden_sizes != [256, 1024]:
+                raise ValueError(
+                    "first-entity vector hidden_sizes must be [256, 1024]"
+                )
+            if text_hidden != 4096:
+                raise ValueError(
+                    "first-entity vector text_hidden_size must be 4096"
+                )
+            self.entity_mlp = nn.Sequential(
+                nn.Linear(3, 256),
+                nn.SiLU(),
+                nn.Linear(256, 1024),
+                nn.SiLU(),
+                nn.Linear(1024, 4096),
+                nn.LayerNorm(4096),
+            )
+            return
+        if self.encoder_type != "si_quantity_token_mlp_v1":
+            raise ValueError(
+                f"unsupported quantity encoder_type {self.encoder_type!r}"
+            )
         numeric_size = int(config["numeric_feature_size"])
         if numeric_size != len(NUMERIC_FEATURE_NAMES):
             raise ValueError(
@@ -285,6 +315,42 @@ class QuantityEncoder(nn.Module):
         records: Iterable[dict[str, Any]],
     ) -> torch.Tensor:
         items = list(records)
+        if self.encoder_type == "first_entity_vector_mlp_v1":
+            if len(items) != 1:
+                raise ValueError(
+                    "first-entity vector encoder requires exactly one record"
+                )
+            values = items[0].get("values_si")
+            if not isinstance(values, list) or len(values) != 3:
+                raise ValueError(
+                    "first-entity vector record requires exactly three values"
+                )
+            if any(
+                not isinstance(value, (int, float))
+                or isinstance(value, bool)
+                or not math.isfinite(float(value))
+                or float(value) < 0
+                for value in values
+            ):
+                raise ValueError(
+                    "first-entity vector values must be finite nonnegative "
+                    "numbers"
+                )
+            parameter = next(self.parameters())
+            vector = torch.tensor(
+                [values],
+                dtype=parameter.dtype,
+                device=parameter.device,
+            )
+            encoded = self.entity_mlp(vector)
+            if (
+                not self.training
+                and not bool(torch.isfinite(encoded.detach()).all())
+            ):
+                raise FloatingPointError(
+                    "QuantityEncoder produced non-finite physical embeddings"
+                )
+            return encoded
         if not items:
             raise ValueError("quantity encoder requires at least one record")
         parameter = next(self.parameters())
@@ -374,23 +440,28 @@ def _validate_quantity_encoder_state_dict(
     encoder: QuantityEncoder,
     state: dict[str, torch.Tensor],
 ) -> None:
-    if len(state) != QUANTITY_ENCODER_TENSOR_COUNT:
-        raise ValueError(
-            "quantity encoder checkpoint must contain exactly "
-            f"{QUANTITY_ENCODER_TENSOR_COUNT} tensors, got {len(state)}"
-        )
-    if set(state) != QUANTITY_ENCODER_STATE_KEYS:
-        missing = sorted(QUANTITY_ENCODER_STATE_KEYS - set(state))
-        unexpected = sorted(set(state) - QUANTITY_ENCODER_STATE_KEYS)
-        raise ValueError(
-            "quantity encoder checkpoint topology mismatch: "
-            f"missing={missing}, unexpected={unexpected}"
-        )
     expected = encoder.state_dict()
-    if set(expected) != QUANTITY_ENCODER_STATE_KEYS:
+    expected_keys = frozenset(expected)
+    expected_count = len(expected_keys)
+    if encoder.encoder_type == "si_quantity_token_mlp_v1" and (
+        expected_count != QUANTITY_ENCODER_TENSOR_COUNT
+        or expected_keys != QUANTITY_ENCODER_STATE_KEYS
+    ):
         raise RuntimeError(
             "QuantityEncoder implementation no longer matches the frozen "
             "19-tensor checkpoint topology"
+        )
+    if len(state) != expected_count:
+        raise ValueError(
+            "quantity encoder checkpoint must contain exactly "
+            f"{expected_count} tensors, got {len(state)}"
+        )
+    if set(state) != expected_keys:
+        missing = sorted(expected_keys - set(state))
+        unexpected = sorted(set(state) - expected_keys)
+        raise ValueError(
+            "quantity encoder checkpoint topology mismatch: "
+            f"missing={missing}, unexpected={unexpected}"
         )
     for key, tensor in state.items():
         if tuple(tensor.shape) != tuple(expected[key].shape):
@@ -858,10 +929,11 @@ def _load_combined_quantity_checkpoint_state(
         raise ValueError(
             f"checkpoint has no quantity encoder tensors: {source}"
         )
-    if len(quantity_keys) != QUANTITY_ENCODER_TENSOR_COUNT:
+    expected_encoder_tensor_count = len(encoder.state_dict())
+    if len(quantity_keys) != expected_encoder_tensor_count:
         raise ValueError(
             "combined checkpoint must contain exactly "
-            f"{QUANTITY_ENCODER_TENSOR_COUNT} quantity encoder tensors, "
+            f"{expected_encoder_tensor_count} quantity encoder tensors, "
             f"got {len(quantity_keys)}"
         )
     quantity_prefixes = {
@@ -930,10 +1002,11 @@ def load_quantity_encoder_checkpoint(
                 f"checkpoint has no quantity encoder tensors: {path}"
             )
         return {"loaded": False, "tensor_count": 0}
-    if len(raw_quantity_keys) != QUANTITY_ENCODER_TENSOR_COUNT:
+    expected_encoder_tensor_count = len(encoder.state_dict())
+    if len(raw_quantity_keys) != expected_encoder_tensor_count:
         raise ValueError(
             "checkpoint must contain exactly "
-            f"{QUANTITY_ENCODER_TENSOR_COUNT} quantity encoder tensors, "
+            f"{expected_encoder_tensor_count} quantity encoder tensors, "
             f"got {len(raw_quantity_keys)}"
         )
     quantity_prefixes = {

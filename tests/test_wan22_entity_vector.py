@@ -13,6 +13,8 @@ from baselines.wan22_entity_vector.adapter import (
 from _paths import ROOT
 from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
+from physbench.baselines.wan22_quantity_model import QuantityEncoder
+from torch import nn
 
 
 def _case(
@@ -221,6 +223,60 @@ class FirstEntityVectorAdapterTests(unittest.TestCase):
             result["input_contract"]["media_channels"][0]["id"],
             "initial_frame",
         )
+
+
+class FirstEntityVectorEncoderTests(unittest.TestCase):
+    def _config(self) -> dict:
+        return {
+            "encoder_type": "first_entity_vector_mlp_v1",
+            "input_size": 3,
+            "hidden_sizes": [256, 1024],
+            "text_hidden_size": 4096,
+        }
+
+    def _record(self) -> dict:
+        return {
+            "representation": "first_entity_vector_mlp_v1",
+            "components": list(ENTITY_VECTOR_COMPONENTS),
+            "values_si": [0.03313, 0.01, 0.6004202942059444],
+            "sentinel": "<extra_id_0>",
+        }
+
+    def test_encoder_has_exact_three_linear_layers(self) -> None:
+        encoder = QuantityEncoder(self._config())
+        linears = [
+            module
+            for module in encoder.modules()
+            if isinstance(module, nn.Linear)
+        ]
+        self.assertEqual(len(linears), 3)
+        self.assertEqual(
+            [
+                (layer.in_features, layer.out_features)
+                for layer in linears
+            ],
+            [(3, 256), (256, 1024), (1024, 4096)],
+        )
+
+    def test_encoder_outputs_one_finite_wan_context_vector(self) -> None:
+        encoder = QuantityEncoder(self._config()).eval()
+        output = encoder.encode_records([self._record()])
+        self.assertEqual(tuple(output.shape), (1, 4096))
+        self.assertTrue(output.isfinite().all().item())
+
+    def test_encoder_rejects_wrong_record_count_or_shape(self) -> None:
+        encoder = QuantityEncoder(self._config())
+        record = self._record()
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            encoder.encode_records([])
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            encoder.encode_records([record, record])
+        wrong = dict(record, values_si=[1.0, 2.0])
+        with self.assertRaisesRegex(ValueError, "three"):
+            encoder.encode_records([wrong])
+        nonfinite = dict(record, values_si=[1.0, float("inf"), 2.0])
+        with self.assertRaisesRegex(ValueError, "finite"):
+            encoder.encode_records([nonfinite])
 
 
 if __name__ == "__main__":
