@@ -218,6 +218,7 @@ class FirstEntityVectorAdapterTests(unittest.TestCase):
         prompt = result["native_inputs"]["text"]["prompt"]
         audited = result["native_inputs"]["text"]["audited_prompt"]
         self.assertEqual(prompt.count("<extra_id_0>"), 1)
+        self.assertEqual(prompt, " ".join(prompt.split()))
         self.assertNotIn("<extra_id_0>", audited)
         self.assertIn("[m=0.03313 kg, size=0.01000 m", audited)
         vector = result["native_inputs"]["physics"]["entity_vector"]

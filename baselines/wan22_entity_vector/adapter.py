@@ -335,7 +335,9 @@ class FirstEntityVectorDataAdapter(DataAdapter):
         )
         structured_prompt = base["native_inputs"]["text"]["prompt"]
         audited_prompt = structured_prompt + audited_clause
-        model_prompt = structured_prompt + model_clause
+        model_prompt = " ".join(
+            (structured_prompt + model_clause).split()
+        )
         if model_prompt.count(vector["sentinel"]) != 1:
             raise AssertionError("entity-vector model prompt needs one sentinel")
 
