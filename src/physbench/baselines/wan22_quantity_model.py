@@ -1083,21 +1083,34 @@ def locate_sentinel_tokens(
         if position in seen_positions:
             raise ValueError("quantity sentinels resolved to one token slot")
         seen_positions.add(position)
-        audits.append({
-            "name": quantity["name"],
+        audit = {
             "sentinel": sentinel,
             "sentinel_token_id": sentinel_id,
             "token_span": [position, position + 1],
-            "raw_value": quantity["raw_value"],
-            "raw_unit": quantity["raw_unit"],
-            "rendered_quantity": quantity["rendered_quantity"],
-            "si_value": quantity["si_value"],
-            "canonical_si_unit": quantity["canonical_si_unit"],
-            "dimension": quantity["dimension"],
-            "quantity_type": quantity["quantity_type"],
-            "quantity_type_id": quantity["quantity_type_id"],
-            "source_role": quantity["source_role"],
-        })
+        }
+        if quantity.get("representation") == "first_entity_vector_mlp_v1":
+            audit.update({
+                "representation": quantity["representation"],
+                "components": list(quantity["components"]),
+                "values_si": list(quantity["values_si"]),
+                "source_object": quantity.get("source_object"),
+                "source_fields": list(quantity.get("source_fields", [])),
+                "provenance": list(quantity.get("provenance", [])),
+            })
+        else:
+            audit.update({
+                "name": quantity["name"],
+                "raw_value": quantity["raw_value"],
+                "raw_unit": quantity["raw_unit"],
+                "rendered_quantity": quantity["rendered_quantity"],
+                "si_value": quantity["si_value"],
+                "canonical_si_unit": quantity["canonical_si_unit"],
+                "dimension": quantity["dimension"],
+                "quantity_type": quantity["quantity_type"],
+                "quantity_type_id": quantity["quantity_type_id"],
+                "source_role": quantity["source_role"],
+            })
+        audits.append(audit)
     return ids, mask, audits
 
 

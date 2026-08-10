@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import json
+import re
 import struct
 import tempfile
 import unittest
@@ -23,7 +24,9 @@ from physbench.baselines.wan22_quantity_model import (
     QUANTITY_CHECKPOINT_PREFIX,
     QuantityEncoder,
     expected_wan22_ti2v_5b_lora_targets,
+    locate_sentinel_tokens,
 )
+import torch
 from torch import nn
 
 
@@ -49,6 +52,40 @@ def _case(
 
 def _quantity(value: float, unit: str) -> dict:
     return {"value": value, "unit": unit, "symbol": "x"}
+
+
+class _EntityTokenizerBackend:
+    unk_token_id = 0
+
+    @staticmethod
+    def convert_tokens_to_ids(token: str) -> int:
+        match = re.fullmatch(r"<extra_id_(\d+)>", token)
+        return 1000 + int(match.group(1)) if match else 0
+
+
+class _EntityWanTokenizer:
+    clean = "whitespace"
+
+    def __init__(self) -> None:
+        self.tokenizer = _EntityTokenizerBackend()
+
+    @staticmethod
+    def _clean(text: str) -> str:
+        return " ".join(text.split())
+
+    def __call__(self, prompt: str, **_kwargs) -> tuple[torch.Tensor, torch.Tensor]:
+        token_ids = [11]
+        for piece in re.split(r"(<extra_id_\d+>)", prompt):
+            if not piece:
+                continue
+            token_ids.append(
+                self.tokenizer.convert_tokens_to_ids(piece)
+                if re.fullmatch(r"<extra_id_\d+>", piece)
+                else 12
+            )
+        token_ids.append(1)
+        ids = torch.tensor([token_ids], dtype=torch.long)
+        return ids, torch.ones_like(ids)
 
 
 class FirstEntityVectorExtractionTests(unittest.TestCase):
@@ -234,6 +271,18 @@ class FirstEntityVectorAdapterTests(unittest.TestCase):
             result["input_contract"]["media_channels"][0]["id"],
             "initial_frame",
         )
+
+        _, _, token_audit = locate_sentinel_tokens(
+            SimpleNamespace(tokenizer=_EntityWanTokenizer()),
+            prompt,
+            [vector],
+        )
+        self.assertEqual(len(token_audit), 1)
+        self.assertEqual(
+            token_audit[0]["components"],
+            list(ENTITY_VECTOR_COMPONENTS),
+        )
+        self.assertEqual(token_audit[0]["values_si"], vector["values_si"])
 
 
 class FirstEntityVectorEncoderTests(unittest.TestCase):
