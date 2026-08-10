@@ -10,7 +10,12 @@ import numpy as np
 from ...common.artifacts import save_iou_curve, save_series_comparison
 from ...common.artifacts.tables import write_rows_csv
 from ...common.base import ReferenceCaseEvaluator, SceneAnalysis
-from ...common.entities import build_common_time_grid, materialize_entity_manifest
+from ...common.csti import build_csti_input_from_aligned_masks
+from ...common.entities import (
+    ReferenceCapability,
+    build_common_time_grid,
+    materialize_entity_manifest,
+)
 from ...common.errors import ReferenceAnalysisError
 from ...common.media import SampledVideo
 from ...common.subject import infer_reference_mode
@@ -1163,6 +1168,37 @@ class ParabolicMotionCaseEvaluator(ReferenceCaseEvaluator):
                 }
             )
         finite_ious = [float(value) for value in scored["ious"] if value is not None]
+        csti_input = (
+            build_csti_input_from_aligned_masks(
+                reference_capability=manifest.reference_capability,
+                times_s=times_s,
+                frame_shape=reference_video.frames[0].shape[:2],
+                expected_entities=((entity.entity_id, entity.role_id),),
+                reference_masks_by_entity={
+                    entity.entity_id: tuple(reference.masks)
+                },
+                prediction_masks_by_entity={
+                    entity.entity_id: (
+                        tuple(prediction.masks)
+                        if bool(scored["binding"]["accepted"])
+                        else None
+                    )
+                },
+                matched_track_ids_by_entity={
+                    entity.entity_id: (
+                        ("bound_projectile",)
+                        if bool(scored["binding"]["accepted"])
+                        else ()
+                    )
+                },
+            )
+            if (
+                self.csti_enabled
+                and manifest.reference_capability
+                is ReferenceCapability.SAME_CASE_GT
+            )
+            else None
+        )
         return SceneAnalysis(
             score=float(scored["score"]),
             metrics={
@@ -1249,6 +1285,7 @@ class ParabolicMotionCaseEvaluator(ReferenceCaseEvaluator):
                 "reference_lifecycle": "manifest_may_exit_observed_timeline_frozen",
                 "ideal_law_metrics_role": "diagnostic_only_empirical_gt_is_scoring_reference",
             },
+            csti_input=csti_input,
         )
 
 

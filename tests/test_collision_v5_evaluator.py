@@ -13,6 +13,7 @@ from unittest.mock import patch
 import cv2
 import numpy as np
 
+from physbench.evaluation.common.csti import CSTIConfig, evaluate_csti
 from physbench.evaluation.common.entities.contracts import EntityMatch
 from physbench.evaluation.common.entities.observer import (
     EvidenceTier,
@@ -37,6 +38,21 @@ _FRAME_COUNT = 5
 _HEIGHT = 60
 _WIDTH = 160
 _TIMES = [0.0, 0.1, 0.2, 0.3, 0.4]
+_CSTI_CONFIG = CSTIConfig.from_mapping(
+    {
+        "enabled": True,
+        "algorithm": "exact_full_tube_edt",
+        "spatial_tolerance_fraction": 0.005,
+        "temporal_tolerance_s": 0.05,
+        "condition_frame_policy": "exclude_initial_samples",
+        "initial_frames_excluded": 1,
+        "score_aggregation": "full_tube",
+        "diagnostic_prefix_fractions": [0.25, 0.5, 0.75, 1.0],
+        "case_aggregation": "mean_gt_entities",
+        "timeline_policy": "physical_overlap",
+        "mask_resolution": "scene_analysis_native",
+    }
+)
 
 
 def _quantity(value: float, unit: str) -> dict[str, object]:
@@ -199,9 +215,15 @@ class CollisionV5EvaluatorTests(unittest.TestCase):
         )
         cls.config = protocol["scenes"]["collision_1d"]
 
-    def _evaluator(self, outcomes) -> CollisionOpenWorldCaseEvaluator:
+    def _evaluator(
+        self,
+        outcomes,
+        *,
+        csti_enabled: bool = False,
+    ) -> CollisionOpenWorldCaseEvaluator:
         evaluator = object.__new__(CollisionOpenWorldCaseEvaluator)
         evaluator.config = copy.deepcopy(self.config)
+        evaluator.csti_enabled = csti_enabled
         evaluator._segmenter = _ScriptedSegmenter(outcomes)
         return evaluator
 
@@ -254,8 +276,9 @@ class CollisionV5EvaluatorTests(unittest.TestCase):
         prediction_available=None,
         discovery=None,
         case=None,
+        csti_enabled: bool = False,
     ):
-        evaluator = self._evaluator(outcomes)
+        evaluator = self._evaluator(outcomes, csti_enabled=csti_enabled)
         reference_frames = _frames()
         if prediction_frames is None:
             prediction_frames = _frames()
@@ -329,6 +352,28 @@ class CollisionV5EvaluatorTests(unittest.TestCase):
                     prediction_video=prediction_video,
                 )
         return evaluator, analysis
+
+    def test_csti_keeps_collision_entities_separate_and_averages_gt(self) -> None:
+        reference = _instance_masks(2)
+        prediction = _instance_masks(2, missing={1})
+
+        _, analysis = self._analyze(
+            count=2,
+            outcomes=[reference, prediction],
+            csti_enabled=True,
+        )
+        self.assertIsNotNone(analysis.csti_input)
+        metric = evaluate_csti(
+            analysis.csti_input,
+            expected_entities=(("ball_1", "body_1"), ("ball_2", "body_2")),
+            config=_CSTI_CONFIG,
+        )
+
+        self.assertEqual(["ball_1", "ball_2"], [item["entity_id"] for item in metric["objects"]])
+        self.assertAlmostEqual(1.0, metric["objects"][0]["score"], places=12)
+        self.assertEqual(0.0, metric["objects"][1]["score"])
+        self.assertFalse(metric["objects"][1]["matched"])
+        self.assertAlmostEqual(0.5, metric["score"], places=12)
 
     def test_mock_segmenter_supports_two_and_four_manifest_bodies(self) -> None:
         for count in (2, 4):

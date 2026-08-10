@@ -7,8 +7,17 @@ from typing import Any
 
 from ...io import canonical_sha256, sha256_file
 from ..contracts import CaseEvaluationRequest, CaseEvaluationResult
-from .errors import ReferenceAnalysisError, SceneAnalysisError
+from .csti import (
+    CSTIConfig,
+    CSTIContractError,
+    CSTIInput,
+    evaluate_csti,
+    not_applicable_csti_metric,
+    zero_csti_metric,
+)
+from .entities import ReferenceCapability, materialize_entity_manifest
 from .entities.timeline import build_common_time_grid
+from .errors import ReferenceAnalysisError, SceneAnalysisError
 from .media import (
     EvaluationTimelinePlan,
     SampledVideo,
@@ -30,6 +39,7 @@ class SceneAnalysis:
     quality: dict[str, Any]
     artifacts: dict[str, Any] = field(default_factory=dict)
     provenance: dict[str, Any] = field(default_factory=dict)
+    csti_input: CSTIInput | None = None
 
 
 class ReferenceCaseEvaluator(ABC):
@@ -45,6 +55,13 @@ class ReferenceCaseEvaluator(ABC):
 
     def __init__(self, config: dict[str, Any]):
         self.config = config
+        csti_value = config.get("general_metrics", {}).get("csti")
+        self.csti_config = (
+            CSTIConfig.from_mapping(csti_value)
+            if csti_value is not None
+            else None
+        )
+        self.csti_enabled = self.csti_config is not None
         self.robust_subject = (
             config.get("evaluator_contract") == "robust_subject_v3"
         )
@@ -85,10 +102,78 @@ class ReferenceCaseEvaluator(ABC):
         observation = self.describe_observation()
         if observation:
             value["observation"] = observation
+        if self.csti_enabled:
+            value["general_metrics"] = {
+                "csti": self.config["general_metrics"]["csti"]
+            }
         return value
 
     def describe_observation(self) -> dict[str, Any]:
         return {}
+
+    def _attach_csti_metric(
+        self,
+        request: CaseEvaluationRequest,
+        analysis: SceneAnalysis,
+    ) -> dict[str, Any]:
+        if self.csti_config is None:
+            raise CSTIContractError(
+                "csti_config_missing",
+                "CSTI is not configured",
+            )
+        try:
+            manifest = materialize_entity_manifest(request.case)
+        except (TypeError, ValueError) as exc:
+            raise CSTIContractError(
+                "csti_manifest_invalid",
+                f"cannot materialize the CSTI entity manifest: {exc}",
+            ) from exc
+        expected_entities = tuple(
+            (entity.entity_id, entity.role_id)
+            for entity in manifest.entities
+        )
+        if (
+            manifest.reference_capability
+            is not ReferenceCapability.SAME_CASE_GT
+        ):
+            return not_applicable_csti_metric(
+                config=self.csti_config,
+                reason_code="csti_requires_same_case_gt",
+            )
+        if analysis.csti_input is None:
+            raise CSTIContractError(
+                "csti_input_missing",
+                "CSTI is enabled but the Scene analysis did not provide "
+                "Tube input",
+            )
+        if (
+            analysis.csti_input.reference_capability
+            is not manifest.reference_capability
+        ):
+            raise CSTIContractError(
+                "csti_reference_capability_mismatch",
+                "CSTI input reference capability differs from the Case manifest",
+            )
+        analysis.provenance["csti"] = {
+            "algorithm": self.csti_config.algorithm,
+            "spatial_tolerance_fraction": (
+                self.csti_config.spatial_tolerance_fraction
+            ),
+            "temporal_tolerance_s": self.csti_config.temporal_tolerance_s,
+            "condition_frame_policy": (
+                self.csti_config.condition_frame_policy
+            ),
+            "initial_frames_excluded": (
+                self.csti_config.initial_frames_excluded
+            ),
+            "entity_manifest_materializer_id": manifest.materializer_id,
+            "entity_manifest_digest": manifest.digest,
+        }
+        return evaluate_csti(
+            analysis.csti_input,
+            expected_entities=expected_entities,
+            config=self.csti_config,
+        )
 
     @staticmethod
     def _outcome(
@@ -147,6 +232,33 @@ class ReferenceCaseEvaluator(ABC):
                 "policy": "conservative_zero_not_evaluator_failure",
             }
         }
+        metrics = {
+            "scene_subject_state_similarity": degraded_subject_metric(
+                reference_mode=reference_mode,
+                code=code,
+                reason=reason,
+            )
+        }
+        if self.csti_config is not None:
+            manifest = materialize_entity_manifest(request.case)
+            if (
+                manifest.reference_capability
+                is ReferenceCapability.SAME_CASE_GT
+            ):
+                metrics["csti"] = zero_csti_metric(
+                    expected_entities=tuple(
+                        (entity.entity_id, entity.role_id)
+                        for entity in manifest.entities
+                    ),
+                    config=self.csti_config,
+                    degradation_code=code,
+                    degradation_reason=reason,
+                )
+            else:
+                metrics["csti"] = not_applicable_csti_metric(
+                    config=self.csti_config,
+                    reason_code="csti_requires_same_case_gt",
+                )
         if reference_path is not None and reference_path.is_file():
             provenance.update(
                 {
@@ -170,15 +282,7 @@ class ReferenceCaseEvaluator(ABC):
             score=0.0,
             reason_code=code,
             reason=reason,
-            metrics={
-                "scene_subject_state_similarity": (
-                    degraded_subject_metric(
-                        reference_mode=reference_mode,
-                        code=code,
-                        reason=reason,
-                    )
-                )
-            },
+            metrics=metrics,
             quality={
                 "degraded": True,
                 "degradation_codes": [code],
@@ -565,6 +669,21 @@ class ReferenceCaseEvaluator(ABC):
                 code=exc.code,
                 reason=str(exc),
             )
+
+        if self.csti_enabled:
+            try:
+                analysis.metrics["csti"] = self._attach_csti_metric(
+                    request,
+                    analysis,
+                )
+            except CSTIContractError as exc:
+                return self._outcome(
+                    request,
+                    evaluator,
+                    status="error",
+                    code=exc.code,
+                    reason=f"CSTI contract failed: {exc}",
+                )
 
         analysis.quality.setdefault("evaluated_frames", len(times_s))
         if self.allow_partial_prediction:

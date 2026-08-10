@@ -47,9 +47,12 @@ class SceneEvaluatorRegistry:
     def resolve(self, scene_id: str) -> SceneCaseEvaluator:
         if scene_id in self._instances:
             return self._instances[scene_id]
-        config = self.protocol["scenes"].get(
+        raw_config = self.protocol["scenes"].get(
             scene_id, {"type": "unsupported"}
         )
+        config = dict(raw_config)
+        if "general_metrics" in self.protocol:
+            config["general_metrics"] = self.protocol["general_metrics"]
         evaluator_type = config.get("type", "unsupported")
         if evaluator_type in {
             "pendulum_state_v1",

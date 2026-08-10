@@ -8,6 +8,11 @@ import numpy as np
 from ....io import canonical_sha256, sha256_file
 from ...common.artifacts.open_world_v2 import write_open_world_v2_artifacts
 from ...common.base import ReferenceCaseEvaluator, SceneAnalysis
+from ...common.csti import (
+    CSTIInput,
+    build_csti_input_from_aligned_masks,
+    build_csti_input_from_frame_matches,
+)
 from ...common.entities import (
     ExpectedPositionSample,
     ReferenceCapability,
@@ -112,6 +117,39 @@ class PendulumOpenWorldCaseEvaluatorV7(ReferenceCaseEvaluator):
                 "without_parent_future_pixel_identity_or_localization"
             ),
         }
+
+    @staticmethod
+    def _build_csti_input(
+        *,
+        capability: ReferenceCapability,
+        times_s: list[float],
+        frame_shape: tuple[int, int],
+        entity: Any,
+        reference_bobs,
+        prediction_observation: OpenWorldObservation | None,
+        comparison: Any,
+    ) -> CSTIInput:
+        expected_entities = ((entity.entity_id, entity.role_id),)
+        references = {entity.entity_id: tuple(reference_bobs)}
+        if prediction_observation is None:
+            return build_csti_input_from_aligned_masks(
+                reference_capability=capability,
+                times_s=times_s,
+                frame_shape=frame_shape,
+                expected_entities=expected_entities,
+                reference_masks_by_entity=references,
+                prediction_masks_by_entity={entity.entity_id: None},
+                matched_track_ids_by_entity={entity.entity_id: ()},
+            )
+        return build_csti_input_from_frame_matches(
+            reference_capability=capability,
+            times_s=times_s,
+            frame_shape=frame_shape,
+            expected_entities=expected_entities,
+            reference_masks_by_entity=references,
+            prediction_observation=prediction_observation,
+            matches=comparison.matches,
+        )
 
     def analyze(
         self,
@@ -790,6 +828,22 @@ class PendulumOpenWorldCaseEvaluatorV7(ReferenceCaseEvaluator):
             "content_components": content,
             "content_weights": weights,
         }
+        csti_input = (
+            self._build_csti_input(
+                capability=capability,
+                times_s=times_s,
+                frame_shape=reference_video.frames[0].shape[:2],
+                entity=entity,
+                reference_bobs=reference_bobs,
+                prediction_observation=prediction_observation,
+                comparison=comparison,
+            )
+            if (
+                self.csti_enabled
+                and capability is ReferenceCapability.SAME_CASE_GT
+            )
+            else None
+        )
         return SceneAnalysis(
             score=score,
             metrics={
@@ -931,6 +985,7 @@ class PendulumOpenWorldCaseEvaluatorV7(ReferenceCaseEvaluator):
                 ),
                 "open_world": comparison.to_dict(),
             },
+            csti_input=csti_input,
         )
 
 

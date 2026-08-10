@@ -39,6 +39,7 @@ from ..common.artifacts.open_world_v2 import (
     write_open_world_v2_artifacts,
 )
 from ..common.base import ReferenceCaseEvaluator, SceneAnalysis
+from ..common.csti import CSTIInput, build_csti_input_from_aligned_masks
 from ..common.entities.timeline import CommonTimeGrid
 from ..common.errors import ReferenceAnalysisError, SceneAnalysisError
 from ..common.geometry import AxisModel, fit_axis
@@ -6436,6 +6437,44 @@ class RigidBodyOpenWorldCaseEvaluatorBase(ReferenceCaseEvaluator):
             "case_score": "entity_integrity_gate_times_scene_content",
         }
 
+    @staticmethod
+    def _build_csti_input(
+        *,
+        capability: ReferenceCapability,
+        times_s: Sequence[float],
+        entity: Any,
+        reference: RigidBodyReference,
+        result: RigidBodyOpenWorldResult,
+    ) -> CSTIInput:
+        matched_track_ids = tuple(
+            sorted(
+                {
+                    match.track_id
+                    for match in result.comparison.matches
+                    if match.entity_id == entity.entity_id
+                }
+            )
+        )
+        return build_csti_input_from_aligned_masks(
+            reference_capability=capability,
+            times_s=times_s,
+            frame_shape=reference.masks[0].shape,
+            expected_entities=((entity.entity_id, entity.role_id),),
+            reference_masks_by_entity={
+                entity.entity_id: reference.masks
+            },
+            prediction_masks_by_entity={
+                entity.entity_id: (
+                    result.matched_prediction_masks
+                    if matched_track_ids
+                    else None
+                )
+            },
+            matched_track_ids_by_entity={
+                entity.entity_id: matched_track_ids
+            },
+        )
+
     def _manifest_entity(self, request: CaseEvaluationRequest):
         try:
             manifest = materialize_entity_manifest(request.case)
@@ -8212,6 +8251,20 @@ class RigidBodyOpenWorldCaseEvaluatorBase(ReferenceCaseEvaluator):
             **result.composition,
             "score": score,
         }
+        csti_input = (
+            self._build_csti_input(
+                capability=capability,
+                times_s=times_s,
+                entity=entity,
+                reference=reference,
+                result=result,
+            )
+            if (
+                getattr(self, "csti_enabled", False)
+                and capability is ReferenceCapability.SAME_CASE_GT
+            )
+            else None
+        )
         return SceneAnalysis(
             score=score,
             metrics={
@@ -8305,6 +8358,7 @@ class RigidBodyOpenWorldCaseEvaluatorBase(ReferenceCaseEvaluator):
                 "subject_reference_mode": reference_mode,
                 **condition_provenance,
             },
+            csti_input=csti_input,
         )
 
 

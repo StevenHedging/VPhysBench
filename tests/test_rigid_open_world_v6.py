@@ -11,6 +11,7 @@ from unittest.mock import patch
 import cv2
 import numpy as np
 
+from physbench.evaluation.common.csti import CSTIConfig, evaluate_csti
 from physbench.evaluation.common.entities import (
     EvidenceTier,
     ObjectDetection,
@@ -39,6 +40,23 @@ from physbench.evaluation.scenes.rigid_body_open_world import (
     select_rigid_body_reference_hypothesis,
     score_rigid_body_reference_hypothesis,
     write_rigid_body_audit_json,
+)
+
+
+_CSTI_CONFIG = CSTIConfig.from_mapping(
+    {
+        "enabled": True,
+        "algorithm": "exact_full_tube_edt",
+        "spatial_tolerance_fraction": 0.005,
+        "temporal_tolerance_s": 0.05,
+        "condition_frame_policy": "exclude_initial_samples",
+        "initial_frames_excluded": 1,
+        "score_aggregation": "full_tube",
+        "diagnostic_prefix_fractions": [0.25, 0.5, 0.75, 1.0],
+        "case_aggregation": "mean_gt_entities",
+        "timeline_policy": "physical_overlap",
+        "mask_resolution": "scene_analysis_native",
+    }
 )
 
 
@@ -213,10 +231,79 @@ def _visualization_inputs():
             row["physical_subject_iou"] for row in result.per_frame
         ],
         "prediction_available": [True] * count,
+        "reference_role": "REFERENCE",
+        "score_summary": {"score": result.composition["score"]},
+        "per_frame_diagnostics": [],
+        "has_issues": False,
     }, result
 
 
 class RigidBodyOpenWorldV6Tests(unittest.TestCase):
+    def test_inclined_plane_csti_uses_aligned_subject_masks(self) -> None:
+        count = 8
+        masks = [_block(12 + 4 * index, 12 + 3 * index) for index in range(count)]
+        reference = _reference(
+            masks,
+            scene_kind="inclined_plane",
+            entity_class="block",
+        )
+        observation = observation_from_mask_channels(
+            directed_masks=masks,
+            residual_instance_masks=[],
+            entity_class="block",
+            time_grid=_grid(count),
+        )
+        _, result = _compare(reference, observation, scene_kind="inclined_plane")
+        evaluator = object.__new__(RigidBodyOpenWorldCaseEvaluatorBase)
+
+        value = evaluator._build_csti_input(
+            capability=ReferenceCapability.SAME_CASE_GT,
+            times_s=_grid(count).times_s.tolist(),
+            entity=_entity("block"),
+            reference=reference,
+            result=result,
+        )
+        metric = evaluate_csti(
+            value,
+            expected_entities=(("subject", "subject"),),
+            config=_CSTI_CONFIG,
+        )
+
+        self.assertAlmostEqual(1.0, metric["score"], places=12)
+        self.assertEqual(count, metric["frame_count"])
+
+    def test_csti_does_not_extend_legal_exit_lifecycle(self) -> None:
+        count = 12
+        visible = [_block(20 + 6 * index, 20 + 3 * index) for index in range(8)]
+        masks = visible + [np.zeros_like(visible[0]) for _ in range(count - len(visible))]
+        reference = _reference(
+            masks,
+            scene_kind="inclined_plane",
+            entity_class="block",
+        )
+        observation = observation_from_mask_channels(
+            directed_masks=masks,
+            residual_instance_masks=[],
+            entity_class="block",
+            time_grid=_grid(count),
+        )
+        _, result = _compare(reference, observation, scene_kind="inclined_plane")
+        evaluator = object.__new__(RigidBodyOpenWorldCaseEvaluatorBase)
+
+        value = evaluator._build_csti_input(
+            capability=ReferenceCapability.SAME_CASE_GT,
+            times_s=_grid(count).times_s.tolist(),
+            entity=_entity("block"),
+            reference=reference,
+            result=result,
+        )
+
+        self.assertEqual(count, len(value.entities[0].reference_masks))
+        prediction = value.entities[0].prediction_masks
+        assert prediction is not None
+        self.assertEqual(count, len(prediction))
+        self.assertTrue(all(not np.any(mask) for mask in prediction[8:]))
+
     @staticmethod
     def _strict_reference_config(scene_kind: str) -> dict:
         config = default_rigid_body_config(scene_kind)
@@ -786,6 +873,13 @@ class RigidBodyOpenWorldV6Tests(unittest.TestCase):
             values["prediction_available"],
             keyword["prediction_available"],
         )
+        self.assertEqual(values["reference_role"], keyword["reference_role"])
+        self.assertEqual(values["score_summary"], keyword["score_summary"])
+        self.assertEqual(
+            values["per_frame_diagnostics"],
+            keyword["per_frame_diagnostics"],
+        )
+        self.assertEqual(values["has_issues"], keyword["has_issues"])
         self.assertEqual(
             evaluator.config["visualization"],
             keyword["config"],

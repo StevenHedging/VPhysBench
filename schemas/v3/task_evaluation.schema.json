@@ -18,6 +18,42 @@
     "protocol": {"type": "object"},
     "status": {"type": "string", "minLength": 1},
     "coverage": {"type": "number", "minimum": 0, "maximum": 1},
-    "score": {"type": ["number", "null"]}
+    "score": {"type": ["number", "null"]},
+    "dimensions": {
+      "type": "object",
+      "required": ["expert", "csti"],
+      "properties": {
+        "expert": {
+          "type": "object",
+          "required": ["score", "source"],
+          "properties": {
+            "score": {"type": ["number", "null"]},
+            "source": {"const": "top_level_score"}
+          },
+          "additionalProperties": false
+        },
+        "csti": {
+          "type": "object",
+          "required": [
+            "status",
+            "score",
+            "coverage",
+            "by_scene",
+            "breakdown"
+          ],
+          "properties": {
+            "status": {
+              "enum": ["complete", "partial", "not_applicable"]
+            },
+            "score": {"type": ["number", "null"]},
+            "coverage": {"type": "number", "minimum": 0, "maximum": 1},
+            "by_scene": {"type": "object"},
+            "breakdown": {"type": "object"}
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    }
   }
 }

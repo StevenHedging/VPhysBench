@@ -8,14 +8,17 @@
 CanonicalTaskPlan + frozen cases + predictions.jsonl + evaluation protocol
 ```
 
-当前官方五场景Task使用：
+当前官方五场景Task提供两条不可混用的协议链：
 
 ```text
-configs/evaluation/protocols/scene_default_v10.json
+scene_default_v10  原有专家评分Task
+scene_default_v11  专家评分 + 独立CSTI轨迹维度
 ```
 
-v10同时冻结无填边空间对齐和物理时间重叠协议。旧run必须继续读取它自身冻结的协议，
-不得用v10语义覆盖既有分数。`scene_default_v3`及其它旧协议只用于复现历史结果：
+v11复用v10的五个scene专家评估器、无填边空间对齐和物理时间重叠协议，通过顶层
+`general_metrics.csti`启用通用轨迹指标，并把五个scene的分析采样统一为24 FPS。旧run
+必须继续读取它自身冻结的协议，
+不得用新协议语义覆盖既有分数。`scene_default_v3`及其它旧协议只用于复现历史结果：
 
 - v2：v5 Task，evaluator `1.2`，reference-bounded 时间轴与顺序前向解码；
 - v1：v4 Task，evaluator `1.1`，random-seek；单摆使用固定 0–5 秒时间轴。
@@ -245,6 +248,47 @@ v6 的 physics-parent profile 将 existence、condition-frozen identity 与当�
 本 Case condition，将规范化动力学交给 parent；公共 timeline 在构造时禁止 parent
 监督 `t>0` 的 raw pixel localization。Condition ROI 由 condition 图自身检测/分割，
 不再由 prediction mask 定义。
+
+### 3.1 CSTI通用轨迹维度
+
+`scene_default_v11`在每个scene完成既有实体发现、角色匹配和追踪后，复用双方的原生
+分辨率二值mask，形成每个GT物理主体的时空Tube。它不改变任何scene专家评分，也不把
+CSTI与专家分数加权合成。当前协议只接受same-Case GT；历史physics-parent reference
+结果明确记为`not_applicable`，不进入CSTI聚合。
+
+v11先在双方物理时间重叠区间构造24 FPS规则网格；若媒体层为覆盖精确时长而附加了
+一个不足`1/24 s`的末端采样点，CSTI在进入EDT前只剔除这个off-grid端点。随后舍弃
+最前面的3个规则采样点，使I2V共同条件帧及其紧邻启动阶段不参与评分。
+
+对剩余GT Tube \(G\) 与已匹配的prediction Tube \(P\)，使用原生mask尺寸上的精确三维
+欧氏距离变换。归一化距离与soft occupancy定义为：
+
+```text
+d_A(t,y,x)^2 = ((t-t') / 0.025 s)^2
+             + ((y-y') / (0.004204482076268572 * max(H-1,1)))^2
+             + ((x-x') / (0.004204482076268572 * max(W-1,1)))^2
+soft_A(t,y,x) = max(0, 1 - min_{(t',y',x') in A} d_A(t,y,x))
+```
+
+正式主体分数直接使用整个postcondition Tube的Soft IoU：
+
+```text
+CSTI_object = sum_x min(soft_G(x), soft_P(x))
+              / sum_x max(soft_G(x), soft_P(x))
+```
+
+25%/50%/75%/100%四个因果prefix只生成诊断曲线，不参与正式分数聚合。Case CSTI是GT
+manifest中全部物理主体分数的算术平均。整个主体未匹配时该主体直接记0且
+`diagnostic_prefix_curve=null`；额外prediction主体不直接进入CSTI分母，但仍由现有
+开放世界专家评估器惩罚。双方均为空时分数记1，仅一方为空时记0。时间轴严格使用
+reference与prediction共同存在的物理时长，不附加独立时长惩罚。
+
+Case级输出位于`case_results.jsonl[*].metrics.csti`，包含主体匹配、正式full-Tube分数、
+诊断prefix曲线以及实际舍弃的初始/末端采样数。Task级输出位于
+`task_result.json.dimensions.csti`，沿用完整coverage门禁和
+scene宏平均；顶层`task_result.json.score`仍是专家分数，并同时镜像到
+`dimensions.expert`。若全部Case均不适用，CSTI维度报告
+`status=not_applicable, score=null`。
 
 Scene score 是 reference 与 prediction 的相似度，不是 prediction 的绝对质量分。
 所有正常 comparison 必须满足：
@@ -1665,7 +1709,8 @@ v6/v7 的非碰撞 scene 还统一具有 `entity_position_curve.png` 与
 - CSV 和曲线 artifact 路径。
 
 `task_result.json` 记录 coverage、状态计数、partition/scene breakdown、严格 Task score
-和部分观察分数。v3 还记录 `robustness`：退化零分数目与比例、reference unavailable
+和部分观察分数。v11另记录互不混合的`dimensions.expert`和`dimensions.csti`；顶层
+score始终保持专家分数。v3 还记录 `robustness`：退化零分数目与比例、reference unavailable
 数、真正 evaluator error 数以及退化原因码分布。
 
 ## 14. Task 聚合
@@ -2097,6 +2142,8 @@ docs/experiments/EVALUATION_V3_20260729.md
 ```text
 configs/evaluation/protocols/scene_default_v6.json  # shadow all-scene open world
 configs/evaluation/protocols/scene_default_v7.json  # shadow observer hardening
+configs/evaluation/protocols/scene_default_v10.json # frozen expert Tasks
+configs/evaluation/protocols/scene_default_v11.json # expert + independent CSTI
 configs/evaluation/protocols/scene_default_v5.json  # shadow collision
 configs/evaluation/protocols/scene_default_v4.json  # shadow collision
 configs/evaluation/protocols/scene_default_v3.json
@@ -2104,6 +2151,7 @@ configs/evaluation/protocols/scene_default_v2.json  # frozen Task v5
 configs/evaluation/protocols/scene_default_v1.json  # frozen legacy
 src/physbench/evaluation/task_evaluator.py
 src/physbench/evaluation/common/
+src/physbench/evaluation/common/csti/
 src/physbench/evaluation/common/entities/
 src/physbench/evaluation/common/entities/v2.py
 src/physbench/evaluation/common/artifacts/open_world_v2.py

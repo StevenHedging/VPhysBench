@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from collections.abc import Mapping
+from dataclasses import dataclass
+import math
 from pathlib import Path
 from statistics import mean
 from typing import Any
@@ -10,6 +13,12 @@ from .contracts import (
     CaseEvaluationRequest,
     CaseEvaluationResult,
 )
+from .common.csti import (
+    CSTIConfig,
+    not_applicable_csti_metric,
+    zero_csti_metric,
+)
+from .common.entities import ReferenceCapability, materialize_entity_manifest
 from .registry import SceneEvaluatorRegistry
 
 
@@ -39,9 +48,40 @@ def _failure_result(
 def _prediction_zero_result(
     job: dict[str, Any],
     *,
+    case: dict[str, Any],
+    csti_config: CSTIConfig | None,
     code: str,
     reason: str,
 ) -> CaseEvaluationResult:
+    metrics = {
+        "scene_subject_state_similarity": {
+            "score": 0.0,
+            "components": {
+                "physics_state": 0.0,
+                "subject": 0.0,
+            },
+            "degraded": True,
+            "degradation_code": code,
+            "degradation_reason": reason,
+        }
+    }
+    if csti_config is not None:
+        manifest = materialize_entity_manifest(case)
+        if manifest.reference_capability is ReferenceCapability.SAME_CASE_GT:
+            metrics["csti"] = zero_csti_metric(
+                expected_entities=tuple(
+                    (entity.entity_id, entity.role_id)
+                    for entity in manifest.entities
+                ),
+                config=csti_config,
+                degradation_code=code,
+                degradation_reason=reason,
+            )
+        else:
+            metrics["csti"] = not_applicable_csti_metric(
+                config=csti_config,
+                reason_code="csti_requires_same_case_gt",
+            )
     return CaseEvaluationResult(
         job_id=job["job_id"],
         case_id=job["case_id"],
@@ -56,18 +96,7 @@ def _prediction_zero_result(
         score=0.0,
         reason_code=code,
         reason=reason,
-        metrics={
-            "scene_subject_state_similarity": {
-                "score": 0.0,
-                "components": {
-                    "physics_state": 0.0,
-                    "subject": 0.0,
-                },
-                "degraded": True,
-                "degradation_code": code,
-                "degradation_reason": reason,
-            }
-        },
+        metrics=metrics,
         quality={
             "degraded": True,
             "degradation_codes": [code],
@@ -120,7 +149,29 @@ def _diagnostic_group_result(
     }
 
 
-def aggregate_task_results(
+@dataclass(frozen=True)
+class DimensionCaseRecord:
+    job_id: str
+    scene_id: str
+    evaluation_partition: str
+    status: str
+    score: float | None
+    quality: dict[str, Any]
+    reason_code: str | None
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "job_id": self.job_id,
+            "scene_id": self.scene_id,
+            "evaluation_partition": self.evaluation_partition,
+            "status": self.status,
+            "score": self.score,
+            "quality": self.quality,
+            "reason_code": self.reason_code,
+        }
+
+
+def _aggregate_dimension(
     *,
     plan: dict[str, Any],
     case_results: list[dict[str, Any]],
@@ -357,6 +408,178 @@ def aggregate_task_results(
     return result
 
 
+def aggregate_task_results(
+    *,
+    plan: dict[str, Any],
+    case_results: list[dict[str, Any]],
+    include_degraded_diagnostics: bool = False,
+    general_metrics: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Aggregate expert scores and optional general metrics independently."""
+
+    expert = _aggregate_dimension(
+        plan=plan,
+        case_results=case_results,
+        include_degraded_diagnostics=include_degraded_diagnostics,
+    )
+    csti_config = (
+        general_metrics.get("csti")
+        if isinstance(general_metrics, Mapping)
+        else None
+    )
+    if (
+        not isinstance(csti_config, Mapping)
+        or csti_config.get("enabled") is not True
+    ):
+        return expert
+
+    csti_records = [
+        _csti_dimension_record(item).to_mapping()
+        for item in case_results
+    ]
+    csti = _aggregate_csti_dimension(plan=plan, records=csti_records)
+    expert["dimensions"] = {
+        "expert": {
+            "score": expert["score"],
+            "source": "top_level_score",
+        },
+        "csti": csti,
+    }
+    return expert
+
+
+def _aggregate_csti_dimension(
+    *,
+    plan: dict[str, Any],
+    records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    applicable = [
+        item for item in records
+        if item["status"] != "not_applicable"
+    ]
+    not_applicable = [
+        item
+        for item in records
+        if (
+            item["evaluation_partition"] != "train_seen"
+            and item["status"] == "not_applicable"
+        )
+    ]
+    aggregate_plan = plan
+    annotations = plan.get("evaluation_annotations")
+    if isinstance(annotations, dict):
+        applicable_ids = {item["job_id"] for item in applicable}
+        aggregate_plan = {
+            **plan,
+            "evaluation_annotations": {
+                job_id: annotation
+                for job_id, annotation in annotations.items()
+                if job_id in applicable_ids
+            },
+        }
+    result = _aggregate_dimension(
+        plan=aggregate_plan,
+        case_results=applicable,
+    )
+    result["not_applicable_jobs"] = len(not_applicable)
+    not_applicable_by_scene = Counter(
+        item["scene_id"] for item in not_applicable
+    )
+    for scene_id in plan["scene_ids"]:
+        scene = result["by_scene"][scene_id]
+        scene["not_applicable_jobs"] = not_applicable_by_scene[scene_id]
+        if scene["expected_jobs"] == 0 and not_applicable_by_scene[scene_id]:
+            scene["status"] = "not_applicable"
+        elif scene["expected_jobs"] and scene["coverage"] == 1.0:
+            scene["status"] = "complete"
+        else:
+            scene["status"] = "partial"
+
+    applicable_scenes = [
+        result["by_scene"][scene_id]
+        for scene_id in plan["scene_ids"]
+        if result["by_scene"][scene_id]["status"] != "not_applicable"
+    ]
+    if not applicable_scenes:
+        result["status"] = "not_applicable"
+        result["score"] = None
+        result["observed_mean_score"] = None
+    else:
+        strict_scores = [scene["score"] for scene in applicable_scenes]
+        result["score"] = (
+            mean(float(score) for score in strict_scores)
+            if all(score is not None for score in strict_scores)
+            else None
+        )
+        observed_scores = [
+            scene["observed_mean_score"]
+            for scene in applicable_scenes
+            if scene["observed_mean_score"] is not None
+        ]
+        result["observed_mean_score"] = (
+            mean(float(score) for score in observed_scores)
+            if observed_scores
+            else None
+        )
+        result["status"] = (
+            "complete"
+            if result["coverage"] == 1.0 and result["score"] is not None
+            else "partial"
+        )
+    return result
+
+
+def _csti_dimension_record(item: Mapping[str, Any]) -> DimensionCaseRecord:
+    case_status = str(item["status"])
+    score: float | None
+    if case_status != "evaluated":
+        status = case_status
+        score = None
+    else:
+        metrics = item.get("metrics", {})
+        metric = metrics.get("csti") if isinstance(metrics, Mapping) else None
+        if not isinstance(metric, Mapping):
+            status = "error"
+            score = None
+        else:
+            status = str(metric.get("status"))
+            raw_score = metric.get("score")
+            if status == "evaluated":
+                if (
+                    isinstance(raw_score, bool)
+                    or not isinstance(raw_score, (int, float))
+                    or not math.isfinite(float(raw_score))
+                    or not 0.0 <= float(raw_score) <= 1.0
+                ):
+                    raise ValueError(
+                        f"CSTI score for job {item['job_id']!r} must be finite and in [0,1]"
+                    )
+                score = float(raw_score)
+            else:
+                if raw_score is not None:
+                    raise ValueError(
+                        f"non-evaluated CSTI record {item['job_id']!r} must have a null score"
+                    )
+                score = None
+    return DimensionCaseRecord(
+        job_id=str(item["job_id"]),
+        scene_id=str(item["scene_id"]),
+        evaluation_partition=str(item["evaluation_partition"]),
+        status=status,
+        score=score,
+        quality=(
+            dict(item.get("quality", {}))
+            if isinstance(item.get("quality", {}), Mapping)
+            else {}
+        ),
+        reason_code=(
+            str(item["reason_code"])
+            if item.get("reason_code") is not None
+            else None
+        ),
+    )
+
+
 def evaluate_task(
     *,
     plan: dict[str, Any],
@@ -397,6 +620,12 @@ def evaluate_task(
             "prediction_record_failure_policy"
         )
         == "evaluated_zero"
+    )
+    csti_value = protocol.get("general_metrics", {}).get("csti")
+    csti_config = (
+        CSTIConfig.from_mapping(csti_value)
+        if csti_value is not None
+        else None
     )
     results: list[dict[str, Any]] = []
     for job in plan["jobs"]:
@@ -473,6 +702,8 @@ def evaluate_task(
             outcome = (
                 _prediction_zero_result(
                     job,
+                    case=case,
+                    csti_config=csti_config,
                     code="prediction_record_missing",
                     reason="planned job has no prediction record",
                 )
@@ -495,6 +726,8 @@ def evaluate_task(
             outcome = (
                 _prediction_zero_result(
                     job,
+                    case=case,
+                    csti_config=csti_config,
                     code="prediction_incomplete",
                     reason=reason,
                 )
@@ -541,6 +774,7 @@ def evaluate_task(
         plan=plan,
         case_results=results,
         include_degraded_diagnostics=bool(protocol.get("robustness")),
+        general_metrics=protocol.get("general_metrics"),
     )
     task_result = {
         "schema_version": "1.0",

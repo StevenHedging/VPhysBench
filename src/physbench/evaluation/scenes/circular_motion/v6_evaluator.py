@@ -18,6 +18,7 @@ from ...common.artifacts.open_world_v2 import (
     write_open_world_v2_artifacts,
 )
 from ...common.base import ReferenceCaseEvaluator, SceneAnalysis
+from ...common.csti import build_csti_input_from_aligned_masks
 from ...common.entities import (
     ExpectedPositionSample,
     ObjectCentricComparisonV2,
@@ -636,6 +637,55 @@ class CircularMotionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
             "content_components": content_components,
             "reference_mode": reference_mode,
         }
+        matched_track_ids_by_entity = {
+            entity_id: tuple(
+                sorted(
+                    {
+                        match.track_id
+                        for match in comparison.matches
+                        if match.entity_id == entity_id
+                    }
+                )
+            )
+            for entity_id in frozen_reference.entity_ids
+        }
+        csti_input = (
+            build_csti_input_from_aligned_masks(
+                reference_capability=manifest.reference_capability,
+                times_s=times_s,
+                frame_shape=frozen_reference.instance_masks[0][0].shape,
+                expected_entities=tuple(
+                    (entity.entity_id, entity.role_id)
+                    for entity in entities
+                ),
+                reference_masks_by_entity={
+                    entity_id: masks
+                    for entity_id, masks in zip(
+                        frozen_reference.entity_ids,
+                        frozen_reference.instance_masks,
+                    )
+                },
+                prediction_masks_by_entity={
+                    entity_id: (
+                        tuple(prediction_tracks.instance_masks[index])
+                        if matched_track_ids_by_entity[entity_id]
+                        else None
+                    )
+                    for index, entity_id in enumerate(
+                        frozen_reference.entity_ids
+                    )
+                },
+                matched_track_ids_by_entity=(
+                    matched_track_ids_by_entity
+                ),
+            )
+            if (
+                self.csti_enabled
+                and manifest.reference_capability
+                is ReferenceCapability.SAME_CASE_GT
+            )
+            else None
+        )
         return SceneAnalysis(
             score=score,
             metrics={
@@ -760,6 +810,7 @@ class CircularMotionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 "subject_reference_mode": reference_mode,
                 **condition_provenance,
             },
+            csti_input=csti_input,
         )
 
 

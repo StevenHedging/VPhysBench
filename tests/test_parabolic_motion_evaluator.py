@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import copy
 import json
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import cv2
 import numpy as np
 
+from physbench.evaluation.common.csti import CSTIConfig, evaluate_csti
+from physbench.evaluation.common.entities import materialize_entity_manifest
 from physbench.evaluation.contracts import CaseEvaluationRequest
 from physbench.evaluation.common.entities.contracts import (
     EntitySpec,
@@ -18,6 +22,7 @@ from physbench.evaluation.common.entities.contracts import (
 from physbench.evaluation.protocols import load_evaluation_protocol
 from physbench.evaluation.registry import SceneEvaluatorRegistry
 from physbench.evaluation.scenes.parabolic_motion.evaluator import (
+    ParabolicMotionCaseEvaluator,
     observe_projectile,
     score_parabolic_observations,
 )
@@ -67,7 +72,183 @@ def _scoring_config() -> dict:
     }
 
 
+_CSTI_MAPPING = {
+    "enabled": True,
+    "algorithm": "exact_full_tube_edt",
+    "spatial_tolerance_fraction": 0.005,
+    "temporal_tolerance_s": 0.05,
+    "condition_frame_policy": "exclude_initial_samples",
+    "initial_frames_excluded": 1,
+    "score_aggregation": "full_tube",
+    "diagnostic_prefix_fractions": [0.25, 0.5, 0.75, 1.0],
+    "case_aggregation": "mean_gt_entities",
+    "timeline_policy": "physical_overlap",
+    "mask_resolution": "scene_analysis_native",
+}
+_CSTI_CONFIG = CSTIConfig.from_mapping(_CSTI_MAPPING)
+
+
+def _case() -> dict[str, object]:
+    return {
+        "case_id": "synthetic_parabolic",
+        "scene_id": "parabolic_motion",
+        "physics": {
+            "ball_mass": {"value": 0.014, "unit": "kg", "annotated": True},
+            "ball_radius": {"value": 0.0075, "unit": "m", "annotated": True},
+            "initial_horizontal_velocity": {
+                "value": 1.0,
+                "unit": "m/s",
+                "annotated": True,
+            },
+            "launch_height": {"value": 0.77, "unit": "m", "annotated": True},
+        },
+        "appearance": {"ball_material": "steel", "ball_size_class": "small"},
+        "assets": {"reference_video": "reference.mp4"},
+    }
+
+
 class ParabolicMotionEvaluatorTests(unittest.TestCase):
+    def test_identical_projectile_analysis_exposes_unit_csti(self) -> None:
+        protocol = load_evaluation_protocol("scene_default_v10")
+        config = copy.deepcopy(protocol["scenes"]["parabolic_motion"])
+        config["general_metrics"] = {"csti": _CSTI_MAPPING}
+        evaluator = ParabolicMotionCaseEvaluator(config)
+        case = _case()
+        manifest = materialize_entity_manifest(case)
+        frames = _frames()
+        times_s = (np.arange(len(frames)) / 24.0).tolist()
+        video = SimpleNamespace(
+            frames=frames,
+            available=np.ones(len(frames), dtype=bool),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = CaseEvaluationRequest(
+                job={"job_id": "parabolic_csti_unit"},
+                case=case,
+                case_catalog={case["case_id"]: case},
+                prediction={"status": "complete", "video_path": "mock.mp4"},
+                asset_root=root,
+                artifact_dir=root / "artifacts",
+                evaluator_config=config,
+            )
+            with (
+                patch(
+                    "physbench.evaluation.scenes.parabolic_motion."
+                    "evaluator.write_rows_csv"
+                ),
+                patch(
+                    "physbench.evaluation.scenes.parabolic_motion."
+                    "evaluator.write_json"
+                ),
+                patch(
+                    "physbench.evaluation.scenes.parabolic_motion."
+                    "evaluator.save_iou_curve"
+                ),
+                patch(
+                    "physbench.evaluation.scenes.parabolic_motion."
+                    "evaluator.save_series_comparison"
+                ),
+                patch(
+                    "physbench.evaluation.scenes.parabolic_motion."
+                    "evaluator.write_parabolic_visualization",
+                    return_value={},
+                ),
+            ):
+                analysis = evaluator.analyze(
+                    request,
+                    times_s=times_s,
+                    reference_video=video,
+                    prediction_video=video,
+                )
+
+        self.assertIsNotNone(analysis.csti_input)
+        metric = evaluate_csti(
+            analysis.csti_input,
+            expected_entities=tuple(
+                (entity.entity_id, entity.role_id)
+                for entity in manifest.entities
+            ),
+            config=_CSTI_CONFIG,
+        )
+        self.assertAlmostEqual(1.0, metric["score"], places=12)
+        self.assertTrue(metric["objects"][0]["matched"])
+        self.assertEqual(
+            ["bound_projectile"],
+            metric["objects"][0]["matched_prediction_track_ids"],
+        )
+
+    def test_rejected_projectile_binding_is_csti_unmatched_zero(self) -> None:
+        protocol = load_evaluation_protocol("scene_default_v10")
+        config = copy.deepcopy(protocol["scenes"]["parabolic_motion"])
+        config["general_metrics"] = {"csti": _CSTI_MAPPING}
+        evaluator = ParabolicMotionCaseEvaluator(config)
+        case = _case()
+        manifest = materialize_entity_manifest(case)
+        reference_frames = _frames()
+        prediction_frames = [np.full_like(frame, 224) for frame in reference_frames]
+        times_s = (np.arange(len(reference_frames)) / 24.0).tolist()
+        reference = SimpleNamespace(
+            frames=reference_frames,
+            available=np.ones(len(reference_frames), dtype=bool),
+        )
+        prediction = SimpleNamespace(
+            frames=prediction_frames,
+            available=np.ones(len(prediction_frames), dtype=bool),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = CaseEvaluationRequest(
+                job={"job_id": "parabolic_csti_unmatched_unit"},
+                case=case,
+                case_catalog={case["case_id"]: case},
+                prediction={"status": "complete", "video_path": "mock.mp4"},
+                asset_root=root,
+                artifact_dir=root / "artifacts",
+                evaluator_config=config,
+            )
+            with (
+                patch(
+                    "physbench.evaluation.scenes.parabolic_motion."
+                    "evaluator.write_rows_csv"
+                ),
+                patch(
+                    "physbench.evaluation.scenes.parabolic_motion."
+                    "evaluator.write_json"
+                ),
+                patch(
+                    "physbench.evaluation.scenes.parabolic_motion."
+                    "evaluator.save_iou_curve"
+                ),
+                patch(
+                    "physbench.evaluation.scenes.parabolic_motion."
+                    "evaluator.save_series_comparison"
+                ),
+                patch(
+                    "physbench.evaluation.scenes.parabolic_motion."
+                    "evaluator.write_parabolic_visualization",
+                    return_value={},
+                ),
+            ):
+                analysis = evaluator.analyze(
+                    request,
+                    times_s=times_s,
+                    reference_video=reference,
+                    prediction_video=prediction,
+                )
+
+        metric = evaluate_csti(
+            analysis.csti_input,
+            expected_entities=tuple(
+                (entity.entity_id, entity.role_id)
+                for entity in manifest.entities
+            ),
+            config=_CSTI_CONFIG,
+        )
+        self.assertEqual(0.0, metric["score"])
+        self.assertFalse(metric["objects"][0]["matched"])
+        self.assertIsNone(metric["objects"][0]["diagnostic_prefix_curve"])
+
     def test_unified_parabolic_overlay_is_run_owned_and_manifested(self) -> None:
         frames = _frames()
         observation = observe_projectile(

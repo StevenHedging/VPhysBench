@@ -25,6 +25,9 @@
     "robustness": {
       "$ref": "#/$defs/robustness"
     },
+    "general_metrics": {
+      "$ref": "#/$defs/generalMetrics"
+    },
     "scenes": {
       "type": "object",
       "required": [
@@ -93,6 +96,81 @@
     }
   },
   "$defs": {
+    "generalMetrics": {
+      "type": "object",
+      "required": [
+        "csti"
+      ],
+      "properties": {
+        "csti": {
+          "$ref": "#/$defs/csti"
+        }
+      },
+      "additionalProperties": false
+    },
+    "csti": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "algorithm",
+        "spatial_tolerance_fraction",
+        "temporal_tolerance_s",
+        "condition_frame_policy",
+        "initial_frames_excluded",
+        "score_aggregation",
+        "diagnostic_prefix_fractions",
+        "case_aggregation",
+        "timeline_policy",
+        "mask_resolution"
+      ],
+      "properties": {
+        "enabled": {
+          "const": true
+        },
+        "algorithm": {
+          "const": "exact_full_tube_edt"
+        },
+        "spatial_tolerance_fraction": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "temporal_tolerance_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "condition_frame_policy": {
+          "const": "exclude_initial_samples"
+        },
+        "initial_frames_excluded": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "score_aggregation": {
+          "const": "full_tube"
+        },
+        "diagnostic_prefix_fractions": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "prefixItems": [
+            {"const": 0.25},
+            {"const": 0.5},
+            {"const": 0.75},
+            {"const": 1.0}
+          ]
+        },
+        "case_aggregation": {
+          "const": "mean_gt_entities"
+        },
+        "timeline_policy": {
+          "const": "physical_overlap"
+        },
+        "mask_resolution": {
+          "const": "scene_analysis_native"
+        }
+      },
+      "additionalProperties": false
+    },
     "robustness": {
       "type": "object",
       "required": [
