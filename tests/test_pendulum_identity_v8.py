@@ -1895,6 +1895,13 @@ class PendulumV8EvaluatorIntegrationTests(unittest.TestCase):
         )
 
 
+@unittest.skipUnless(
+    (
+        Path(__file__).resolve().parents[1]
+        / "scripts/regress_pendulum_identity_v8.py"
+    ).is_file(),
+    "clean release excludes the model-specific pendulum regression script",
+)
 class PendulumV8RealRegressionContractTests(unittest.TestCase):
     def test_existing_result_reuse_requires_exact_identity_and_hashes(
         self,

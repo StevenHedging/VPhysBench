@@ -412,6 +412,13 @@ class ParabolicMotionV2Tests(unittest.TestCase):
         self.assertIn("ambiguous_assignment", failures[0]["reason"])
 
 
+@unittest.skipUnless(
+    (
+        Path(__file__).resolve().parents[1]
+        / "scripts/regress_parabolic_identity_v2.py"
+    ).is_file(),
+    "clean release excludes the model-specific parabolic regression script",
+)
 class ParabolicV2RealRegressionContractTests(unittest.TestCase):
     def test_reuse_requires_matching_evaluator_and_video_hashes(self) -> None:
         module = importlib.import_module("scripts.regress_parabolic_identity_v2")
