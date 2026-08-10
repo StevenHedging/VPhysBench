@@ -480,11 +480,13 @@
           "enum": [
             "pendulum_state_v6",
             "pendulum_state_v7",
+            "pendulum_state_v8",
             "inclined_plane_state_v6",
             "inclined_plane_state_v7",
             "uniform_circular_motion_state_v6",
             "uniform_circular_motion_state_v7",
-            "parabolic_motion_state_v1"
+            "parabolic_motion_state_v1",
+            "parabolic_motion_state_v2"
           ]
         },
         "observer_protocol": {
@@ -496,7 +498,8 @@
         "reference_observation_policy": {
           "enum": [
             "condition_causal_symmetric",
-            "apparatus_geometry_symmetric"
+            "apparatus_geometry_symmetric",
+            "frozen_dataset_subject_identity"
           ]
         },
         "timeline": {
@@ -529,6 +532,9 @@
         "topology": {
           "type": "object"
         },
+        "subject_identity": {
+          "type": "object"
+        },
         "scoring": {
           "type": "object",
           "required": [
@@ -557,7 +563,8 @@
               "type": {
                 "enum": [
                   "pendulum_state_v6",
-                  "pendulum_state_v7"
+                  "pendulum_state_v7",
+                  "pendulum_state_v8"
                 ]
               }
             }
@@ -591,6 +598,29 @@
               "quality",
               "rigid_body_observation"
             ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "pendulum_state_v8",
+                  "parabolic_motion_state_v2"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "reference_observation_policy",
+              "subject_identity"
+            ],
+            "properties": {
+              "reference_observation_policy": {
+                "const": "frozen_dataset_subject_identity"
+              }
+            }
           }
         },
         {
@@ -684,7 +714,8 @@
             "type": {
               "enum": [
                 "pendulum_state_v6",
-                "pendulum_state_v7"
+                "pendulum_state_v7",
+                "pendulum_state_v8"
               ]
             }
           }
@@ -733,7 +764,10 @@
         {
           "properties": {
             "type": {
-              "const": "parabolic_motion_state_v1"
+              "enum": [
+                "parabolic_motion_state_v1",
+                "parabolic_motion_state_v2"
+              ]
             }
           },
           "required": [
@@ -994,7 +1028,8 @@
             "collision_1d_state_v1",
             "collision_1d_state_v2",
             "collision_1d_state_v3",
-            "collision_1d_state_v5"
+            "collision_1d_state_v5",
+            "collision_1d_state_v6"
           ]
         },
         "timeline": {
@@ -1024,6 +1059,9 @@
         "object_centric_scoring": {
           "$ref": "#/$defs/objectCentricScoring"
         },
+        "subject_identity": {
+          "type": "object"
+        },
         "quality": {
           "type": "object"
         },
@@ -1049,7 +1087,8 @@
                   "uniform_circular_motion_state_v2",
                   "collision_1d_state_v2",
                   "collision_1d_state_v3",
-                  "collision_1d_state_v5"
+                  "collision_1d_state_v5",
+                  "collision_1d_state_v6"
                 ]
               }
             }
@@ -1065,7 +1104,10 @@
           "if": {
             "properties": {
               "type": {
-                "const": "collision_1d_state_v5"
+                "enum": [
+                  "collision_1d_state_v5",
+                  "collision_1d_state_v6"
+                ]
               }
             }
           },
@@ -1077,6 +1119,20 @@
               "nbody_extraction",
               "nbody_scoring",
               "object_centric_scoring"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "collision_1d_state_v6"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "subject_identity"
             ]
           }
         }

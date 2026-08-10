@@ -13,6 +13,7 @@ SUPPORTED_EVALUATOR_TYPES = frozenset(
         "pendulum_state_v3",
         "pendulum_state_v6",
         "pendulum_state_v7",
+        "pendulum_state_v8",
         "inclined_plane_state_v1",
         "inclined_plane_state_v2",
         "inclined_plane_state_v6",
@@ -25,7 +26,9 @@ SUPPORTED_EVALUATOR_TYPES = frozenset(
         "collision_1d_state_v2",
         "collision_1d_state_v3",
         "collision_1d_state_v5",
+        "collision_1d_state_v6",
         "parabolic_motion_state_v1",
+        "parabolic_motion_state_v2",
         "unsupported",
     }
 )
@@ -74,6 +77,12 @@ class SceneEvaluatorRegistry:
             )
 
             evaluator = PendulumOpenWorldCaseEvaluatorV7(config)
+        elif evaluator_type == "pendulum_state_v8":
+            from .scenes.pendulum.v8_evaluator import (
+                PendulumOpenWorldCaseEvaluatorV8,
+            )
+
+            evaluator = PendulumOpenWorldCaseEvaluatorV8(config)
         elif evaluator_type in {
             "inclined_plane_state_v1",
             "inclined_plane_state_v2",
@@ -130,12 +139,24 @@ class SceneEvaluatorRegistry:
             )
 
             evaluator = CollisionOpenWorldCaseEvaluator(config)
+        elif evaluator_type == "collision_1d_state_v6":
+            from .scenes.collision.v6_evaluator import (
+                CollisionFailClosedCaseEvaluator,
+            )
+
+            evaluator = CollisionFailClosedCaseEvaluator(config)
         elif evaluator_type == "parabolic_motion_state_v1":
             from .scenes.parabolic_motion.evaluator import (
                 ParabolicMotionCaseEvaluator,
             )
 
             evaluator = ParabolicMotionCaseEvaluator(config)
+        elif evaluator_type == "parabolic_motion_state_v2":
+            from .scenes.parabolic_motion.v2_evaluator import (
+                ParabolicMotionCaseEvaluatorV2,
+            )
+
+            evaluator = ParabolicMotionCaseEvaluatorV2(config)
         elif evaluator_type == "unsupported":
             evaluator = UnsupportedSceneEvaluator(scene_id, config)
         else:

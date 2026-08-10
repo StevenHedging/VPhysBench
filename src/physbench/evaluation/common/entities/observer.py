@@ -556,6 +556,7 @@ def _frame_assignment(
     frame_index: int,
     frame_diagonal_px: float,
     minimum_match_position_similarity: float,
+    fixed_entity_track_ids: Mapping[str, str] | None = None,
 ) -> tuple[
     list[EntityMatch],
     list[dict[str, object]],
@@ -605,11 +606,20 @@ def _frame_assignment(
             dtype=np.float64,
         )
         comparisons: dict[tuple[int, int], object] = {}
-        for ref_index, (_, ref_track) in enumerate(remaining_reference):
+        for ref_index, (entity_id, ref_track) in enumerate(
+            remaining_reference
+        ):
             ref_class = str(
                 ref_track.metadata.get("entity_class", "")
             )
             for pred_index, pred_track in enumerate(tier_prediction):
+                if (
+                    fixed_entity_track_ids is not None
+                    and entity_id in fixed_entity_track_ids
+                    and pred_track.track_id
+                    != fixed_entity_track_ids[entity_id]
+                ):
+                    continue
                 pred_class = str(
                     pred_track.metadata.get("entity_class", "")
                 )
@@ -738,6 +748,7 @@ def compare_open_world_tracks(
     time_grid: CommonTimeGrid,
     frame_diagonal_px: float,
     minimum_match_position_similarity: float = 0.0,
+    fixed_entity_track_ids: Mapping[str, str] | None = None,
 ) -> OpenWorldComparison:
     """Compare fixed GT identities with every prediction track and residual.
 
@@ -745,6 +756,9 @@ def compare_open_world_tracks(
     to each evidence-tiered Hungarian assignment. A candidate below the
     reference-scaled continuous position threshold is reported as a rejected
     edge, leaving the reference entity missing and the prediction track extra.
+    ``fixed_entity_track_ids`` makes declared identities terminal: an entity
+    may match only its frame-zero-bound directed track, so residual discovery
+    cannot rename or reactivate it after uncertainty.
     """
 
     frame_count = len(time_grid.times_s)
@@ -775,6 +789,22 @@ def compare_open_world_tracks(
         if entity_id in reference_by_entity:
             raise ValueError(f"duplicate reference entity ID: {entity_id}")
         reference_by_entity[entity_id] = track
+
+    fixed_tracks = None
+    if fixed_entity_track_ids is not None:
+        fixed_tracks = {
+            str(entity_id): str(track_id)
+            for entity_id, track_id in fixed_entity_track_ids.items()
+        }
+        if (
+            set(fixed_tracks) - set(reference_by_entity)
+            or any(not value for value in fixed_tracks.values())
+            or len(set(fixed_tracks.values())) != len(fixed_tracks)
+        ):
+            raise ValueError(
+                "fixed entity-track identities must be unique, non-empty, "
+                "and reference-backed"
+            )
 
     prediction_tracks = [
         value.to_object_track(
@@ -819,6 +849,7 @@ def compare_open_world_tracks(
             frame_index=frame_index,
             frame_diagonal_px=diagonal,
             minimum_match_position_similarity=minimum_similarity,
+            fixed_entity_track_ids=fixed_tracks,
         )
         matches.extend(current)
         matched_entities = {item.entity_id for item in current}

@@ -22,7 +22,9 @@ from physbench.evaluation.common.entities.contracts import (
 from physbench.evaluation.protocols import load_evaluation_protocol
 from physbench.evaluation.registry import SceneEvaluatorRegistry
 from physbench.evaluation.scenes.parabolic_motion.evaluator import (
+    BallCandidate,
     ParabolicMotionCaseEvaluator,
+    _compose_parabolic_scores,
     observe_projectile,
     score_parabolic_observations,
 )
@@ -108,6 +110,176 @@ def _case() -> dict[str, object]:
 
 
 class ParabolicMotionEvaluatorTests(unittest.TestCase):
+    @staticmethod
+    def _false_high_components() -> dict[str, float]:
+        return {
+            "time_parameterized_trajectory": 0.6493891526642883,
+            "horizontal_uniform_motion": 0.40136498136363213,
+            "vertical_uniform_acceleration": 0.1140319428328521,
+            "parabolic_geometry": 0.31531938280236077,
+            "lifecycle_and_cardinality": 0.9305362023265322,
+        }
+
+    def test_strict_composition_does_not_compensate_failed_motion_law(
+        self,
+    ) -> None:
+        composed = _compose_parabolic_scores(
+            self._false_high_components(),
+            subject_score=0.8143368124741036,
+            integrity_score=0.9305362023265322,
+            config={
+                "composition": "strict_multiplicative_v2",
+                "weights": _scoring_config()["weights"],
+                "case_weights": {"physics_state": 0.75, "subject": 0.25},
+            },
+        )
+
+        self.assertEqual("strict_multiplicative_v2", composed["composition"])
+        self.assertLess(composed["motion_law_gate"], 0.25)
+        self.assertLess(composed["physics_score"], 0.16)
+        self.assertLess(composed["score"], 0.15)
+
+    def test_strict_composition_preserves_all_one_exact_control(self) -> None:
+        composed = _compose_parabolic_scores(
+            {name: 1.0 for name in self._false_high_components()},
+            subject_score=1.0,
+            integrity_score=1.0,
+            config={"composition": "strict_multiplicative_v2"},
+        )
+
+        self.assertEqual(1.0, composed["motion_law_gate"])
+        self.assertEqual(1.0, composed["physics_score"])
+        self.assertEqual(1.0, composed["score"])
+
+    def test_default_composition_retains_v1_arithmetic_score(self) -> None:
+        composed = _compose_parabolic_scores(
+            self._false_high_components(),
+            subject_score=0.8143368124741036,
+            integrity_score=0.9305362023265322,
+            config={
+                "weights": _scoring_config()["weights"],
+                "case_weights": {"physics_state": 0.75, "subject": 0.25},
+            },
+        )
+
+        self.assertEqual("weighted_arithmetic_v1", composed["composition"])
+        self.assertIsNone(composed["motion_law_gate"])
+        self.assertAlmostEqual(0.5656459893608466, composed["score"], places=12)
+
+    @staticmethod
+    def _candidate(
+        xy: tuple[float, float],
+        *,
+        shape: tuple[int, int] = (160, 240),
+    ) -> BallCandidate:
+        mask = np.zeros(shape, dtype=np.uint8)
+        center = tuple(np.rint(xy).astype(int).tolist())
+        cv2.circle(mask, center, 8, 255, -1)
+        histogram = np.zeros(24, dtype=np.float64)
+        histogram[0] = 1.0
+        return BallCandidate(
+            xy=np.asarray(xy, dtype=np.float64),
+            radius=8.0,
+            mask=mask,
+            histogram=histogram,
+            contrast=30.0,
+            source="fixture",
+        )
+
+    def test_ambiguous_assignment_terminates_identity_without_reacquisition(
+        self,
+    ) -> None:
+        frames = [
+            np.full((160, 240, 3), 224, dtype=np.uint8)
+            for _ in range(4)
+        ]
+        seed = self._candidate((120.0, 35.0))
+        candidates = [
+            [self._candidate((108.0, 48.0)), self._candidate((132.0, 48.0))],
+            [self._candidate((96.0, 65.0))],
+            [self._candidate((84.0, 84.0))],
+        ]
+        config = {
+            **_observation_config(),
+            "minimum_assignment_cost_margin": 0.15,
+            "latch_identity_loss": True,
+        }
+
+        with (
+            patch(
+                "physbench.evaluation.scenes.parabolic_motion.evaluator."
+                "_hough_candidates",
+                side_effect=candidates,
+            ),
+            patch(
+                "physbench.evaluation.scenes.parabolic_motion.evaluator."
+                "_foreground_candidates",
+                return_value=[],
+            ),
+        ):
+            observation = observe_projectile(
+                frames,
+                available=np.ones(len(frames), dtype=bool),
+                config=config,
+                seed_override=seed,
+                seed_provenance={"policy": "fixture_anchor"},
+            )
+
+        self.assertEqual([True, False, False, False], observation.observed.tolist())
+        self.assertEqual("terminated_uncertain", observation.diagnostics["identity_state"])
+        self.assertEqual(1, observation.diagnostics["identity_termination_frame"])
+        self.assertEqual(
+            "ambiguous_assignment",
+            observation.diagnostics["identity_termination_reason"],
+        )
+        self.assertAlmostEqual(
+            0.0, observation.diagnostics["assignment_margins"][1]
+        )
+        self.assertEqual(
+            {"policy": "fixture_anchor"},
+            observation.diagnostics["seed_provenance"],
+        )
+
+    def test_unique_assignments_keep_anchored_identity_active(self) -> None:
+        frames = [
+            np.full((160, 240, 3), 224, dtype=np.uint8)
+            for _ in range(4)
+        ]
+        seed = self._candidate((120.0, 35.0))
+        candidates = [
+            [self._candidate((108.0, 48.0))],
+            [self._candidate((96.0, 65.0))],
+            [self._candidate((84.0, 84.0))],
+        ]
+        config = {
+            **_observation_config(),
+            "minimum_assignment_cost_margin": 0.15,
+            "latch_identity_loss": True,
+        }
+
+        with (
+            patch(
+                "physbench.evaluation.scenes.parabolic_motion.evaluator."
+                "_hough_candidates",
+                side_effect=candidates,
+            ),
+            patch(
+                "physbench.evaluation.scenes.parabolic_motion.evaluator."
+                "_foreground_candidates",
+                return_value=[],
+            ),
+        ):
+            observation = observe_projectile(
+                frames,
+                available=np.ones(len(frames), dtype=bool),
+                config=config,
+                seed_override=seed,
+            )
+
+        self.assertEqual([True, True, True, True], observation.observed.tolist())
+        self.assertEqual("active", observation.diagnostics["identity_state"])
+        self.assertIsNone(observation.diagnostics["identity_termination_frame"])
+
     def test_identical_projectile_analysis_exposes_unit_csti(self) -> None:
         protocol = load_evaluation_protocol("scene_default_v10")
         config = copy.deepcopy(protocol["scenes"]["parabolic_motion"])
@@ -332,6 +504,8 @@ class ParabolicMotionEvaluatorTests(unittest.TestCase):
         valid = observation.xy[observation.observed]
         self.assertLess(valid[-1, 0], valid[0, 0])
         self.assertGreater(valid[-1, 1], valid[0, 1])
+        self.assertNotIn("identity_state", observation.diagnostics)
+        self.assertNotIn("assignment_margins", observation.diagnostics)
 
     def test_identical_observation_scores_exactly_one(self) -> None:
         frames = _frames()
