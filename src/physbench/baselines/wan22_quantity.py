@@ -14,6 +14,7 @@ from .wan22_lora import Wan22LoraAdapter
 from .wan22_quantity_model import (
     QUANTITY_ENCODER_STATE_KEYS,
     QUANTITY_ENCODER_TENSOR_COUNT,
+    QuantityEncoder,
     WAN22_TI2V_5B_LORA_PAIR_COUNT,
     WAN22_TI2V_5B_LORA_RANK,
     WAN22_TI2V_5B_LORA_TENSOR_COUNT,
@@ -57,7 +58,10 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
     ) -> dict[str, Any]:
         prepared = super().prepare_training(train_case_ids, run_dir)
         prepared.update({
-            "adapter": "wan22_quantity_embedding",
+            "adapter": self.config.get(
+                "conditioning_adapter_id",
+                "wan22_quantity_embedding",
+            ),
             "quantity_encoder": self.config["quantity_encoder"],
             "checkpoint_format": (
                 "combined_dit_lora_and_quantity_encoder_safetensors_v1"
@@ -390,6 +394,13 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
     @staticmethod
     def _checkpoint_inventory_bytes(
         checkpoint_bytes: bytes,
+        *,
+        expected_encoder_keys: frozenset[str] = (
+            QUANTITY_ENCODER_STATE_KEYS
+        ),
+        expected_encoder_tensor_count: int = (
+            QUANTITY_ENCODER_TENSOR_COUNT
+        ),
     ) -> dict[str, Any]:
         if not isinstance(checkpoint_bytes, bytes):
             raise TypeError(
@@ -558,20 +569,39 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
         lora_tensors = sum(len(pair) for pair in lora_pairs.values())
         if tensor_count != (
             WAN22_TI2V_5B_LORA_TENSOR_COUNT
-            + QUANTITY_ENCODER_TENSOR_COUNT
+            + expected_encoder_tensor_count
         ):
+            if (
+                expected_encoder_tensor_count
+                == QUANTITY_ENCODER_TENSOR_COUNT
+                and expected_encoder_keys == QUANTITY_ENCODER_STATE_KEYS
+            ):
+                raise ValueError(
+                    "combined checkpoint must contain exactly 619 tensors: "
+                    f"got {tensor_count}"
+                )
             raise ValueError(
-                "combined checkpoint must contain exactly 619 tensors: "
+                "combined checkpoint tensor count differs from the sealed "
+                "LoRA plus conditioning-encoder topology: "
                 f"got {tensor_count}"
             )
         if (
-            len(quantity_keys) != QUANTITY_ENCODER_TENSOR_COUNT
-            or quantity_keys != QUANTITY_ENCODER_STATE_KEYS
+            len(quantity_keys) != expected_encoder_tensor_count
+            or quantity_keys != expected_encoder_keys
             or len(quantity_prefixes) != 1
         ):
+            topology_name = (
+                "the exact 19-tensor QuantityEncoder topology"
+                if expected_encoder_tensor_count
+                == QUANTITY_ENCODER_TENSOR_COUNT
+                and expected_encoder_keys == QUANTITY_ENCODER_STATE_KEYS
+                else (
+                    "the exact sealed conditioning-encoder topology "
+                    f"({expected_encoder_tensor_count} tensors)"
+                )
+            )
             raise ValueError(
-                "combined checkpoint must contain the exact 19-tensor "
-                "QuantityEncoder topology"
+                "combined checkpoint must contain " + topology_name
             )
         if lora_tensors != WAN22_TI2V_5B_LORA_TENSOR_COUNT:
             raise ValueError(
@@ -636,11 +666,22 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
         }
 
     @staticmethod
-    def _checkpoint_inventory(path: Path) -> dict[str, Any]:
+    def _checkpoint_inventory(
+        path: Path,
+        *,
+        expected_encoder_keys: frozenset[str] = (
+            QUANTITY_ENCODER_STATE_KEYS
+        ),
+        expected_encoder_tensor_count: int = (
+            QUANTITY_ENCODER_TENSOR_COUNT
+        ),
+    ) -> dict[str, Any]:
         with path.open("rb") as handle:
             checkpoint_bytes = handle.read()
         return Wan22QuantityLoraAdapter._checkpoint_inventory_bytes(
-            checkpoint_bytes
+            checkpoint_bytes,
+            expected_encoder_keys=expected_encoder_keys,
+            expected_encoder_tensor_count=expected_encoder_tensor_count,
         )
 
     def train(
@@ -659,7 +700,13 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
             and checkpoint_value
         ):
             checkpoint = Path(checkpoint_value).resolve()
-            inventory = self._checkpoint_inventory(checkpoint)
+            encoder = QuantityEncoder(self.config["quantity_encoder"])
+            expected_encoder_keys = frozenset(encoder.state_dict())
+            inventory = self._checkpoint_inventory(
+                checkpoint,
+                expected_encoder_keys=expected_encoder_keys,
+                expected_encoder_tensor_count=len(expected_encoder_keys),
+            )
             state_root = checkpoint.parent / "training_state_latest"
             state_path = state_root / "optimizer_scheduler.pt"
             manifest = {
@@ -678,6 +725,11 @@ class Wan22QuantityLoraAdapter(Wan22LoraAdapter):
                 "quantity_encoder_config": self.config[
                     "quantity_encoder"
                 ],
+                "conditioning_adapter_id": self.config.get(
+                    "conditioning_adapter_id",
+                    "wan22_quantity_embedding",
+                ),
+                "encoder_type": encoder.encoder_type,
                 "base_model_assets": str(
                     self._model_asset_manifest(run_dir)
                 ),

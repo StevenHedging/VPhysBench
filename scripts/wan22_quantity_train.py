@@ -366,6 +366,7 @@ def audit_training_tokens(
             "schema_version": "1.0",
             "case_id": case_id,
             "scene_id": row["scene_id"],
+            "encoder_type": model.pipe.quantity_encoder.encoder_type,
             "prompt": row["prompt"],
             "audited_prompt": row["audited_prompt"],
             "quantity_registry_id": row["quantity_registry_id"],

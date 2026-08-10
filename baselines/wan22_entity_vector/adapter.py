@@ -308,6 +308,13 @@ class FirstEntityVectorDataAdapter(DataAdapter):
         base["native_inputs"]["physics"] = {
             "representation": REPRESENTATION,
             "entity_vector": vector,
+            "quantities": [vector],
+            "registry_id": REPRESENTATION,
+            "registry_fingerprint": canonical_sha256({
+                "representation": REPRESENTATION,
+                "components": list(ENTITY_VECTOR_COMPONENTS),
+                "source_object": "object_1",
+            }),
         }
         base["stages"]["text"] = {
             "type": "seven_scene_physics_text_plus_entity_sentinel_v1",

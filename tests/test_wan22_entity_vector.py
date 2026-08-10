@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+import json
+import struct
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,7 +15,12 @@ from baselines.wan22_entity_vector.adapter import (
 from _paths import ROOT
 from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
-from physbench.baselines.wan22_quantity_model import QuantityEncoder
+from physbench.baselines.wan22_quantity import Wan22QuantityLoraAdapter
+from physbench.baselines.wan22_quantity_model import (
+    QUANTITY_CHECKPOINT_PREFIX,
+    QuantityEncoder,
+    expected_wan22_ti2v_5b_lora_targets,
+)
 from torch import nn
 
 
@@ -277,6 +284,49 @@ class FirstEntityVectorEncoderTests(unittest.TestCase):
         nonfinite = dict(record, values_si=[1.0, float("inf"), 2.0])
         with self.assertRaisesRegex(ValueError, "finite"):
             encoder.encode_records([nonfinite])
+
+    def test_checkpoint_inventory_accepts_only_entity_topology(self) -> None:
+        encoder = QuantityEncoder(self._config())
+        tensors = {
+            f"{QUANTITY_CHECKPOINT_PREFIX}{name}": (
+                "F32",
+                list(tensor.shape),
+            )
+            for name, tensor in encoder.state_dict().items()
+        }
+        for target in expected_wan22_ti2v_5b_lora_targets():
+            tensors[f"{target}.lora_A.weight"] = ("F32", [32, 1])
+            tensors[f"{target}.lora_B.weight"] = ("F32", [1, 32])
+        offset = 0
+        header = {}
+        for name, (dtype, shape) in tensors.items():
+            size = math.prod(shape) * 4
+            header[name] = {
+                "dtype": dtype,
+                "shape": shape,
+                "data_offsets": [offset, offset + size],
+            }
+            offset += size
+        encoded_header = json.dumps(
+            header,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+        payload = struct.pack("<Q", len(encoded_header)) + encoded_header
+        payload += b"\0" * offset
+
+        expected_keys = frozenset(encoder.state_dict())
+        inventory = Wan22QuantityLoraAdapter._checkpoint_inventory_bytes(
+            payload,
+            expected_encoder_keys=expected_keys,
+            expected_encoder_tensor_count=len(expected_keys),
+        )
+        self.assertEqual(
+            inventory["quantity_encoder_tensor_count"],
+            len(expected_keys),
+        )
+        with self.assertRaisesRegex(ValueError, "619 tensors"):
+            Wan22QuantityLoraAdapter._checkpoint_inventory_bytes(payload)
 
 
 if __name__ == "__main__":
