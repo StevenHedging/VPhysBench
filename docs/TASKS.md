@@ -22,23 +22,25 @@ adaptation ID 都必须匹配 `^[A-Za-z0-9][A-Za-z0-9_.-]*$`。路径分隔符�
 
 ## 2. 官方 Task
 
-当前Dataset有六个scene，但推水瓶评估器尚未定义。两份官方Task因此继续选择已有评估器
-的五个scene，并已切换到13.0.0 Dataset：
+当前Dataset有七个scene，但推水瓶和竖直弹簧振子评估器尚未定义。四份官方Task因此
+继续选择已有评估器的五个scene，并已切换到13.0.0 Dataset：
 
-| 文件 | family | View | 训练 |
-| --- | --- | --- | --- |
-| `tasks/official/five_scene_finetune_eval.json` | `finetune_eval` | A | 是 |
-| `tasks/official/five_scene_direct_eval.json` | `direct_eval` | B | 否 |
+| 文件 | family | View | 协议 | 训练 |
+| --- | --- | --- | --- | --- |
+| `tasks/official/five_scene_finetune_eval.json` | `finetune_eval` | A | `scene_default_v10` | 是 |
+| `tasks/official/five_scene_direct_eval.json` | `direct_eval` | B | `scene_default_v10` | 否 |
+| `tasks/official/five_scene_finetune_eval_csti.json` | `finetune_eval` | A | `scene_default_v11` | 是 |
+| `tasks/official/five_scene_direct_eval_csti.json` | `direct_eval` | B | `scene_default_v11` | 否 |
 
-推水瓶可以进入Dataset训练和基线数据适配，但在专用评估器及协议完成前不能计入官方
-物理分数。不得用其它scene的评估器代替。
+推水瓶和竖直弹簧振子可以进入Dataset训练和基线数据适配，但在专用评估器及协议完成
+前不能计入官方物理分数。不得用其它scene的评估器代替。
 
 Fine-tune + eval 示例：
 
 ```json
 {
   "schema_version": "4.0",
-  "task_id": "five_scene_finetune_eval_v13",
+  "task_id": "five_scene_finetune_eval_v13_csti",
   "family": "finetune_eval",
   "dataset_id": "physics_video_seven_scene_v13",
   "dataset_view": "view_a",
@@ -57,7 +59,7 @@ Fine-tune + eval 示例：
     "inference": [42]
   },
   "evaluation": {
-    "protocol": "scene_default_v10",
+    "protocol": "scene_default_v11",
     "reporting": {
       "primary_score": "overall_test",
       "breakdowns": [],
@@ -67,12 +69,23 @@ Fine-tune + eval 示例：
 }
 ```
 
-两份官方Task固定`scene_default_v10`。不同Dataset digest或protocol identity的分数不能
-混合。
+不带`_csti`的两份历史Task固定`scene_default_v10`；新增变体固定
+`scene_default_v11`。v11保留原scene专家评估器并增加通用CSTI维度，同时把五个scene的
+分析采样统一为24 FPS；顶层`score`仍只表示专家维度，但不同协议的专家结果也不得混用。
+CSTI写入`task_result.json.dimensions.csti`，专家维度镜像写入
+`task_result.json.dimensions.expert`。不同Dataset digest或protocol identity的分数
+不能混合。
+
+CSTI采用一次正式full-Tube精确3D EDT；25%/50%/75%/100%四个prefix只提供诊断。
+最终配置在`121 × 540 × 960`单主体基准为4.531秒、峰值946,292 KiB。direct Task的
+330个碰撞job合计726个GT主体；若每个主体都达到最大规格，CSTI数值部分的串行保守
+上界约54.8分钟，scene observer耗时另计。正式运行v11前应按
+[`CSTI_REFERENCE_PERFORMANCE_20260807.md`](experiments/CSTI_REFERENCE_PERFORMANCE_20260807.md)
+预留资源；日常管线smoke优先使用冻结的v10 Task。
 
 这次Dataset升级只改变物理quantity与prompt契约，不改变Task字段形状、选择或评估协议，
-因此Task继续使用schema 4.0和`scene_default_v10`协议身份。当前冻结计划保持582条训练
-Case、76个finetune评测job和658个direct-eval job。
+因此Task继续使用schema 4.0；v10与v11 Task具有完全相同的数据选择。当前冻结计划保持
+582条训练Case、76个finetune评测job和658个direct-eval job。
 
 `finetune_eval` 必须使用 View A，且一个 AtomicRun 恰好有一个 training seed；
 `direct_eval` 必须使用 View B，且没有 training seed。多个 seed 应展开成多个独立
@@ -131,7 +144,7 @@ one Dataset × one Task × many Baseline identities
 ```
 
 例如 `cosmos3_nano_i2v_generic` 和 `cosmos3_nano_i2v_physics` 都编译
-`five_scene_direct_eval.json`。两者接收同一Case prompt、首帧与annotated物理标注；
+`five_scene_direct_eval_csti.json`。两者接收同一Case prompt、首帧与annotated物理标注；
 前者通过 `input_policy.physics.usage=ignored` 明确不消费物理字段，后者通过
 `usage=required` 与 `structured_text` adapter 追加物理信息。
 
@@ -199,7 +212,7 @@ binding 都会改变或破坏 digest。
 PYTHONPATH=src python -m physbench \
   task-build \
   --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_finetune_eval.json \
+  --task tasks/official/five_scene_finetune_eval_csti.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
   --output results/wan22_physics_task_instance.json
 ```
@@ -216,7 +229,7 @@ PYTHONPATH=src python -m physbench \
 PYTHONPATH=src python -m physbench \
   atomic-run \
   --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval.json \
+  --task tasks/official/five_scene_direct_eval_csti.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --output-root run \
   --run-id wan22_generic_dryrun
@@ -255,7 +268,7 @@ Direct-eval 工程 smoke 可加：
 PYTHONPATH=src python -m physbench \
   matrix-run \
   --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval.json \
+  --task tasks/official/five_scene_direct_eval_csti.json \
   --baseline wan22_ti2v_5b_lora_r32_v3_generic \
   --baseline wan22_ti2v_5b_lora_r32_v3_physics \
   --matrix-id wan22_prompt_injection_ablation \

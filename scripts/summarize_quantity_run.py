@@ -28,6 +28,7 @@ from physbench.evaluation.contracts import (
     CASE_STATUSES,
     CaseEvaluationResult,
 )
+from physbench.evaluation.protocols import load_evaluation_protocol
 from physbench.evaluation.task_evaluator import aggregate_task_results
 
 
@@ -2522,6 +2523,7 @@ def _official_task_result(
             "integrity_issues": None,
             "by_scene": {},
             "breakdown": {},
+            "dimensions": None,
             "aggregation_verified": False,
             "protocol_verified": False,
             "result_complete": False,
@@ -2619,11 +2621,33 @@ def _official_task_result(
             evaluations[job["job_id"]]
             for job in plan["jobs"]
         ]
+        general_metrics = None
+        try:
+            resolved_protocol = load_evaluation_protocol(
+                str(expected_protocol_id)
+            )
+        except (OSError, TypeError, ValueError):
+            resolved_protocol = None
+        if (
+            resolved_protocol is not None
+            and resolved_protocol.get("fingerprint")
+            == expected_protocol_fingerprint
+        ):
+            general_metrics = resolved_protocol.get("general_metrics")
+        elif "dimensions" in task_result:
+            _issue(
+                integrity_issues,
+                "official_dimension_protocol_unverified",
+                protocol_id=expected_protocol_id,
+                protocol_fingerprint=expected_protocol_fingerprint,
+            )
+            protocol_verified = False
         recomputed = aggregate_task_results(
             plan=plan,
             case_results=ordered_results,
+            general_metrics=general_metrics,
         )
-        aggregate_fields = (
+        aggregate_fields = [
             "status",
             "expected_jobs",
             "evaluated_jobs",
@@ -2634,7 +2658,9 @@ def _official_task_result(
             "aggregation_policy",
             "by_scene",
             "breakdown",
-        )
+        ]
+        if general_metrics:
+            aggregate_fields.append("dimensions")
         aggregation_verified = True
         for field in aggregate_fields:
             expected = recomputed.get(field)
@@ -2737,6 +2763,7 @@ def _official_task_result(
         "integrity_issues": copy.deepcopy(official_issues),
         "by_scene": by_scene,
         "breakdown": breakdown,
+        "dimensions": copy.deepcopy(task_result.get("dimensions")),
         "aggregation_verified": aggregation_verified,
         "protocol_verified": protocol_verified,
         "result_complete": result_complete,

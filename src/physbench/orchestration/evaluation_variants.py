@@ -459,6 +459,7 @@ def _validate_native_evaluation(
         **aggregate_task_results(
             plan=plan,
             case_results=case_results,
+            general_metrics=native_protocol.get("general_metrics"),
         ),
     }
     if task_result != expected_task_result:

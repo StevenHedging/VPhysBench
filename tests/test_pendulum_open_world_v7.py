@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import math
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -9,7 +10,13 @@ import cv2
 import numpy as np
 
 from _paths import ROOT
-from physbench.evaluation.common.entities import build_common_time_grid
+from physbench.evaluation.common.csti import CSTIConfig, evaluate_csti
+from physbench.evaluation.common.entities import (
+    EntityMatch,
+    OpenWorldObservation,
+    ReferenceCapability,
+    build_common_time_grid,
+)
 from physbench.evaluation.common.entities.observer import (
     EvidenceTier,
     ObjectDetection,
@@ -20,6 +27,9 @@ from physbench.evaluation.scenes.pendulum.open_world import (
     letterbox_condition_image,
 )
 from physbench.evaluation.scenes.pendulum.scoring import score_traces
+from physbench.evaluation.scenes.pendulum.v7_evaluator import (
+    PendulumOpenWorldCaseEvaluatorV7,
+)
 from physbench.evaluation.scenes.pendulum.v7_open_world import (
     _calibrate_residual_tracks,
     _condition_preexistence_score,
@@ -73,6 +83,22 @@ _TOPOLOGY_CONFIG = {
     "v7_topology_persistence_frames": 3,
 }
 
+_CSTI_CONFIG = CSTIConfig.from_mapping(
+    {
+        "enabled": True,
+        "algorithm": "exact_full_tube_edt",
+        "spatial_tolerance_fraction": 0.005,
+        "temporal_tolerance_s": 0.05,
+        "condition_frame_policy": "exclude_initial_samples",
+        "initial_frames_excluded": 1,
+        "score_aggregation": "full_tube",
+        "diagnostic_prefix_fractions": [0.25, 0.5, 0.75, 1.0],
+        "case_aggregation": "mean_gt_entities",
+        "timeline_policy": "physical_overlap",
+        "mask_resolution": "scene_analysis_native",
+    }
+)
+
 
 def _mask(
     center: tuple[int, int],
@@ -114,6 +140,77 @@ def _detection(
 
 
 class PendulumOpenWorldV7Tests(unittest.TestCase):
+    def test_csti_input_uses_only_the_matched_bob_tube(self) -> None:
+        masks = (_mask((70, 80)), _mask((72, 80)))
+        track = OpenWorldTrack(
+            track_id="track_bob",
+            detections=tuple(
+                _detection(
+                    index,
+                    (70 + 2 * index, 80),
+                    detection_id=f"bob_{index}",
+                    sources=("condition_directed_sam2",),
+                    metadata={"identity_anchor_valid": True},
+                    tier=EvidenceTier.PARTICIPANT,
+                )
+                for index in range(2)
+            ),
+            confirmed=True,
+            evidence_tier=EvidenceTier.PARTICIPANT,
+        )
+        observation = OpenWorldObservation(
+            tracks=(track,),
+            overflow_counts=np.zeros(2),
+        )
+        comparison = SimpleNamespace(
+            matches=tuple(
+                EntityMatch(index, "bob", "track_bob", 1.0, 0.0)
+                for index in range(2)
+            )
+        )
+        evaluator = object.__new__(PendulumOpenWorldCaseEvaluatorV7)
+
+        value = evaluator._build_csti_input(
+            capability=ReferenceCapability.SAME_CASE_GT,
+            times_s=[0.0, 0.05],
+            frame_shape=(120, 140),
+            entity=SimpleNamespace(entity_id="bob", role_id="moving_bob"),
+            reference_bobs=masks,
+            prediction_observation=observation,
+            comparison=comparison,
+        )
+        metric = evaluate_csti(
+            value,
+            expected_entities=(("bob", "moving_bob"),),
+            config=_CSTI_CONFIG,
+        )
+
+        self.assertEqual(1.0, metric["score"])
+        self.assertEqual(["track_bob"], metric["objects"][0]["matched_prediction_track_ids"])
+
+    def test_csti_fail_closed_observation_marks_bob_unmatched(self) -> None:
+        masks = (_mask((70, 80)), _mask((72, 80)))
+        evaluator = object.__new__(PendulumOpenWorldCaseEvaluatorV7)
+
+        value = evaluator._build_csti_input(
+            capability=ReferenceCapability.SAME_CASE_GT,
+            times_s=[0.0, 0.05],
+            frame_shape=(120, 140),
+            entity=SimpleNamespace(entity_id="bob", role_id="moving_bob"),
+            reference_bobs=masks,
+            prediction_observation=None,
+            comparison=SimpleNamespace(matches=()),
+        )
+        metric = evaluate_csti(
+            value,
+            expected_entities=(("bob", "moving_bob"),),
+            config=_CSTI_CONFIG,
+        )
+
+        self.assertEqual(0.0, metric["score"])
+        self.assertFalse(metric["objects"][0]["matched"])
+        self.assertIsNone(metric["objects"][0]["diagnostic_prefix_curve"])
+
     def test_short_gap_velocity_recovery_does_not_admit_replacement(
         self,
     ) -> None:

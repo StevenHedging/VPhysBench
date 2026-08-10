@@ -11,6 +11,7 @@ from unittest.mock import patch
 import cv2
 import numpy as np
 
+from physbench.evaluation.common.csti import CSTIConfig, evaluate_csti
 from physbench.evaluation.common.entities import (
     PositionEvidence,
     ReferenceCapability,
@@ -44,6 +45,20 @@ from physbench.evaluation.scenes.circular_motion.v7_evaluator import (
 _FRAME_COUNT = 9
 _TIMES = [index / 8.0 for index in range(_FRAME_COUNT)]
 _GRID = build_common_time_grid(_TIMES)
+_CSTI_MAPPING = {
+    "enabled": True,
+    "algorithm": "exact_full_tube_edt",
+    "spatial_tolerance_fraction": 0.005,
+    "temporal_tolerance_s": 0.05,
+    "condition_frame_policy": "exclude_initial_samples",
+    "initial_frames_excluded": 1,
+    "score_aggregation": "full_tube",
+    "diagnostic_prefix_fractions": [0.25, 0.5, 0.75, 1.0],
+    "case_aggregation": "mean_gt_entities",
+    "timeline_policy": "physical_overlap",
+    "mask_resolution": "scene_analysis_native",
+}
+_CSTI_CONFIG = CSTIConfig.from_mapping(_CSTI_MAPPING)
 _COLOR_CONFIG = {
     "green_hsv_lower": [35, 35, 25],
     "green_hsv_upper": [100, 255, 255],
@@ -1015,6 +1030,67 @@ class CircularOpenWorldEvaluatorTests(unittest.TestCase):
         }
         return config
 
+    def test_v7_csti_preserves_independent_orbiter_tubes(self) -> None:
+        config = self._v7_config()
+        config["general_metrics"] = {"csti": _CSTI_MAPPING}
+        evaluator = CircularMotionOpenWorldCaseEvaluatorV7(
+            copy.deepcopy(config)
+        )
+        case = _case()
+        manifest = materialize_entity_manifest(case)
+        with tempfile.TemporaryDirectory() as temporary:
+            request = CaseEvaluationRequest(
+                job={"job_id": "circular_v7_csti_unit"},
+                case=case,
+                case_catalog={str(case["case_id"]): case},
+                prediction={"status": "complete", "video_path": "mock.mp4"},
+                asset_root=Path(temporary),
+                artifact_dir=Path(temporary) / "artifacts",
+                evaluator_config=config,
+            )
+            video = SimpleNamespace(
+                frames=_frames(),
+                available=np.ones(_FRAME_COUNT, dtype=bool),
+            )
+            with (
+                patch(
+                    "physbench.evaluation.scenes.circular_motion."
+                    "v6_evaluator.write_rows_csv"
+                ),
+                patch(
+                    "physbench.evaluation.scenes.circular_motion."
+                    "v6_evaluator.save_iou_curve"
+                ),
+                patch(
+                    "physbench.evaluation.scenes.circular_motion."
+                    "v6_evaluator.save_series_comparison"
+                ),
+                patch(
+                    "physbench.evaluation.scenes.circular_motion."
+                    "v6_evaluator.write_subject_artifacts",
+                    return_value={},
+                ),
+            ):
+                analysis = evaluator.analyze(
+                    request,
+                    times_s=_TIMES,
+                    reference_video=video,
+                    prediction_video=video,
+                )
+
+        self.assertIsNotNone(analysis.csti_input)
+        metric = evaluate_csti(
+            analysis.csti_input,
+            expected_entities=tuple(
+                (entity.entity_id, entity.role_id)
+                for entity in manifest.entities
+            ),
+            config=_CSTI_CONFIG,
+        )
+        self.assertAlmostEqual(1.0, metric["score"], places=12)
+        self.assertEqual(2, len(metric["objects"]))
+        self.assertTrue(all(item["matched"] for item in metric["objects"]))
+
     def test_normal_result_has_unified_metrics_and_finite_score(self) -> None:
         config = self._config()
         evaluator = CircularMotionOpenWorldCaseEvaluator(
@@ -1154,10 +1230,12 @@ class CircularOpenWorldEvaluatorTests(unittest.TestCase):
         self,
     ) -> None:
         config = self._v7_config()
+        config["general_metrics"] = {"csti": _CSTI_MAPPING}
         evaluator = CircularMotionOpenWorldCaseEvaluatorV7(
             copy.deepcopy(config)
         )
         case = _case()
+        manifest = materialize_entity_manifest(case)
         with tempfile.TemporaryDirectory() as temporary:
             request = CaseEvaluationRequest(
                 job={"job_id": "circular_v7_fail_closed_unit"},
@@ -1215,6 +1293,18 @@ class CircularOpenWorldEvaluatorTests(unittest.TestCase):
             analysis.metrics["object_centric_integrity"][
                 "integrity_gate"
             ],
+        )
+        metric = evaluate_csti(
+            analysis.csti_input,
+            expected_entities=tuple(
+                (entity.entity_id, entity.role_id)
+                for entity in manifest.entities
+            ),
+            config=_CSTI_CONFIG,
+        )
+        self.assertEqual(0.0, metric["score"])
+        self.assertTrue(
+            all(not item["matched"] for item in metric["objects"])
         )
 
     def test_physics_parent_uses_condition_identity_not_future_pixels(

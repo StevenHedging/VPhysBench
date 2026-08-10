@@ -14,8 +14,10 @@ from ...common.artifacts import (
     write_rows_csv,
 )
 from ...common.base import ReferenceCaseEvaluator, SceneAnalysis
+from ...common.csti import build_csti_input_from_frame_matches
 from ...common.entities import (
     ObjectTrack,
+    ReferenceCapability,
     build_common_time_grid,
     compose_gated_case_score,
     materialize_entity_manifest,
@@ -708,6 +710,29 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
             "score": score,
             "content_components": content_components,
         }
+        csti_input = (
+            build_csti_input_from_frame_matches(
+                reference_capability=manifest.reference_capability,
+                times_s=times_s,
+                frame_shape=reference_union[0].shape,
+                expected_entities=tuple(
+                    (entity.entity_id, entity.role_id)
+                    for entity in entities
+                ),
+                reference_masks_by_entity={
+                    entity_id: tuple(reference_masks[index])
+                    for index, entity_id in enumerate(entity_ids)
+                },
+                prediction_observation=prediction_objects,
+                matches=comparison.matches,
+            )
+            if (
+                getattr(self, "csti_enabled", False)
+                and manifest.reference_capability
+                is ReferenceCapability.SAME_CASE_GT
+            )
+            else None
+        )
         return SceneAnalysis(
             score=score,
             metrics={
@@ -815,6 +840,7 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 "subject_reference_mode": reference_mode,
                 **condition_provenance,
             },
+            csti_input=csti_input,
         )
 
 

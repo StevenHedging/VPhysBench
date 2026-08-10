@@ -11,6 +11,7 @@ from unittest.mock import patch
 from physbench.cli import main
 from physbench.baseline_runtime import create_baseline_scaffold
 from physbench.evaluation import load_evaluation_protocol
+from physbench.evaluation.task_evaluator import aggregate_task_results
 from physbench.io import (
     canonical_sha256,
     load_json,
@@ -23,9 +24,25 @@ from physbench.orchestration import reevaluate_atomic_variant
 from physbench.orchestration.atomic_runner import run_atomic
 from physbench.orchestration.evaluation_variants import (
     _load_asset_lock,
+    _validate_native_evaluation,
     _validate_cases,
     _validate_reference_assets,
 )
+
+
+_CSTI_CONFIG = {
+    "enabled": True,
+    "algorithm": "exact_full_tube_edt",
+    "spatial_tolerance_fraction": 0.005,
+    "temporal_tolerance_s": 0.05,
+    "condition_frame_policy": "exclude_initial_samples",
+    "initial_frames_excluded": 1,
+    "score_aggregation": "full_tube",
+    "diagnostic_prefix_fractions": [0.25, 0.5, 0.75, 1.0],
+    "case_aggregation": "mean_gt_entities",
+    "timeline_policy": "physical_overlap",
+    "mask_resolution": "scene_analysis_native",
+}
 
 
 def _asset_record(
@@ -309,6 +326,41 @@ class EvaluationVariantTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.sam_patch.stop()
         self.temporary.cleanup()
+
+    def test_native_validation_reaggregates_enabled_csti_dimension(self) -> None:
+        run_dir = _build_atomic_run(self.root)
+        plan = load_json(run_dir / "plan.json")
+        case_results = load_jsonl(
+            run_dir / "evaluation" / "case_results.jsonl"
+        )
+        aggregation = aggregate_task_results(
+            plan=plan,
+            case_results=case_results,
+            general_metrics={"csti": _CSTI_CONFIG},
+        )
+        task_result = load_json(run_dir / "evaluation" / "task_result.json")
+        task_result = {
+            "schema_version": task_result["schema_version"],
+            "task_id": task_result["task_id"],
+            "task_family": task_result["task_family"],
+            "protocol": task_result["protocol"],
+            "integrity_issues": task_result["integrity_issues"],
+            **aggregation,
+        }
+        write_json(run_dir / "evaluation" / "task_result.json", task_result)
+        write_json(run_dir / "evaluation" / "summary.json", task_result)
+        native_protocol = load_evaluation_protocol("scene_default_v1")
+        native_protocol["general_metrics"] = {"csti": _CSTI_CONFIG}
+
+        _, validated, _ = _validate_native_evaluation(
+            run_dir,
+            plan=plan,
+            predictions=load_jsonl(run_dir / "predictions.jsonl"),
+            native_protocol=native_protocol,
+        )
+
+        self.assertIn("dimensions", validated)
+        self.assertIn("csti", validated["dimensions"])
 
     def test_partial_variant_is_coexisting_and_fully_manifested(self) -> None:
         run_dir = _build_atomic_run(self.root)

@@ -865,6 +865,77 @@ class QuantityRunSummaryTests(unittest.TestCase):
         run["evaluation_score"] = aggregation["score"]
         self._write_json(run_dir / "run.json", run)
 
+    def test_official_audit_recomputes_enabled_csti_dimensions(self) -> None:
+        csti_config = {
+            "enabled": True,
+            "algorithm": "exact_full_tube_edt",
+            "spatial_tolerance_fraction": 0.005,
+            "temporal_tolerance_s": 0.05,
+            "condition_frame_policy": "exclude_initial_samples",
+            "initial_frames_excluded": 1,
+            "score_aggregation": "full_tube",
+            "diagnostic_prefix_fractions": [0.25, 0.5, 0.75, 1.0],
+            "case_aggregation": "mean_gt_entities",
+            "timeline_policy": "physical_overlap",
+            "mask_resolution": "scene_analysis_native",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = self._fixture_run(Path(temporary))
+            plan = self._read_json(run_dir / "plan.json")
+            records = self._read_jsonl(
+                run_dir / "evaluation" / "case_results.jsonl"
+            )
+            for record in records:
+                record["metrics"]["csti"] = {
+                    "status": "evaluated",
+                    "score": record["score"],
+                }
+                self._write_json(
+                    run_dir / "evaluation" / "cases"
+                    / record["job_id"] / "result.json",
+                    record,
+                )
+            self._write_jsonl(
+                run_dir / "evaluation" / "case_results.jsonl",
+                records,
+            )
+            aggregation = aggregate_task_results(
+                plan=plan,
+                case_results=records,
+                general_metrics={"csti": csti_config},
+            )
+            task_result = self._read_json(
+                run_dir / "evaluation" / "task_result.json"
+            )
+            task_result = {
+                "schema_version": task_result["schema_version"],
+                "task_id": task_result["task_id"],
+                "task_family": task_result["task_family"],
+                "protocol": task_result["protocol"],
+                "integrity_issues": task_result["integrity_issues"],
+                **aggregation,
+            }
+            self._write_json(
+                run_dir / "evaluation" / "task_result.json",
+                task_result,
+            )
+            with patch(
+                "scripts.summarize_quantity_run.load_evaluation_protocol",
+                return_value={
+                    "protocol_id": self.PROTOCOL_ID,
+                    "fingerprint": self.PROTOCOL_FINGERPRINT,
+                    "general_metrics": {"csti": csti_config},
+                },
+            ):
+                summary = summarize_run(run_dir)
+
+        official = summary["official_task_result"]
+        self.assertTrue(official["aggregation_verified"])
+        self.assertEqual(
+            aggregation["dimensions"],
+            official["dimensions"],
+        )
+
     def test_complete_golden_run_is_publishable_and_deterministic(
         self,
     ) -> None:

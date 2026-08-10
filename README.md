@@ -12,9 +12,19 @@ Dataset release 是
 - 推水瓶 `push_bottle`
 - 竖直弹簧振子 `vertical_spring_oscillator`
 
-当前官方Task为`five_scene_finetune_eval.json`和`five_scene_direct_eval.json`，均指向
-13.0.0 Dataset。推水瓶和竖直弹簧振子已进入Dataset，但专用评估器尚未完成，因此暂不
-进入这两份正式计分Task。
+当前13.0.0 Dataset提供两组五场景官方Task：原有的
+`five_scene_finetune_eval.json`/`five_scene_direct_eval.json`冻结
+`scene_default_v10`专家评分；新增的同名`*_csti.json`变体冻结
+`scene_default_v11`，在保留专家评分的同时独立报告CSTI轨迹评分。推水瓶和竖直弹簧
+振子已进入Dataset，但专用评估器尚未完成，因此暂不进入这些正式计分Task。
+
+| Task | 协议 | 输出维度 |
+| --- | --- | --- |
+| `five_scene_finetune_eval.json` / `five_scene_direct_eval.json` | `scene_default_v10` | 专家评分 |
+| `five_scene_finetune_eval_csti.json` / `five_scene_direct_eval_csti.json` | `scene_default_v11` | 专家评分 + 独立CSTI |
+
+v11结果中的顶层`score`仍是专家评分；CSTI位于
+`task_result.json.dimensions.csti`，不会与专家分数混合成新的总分。
 
 13.0.0在每个Case资产目录中只保存一份`caption.json`和一份`physics.json`，并由
 `cases.jsonl`中的`assets.caption`与`assets.physics_annotation`引用。Loader读取这两个
@@ -115,8 +125,11 @@ python -m pip install -e ../sam2
 
 ## 快速开始
 
-下面三条命令使用当前13.0.0 Dataset和已有评估器的五场景官方Task。推水瓶和竖直弹簧
-振子需等专用评估器和协议接入后再加入正式Task。
+下面三条快速开始命令使用冻结的v10专家评分Task。需要独立CSTI维度时，把Task路径
+替换为对应的`*_csti.json`文件；CSTI使用一次正式full-Tube 3D EDT和四个诊断prefix，
+批量运行前应先阅读
+[`CSTI_REFERENCE_PERFORMANCE_20260807.md`](docs/experiments/CSTI_REFERENCE_PERFORMANCE_20260807.md)
+并规划CPU与内存。推水瓶和竖直弹簧振子需等专用评估器和协议接入后再加入正式Task。
 
 发现并验证 Baseline：
 
