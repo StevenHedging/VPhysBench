@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "template_set_id": "seven_scene_physics_text_v1",
+  "description": "Compact deterministic physical conditions matching the seven-scene symbol-value independent scalar registry.",
+  "scenes": {
+    "pendulum": {
+      "parameter_intro": "\nPhysical conditions (symbols follow the caption): ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "string_length", "required": true, "expected_unit": "m", "precision": 3, "template": "{symbol} = {value} m"},
+        {"name": "bob_radius", "required": true, "expected_unit": "m", "precision": 3, "template": "{symbol} = {value} m"},
+        {"name": "initial_angle", "required": true, "expected_unit": "deg", "precision": 1, "template": "{symbol} = {value} deg"},
+        {"name": "bob_mass", "required": false, "expected_unit": "kg", "precision": 5, "template": "{symbol} = {value} kg"}
+      ]
+    },
+    "collision_1d": {
+      "parameter_intro": "\nPhysical conditions (bodies numbered left to right): ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "ball_1_initial_velocity", "required": true, "expected_unit": "m/s", "precision": 4, "template": "{symbol} = {value} m/s"},
+        {"name": "ball_1_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "{symbol} = {value} kg"},
+        {"name": "ball_1_radius", "required": true, "expected_unit": "m", "precision": 5, "template": "{symbol} = {value} m"},
+        {"name": "ball_2_initial_velocity", "required": true, "expected_unit": "m/s", "precision": 4, "template": "{symbol} = {value} m/s"},
+        {"name": "ball_2_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "{symbol} = {value} kg"},
+        {"name": "ball_2_radius", "required": true, "expected_unit": "m", "precision": 5, "template": "{symbol} = {value} m"},
+        {"name": "ball_3_initial_velocity", "required": false, "expected_unit": "m/s", "precision": 4, "template": "{symbol} = {value} m/s"},
+        {"name": "ball_3_mass", "required": false, "expected_unit": "kg", "precision": 5, "template": "{symbol} = {value} kg"},
+        {"name": "ball_3_radius", "required": false, "expected_unit": "m", "precision": 5, "template": "{symbol} = {value} m"}
+      ]
+    },
+    "inclined_plane_slide": {
+      "parameter_intro": "\nPhysical conditions (symbols follow the caption): ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "incline_angle", "required": true, "expected_unit": "deg", "precision": 1, "template": "{symbol} = {value} deg"},
+        {"name": "block_length", "required": true, "expected_unit": "m", "precision": 3, "template": "{symbol} = {value} m"},
+        {"name": "block_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "{symbol} = {value} kg"},
+        {"name": "gravity_acceleration", "required": true, "expected_unit": "m/s^2", "precision": 5, "template": "{symbol} = {value} m/s^2"}
+      ]
+    },
+    "uniform_circular_motion": {
+      "parameter_intro": "\nPhysical conditions (symbols follow the caption): ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "angular_velocity", "required": true, "expected_unit": "deg/s", "precision": 2, "template": "{symbol} = {value} deg/s"},
+        {"name": "object_1_orbit_radius", "required": true, "expected_unit": "m", "precision": 2, "template": "{symbol} = {value} m"},
+        {"name": "object_2_orbit_radius", "required": false, "expected_unit": "m", "precision": 2, "template": "{symbol} = {value} m"}
+      ]
+    },
+    "parabolic_motion": {
+      "parameter_intro": "\nPhysical conditions (symbols follow the caption): ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "initial_horizontal_velocity", "required": true, "expected_unit": "m/s", "precision": 4, "template": "{symbol} = {value} m/s"},
+        {"name": "launch_height", "required": true, "expected_unit": "m", "precision": 3, "template": "{symbol} = {value} m"},
+        {"name": "ball_radius", "required": true, "expected_unit": "m", "precision": 5, "template": "{symbol} = {value} m"},
+        {"name": "ball_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "{symbol} = {value} kg"}
+      ]
+    },
+    "push_bottle": {
+      "parameter_intro": "\nPhysical conditions (symbols follow the caption): ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "bottle_mass", "required": true, "expected_unit": "kg", "precision": 5, "template": "{symbol} = {value} kg"},
+        {"name": "bottle_height", "required": true, "expected_unit": "m", "precision": 3, "template": "{symbol} = {value} m"}
+      ]
+    },
+    "vertical_spring_oscillator": {
+      "parameter_intro": "\nPhysical conditions (symbols follow the caption): ",
+      "parameter_separator": "; ",
+      "parameter_outro": ".",
+      "parameter_clauses": [
+        {"name": "initial_displacement", "required": true, "expected_unit": "m", "precision": 3, "template": "{symbol} = {value} m"},
+        {"name": "oscillator_mass", "required": true, "expected_unit": "kg", "precision": 4, "template": "{symbol} = {value} kg"},
+        {"name": "ball_radius", "required": true, "expected_unit": "m", "precision": 3, "template": "{symbol} = {value} m"},
+        {"name": "gravity_acceleration", "required": true, "expected_unit": "m/s^2", "precision": 5, "template": "{symbol} = {value} m/s^2"},
+        {"name": "natural_spring_length", "required": true, "expected_unit": "m", "precision": 3, "template": "{symbol} = {value} m"},
+        {"name": "spring_stiffness", "required": true, "expected_unit": "N/m", "precision": 5, "template": "{symbol} = {value} N/m"}
+      ]
+    }
+  }
+}

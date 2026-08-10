@@ -113,14 +113,23 @@ class StructuredPhysicsTextRenderer:
                     f"case {case['case_id']} physics.{name} must be numeric"
                 )
             rendered_value = f"{float(value):.{clause['precision']}f}"
+            symbol = quantity.get("symbol")
+            template = str(clause["template"])
+            if "{symbol}" in template and (
+                not isinstance(symbol, str) or not symbol
+            ):
+                raise ValueError(
+                    f"case {case['case_id']} physics.{name} requires a "
+                    "non-empty symbol"
+                )
             rendered_clauses.append(
-                clause["template"].format(value=rendered_value)
+                template.format(value=rendered_value, symbol=symbol)
             )
             used_parameters[name] = {
                 "value": value,
                 "unit": unit,
                 "rendered_value": rendered_value,
-                "symbol": quantity.get("symbol"),
+                "symbol": symbol,
             }
         if not rendered_clauses:
             return base_prompt, used_parameters
