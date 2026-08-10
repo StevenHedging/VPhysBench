@@ -1296,13 +1296,30 @@ def _residual_detections(
             if weak and not anchor_copy:
                 rejected["weak_string_circle"] += 1
                 continue
-            independent = bool(
-                round_body
-                and (
-                    (changed_body and (anchored or appearance))
-                    or anchor_copy
+            if bool(
+                config.get("v8_residual_requires_pivot_string", False)
+            ):
+                # A changed round patch with merely similar appearance is
+                # common on the fixed support under exposure shifts.  V8
+                # promotes a new pendulum participant only when it also has
+                # an independently observed string terminating at the frozen
+                # pivot.  Anchor-copy and causal recovery paths below remain
+                # available for repairing the already declared bob.
+                independent = bool(
+                    round_body
+                    and (
+                        (changed_body and anchored and appearance)
+                        or anchor_copy
+                    )
                 )
-            )
+            else:
+                independent = bool(
+                    round_body
+                    and (
+                        (changed_body and (anchored or appearance))
+                        or anchor_copy
+                    )
+                )
             sam_identity_recovery = bool(
                 directed_center is None
                 and directed_subject_overlap

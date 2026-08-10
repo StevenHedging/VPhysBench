@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 import cv2
 import numpy as np
@@ -342,6 +342,8 @@ def observe_projectile(
     *,
     available: np.ndarray | None,
     config: dict[str, Any],
+    seed_override: BallCandidate | None = None,
+    seed_provenance: Mapping[str, object] | None = None,
 ) -> ParabolicObservation:
     """Discover and track the single manifest-declared projectile ball.
 
@@ -361,11 +363,22 @@ def observe_projectile(
     )
     if availability.shape != (frame_count,):
         raise ValueError("availability must have one value per frame")
-    seed_candidates = (
-        _hough_candidates(frames[0], config=config, initial=True)
-        if availability[0]
-        else []
-    )
+    if seed_override is not None:
+        if (
+            seed_override.mask.shape != (height, width)
+            or seed_override.xy.shape != (2,)
+            or not np.isfinite(seed_override.xy).all()
+            or not math.isfinite(seed_override.radius)
+            or seed_override.radius <= 0.0
+        ):
+            raise ValueError("seed_override is invalid on the frame canvas")
+        seed_candidates = [seed_override] if availability[0] else []
+    else:
+        seed_candidates = (
+            _hough_candidates(frames[0], config=config, initial=True)
+            if availability[0]
+            else []
+        )
     if not seed_candidates:
         return _empty_observation(
             (height, width),
@@ -391,8 +404,24 @@ def observe_projectile(
     cardinality = np.zeros(frame_count, dtype=np.int64)
     sources: list[str | None] = [None for _ in frames]
     candidate_counts: list[int] = [0 for _ in frames]
+    assignment_costs: list[float | None] = [None for _ in frames]
+    assignment_margins: list[float | None] = [None for _ in frames]
     last_xy: np.ndarray | None = None
     velocity = np.zeros(2, dtype=np.float64)
+    identity_terminated = False
+    identity_exited = False
+    termination_frame: int | None = None
+    termination_reason: str | None = None
+    minimum_assignment_margin = max(
+        0.0, float(config.get("minimum_assignment_cost_margin", 0.0))
+    )
+    latch_identity_loss = bool(config.get("latch_identity_loss", False))
+    identity_audit_enabled = bool(
+        seed_override is not None
+        or seed_provenance is not None
+        or "minimum_assignment_cost_margin" in config
+        or "latch_identity_loss" in config
+    )
     maximum_jump = max(
         float(config.get("maximum_jump_diagonal_ratio", 0.2))
         * math.hypot(width, height),
@@ -400,6 +429,8 @@ def observe_projectile(
     )
     for frame_index, frame in enumerate(frames):
         if not availability[frame_index]:
+            continue
+        if identity_terminated:
             continue
         if frame_index == 0:
             hough_candidates = seed_candidates
@@ -431,8 +462,10 @@ def observe_projectile(
         cardinality[frame_index] = len(plausible_hough)
         if frame_index == 0:
             selected = seed
+            selection_failure_reason = None
         elif not plausible:
             selected = None
+            selection_failure_reason = "missing_candidate"
         else:
             predicted_xy = (
                 last_xy + velocity if last_xy is not None else seed.xy
@@ -449,14 +482,53 @@ def observe_projectile(
                 )
                 return distance / scale + 0.45 * radius_cost + 0.35 * appearance_cost
 
-            selected = min(plausible, key=assignment_cost)
-            if last_xy is not None:
+            ranked = sorted(
+                (
+                    (assignment_cost(candidate), candidate)
+                    for candidate in plausible
+                ),
+                key=lambda item: item[0],
+            )
+            assignment_costs[frame_index] = float(ranked[0][0])
+            margin = (
+                None
+                if len(ranked) == 1
+                else float(ranked[1][0] - ranked[0][0])
+            )
+            assignment_margins[frame_index] = margin
+            if margin is not None and margin < minimum_assignment_margin:
+                selected = None
+                selection_failure_reason = "ambiguous_assignment"
+            else:
+                selected = ranked[0][1]
+                selection_failure_reason = None
+            if selected is not None and last_xy is not None:
                 distance = float(
                     np.linalg.norm(selected.xy - (last_xy + velocity))
                 )
                 if distance > maximum_jump:
                     selected = None
+                    selection_failure_reason = "maximum_jump_exceeded"
         if selected is None:
+            if latch_identity_loss and last_xy is not None:
+                identity_terminated = True
+                termination_frame = frame_index
+                projected_xy = last_xy + velocity
+                projected_outside = bool(
+                    projected_xy[0] < -seed.radius
+                    or projected_xy[0] > width - 1 + seed.radius
+                    or projected_xy[1] < -seed.radius
+                    or projected_xy[1] > height - 1 + seed.radius
+                )
+                identity_exited = bool(
+                    selection_failure_reason == "missing_candidate"
+                    and projected_outside
+                )
+                termination_reason = (
+                    "projected_outside_canvas"
+                    if identity_exited
+                    else selection_failure_reason
+                )
             velocity *= 0.75
             continue
         cardinality[frame_index] = max(1, cardinality[frame_index])
@@ -509,6 +581,24 @@ def observe_projectile(
             "interpolated_frames": int(np.count_nonzero(interpolated)),
             "candidate_counts": candidate_counts,
             "selected_sources": sources,
+            **(
+                {
+                    "assignment_costs": assignment_costs,
+                    "assignment_margins": assignment_margins,
+                    "identity_state": (
+                        "exited"
+                        if identity_exited
+                        else "terminated_uncertain"
+                        if identity_terminated
+                        else "active"
+                    ),
+                    "identity_termination_frame": termination_frame,
+                    "identity_termination_reason": termination_reason,
+                    "seed_provenance": dict(seed_provenance or {}),
+                }
+                if identity_audit_enabled
+                else {}
+            ),
         },
     )
 
@@ -550,13 +640,98 @@ def _binding_score(
         + float(weights["appearance"]) * appearance
     ) / max(denominator, EPSILON)
     threshold = float(config.get("minimum_binding_score", 0.15))
+    minimum_appearance = float(
+        config.get("minimum_binding_appearance", 0.0)
+    )
     return {
         "score": _bounded(score),
-        "accepted": bool(score >= threshold),
+        "accepted": bool(
+            score >= threshold and appearance >= minimum_appearance
+        ),
         "minimum_score": threshold,
+        **(
+            {"minimum_appearance": minimum_appearance}
+            if "minimum_binding_appearance" in config
+            else {}
+        ),
         "position": position,
         "scale": scale,
         "appearance": appearance,
+    }
+
+
+def _compose_parabolic_scores(
+    state_components: Mapping[str, float],
+    *,
+    subject_score: float,
+    integrity_score: float,
+    config: Mapping[str, Any],
+) -> dict[str, float | str | None]:
+    composition = str(
+        config.get("composition", "weighted_arithmetic_v1")
+    )
+    if composition == "strict_multiplicative_v2":
+        horizontal = _bounded(
+            float(state_components["horizontal_uniform_motion"])
+        )
+        vertical = _bounded(
+            float(state_components["vertical_uniform_acceleration"])
+        )
+        parabola = _bounded(
+            float(state_components["parabolic_geometry"])
+        )
+        motion_law_gate = float(
+            np.cbrt(horizontal * vertical * parabola)
+        )
+        physics_score = _bounded(
+            float(state_components["time_parameterized_trajectory"])
+            * motion_law_gate
+            * float(state_components["lifecycle_and_cardinality"])
+        )
+        score = _bounded(
+            physics_score
+            * _bounded(subject_score)
+            * _bounded(integrity_score)
+        )
+        return {
+            "composition": composition,
+            "motion_law_gate": motion_law_gate,
+            "physics_score": physics_score,
+            "score": score,
+        }
+    if composition != "weighted_arithmetic_v1":
+        raise ValueError(
+            f"unsupported parabolic score composition: {composition!r}"
+        )
+    state_weights = config.get(
+        "weights",
+        {
+            "time_parameterized_trajectory": 0.45,
+            "horizontal_uniform_motion": 0.15,
+            "vertical_uniform_acceleration": 0.15,
+            "parabolic_geometry": 0.15,
+            "lifecycle_and_cardinality": 0.10,
+        },
+    )
+    weight_sum = sum(float(value) for value in state_weights.values())
+    physics_score = sum(
+        float(state_weights[name]) * float(value)
+        for name, value in state_components.items()
+    ) / max(weight_sum, EPSILON)
+    case_weights = config.get(
+        "case_weights", {"physics_state": 0.75, "subject": 0.25}
+    )
+    case_weight_sum = sum(float(value) for value in case_weights.values())
+    score = (
+        float(case_weights["physics_state"]) * physics_score
+        + float(case_weights["subject"]) * subject_score
+    ) / max(case_weight_sum, EPSILON)
+    score *= 0.5 + 0.5 * integrity_score
+    return {
+        "composition": composition,
+        "motion_law_gate": None,
+        "physics_score": _bounded(physics_score),
+        "score": _bounded(score),
     }
 
 
@@ -778,12 +953,6 @@ def score_parabolic_observations(
             "lifecycle_and_cardinality": 0.10,
         },
     )
-    weight_sum = sum(float(value) for value in state_weights.values())
-    physics_score = sum(
-        float(state_weights[name]) * float(value)
-        for name, value in state_components.items()
-    ) / max(weight_sum, EPSILON)
-
     shape_values = np.zeros(frame_count, dtype=np.float64)
     appearance_values = np.zeros(frame_count, dtype=np.float64)
     for index in np.flatnonzero(matched):
@@ -809,15 +978,12 @@ def score_parabolic_observations(
         + float(subject_weights["shape"]) * shape_score
         + float(subject_weights["appearance"]) * appearance_score
     ) / max(subject_weight_sum, EPSILON)
-    case_weights = config.get(
-        "case_weights", {"physics_state": 0.75, "subject": 0.25}
+    composed = _compose_parabolic_scores(
+        state_components,
+        subject_score=subject_score,
+        integrity_score=integrity,
+        config=config,
     )
-    case_weight_sum = sum(float(value) for value in case_weights.values())
-    score = (
-        float(case_weights["physics_state"]) * physics_score
-        + float(case_weights["subject"]) * subject_score
-    ) / max(case_weight_sum, EPSILON)
-    score *= 0.5 + 0.5 * integrity
     ious = [
         _mask_iou(reference.masks[index], prediction.masks[index])
         if expected[index]
@@ -825,10 +991,12 @@ def score_parabolic_observations(
         for index in range(frame_count)
     ]
     return {
-        "score": _bounded(score),
-        "physics_score": _bounded(physics_score),
+        "score": float(composed["score"]),
+        "physics_score": float(composed["physics_score"]),
         "subject_score": _bounded(subject_score),
         "integrity_score": _bounded(integrity),
+        "composition": composed["composition"],
+        "motion_law_gate": composed["motion_law_gate"],
         "state_components": state_components,
         "state_weights": state_weights,
         "binding": binding,
@@ -880,6 +1048,10 @@ class ParabolicMotionCaseEvaluator(ReferenceCaseEvaluator):
     scene_id = "parabolic_motion"
     primary_score = "parabolic_motion_state_similarity"
     allow_partial_prediction = True
+    prediction_missing_code = "prediction_projectile_entity_missing"
+    prediction_unmatched_code = "prediction_projectile_entity_unmatched"
+    prediction_uncertain_code: str | None = None
+    identity_policy = "frame_zero_binding_then_continuity_with_null_state"
 
     def __init__(self, config: dict[str, Any]):
         if config.get("observer_protocol") != "open_world_v2":
@@ -898,6 +1070,68 @@ class ParabolicMotionCaseEvaluator(ReferenceCaseEvaluator):
             "lifecycle": "reference_frozen_may_exit",
             "distance": "scene_specific_empirical_projectile_trajectory_v1",
         }
+
+    def _observe_projectile(
+        self,
+        request: CaseEvaluationRequest,
+        *,
+        entity_id: str,
+        frames: list[np.ndarray],
+        available: np.ndarray,
+        spatial_transform: Mapping[str, object],
+        reference: bool,
+    ) -> ParabolicObservation:
+        del request, entity_id, spatial_transform, reference
+        return observe_projectile(
+            frames,
+            available=available,
+            config=dict(self.config.get("open_world_observation", {})),
+        )
+
+    def _projectile_identity_failures(
+        self,
+        prediction: ParabolicObservation,
+        *,
+        binding: Mapping[str, Any],
+    ) -> list[dict[str, str]]:
+        failures: list[dict[str, str]] = []
+        if prediction.seed is None:
+            failures.append(
+                {
+                    "code": self.prediction_missing_code,
+                    "reason": (
+                        "prediction frame zero contains no bindable "
+                        "projectile ball"
+                    ),
+                }
+            )
+        elif not bool(binding["accepted"]):
+            failures.append(
+                {
+                    "code": self.prediction_unmatched_code,
+                    "reason": (
+                        "prediction projectile failed the frame-zero "
+                        "binding gate"
+                    ),
+                }
+            )
+        if (
+            self.prediction_uncertain_code is not None
+            and prediction.diagnostics.get("identity_state")
+            == "terminated_uncertain"
+        ):
+            failures.append(
+                {
+                    "code": self.prediction_uncertain_code,
+                    "reason": (
+                        "prediction projectile identity became uncertain at "
+                        "frame "
+                        f"{prediction.diagnostics.get('identity_termination_frame')}: "
+                        f"{prediction.diagnostics.get('identity_termination_reason')}"
+                    ),
+                }
+            )
+        return failures
 
     def analyze(
         self,
@@ -925,13 +1159,19 @@ class ParabolicMotionCaseEvaluator(ReferenceCaseEvaluator):
                 "invalid_parabolic_entity_class",
                 f"projectile entity must be a ball, got {entity.entity_class!r}",
             )
-        observation_config = dict(self.config.get("open_world_observation", {}))
         try:
-            reference = observe_projectile(
-                list(reference_video.frames),
+            reference = self._observe_projectile(
+                request,
+                entity_id=entity.entity_id,
+                frames=list(reference_video.frames),
                 available=np.ones(len(times_s), dtype=bool),
-                config=observation_config,
+                spatial_transform=getattr(
+                    reference_video, "spatial_transform", {}
+                ),
+                reference=True,
             )
+        except ReferenceAnalysisError:
+            raise
         except Exception as exc:
             raise ReferenceAnalysisError(
                 "reference_projectile_observation_failed",
@@ -971,10 +1211,15 @@ class ParabolicMotionCaseEvaluator(ReferenceCaseEvaluator):
         else:
             prediction_observation_policy = "independent_observation"
             try:
-                prediction = observe_projectile(
-                    prediction_frames,
+                prediction = self._observe_projectile(
+                    request,
+                    entity_id=entity.entity_id,
+                    frames=prediction_frames,
                     available=available,
-                    config=observation_config,
+                    spatial_transform=getattr(
+                        prediction_video, "spatial_transform", {}
+                    ),
+                    reference=False,
                 )
             except Exception as exc:
                 failure = {
@@ -1007,20 +1252,12 @@ class ParabolicMotionCaseEvaluator(ReferenceCaseEvaluator):
             available=available,
             config=scoring_config,
         )
-        if prediction.seed is None:
-            prediction_failures.append(
-                {
-                    "code": "prediction_projectile_entity_missing",
-                    "reason": "prediction frame zero contains no bindable projectile ball",
-                }
+        prediction_failures.extend(
+            self._projectile_identity_failures(
+                prediction,
+                binding=scored["binding"],
             )
-        elif not bool(scored["binding"]["accepted"]):
-            prediction_failures.append(
-                {
-                    "code": "prediction_projectile_entity_unmatched",
-                    "reason": "prediction projectile failed the frame-zero binding gate",
-                }
-            )
+        )
         artifact_failures: list[dict[str, str]] = []
         artifacts: dict[str, str] = {}
         rows: list[dict[str, Any]] = []
@@ -1208,6 +1445,15 @@ class ParabolicMotionCaseEvaluator(ReferenceCaseEvaluator):
                     "components": scored["state_components"],
                     "weights": scored["state_weights"],
                     "reference_relative_diagnostics": scored["diagnostics"],
+                    **(
+                        {
+                            "composition": scored["composition"],
+                            "motion_law_gate": scored["motion_law_gate"],
+                        }
+                        if scored["composition"]
+                        != "weighted_arithmetic_v1"
+                        else {}
+                    ),
                 },
                 "physical_subject_similarity": {
                     "score": float(scored["subject_score"]),
@@ -1280,7 +1526,7 @@ class ParabolicMotionCaseEvaluator(ReferenceCaseEvaluator):
                     "prediction": prediction.diagnostics,
                     "prediction_policy": prediction_observation_policy,
                 },
-                "identity_policy": "frame_zero_binding_then_continuity_with_null_state",
+                "identity_policy": self.identity_policy,
                 "time_alignment": "common_reference_bounded_physical_time_grid_no_dtw",
                 "reference_lifecycle": "manifest_may_exit_observed_timeline_frozen",
                 "ideal_law_metrics_role": "diagnostic_only_empirical_gt_is_scoring_reference",

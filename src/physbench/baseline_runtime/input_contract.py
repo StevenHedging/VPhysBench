@@ -22,10 +22,12 @@ GENERATION_MODES = frozenset({"t2v", "i2v", "v2v", "hybrid"})
 MEDIA_KINDS = frozenset({"image", "video"})
 NATIVE_INPUT_BINDING_PREFIX = "native_inputs."
 
-FORBIDDEN_ASSET_KEYS = frozenset({
+EVALUATOR_ONLY_ASSET_KEYS = frozenset({
     "reference_video",
     "source_video",
+    "first_frame_mask_manifest",
 })
+FORBIDDEN_ASSET_KEYS = EVALUATOR_ONLY_ASSET_KEYS
 LARGE_PHYSICS_REPRESENTATIONS = frozenset({
     "mask",
     "optical_flow",
@@ -45,6 +47,7 @@ MAX_INLINE_CONTROL_BYTES = 4096
 __all__ = [
     "ARTIFACT_REFERENCE_PREFIXES",
     "ARTIFACT_REFERENCE_RE",
+    "EVALUATOR_ONLY_ASSET_KEYS",
     "FORBIDDEN_ASSET_KEYS",
     "GENERATION_MODES",
     "INPUT_CONTRACT_SCHEMA_VERSION",

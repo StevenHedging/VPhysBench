@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import math
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 import cv2
 import numpy as np
@@ -29,7 +29,7 @@ from ...common.entities.observer import (
 from ...common.errors import ReferenceAnalysisError, SceneAnalysisError
 from ...common.geometry import AxisModel, fit_axis
 from ...common.masks.quality import observed_mask_iou, summarize_mask_ious
-from ...common.masks.sam2 import Sam2VideoSegmenter
+from ...common.masks.sam2 import MaskPrompt, Sam2VideoSegmenter
 from ...common.subject import (
     SubjectComparison,
     compare_subjects,
@@ -61,6 +61,10 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
     scene_id = "collision_1d"
     primary_score = "collision_1d_open_world_similarity"
     allow_partial_prediction = True
+    fail_closed_on_directed_identity = False
+    identity_policy = (
+        "causal_track_ids_no_future_renaming_hota_association"
+    )
 
     def __init__(self, config: dict[str, Any]):
         super().__init__(config)
@@ -102,6 +106,68 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
             "cardinality": "case_entity_manifest_not_scene_constant",
         }
 
+    def _prepare_identity_context(
+        self,
+        request: CaseEvaluationRequest,
+        *,
+        reference_frames: Sequence[np.ndarray],
+        entity_ids: Sequence[str],
+    ) -> object | None:
+        del request, reference_frames, entity_ids
+        return None
+
+    def _observe_expected_role(
+        self,
+        frames: list[np.ndarray],
+        *,
+        expected_count: int,
+        entity_ids: Sequence[str],
+        observation_role: str,
+        identity_context: object | None,
+        available: Sequence[bool] | None = None,
+    ) -> tuple[
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        list[list[np.ndarray]],
+        list[np.ndarray],
+        dict[str, Any],
+    ]:
+        del identity_context
+        return self._observe_expected(
+            frames,
+            expected_count=expected_count,
+            entity_ids=entity_ids,
+            available=available,
+            observation_role=observation_role,
+        )
+
+    def _postprocess_expected_masks(
+        self,
+        masks: list[list[np.ndarray]],
+        prompts: list[MaskPrompt],
+        *,
+        observation_role: str,
+    ) -> tuple[list[list[np.ndarray]], dict[str, Any] | None]:
+        del prompts, observation_role
+        return masks, None
+
+    def _fixed_prediction_track_ids(
+        self, entity_ids: Sequence[str]
+    ) -> Mapping[str, str] | None:
+        del entity_ids
+        return None
+
+    def _terminal_prediction_observation_failure(
+        self,
+        observation: OpenWorldObservation,
+        *,
+        entity_ids: Sequence[str],
+        frame_count: int,
+    ) -> tuple[dict[str, str], dict[str, Any]] | None:
+        del observation, entity_ids, frame_count
+        return None
+
     def _observe_expected(
         self,
         frames: list[np.ndarray],
@@ -109,6 +175,9 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
         expected_count: int,
         entity_ids: Sequence[str],
         available: Sequence[bool] | None = None,
+        prompts_override: Sequence[MaskPrompt] | None = None,
+        prompt_metadata_override: Mapping[str, Any] | None = None,
+        observation_role: str = "unspecified",
     ) -> tuple[
         np.ndarray,
         np.ndarray,
@@ -127,15 +196,19 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
             raise ValueError(
                 "entity ID count differs from expected collision cardinality"
             )
-        prompts, prompt_metadata = (
-            build_multiframe_collision_entity_prompts(
-                frames,
-                expected_count=expected_count,
-                config=config,
-                entity_ids=entity_ids,
-                available=available,
+        if prompts_override is None:
+            prompts, prompt_metadata = (
+                build_multiframe_collision_entity_prompts(
+                    frames,
+                    expected_count=expected_count,
+                    config=config,
+                    entity_ids=entity_ids,
+                    available=available,
+                )
             )
-        )
+        else:
+            prompts = list(prompts_override)
+            prompt_metadata = dict(prompt_metadata_override or {})
         if len(prompts) != expected_count:
             raise SceneAnalysisError(
                 "collision_prompt_cardinality_mismatch",
@@ -180,6 +253,11 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 for index, is_available in enumerate(available):
                     if not is_available:
                         instance[index] = np.zeros_like(instance[index])
+        masks, identity_latch = self._postprocess_expected_masks(
+            masks,
+            prompts,
+            observation_role=observation_role,
+        )
         quality = self.config["quality"]
         minimum_area = int(quality["minimum_mask_pixels"])
         maximum_area = int(
@@ -246,6 +324,11 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 "segmentation": segmentation,
                 "mask_stabilization": stabilization,
                 "valid_track_ratios": np.mean(valid, axis=0).tolist(),
+                **(
+                    {"identity_latch": identity_latch}
+                    if identity_latch is not None
+                    else {}
+                ),
             },
         )
 
@@ -282,6 +365,11 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
             **self.config.get("nbody_scoring", {})
         )
         try:
+            identity_context = self._prepare_identity_context(
+                request,
+                reference_frames=reference_video.frames,
+                entity_ids=entity_ids,
+            )
             (
                 reference_xy,
                 reference_valid,
@@ -289,10 +377,12 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 reference_masks,
                 reference_union,
                 reference_observation,
-            ) = self._observe_expected(
+            ) = self._observe_expected_role(
                 reference_video.frames,
                 expected_count=len(entities),
                 entity_ids=entity_ids,
+                observation_role="reference",
+                identity_context=identity_context,
             )
             minimum_reference_ratio = float(
                 quality.get("minimum_reference_valid_frame_ratio", 0.2)
@@ -357,6 +447,9 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
             frame_shape=reference_video.frames[0].shape,
         )
         prediction_failures: list[dict[str, str]] = []
+        directed_identity_failure: dict[str, str] | None = None
+        residual_after_identity_failure: dict[str, Any] | None = None
+        terminal_prediction_observation: dict[str, Any] | None = None
         if prediction_timeline_failure is not None:
             prediction_failures.append(prediction_timeline_failure)
         try:
@@ -367,10 +460,12 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 prediction_masks,
                 _prediction_direct_union,
                 prediction_direct_observation,
-            ) = self._observe_expected(
+            ) = self._observe_expected_role(
                 prediction_frames,
                 expected_count=len(entities),
                 entity_ids=entity_ids,
+                observation_role="prediction",
+                identity_context=identity_context,
                 available=prediction_available,
             )
         except Exception as exc:
@@ -383,6 +478,7 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 "reason": f"{type(exc).__name__}: {exc}",
             }
             prediction_failures.append(prediction_failure)
+            directed_identity_failure = prediction_failure
             height, width = reference_video.frames[0].shape[:2]
             prediction_masks = [
                 [
@@ -392,7 +488,11 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 for _ in entities
             ]
             prediction_direct_observation = {
-                "status": "failed_but_residual_discovery_continued",
+                "status": (
+                    "failed_terminal_residual_discovery_diagnostic_only"
+                    if self.fail_closed_on_directed_identity
+                    else "failed_but_residual_discovery_continued"
+                ),
                 **prediction_failure,
             }
 
@@ -426,6 +526,41 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 reason=prediction_failure["reason"],
             )
 
+        if (
+            self.fail_closed_on_directed_identity
+            and directed_identity_failure is not None
+        ):
+            residual_after_identity_failure = {
+                "status": "diagnostic_only_not_eligible_for_role_recovery",
+                "track_count": len(prediction_objects.tracks),
+                "overflow_counts": prediction_objects.overflow_counts.tolist(),
+                "diagnostics": prediction_objects.diagnostics,
+            }
+            prediction_objects = _empty_prediction_observation(
+                len(times_s),
+                code=directed_identity_failure["code"],
+                reason=(
+                    "directed collision identity is unconfirmed; residual "
+                    "tracks are diagnostic-only and cannot recover roles: "
+                    + directed_identity_failure["reason"]
+                ),
+            )
+
+        if directed_identity_failure is None:
+            terminal_observation = self._terminal_prediction_observation_failure(
+                prediction_objects,
+                entity_ids=entity_ids,
+                frame_count=len(times_s),
+            )
+            if terminal_observation is not None:
+                failure, terminal_prediction_observation = terminal_observation
+                prediction_failures.append(failure)
+                prediction_objects = _empty_prediction_observation(
+                    len(times_s),
+                    code=failure["code"],
+                    reason=failure["reason"],
+                )
+
         frame_diagonal = float(
             np.hypot(
                 reference_video.frames[0].shape[1],
@@ -437,6 +572,9 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 "minimum_match_position_similarity"
             ]
         )
+        fixed_prediction_track_ids = self._fixed_prediction_track_ids(
+            entity_ids
+        )
         try:
             comparison = compare_open_world_tracks(
                 reference_tracks=reference_tracks,
@@ -446,6 +584,7 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 minimum_match_position_similarity=(
                     minimum_match_position_similarity
                 ),
+                fixed_entity_track_ids=fixed_prediction_track_ids,
             )
         except Exception as exc:
             failure = {
@@ -466,6 +605,7 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 minimum_match_position_similarity=(
                     minimum_match_position_similarity
                 ),
+                fixed_entity_track_ids=fixed_prediction_track_ids,
             )
 
         prediction_entity_ids = list(entity_ids)
@@ -808,6 +948,21 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                     np.count_nonzero(prediction_available)
                 ),
                 "expected_prediction_frames": len(times_s),
+                **(
+                    {
+                        "directed_identity_failure_terminal": (
+                            directed_identity_failure is not None
+                        ),
+                        "prediction_residual_after_identity_failure": (
+                            residual_after_identity_failure
+                        ),
+                        "terminal_prediction_observation": (
+                            terminal_prediction_observation
+                        ),
+                    }
+                    if self.fail_closed_on_directed_identity
+                    else {}
+                ),
             },
             artifacts={
                 "per_frame_csv": str(csv_path),
@@ -828,9 +983,7 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                         prediction_objects.diagnostics
                     ),
                 },
-                "identity_policy": (
-                    "causal_track_ids_no_future_renaming_hota_association"
-                ),
+                "identity_policy": self.identity_policy,
                 "position_kernel": (
                     "reference_scaled_anisotropic_cauchy"
                 ),

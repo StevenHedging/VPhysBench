@@ -22,6 +22,7 @@ from physbench.baseline_runtime.adapter import StandardDataAdapter
 from physbench.baseline_runtime.drivers.subprocess_i2v import (
     StandardI2VCLIDriver,
 )
+from physbench.baseline_runtime.compiler import ManagedTaskBuilder
 from physbench.domain import (
     BaselineTaskInstance,
     DatasetSnapshot,
@@ -726,6 +727,24 @@ class BaseDriver(DirectManagedDriver):
 
 
 class InputContractTests(unittest.TestCase):
+    def test_input_contract_rejects_evaluator_only_mask_manifest(
+        self,
+    ) -> None:
+        record = _base_record(
+            mode="i2v",
+            kind="image",
+            asset_key="first_frame",
+        )
+        record["input_contract"]["asset_access"].append(
+            "first_frame_mask_manifest"
+        )
+
+        with self.assertRaisesRegex(ValueError, "reserved asset key"):
+            validate_adaptation_record(
+                record,
+                input_policy=_input_policy(),
+            )
+
     def test_text_binding_must_resolve_to_non_empty_text(self) -> None:
         valid = _base_record(
             mode="i2v",
@@ -1020,6 +1039,21 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
             _task(root),
         )
         return plugin, instance
+
+    def test_evaluator_only_mask_manifest_never_reaches_adapter_case(
+        self,
+    ) -> None:
+        case = _case()
+        case["assets"]["first_frame_mask_manifest"] = (
+            "assets/pendulum/canonical/masks/manifest.json"
+        )
+
+        projected = ManagedTaskBuilder._adapter_case(case)
+
+        self.assertNotIn(
+            "first_frame_mask_manifest",
+            projected["assets"],
+        )
 
     def test_compiler_gives_adapter_annotated_physics_but_ignored_policy_does_not_consume_it(
         self,
