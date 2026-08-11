@@ -14,10 +14,6 @@ FORBIDDEN = (
     "/absolute/",
     "physics_video_benchmark",
 )
-FROZEN_PROTOCOLS = {
-    f"configs/evaluation/protocols/scene_default_v{version}.json"
-    for version in range(4, 8)
-}
 PRESERVED_PREFIXES = ("tests/",)
 
 
@@ -33,9 +29,7 @@ def _active_tracked_text() -> list[tuple[str, str]]:
         if not raw_path:
             continue
         relative = raw_path.decode("utf-8")
-        if relative in FROZEN_PROTOCOLS or relative.startswith(
-            PRESERVED_PREFIXES
-        ):
+        if relative.startswith(PRESERVED_PREFIXES):
             continue
         path = ROOT / relative
         if path.is_symlink() or not path.is_file():

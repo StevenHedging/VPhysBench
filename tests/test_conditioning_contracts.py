@@ -29,6 +29,7 @@ from physbench.domain import (
     TaskSpec,
 )
 from physbench.io import canonical_sha256, write_json
+from physbench.orchestration import compile_task_instance
 
 
 DRIVER_SOURCE = """\
@@ -388,17 +389,23 @@ def _dataset(root: Path) -> DatasetSnapshot:
 
 def _task(root: Path) -> TaskSpec:
     value = {
-        "schema_version": "3.0",
+        "schema_version": "1.0",
         "task_id": "fixture_direct",
         "family": "direct_eval",
         "dataset_id": "conditioning_contract_fixture",
-        "dataset_view": "view_b",
         "selection": {
-            "scene_ids": ["pendulum"],
+            "evaluation_scene_ids": ["pendulum"],
             "groups": "all",
         },
-        "ood2": {"enabled": False},
         "seeds": {"training": [], "inference": [7]},
+        "evaluation": {
+            "protocol": "scene_default_v1",
+            "reporting": {
+                "primary_score": "overall_test",
+                "breakdowns": [],
+                "minimum_subgroup_jobs": 1,
+            },
+        },
     }
     return TaskSpec(
         path=root / f"{value['task_id']}.json",
@@ -1034,7 +1041,7 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
         plugin = load_baseline_plugin(
             load_baseline_bundle(bundle_root)
         )
-        instance = plugin.task_builder.build(
+        instance = compile_task_instance(plugin,
             _dataset(root),
             _task(root),
         )
@@ -1186,7 +1193,7 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                 adapter=_sealed_standard_adapter_config(),
             )
             plugin = load_baseline_plugin(load_baseline_bundle(bundle_root))
-            instance = plugin.task_builder.build(_dataset(root), _task(root))
+            instance = compile_task_instance(plugin, _dataset(root), _task(root))
             job = instance.value["inference"]["jobs"][0]
             expected = job["native_inputs"]["media_contract"]
             tampered = copy.deepcopy(expected)
@@ -1240,7 +1247,7 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                 "unit": "s",
                 "annotated": False,
             }
-            instance = plugin.task_builder.build(
+            instance = compile_task_instance(plugin,
                 dataset,
                 _task(root),
             )
@@ -1283,7 +1290,7 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                 ValueError,
                 "differ from Dataset truth",
             ):
-                plugin.task_builder.build(
+                compile_task_instance(plugin,
                     _dataset(root),
                     _task(root),
                 )
@@ -1338,7 +1345,7 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                 ValueError,
                 "anywhere in the Dataset",
             ):
-                plugin.task_builder.build(dataset, _task(root))
+                compile_task_instance(plugin, dataset, _task(root))
 
     def test_runtime_revalidates_managed_contract_and_recipe(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1455,8 +1462,13 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                     "scenes": {
                         "pendulum": {
                             "train": ["pendulum_train"],
-                            "test_id": ["pendulum_eval"],
-                            "test_ood1": [],
+                            "test": ["pendulum_eval"],
+                        },
+                    },
+                    "test_annotations": {
+                        "pendulum_eval": {
+                            "generalization_regime": "id",
+                            "ood_factors": [],
                         },
                     },
                 },
@@ -1490,17 +1502,24 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                 asset_root=root,
             )
             task_value = {
-                "schema_version": "3.0",
+                "schema_version": "1.0",
                 "task_id": "fixture_finetune",
                 "family": "finetune_eval",
                 "dataset_id": "conditioning_contract_fixture",
-                "dataset_view": "view_a",
                 "selection": {
-                    "scene_ids": ["pendulum"],
-                    "eval_partitions": ["test_id"],
+                    "training_scene_ids": ["pendulum"],
+                    "evaluation_scene_ids": ["pendulum"],
+                    "test_regimes": ["id"],
                 },
-                "ood2": {"enabled": False},
                 "seeds": {"training": [11], "inference": [7]},
+                "evaluation": {
+                    "protocol": "scene_default_v1",
+                    "reporting": {
+                        "primary_score": "overall_test",
+                        "breakdowns": [],
+                        "minimum_subgroup_jobs": 1,
+                    },
+                },
             }
             task = TaskSpec(
                 path=root / "fixture_finetune.json",
@@ -1508,7 +1527,7 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                 digest=canonical_sha256(task_value),
             )
 
-            instance = plugin.task_builder.build(dataset, task).value
+            instance = compile_task_instance(plugin, dataset, task).value
             source = {
                 case["case_id"]: case
                 for case in instance["source"]["cases"]
@@ -1539,7 +1558,7 @@ class TaskInstanceContractTests(unittest.TestCase):
             plugin = load_baseline_plugin(
                 load_baseline_bundle(bundle_root)
             )
-            value = plugin.task_builder.build(
+            value = compile_task_instance(plugin,
                 _dataset(root),
                 _task(root),
             ).value
@@ -1557,7 +1576,7 @@ class TaskInstanceContractTests(unittest.TestCase):
             plugin = load_baseline_plugin(
                 load_baseline_bundle(bundle_root)
             )
-            value = plugin.task_builder.build(
+            value = compile_task_instance(plugin,
                 _dataset(root),
                 _task(root),
             ).value
@@ -1576,7 +1595,7 @@ class TaskInstanceContractTests(unittest.TestCase):
             plugin = load_baseline_plugin(
                 load_baseline_bundle(_create_bundle(root))
             )
-            value = plugin.task_builder.build(
+            value = compile_task_instance(plugin,
                 _dataset(root),
                 _task(root),
             ).value
@@ -1593,7 +1612,7 @@ class TaskInstanceContractTests(unittest.TestCase):
             plugin = load_baseline_plugin(
                 load_baseline_bundle(_create_bundle(root))
             )
-            value = plugin.task_builder.build(
+            value = compile_task_instance(plugin,
                 _dataset(root),
                 _task(root),
             ).value
@@ -1612,7 +1631,7 @@ class TaskInstanceContractTests(unittest.TestCase):
             plugin = load_baseline_plugin(
                 load_baseline_bundle(_create_bundle(root))
             )
-            value = plugin.task_builder.build(
+            value = compile_task_instance(plugin,
                 _dataset(root),
                 _task(root),
             ).value

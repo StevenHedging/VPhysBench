@@ -648,6 +648,11 @@ class PendulumOpenWorldV7Tests(unittest.TestCase):
                 20.0,
             ),
         }
+        if any(
+            not list((root / case_id / "canonical").glob("first_frame.*"))
+            for case_id in expected
+        ):
+            self.skipTest("full pendulum media assets are not published")
         ood01_support_rejections = 0
         for case_id, (target, ratio, angle_deg) in expected.items():
             with self.subTest(case_id=case_id):
@@ -696,6 +701,8 @@ class PendulumOpenWorldV7Tests(unittest.TestCase):
             / "canonical"
             / "first_frame.png"
         )
+        if not path.is_file():
+            self.skipTest("full pendulum media assets are not published")
         frame, _ = letterbox_condition_image(
             path, width=480, height=832
         )
@@ -728,6 +735,8 @@ class PendulumOpenWorldV7Tests(unittest.TestCase):
             / "canonical"
             / "first_frame.png"
         )
+        if not path.is_file():
+            self.skipTest("full pendulum media assets are not published")
         frame, _ = letterbox_condition_image(
             path, width=480, height=832
         )

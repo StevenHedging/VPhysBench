@@ -28,10 +28,6 @@ try:
         extract_collision_trace,
         score_collision,
     )
-    from physbench.evaluation.scenes.free_fall.scoring import (
-        extract_free_fall_trace,
-        score_free_fall,
-    )
     from physbench.evaluation.scenes.inclined_plane.scoring import (
         extract_incline_trace,
         score_incline,
@@ -194,95 +190,6 @@ class SceneEvaluationTests(unittest.TestCase):
             )
             self.assertTrue(path.is_file())
             self.assertGreater(path.stat().st_size, 0)
-
-    @staticmethod
-    def _free_fall_trace(*, upward: bool = False):
-        times = np.arange(17, dtype=np.float64) / 32.0
-        direction = -1.0 if upward else 1.0
-        xy = np.column_stack(
-            [
-                np.full(len(times), 40.0),
-                10.0 + direction * 200.0 * np.square(times),
-            ]
-        )
-        centroid = CentroidTrace(
-            xy=xy,
-            area=np.full(len(times), 50.0),
-            valid=np.ones(len(times), dtype=bool),
-            valid_ratio=1.0,
-        )
-        return extract_free_fall_trace(
-            centroid,
-            times.tolist(),
-            minimum_vertical_span_px=5.0,
-        )
-
-    def test_identical_free_fall_trace_scores_one(self) -> None:
-        trace = replace(
-            self._free_fall_trace(),
-            horizontal_drift_ratio=0.07,
-            downward_progress_ratio=0.8,
-            quadratic_rmse_ratio=0.05,
-        )
-        result = score_free_fall(
-            trace,
-            trace,
-            config={
-                "trajectory_error_scale": 0.15,
-                "acceleration_error_scale": 0.35,
-                "impact_time_error_scale": 0.15,
-                "horizontal_drift_scale": 0.08,
-                "weights": {
-                    "vertical_trajectory": 0.5,
-                    "normalized_acceleration": 0.25,
-                    "impact_time": 0.15,
-                    "motion_constraints": 0.1,
-                },
-            },
-        )
-        self.assertEqual(1.0, result["score"])
-        degraded = score_free_fall(
-            trace,
-            replace(
-                trace,
-                horizontal_drift_ratio=0.15,
-                downward_progress_ratio=0.5,
-            ),
-            config={
-                "trajectory_error_scale": 0.15,
-                "acceleration_error_scale": 0.35,
-                "impact_time_error_scale": 0.15,
-                "horizontal_drift_scale": 0.08,
-                "weights": {
-                    "vertical_trajectory": 0.5,
-                    "normalized_acceleration": 0.25,
-                    "impact_time": 0.15,
-                    "motion_constraints": 0.1,
-                },
-            },
-        )
-        self.assertLess(degraded["score"], 1.0)
-
-    def test_upward_motion_is_penalized_as_non_free_fall(self) -> None:
-        reference = self._free_fall_trace()
-        upward = self._free_fall_trace(upward=True)
-        result = score_free_fall(
-            reference,
-            upward,
-            config={
-                "trajectory_error_scale": 0.15,
-                "acceleration_error_scale": 0.35,
-                "impact_time_error_scale": 0.15,
-                "horizontal_drift_scale": 0.08,
-                "weights": {
-                    "vertical_trajectory": 0.5,
-                    "normalized_acceleration": 0.25,
-                    "impact_time": 0.15,
-                    "motion_constraints": 0.1,
-                },
-            },
-        )
-        self.assertLess(result["score"], 0.35)
 
     def test_common_axis_and_circle_geometry(self) -> None:
         axis = fit_axis(np.asarray([[0, 0], [1, 2], [2, 4], [3, 6]]))
@@ -565,26 +472,19 @@ class SceneEvaluationTests(unittest.TestCase):
             self.assertAlmostEqual(0.8, summary["observed_mean_score"])
 
     def test_default_protocol_resolves_all_five_scene_evaluators(self) -> None:
-        protocol = load_evaluation_protocol("scene_default_v2")
+        protocol = load_evaluation_protocol("scene_default_v1")
         registry = SceneEvaluatorRegistry(protocol)
         expected = {
-            "pendulum": ("pendulum_state_similarity", "1.2"),
-            "free_fall": ("free_fall_state_similarity", "1.2"),
-            "inclined_plane_slide": (
-                "inclined_plane_state_similarity",
-                "1.2",
-            ),
-            "uniform_circular_motion": (
-                "uniform_circular_motion_state_similarity",
-                "1.2",
-            ),
-            "collision_1d": ("collision_1d_state_similarity", "1.2"),
+            "pendulum",
+            "collision_1d",
+            "inclined_plane_slide",
+            "uniform_circular_motion",
+            "parabolic_motion",
         }
-        for scene_id, (primary_score, version) in expected.items():
+        for scene_id in expected:
             description = registry.resolve(scene_id).describe()
             self.assertTrue(description["implemented"])
-            self.assertEqual(version, description["version"])
-            self.assertEqual(primary_score, description["primary_score"])
+            self.assertEqual("1.0", description["version"])
 
 
 if __name__ == "__main__":

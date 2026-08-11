@@ -187,17 +187,21 @@ def _validate_semantics(semantics_value: Any) -> None:
     semantics = _require_object(semantics_value, "semantics")
     _require_fields(
         semantics,
-        {"family", "scene_ids"},
+        {"family", "training_scene_ids", "scene_ids"},
         "semantics",
     )
     _require_non_empty_string(semantics["family"], "semantics.family")
-    scene_ids = _require_list(semantics["scene_ids"], "semantics.scene_ids")
-    for index, scene_id in enumerate(scene_ids):
-        _require_safe_identifier(
-            scene_id, f"semantics.scene_ids[{index}]"
-        )
-    if len(scene_ids) != len(set(scene_ids)):
-        raise _invalid("semantics.scene_ids", "must not contain duplicates")
+    for field in ("training_scene_ids", "scene_ids"):
+        scene_ids = _require_list(semantics[field], f"semantics.{field}")
+        for index, scene_id in enumerate(scene_ids):
+            _require_safe_identifier(
+                scene_id, f"semantics.{field}[{index}]"
+            )
+        if len(scene_ids) != len(set(scene_ids)):
+            raise _invalid(
+                f"semantics.{field}",
+                "must not contain duplicates",
+            )
 
 
 def _validate_source(source_value: Any) -> set[str]:
@@ -353,6 +357,7 @@ def _validate_plan_identity(
             "family",
             "dataset_id",
             "dataset_digest",
+            "training_scene_ids",
             "scene_ids",
             "train_case_ids",
             "training_seed",
@@ -368,21 +373,27 @@ def _validate_plan_identity(
         canonical_plan["dataset_id"],
         "canonical_plan.dataset_id",
     )
-    for index, scene_id in enumerate(
-        _require_list(
-            canonical_plan["scene_ids"],
-            "canonical_plan.scene_ids",
+    for field in ("training_scene_ids", "scene_ids"):
+        scene_ids = _require_list(
+            canonical_plan[field],
+            f"canonical_plan.{field}",
         )
-    ):
-        _require_safe_identifier(
-            scene_id,
-            f"canonical_plan.scene_ids[{index}]",
-        )
+        for index, scene_id in enumerate(scene_ids):
+            _require_safe_identifier(
+                scene_id,
+                f"canonical_plan.{field}[{index}]",
+            )
+        if len(scene_ids) != len(set(scene_ids)):
+            raise _invalid(
+                f"canonical_plan.{field}",
+                "must not contain duplicates",
+            )
     comparisons = {
         "task_id": identity["task"]["task_id"],
         "dataset_id": identity["dataset"]["dataset_id"],
         "dataset_digest": identity["dataset"]["digest"],
         "family": semantics["family"],
+        "training_scene_ids": semantics["training_scene_ids"],
         "scene_ids": semantics["scene_ids"],
     }
     mismatched = sorted(

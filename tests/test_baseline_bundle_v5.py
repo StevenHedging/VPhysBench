@@ -138,7 +138,7 @@ class BaselineBundleV5Tests(unittest.TestCase):
             ROOT
             / "tasks"
             / "official"
-            / "five_scene_direct_eval.json"
+            / "five_scene_direct_eval_v1.json"
         )
 
     def test_directory_discovery_and_id_resolution_require_no_registry_edit(

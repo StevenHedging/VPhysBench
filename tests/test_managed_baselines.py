@@ -22,6 +22,7 @@ from physbench.io import (
     write_json,
     write_jsonl,
 )
+from physbench.orchestration import compile_task_instance
 from physbench.tasks import load_task
 
 
@@ -180,20 +181,20 @@ class ManagedBaselineTests(unittest.TestCase):
             ROOT
             / "tasks"
             / "official"
-            / "five_scene_direct_eval.json"
+            / "five_scene_direct_eval_v1.json"
         )
         cls.finetune = load_task(
             ROOT
             / "tasks"
             / "official"
-            / "five_scene_finetune_eval.json"
+            / "seven_scene_train_five_scene_eval_v1.json"
         )
 
     def _one_case_task(self) -> TaskSpec:
         source = self.direct
         value = copy.deepcopy(self.direct.value)
         case = self.dataset.cases[0]
-        value["selection"]["scene_ids"] = [case["scene_id"]]
+        value["selection"]["evaluation_scene_ids"] = [case["scene_id"]]
         value["selection"]["case_ids"] = [case["case_id"]]
         return TaskSpec(source.path, value, canonical_sha256(value))
 
@@ -232,8 +233,8 @@ class ManagedBaselineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = _bundle(Path(temporary), "fixture", "managed")
             plugin = load_baseline_plugin(load_baseline_bundle(root))
-            first = plugin.task_builder.build(self.dataset, self.direct)
-            second = plugin.task_builder.build(self.dataset, self.direct)
+            first = compile_task_instance(plugin, self.dataset, self.direct)
+            second = compile_task_instance(plugin, self.dataset, self.direct)
             self.assertEqual(first.digest, second.digest)
             first.verify()
             self.assertEqual(
@@ -280,10 +281,10 @@ class ManagedBaselineTests(unittest.TestCase):
                 load_baseline_bundle(physics_root)
             )
             task = self._one_case_task()
-            generic_instance = generic.task_builder.build(
+            generic_instance = compile_task_instance(generic,
                 self.dataset, task
             )
-            physics_instance = physics.task_builder.build(
+            physics_instance = compile_task_instance(physics,
                 self.dataset, task
             )
             self.assertEqual(
@@ -346,7 +347,33 @@ class ManagedBaselineTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 ValueError, "does not support task family"
             ):
-                plugin.task_builder.build(self.dataset, self.finetune)
+                compile_task_instance(plugin, self.dataset, self.finetune)
+
+    def test_finetune_requires_support_for_all_training_scenes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = _bundle(Path(temporary), "fixture", "managed")
+            value = load_json(root / "baseline.json")
+            value["supported_scenes"] = [
+                "pendulum",
+                "collision_1d",
+                "inclined_plane_slide",
+                "uniform_circular_motion",
+                "parabolic_motion",
+            ]
+            value["capabilities"].update({
+                "task_families": ["direct_eval", "finetune_eval"],
+                "train": True,
+                "finetune": True,
+            })
+            value["trainer"] = {"type": "fixture", "config": {}}
+            write_json(root / "baseline.json", value)
+            plugin = load_baseline_plugin(load_baseline_bundle(root))
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "push_bottle.*vertical_spring_oscillator",
+            ):
+                compile_task_instance(plugin, self.dataset, self.finetune)
 
     def test_managed_plugin_rejects_driver_output_identity_and_coverage(
         self,
@@ -355,7 +382,7 @@ class ManagedBaselineTests(unittest.TestCase):
             parent = Path(temporary)
             root = _bundle(parent, "fixture", "managed")
             plugin = load_baseline_plugin(load_baseline_bundle(root))
-            instance = plugin.task_builder.build(
+            instance = compile_task_instance(plugin,
                 self.dataset, self._one_case_task()
             )
             job = instance.value["inference"]["jobs"][0]
@@ -437,7 +464,7 @@ class ManagedBaselineTests(unittest.TestCase):
             provisional = load_baseline_plugin(
                 load_baseline_bundle(root)
             )
-            instance = provisional.task_builder.build(self.dataset, task)
+            instance = compile_task_instance(provisional, self.dataset, task)
             job = instance.value["inference"]["jobs"][0]
             source = parent / "external.mp4"
             source.write_bytes(b"submitted-video")
@@ -452,7 +479,7 @@ class ManagedBaselineTests(unittest.TestCase):
                 "runtime": {"submission_manifest": str(manifest)}
             })
             plugin = load_baseline_plugin(load_baseline_bundle(root))
-            instance = plugin.task_builder.build(self.dataset, task)
+            instance = compile_task_instance(plugin, self.dataset, task)
             run_dir = parent / "run"
             for child in ("predictions", "provenance"):
                 (run_dir / child).mkdir(parents=True)
@@ -484,7 +511,7 @@ class ManagedBaselineTests(unittest.TestCase):
                     stop_after_training=False,
                 )
             reloaded = load_baseline_plugin(load_baseline_bundle(root))
-            bad_instance = reloaded.task_builder.build(
+            bad_instance = compile_task_instance(reloaded,
                 self.dataset, task
             )
             with self.assertRaisesRegex(
@@ -507,7 +534,7 @@ class ManagedBaselineTests(unittest.TestCase):
                 "runtime": {"submission_manifest": str(manifest)}
             })
             plugin = load_baseline_plugin(load_baseline_bundle(root))
-            instance = plugin.task_builder.build(
+            instance = compile_task_instance(plugin,
                 self.dataset, self._one_case_task()
             )
             with self.assertRaisesRegex(

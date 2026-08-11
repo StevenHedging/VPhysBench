@@ -75,9 +75,9 @@ class PendulumOpenWorldCaseEvaluatorV8(ReferenceCaseEvaluator):
     """Fail-closed pendulum evaluator bound to a frozen bob annotation."""
 
     evaluator_id = "pendulum_open_world_subject_identity"
-    evaluator_version = "3.0"
-    sequential_evaluator_version = "3.0"
-    robust_evaluator_version = "3.0"
+    evaluator_version = "1.0"
+    sequential_evaluator_version = "1.0"
+    robust_evaluator_version = "1.0"
     scene_id = "pendulum"
     primary_score = "pendulum_open_world_similarity"
     allow_partial_prediction = True

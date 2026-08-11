@@ -58,11 +58,12 @@ class DataAdapter(ABC):
 
 
 class TaskBuilder(ABC):
-    """Compile Dataset + model-agnostic Task into one Baseline task instance.
+    """Compile a Benchmark-owned plan into one Baseline task instance.
 
-    Builders are deterministic and side-effect free: they validate
-    compatibility, invoke their private DataAdapter, assemble an operation graph
-    and seal a runnable specification.  They never train or infer.
+    The Benchmark planner expands Dataset + Task before invoking this boundary.
+    Builders are deterministic and side-effect free: they validate compatibility,
+    invoke their private DataAdapter, assemble an operation graph and seal a
+    runnable specification. They cannot select cases, train, or infer.
     """
 
     bundle: BaselineBundle
@@ -76,16 +77,6 @@ class TaskBuilder(ABC):
     @abstractmethod
     def describe(self) -> dict[str, Any]:
         raise NotImplementedError
-
-    def build(
-        self, dataset: DatasetSnapshot, task: TaskSpec
-    ) -> BaselineTaskInstance:
-        # The canonical View A/B expansion remains Benchmark-owned so Baselines
-        # cannot silently choose different train/ID/OOD cases.
-        from ..tasks import plan_atomic_task
-
-        canonical_plan = plan_atomic_task(task, dataset)
-        return self.compile(dataset, task, canonical_plan)
 
     @abstractmethod
     def compile(

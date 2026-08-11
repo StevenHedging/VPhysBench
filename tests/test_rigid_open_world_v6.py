@@ -819,7 +819,7 @@ class RigidBodyOpenWorldV6Tests(unittest.TestCase):
             config={
                 "visualization": {
                     "enabled": True,
-                    "namespace": "scene_default_v6",
+                    "namespace": "scene_default_v1",
                 }
             },
         )

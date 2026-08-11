@@ -2,20 +2,16 @@
 
 ## Dataset identity
 
-- Dataset ID: `physics_video_seven_scene_v13`
-- Release: `13.0.0`
-- Cases: 916
-- Views: `view_a` and `view_b`
-- Bound Hub revision: `datasets/huggingface.json`
+- Dataset ID：`physics_video_seven_scene_v13`
+- Release：`13.0.0`
+- Cases：916
+- Views：`view_a`、`view_b`
+- Hub binding：`datasets/huggingface.json`
 
-Each Case owns its canonical prompt, structured physical quantities, first
-frame, masks, reference video, and split annotations. Baselines receive only
-the input view authorized by their declared input policy. Reference media and
-evaluator annotations are evaluator-only.
+每个 Case 拥有规范 prompt、结构化物理量、输入资产、参考资产和 split 注释。Baseline
+只能读取其 input policy 授权的投影；参考媒体与 evaluator 注释不会进入推理输入。
 
 ## Five scored scenes
-
-The official direct- and finetune-evaluation Tasks score:
 
 1. `pendulum`
 2. `collision_1d`
@@ -25,50 +21,39 @@ The official direct- and finetune-evaluation Tasks score:
 
 ## Two preview scenes
 
-The Dataset also exposes:
-
 1. `push_bottle`
 2. `vertical_spring_oscillator`
 
-These scenes are data-only in this near-release. Their Cases may be inspected
-or used for private experiments, but they are excluded from official Task
-selection, aggregation, and leaderboard claims.
+这两个场景在 finetune Task v1 中参与训练，但没有公开 evaluator，不进入正式评估 job、
+五场景聚合或 leaderboard 分数。
 
 ## Official Tasks
 
-- `tasks/official/five_scene_direct_eval.json`: no training partition; 658
-  inference jobs across the five scored scenes.
-- `tasks/official/five_scene_finetune_eval.json`: view-A training followed by
-  76 held-out inference jobs across the same scenes.
+- `five_scene_direct_eval_v1`：五场景 658 个直接评估 job，无训练；
+- `seven_scene_train_five_scene_eval_v1`：七场景 806 个训练 case，五场景 76 个 ID
+  评估 job。
 
-Both Tasks use evaluation protocol `scene_default_v10`. The Task owns scene
-selection, seeds, split and reporting policy. It does not own model
-conditioning. A baseline owns whether structured physics is ignored, optional
-or required.
+两者都使用 `scene_default_v1`。Task 拥有数据选择、种子和报告策略；Baseline 拥有输入
+适配、是否使用物理信息、模型训练和推理实现。
 
 ## Media contract
 
-Managed I2V jobs seal:
+Managed I2V/V2V job 会封印允许使用的媒体通道、输出画布、FPS、物理时间零点、帧数规则
+和 run 内输出路径。无法解码、违反媒体契约或越权读取 evaluator/source 视频的预测会在
+场景评分前失败。
 
-- the authorized first-frame asset;
-- output canvas width and height;
-- FPS and physical time zero;
-- a fixed or bounded frame-count rule;
-- the output path inside the current run.
+## Scoring, degradation and coverage
 
-Predictions that cannot be decoded or violate the canvas, FPS, start-time or
-frame-count contract fail before scene scoring.
+Evaluation v1 对五场景运行对象级物理评分，并计算独立 CSTI 时空一致性维度。以下预测侧
+失败按“已评估零分”处理，同时写入 degradation reason：
 
-## Scoring and coverage
+- 缺失或未完成的 prediction record；
+- prediction media 无效；
+- prediction observation 失败。
 
-Scene evaluators compute per-case physical-consistency measurements and emit
-case results under the run's `evaluation/` tree. Task aggregation is valid only
-when canonical inference-job coverage is complete. A partial run may expose
-diagnostic observed means, but it is not an official Task score.
+参考资产失败仍标记为 unavailable，evaluator 内部错误仍标记为 error；这两类不会伪装成
+有效零分。Task 汇总以 canonical jobs 为分母，记录 coverage、status counts、逐场景结果、
+expert 分数、CSTI 和退化诊断。只有 canonical identity、计划、预测与协议摘要一致的产物
+才能作为正式结果。
 
-Failures remain explicit. Missing predictions, invalid media, unsupported
-scenes and evaluator errors are recorded rather than silently replaced with a
-successful score.
-
-For evaluator algorithms and scene-specific quantities, see
-[EVALUATION.md](EVALUATION.md).
+评分实现细节见 [EVALUATION.md](EVALUATION.md)。

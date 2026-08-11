@@ -93,6 +93,16 @@ def _build_atomic_run(container: Path, *, run_id: str = "fixture-run") -> Path:
     reference.write_bytes(b"fixture-reference-video")
 
     physics = {
+        "bob_radius": {
+            "annotated": True,
+            "unit": "m",
+            "value": 0.04,
+        },
+        "initial_angle": {
+            "annotated": True,
+            "unit": "rad",
+            "value": 0.3,
+        },
         "length": {
             "annotated": True,
             "unit": "m",
@@ -102,6 +112,16 @@ def _build_atomic_run(container: Path, *, run_id: str = "fixture-run") -> Path:
             "annotated": True,
             "unit": "m/s^2",
             "value": 9.8,
+        },
+        "pendulum_length": {
+            "annotated": True,
+            "unit": "m",
+            "value": 0.8,
+        },
+        "string_length": {
+            "annotated": True,
+            "unit": "m",
+            "value": 0.8,
         },
     }
     text = {
@@ -124,6 +144,7 @@ def _build_atomic_run(container: Path, *, run_id: str = "fixture-run") -> Path:
         "appearance": {
             "background": "fixture_lab",
             "apparatus": "fixture_stand",
+            "bob_material": "fixture_metal",
         },
         "temporal": {"time_scale": "real_time"},
         "provenance": {
@@ -147,6 +168,7 @@ def _build_atomic_run(container: Path, *, run_id: str = "fixture-run") -> Path:
         "appearance": {
             "background": "fixture_ood_lab",
             "apparatus": "fixture_ood_stand",
+            "bob_material": "fixture_metal",
         },
         "temporal": {"time_scale": "real_time"},
         "provenance": {
@@ -235,19 +257,24 @@ def _build_atomic_run(container: Path, *, run_id: str = "fixture-run") -> Path:
         "asset_files_digest": asset_lock["files_digest"],
     })
     task = {
-        "schema_version": "3.0",
+        "schema_version": "1.0",
         "task_id": "evaluation_variant_direct",
         "family": "direct_eval",
         "dataset_id": descriptor["dataset_id"],
-        "dataset_view": "view_b",
         "selection": {
-            "scene_ids": ["pendulum"],
+            "evaluation_scene_ids": ["pendulum"],
             "groups": "all",
             "case_ids": case_ids,
         },
-        "ood2": {"enabled": False},
         "seeds": {"training": [], "inference": [42]},
-        "evaluation": {"protocol": "scene_default_v1"},
+        "evaluation": {
+            "protocol": "scene_default_v1",
+            "reporting": {
+                "primary_score": "overall_test",
+                "breakdowns": [],
+                "minimum_subgroup_jobs": 1,
+            },
+        },
     }
     task_path = container / "task.json"
     write_json(task_path, task)
@@ -297,7 +324,7 @@ def _variant_destination(
     run_dir: Path,
     *,
     evaluation_id: str,
-    protocol_id: str = "scene_default_v2",
+    protocol_id: str = "scene_default_v1",
 ) -> Path:
     protocol = load_evaluation_protocol(protocol_id)
     return (
@@ -336,6 +363,7 @@ class EvaluationVariantTests(unittest.TestCase):
         aggregation = aggregate_task_results(
             plan=plan,
             case_results=case_results,
+            include_degraded_diagnostics=True,
             general_metrics={"csti": _CSTI_CONFIG},
         )
         task_result = load_json(run_dir / "evaluation" / "task_result.json")
@@ -367,7 +395,7 @@ class EvaluationVariantTests(unittest.TestCase):
         canonical = _canonical_snapshot(run_dir)
         result = reevaluate_atomic_variant(
             run_dir,
-            protocol_id="scene_default_v2",
+            protocol_id="scene_default_v1",
             evaluation_id="protocol-v2-audit",
         )
 
@@ -377,8 +405,8 @@ class EvaluationVariantTests(unittest.TestCase):
         )
         self.assertEqual(str(destination), result["variant_path"])
         self.assertEqual("complete", result["reevaluation"]["workflow_status"])
-        self.assertEqual("partial", result["task_result"]["status"])
-        self.assertEqual(0.0, result["task_result"]["coverage"])
+        self.assertEqual("complete", result["task_result"]["status"])
+        self.assertEqual(1.0, result["task_result"]["coverage"])
         _assert_snapshot_unchanged(self, run_dir, canonical)
 
         references = load_json(destination / "reference_assets.json")
@@ -391,7 +419,7 @@ class EvaluationVariantTests(unittest.TestCase):
             source["native_protocol"]["id"],
         )
         self.assertEqual(
-            "scene_default_v2",
+            "scene_default_v1",
             source["target_protocol"]["id"],
         )
         self.assertIn("tree_sha256", source["evaluator_source"])
@@ -425,13 +453,13 @@ class EvaluationVariantTests(unittest.TestCase):
         run_dir = _build_atomic_run(self.root)
         reevaluate_atomic_variant(
             run_dir,
-            protocol_id="scene_default_v2",
+            protocol_id="scene_default_v1",
             evaluation_id="one",
         )
         with self.assertRaisesRegex(FileExistsError, "already exists"):
             reevaluate_atomic_variant(
                 run_dir,
-                protocol_id="scene_default_v2",
+                protocol_id="scene_default_v1",
                 evaluation_id="one",
             )
         for invalid in ("../escape", "nested/id", "."):
@@ -439,13 +467,13 @@ class EvaluationVariantTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     reevaluate_atomic_variant(
                         run_dir,
-                        protocol_id="scene_default_v2",
+                        protocol_id="scene_default_v1",
                         evaluation_id=invalid,
                     )
         with self.assertRaises(ValueError):
             reevaluate_atomic_variant(
                 run_dir,
-                protocol_id="../scene_default_v2",
+                protocol_id="../scene_default_v1",
                 evaluation_id="two",
             )
 
@@ -457,7 +485,7 @@ class EvaluationVariantTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must not contain symlinks"):
             reevaluate_atomic_variant(
                 run_dir,
-                protocol_id="scene_default_v2",
+                protocol_id="scene_default_v1",
                 evaluation_id="symlink-attempt",
             )
         self.assertEqual([], list(external.iterdir()))
@@ -472,7 +500,7 @@ class EvaluationVariantTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must not contain symlinks"):
             reevaluate_atomic_variant(
                 run_dir,
-                protocol_id="scene_default_v2",
+                protocol_id="scene_default_v1",
                 evaluation_id="must-not-exist",
             )
         self.assertFalse((run_dir / "reevaluations").exists())
@@ -493,7 +521,7 @@ class EvaluationVariantTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     reevaluate_atomic_variant(
                         run_dir,
-                        protocol_id="scene_default_v2",
+                        protocol_id="scene_default_v1",
                         evaluation_id="must-not-exist",
                     )
                 self.assertFalse((run_dir / "reevaluations").exists())
@@ -515,7 +543,7 @@ class EvaluationVariantTests(unittest.TestCase):
         ):
             reevaluate_atomic_variant(
                 run_dir,
-                protocol_id="scene_default_v2",
+                protocol_id="scene_default_v1",
                 evaluation_id="must-not-exist",
             )
         self.assertFalse((run_dir / "reevaluations").exists())
@@ -538,7 +566,7 @@ class EvaluationVariantTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     reevaluate_atomic_variant(
                         run_dir,
-                        protocol_id="scene_default_v2",
+                        protocol_id="scene_default_v1",
                         evaluation_id="must-not-exist",
                     )
                 self.assertFalse((run_dir / "reevaluations").exists())
@@ -571,7 +599,7 @@ class EvaluationVariantTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, expected):
                     reevaluate_atomic_variant(
                         run_dir,
-                        protocol_id="scene_default_v2",
+                        protocol_id="scene_default_v1",
                         evaluation_id="must-not-exist",
                     )
                 self.assertFalse((run_dir / "reevaluations").exists())
@@ -585,10 +613,10 @@ class EvaluationVariantTests(unittest.TestCase):
         reference.write_bytes(b"x" * len(original))
         result = reevaluate_atomic_variant(
             run_dir,
-            protocol_id="scene_default_v2",
+            protocol_id="scene_default_v1",
             evaluation_id="unused-reference",
         )
-        self.assertEqual("partial", result["task_result"]["status"])
+        self.assertEqual("complete", result["task_result"]["status"])
         references = load_json(
             Path(result["variant_path"]) / "reference_assets.json"
         )
@@ -616,7 +644,7 @@ class EvaluationVariantTests(unittest.TestCase):
             _validate_reference_assets(
                 plan=plan,
                 predictions=predictions,
-                protocol=load_evaluation_protocol("scene_default_v2"),
+                protocol=load_evaluation_protocol("scene_default_v1"),
                 catalog=catalog,
                 asset_root=self.root / "assets",
                 locked_by_path=locked,
@@ -650,7 +678,7 @@ class EvaluationVariantTests(unittest.TestCase):
             ):
                 reevaluate_atomic_variant(
                     run_dir,
-                    protocol_id="scene_default_v2",
+                    protocol_id="scene_default_v1",
                     evaluation_id="failed-workflow",
                 )
 
@@ -678,7 +706,7 @@ class EvaluationVariantTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             reevaluate_atomic_variant(
                 run_dir,
-                protocol_id="scene_default_v2",
+                protocol_id="scene_default_v1",
                 evaluation_id="failed-workflow",
             )
 
@@ -701,7 +729,7 @@ class EvaluationVariantTests(unittest.TestCase):
                 "--run-dir",
                 str(run_dir),
                 "--protocol-id",
-                "scene_default_v2",
+                "scene_default_v1",
                 "--evaluation-id",
                 "cli-evaluation",
             ])

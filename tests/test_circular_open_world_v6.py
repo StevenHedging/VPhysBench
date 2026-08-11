@@ -1220,7 +1220,7 @@ class CircularOpenWorldEvaluatorTests(unittest.TestCase):
             "apparatus_geometry_symmetric"
         )
         evaluator = CircularMotionOpenWorldCaseEvaluatorV7(config)
-        self.assertEqual("2.1", evaluator.describe()["version"])
+        self.assertEqual("1.0", evaluator.describe()["version"])
         self.assertIn(
             "confidence_only",
             evaluator.describe()["observation"]["shape_policy"],

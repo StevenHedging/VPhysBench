@@ -74,6 +74,16 @@ class ReleaseAuditTests(unittest.TestCase):
         )
         self.assertEqual([], self.issues())
 
+    def test_release_manifest_requires_only_v1_tasks_and_protocol(self) -> None:
+        self.write("RELEASE_MANIFEST.json", "{}")
+        self.write("tasks/official/legacy.json", "{}")
+        self.write(
+            "configs/evaluation/protocols/scene_default_v2.json",
+            "{}",
+        )
+        self.assert_issue("release Task inventory mismatch")
+        self.assert_issue("release evaluation protocol inventory mismatch")
+
 
 if __name__ == "__main__":
     unittest.main()

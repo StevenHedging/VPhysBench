@@ -8,9 +8,9 @@ class InclinedPlaneOpenWorldCaseEvaluatorV7(
 ):
     """V7 incline evaluator with symmetric condition-causal observation."""
 
-    evaluator_version = "2.1"
-    sequential_evaluator_version = "2.1"
-    robust_evaluator_version = "2.1"
+    evaluator_version = "1.0"
+    sequential_evaluator_version = "1.0"
+    robust_evaluator_version = "1.0"
     temporary_prefix = "physbench_inclined_plane_v7_"
     required_observer_version = "2.1"
     required_observer_policies = {

@@ -95,9 +95,11 @@ class ManagedTaskBuilder(TaskBuilder):
             )
         supported = value.get("supported_scenes", "all")
         if supported != "all":
-            requested = set(canonical_plan.value["scene_ids"]) | {
-                job["scene_id"] for job in canonical_plan.jobs
-            }
+            requested = (
+                set(canonical_plan.value["training_scene_ids"])
+                | set(canonical_plan.value["scene_ids"])
+                | {job["scene_id"] for job in canonical_plan.jobs}
+            )
             unknown = requested - set(supported)
             if unknown:
                 raise ValueError(
@@ -729,6 +731,9 @@ class ManagedTaskBuilder(TaskBuilder):
             },
             "semantics": {
                 "family": task.family,
+                "training_scene_ids": canonical_plan.value[
+                    "training_scene_ids"
+                ],
                 "scene_ids": canonical_plan.value["scene_ids"],
             },
             "canonical_plan": canonical_plan.value,

@@ -10,9 +10,9 @@ class CircularMotionOpenWorldCaseEvaluatorV7(
 ):
     """V7 circular evaluator with hue-invariant apparatus discovery."""
 
-    evaluator_version = "2.1"
-    sequential_evaluator_version = "2.1"
-    robust_evaluator_version = "2.1"
+    evaluator_version = "1.0"
+    sequential_evaluator_version = "1.0"
+    robust_evaluator_version = "1.0"
 
     def __init__(self, config: dict[str, Any]):
         observation = config.get("color_observation", {})

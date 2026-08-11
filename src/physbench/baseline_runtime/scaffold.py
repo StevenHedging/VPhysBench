@@ -13,6 +13,8 @@ SCENES = [
     "inclined_plane_slide",
     "uniform_circular_motion",
     "parabolic_motion",
+    "push_bottle",
+    "vertical_spring_oscillator",
 ]
 
 

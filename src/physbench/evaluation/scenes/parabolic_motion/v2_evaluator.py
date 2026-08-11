@@ -20,9 +20,9 @@ from .evaluator import (
 
 class ParabolicMotionCaseEvaluatorV2(ParabolicMotionCaseEvaluator):
     evaluator_id = "parabolic_motion_fail_closed"
-    evaluator_version = "2.0"
-    sequential_evaluator_version = "2.0"
-    robust_evaluator_version = "2.0"
+    evaluator_version = "1.0"
+    sequential_evaluator_version = "1.0"
+    robust_evaluator_version = "1.0"
     prediction_missing_code = "prediction_projectile_entity_missing_v2"
     prediction_unmatched_code = "prediction_projectile_entity_unmatched_v2"
     prediction_uncertain_code = "prediction_projectile_identity_uncertain_v2"

@@ -210,10 +210,10 @@ class CSTIAggregationTest(unittest.TestCase):
             "assets": {"reference_video": "reference.mp4"},
         }
         protocol = {
-            "protocol_id": "scene_default_v11",
+            "protocol_id": "scene_default_v1",
             "fingerprint": "f" * 64,
-            "path": "scene_default_v11.json",
-            "scenes": {"pendulum": {"type": "pendulum_state_v7"}},
+            "path": "scene_default_v1.json",
+            "scenes": {"pendulum": {"type": "pendulum_v1"}},
             "robustness": {
                 "prediction_record_failure_policy": "evaluated_zero"
             },

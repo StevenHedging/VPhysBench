@@ -219,11 +219,11 @@ class CollisionV6EvaluatorTests(unittest.TestCase):
         protocol = json.loads(
             (
                 Path(__file__).parents[1]
-                / "configs/evaluation/protocols/scene_default_v13.json"
+                / "configs/evaluation/protocols/scene_default_v1.json"
             ).read_text(encoding="utf-8")
         )
         cls.config = copy.deepcopy(protocol["scenes"]["collision_1d"])
-        cls.config["type"] = "collision_1d_state_v6"
+        cls.config["type"] = "collision_1d_v1"
         cls.config["subject_identity"] = {
             "anchor_policy": "reference_motion_validated_frame_zero_v1",
             "failure_policy": "fail_closed_v1",

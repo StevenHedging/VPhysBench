@@ -20,15 +20,19 @@ from physbench.datasets import load_dataset
 from physbench.domain import TaskSpec
 from physbench.identifiers import SAFE_ID_PATTERN
 from physbench.io import canonical_sha256, load_json, write_json
-from physbench.orchestration.atomic_runner import run_atomic, run_matrix
+from physbench.orchestration.atomic_runner import (
+    compile_task_instance,
+    run_atomic,
+    run_matrix,
+)
 from physbench.tasks import load_task, plan_atomic_task
 
 
 DIRECT_TASK = (
-    ROOT / "tasks" / "official" / "five_scene_direct_eval.json"
+    ROOT / "tasks" / "official" / "five_scene_direct_eval_v1.json"
 )
 FINETUNE_TASK = (
-    ROOT / "tasks" / "official" / "five_scene_finetune_eval.json"
+    ROOT / "tasks" / "official" / "seven_scene_train_five_scene_eval_v1.json"
 )
 class TaskRuntimeContractTests(unittest.TestCase):
     @classmethod
@@ -49,7 +53,7 @@ class TaskRuntimeContractTests(unittest.TestCase):
         value = copy.deepcopy(self.direct.value)
         case = self.dataset.cases[0]
         value["task_id"] = task_id
-        value["selection"]["scene_ids"] = [case["scene_id"]]
+        value["selection"]["evaluation_scene_ids"] = [case["scene_id"]]
         value["selection"]["groups"] = "all"
         value["selection"]["case_ids"] = [case["case_id"]]
         return value
@@ -61,7 +65,7 @@ class TaskRuntimeContractTests(unittest.TestCase):
             value,
             canonical_sha256(value),
         )
-        return self.generic_plugin.task_builder.build(
+        return compile_task_instance(self.generic_plugin,
             self.dataset,
             task,
         )
@@ -78,7 +82,10 @@ class TaskRuntimeContractTests(unittest.TestCase):
         invalid_documents.append(("selection_fields", value, "unknown fields"))
 
         value = copy.deepcopy(self.direct.value)
-        value["selection"]["scene_ids"] = ["pendulum", "pendulum"]
+        value["selection"]["evaluation_scene_ids"] = [
+            "pendulum",
+            "pendulum",
+        ]
         invalid_documents.append(("scene_unique", value, "unique identifiers"))
 
         value = copy.deepcopy(self.direct.value)

@@ -30,9 +30,9 @@ class CollisionFailClosedCaseEvaluator(CollisionOpenWorldCaseEvaluator):
     """Collision evaluator with causal, terminal subject identity."""
 
     evaluator_id = "collision_1d_fail_closed_nbody"
-    evaluator_version = "3.0"
-    sequential_evaluator_version = "3.0"
-    robust_evaluator_version = "3.0"
+    evaluator_version = "1.0"
+    sequential_evaluator_version = "1.0"
+    robust_evaluator_version = "1.0"
     fail_closed_on_directed_identity = True
     identity_policy = (
         "motion_validated_reference_frame_zero_plus_unique_prediction_"

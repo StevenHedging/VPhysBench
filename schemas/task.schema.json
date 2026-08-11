@@ -1,56 +1,25 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Model-agnostic atomic benchmark Task",
+  "$id": "https://vphysbench.org/schemas/task.schema.json",
+  "title": "VPhysBench Task v1",
+  "description": "Model-agnostic benchmark workload compiled against a dataset snapshot.",
   "type": "object",
   "required": [
     "schema_version",
     "task_id",
     "family",
     "dataset_id",
-    "dataset_view",
     "selection",
-    "ood2",
-    "seeds"
+    "seeds",
+    "evaluation"
   ],
   "properties": {
-    "schema_version": {"const": "3.0"},
+    "$schema": {"type": "string"},
+    "schema_version": {"const": "1.0"},
     "task_id": {"$ref": "#/$defs/safeIdentifier"},
     "family": {"enum": ["finetune_eval", "direct_eval"]},
     "dataset_id": {"$ref": "#/$defs/safeIdentifier"},
-    "dataset_view": {"enum": ["view_a", "view_b"]},
     "selection": {"type": "object"},
-    "ood2": {
-      "type": "object",
-      "required": ["enabled"],
-      "properties": {
-        "enabled": {"type": "boolean"},
-        "heldout_scenes": {
-          "type": "array",
-          "items": {"$ref": "#/$defs/safeIdentifier"},
-          "uniqueItems": true
-        }
-      },
-      "additionalProperties": false,
-      "allOf": [
-        {
-          "if": {
-            "properties": {"enabled": {"const": true}},
-            "required": ["enabled"]
-          },
-          "then": {
-            "required": ["heldout_scenes"],
-            "properties": {
-              "heldout_scenes": {"minItems": 1}
-            }
-          },
-          "else": {
-            "properties": {
-              "heldout_scenes": {"maxItems": 0}
-            }
-          }
-        }
-      ]
-    },
     "seeds": {
       "type": "object",
       "required": ["training", "inference"],
@@ -71,8 +40,32 @@
     },
     "evaluation": {
       "type": "object",
+      "required": ["protocol", "reporting"],
       "properties": {
-        "protocol": {"$ref": "#/$defs/safeIdentifier"}
+        "protocol": {"$ref": "#/$defs/safeIdentifier"},
+        "reporting": {
+          "type": "object",
+          "required": [
+            "primary_score",
+            "breakdowns",
+            "minimum_subgroup_jobs"
+          ],
+          "properties": {
+            "primary_score": {"const": "overall_test"},
+            "breakdowns": {
+              "type": "array",
+              "items": {
+                "enum": ["generalization_regime", "ood_factor"]
+              },
+              "uniqueItems": true
+            },
+            "minimum_subgroup_jobs": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     }
@@ -86,39 +79,34 @@
       },
       "then": {
         "properties": {
-          "dataset_view": {"const": "view_a"},
           "selection": {
             "type": "object",
-            "required": ["scene_ids", "eval_partitions"],
+            "required": [
+              "training_scene_ids",
+              "evaluation_scene_ids",
+              "test_regimes"
+            ],
             "properties": {
-              "scene_ids": {"$ref": "#/$defs/idSelector"},
-              "eval_partitions": {
-                "type": "array",
-                "minItems": 1,
-                "items": {"enum": ["test_id", "test_ood1"]},
-                "uniqueItems": true
-              }
+              "training_scene_ids": {"$ref": "#/$defs/idSelector"},
+              "evaluation_scene_ids": {"$ref": "#/$defs/idSelector"},
+              "test_regimes": {"$ref": "#/$defs/regimeSelector"}
             },
             "additionalProperties": false
           },
           "seeds": {
             "properties": {
-              "training": {
-                "minItems": 1,
-                "maxItems": 1
-              }
+              "training": {"minItems": 1, "maxItems": 1}
             }
           }
         }
       },
       "else": {
         "properties": {
-          "dataset_view": {"const": "view_b"},
           "selection": {
             "type": "object",
-            "required": ["scene_ids", "groups"],
+            "required": ["evaluation_scene_ids", "groups"],
             "properties": {
-              "scene_ids": {"$ref": "#/$defs/idSelector"},
+              "evaluation_scene_ids": {"$ref": "#/$defs/idSelector"},
               "groups": {"$ref": "#/$defs/idSelector"},
               "case_ids": {
                 "type": "array",
@@ -127,11 +115,6 @@
               }
             },
             "additionalProperties": false
-          },
-          "ood2": {
-            "properties": {
-              "enabled": {"const": false}
-            }
           },
           "seeds": {
             "properties": {
@@ -154,6 +137,17 @@
           "type": "array",
           "minItems": 1,
           "items": {"$ref": "#/$defs/safeIdentifier"},
+          "uniqueItems": true
+        }
+      ]
+    },
+    "regimeSelector": {
+      "oneOf": [
+        {"const": "all"},
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {"enum": ["id", "ood", "mixed"]},
           "uniqueItems": true
         }
       ]

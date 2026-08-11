@@ -10,7 +10,7 @@ from .. import __version__
 from ..artifacts import ARTIFACT_POLICY, validate_prediction_records
 from ..baseline_api import load_baseline_bundle, load_baseline_plugin
 from ..datasets import load_dataset
-from ..domain import BaselineTaskInstance, TaskSpec
+from ..domain import BaselineTaskInstance, DatasetSnapshot, TaskSpec
 from ..evaluation import evaluate_task, load_evaluation_protocol
 from ..identifiers import require_safe_id
 from ..io import (
@@ -19,7 +19,17 @@ from ..io import (
     write_json,
     write_jsonl,
 )
-from ..tasks import load_task
+from ..tasks import load_task, plan_atomic_task
+
+
+def compile_task_instance(
+    plugin: Any,
+    dataset: DatasetSnapshot,
+    task: TaskSpec,
+) -> BaselineTaskInstance:
+    """Compile the one canonical plan selected by the Benchmark."""
+    canonical_plan = plan_atomic_task(task, dataset)
+    return plugin.task_builder.compile(dataset, task, canonical_plan)
 
 
 def build_task_instance(
@@ -34,7 +44,7 @@ def build_task_instance(
     task = load_task(task_path)
     baseline = load_baseline_bundle(baseline_path)
     plugin = load_baseline_plugin(baseline)
-    instance = plugin.task_builder.build(dataset, task)
+    instance = compile_task_instance(plugin, dataset, task)
     instance.verify()
     return instance
 
@@ -133,7 +143,9 @@ def run_atomic(
     if scene_ids is not None or groups is not None or case_ids is not None:
         value = copy.deepcopy(task.value)
         if scene_ids is not None:
-            value["selection"]["scene_ids"] = list(dict.fromkeys(scene_ids))
+            value["selection"]["evaluation_scene_ids"] = list(
+                dict.fromkeys(scene_ids)
+            )
         if groups is not None:
             if task.family != "direct_eval":
                 raise ValueError("--group is only valid for direct_eval")
@@ -145,7 +157,7 @@ def run_atomic(
         task = TaskSpec(task.path, value, canonical_sha256(value))
     baseline = load_baseline_bundle(baseline_path)
     plugin = load_baseline_plugin(baseline)
-    instance = plugin.task_builder.build(dataset, task)
+    instance = compile_task_instance(plugin, dataset, task)
     instance.verify()
     plan = instance.canonical_plan
 
@@ -330,6 +342,7 @@ def _paired_plan_signature(plan: dict[str, Any]) -> dict[str, Any]:
     return {
         "dataset_id": plan["dataset_id"],
         "dataset_digest": plan["dataset_digest"],
+        "training_scene_ids": plan["training_scene_ids"],
         "scene_ids": plan["scene_ids"],
         "train_case_ids": plan["train_case_ids"],
         "training_seed": plan["training_seed"],
@@ -367,7 +380,7 @@ def run_matrix(
         raise ValueError("task matrix contains duplicate Baseline identities")
     plugins = [load_baseline_plugin(baseline) for baseline in baselines]
     instances = [
-        plugin.task_builder.build(dataset, task)
+        compile_task_instance(plugin, dataset, task)
         for plugin in plugins
     ]
     plans = [instance.canonical_plan.value for instance in instances]

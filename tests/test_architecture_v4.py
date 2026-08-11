@@ -13,14 +13,15 @@ from physbench.datasets import load_dataset
 from physbench.datasets.physics import flat_physics_quantities
 from physbench.domain import TaskSpec
 from physbench.io import canonical_sha256, load_json, write_json
+from physbench.orchestration import compile_task_instance
 from physbench.tasks import load_task, plan_atomic_task
 
 
 DIRECT_TASK = (
-    ROOT / "tasks" / "official" / "five_scene_direct_eval.json"
+    ROOT / "tasks" / "official" / "five_scene_direct_eval_v1.json"
 )
 FINETUNE_TASK = (
-    ROOT / "tasks" / "official" / "five_scene_finetune_eval.json"
+    ROOT / "tasks" / "official" / "seven_scene_train_five_scene_eval_v1.json"
 )
 def _contains_key(value: object, target: str) -> bool:
     if isinstance(value, dict):
@@ -106,10 +107,10 @@ class ArchitectureV4Tests(unittest.TestCase):
     def test_same_task_has_same_plan_but_baseline_owned_adaptation(
         self,
     ) -> None:
-        generic = self.generic_plugin.task_builder.build(
+        generic = compile_task_instance(self.generic_plugin,
             self.dataset, self.task
         ).value
-        physics = self.physics_plugin.task_builder.build(
+        physics = compile_task_instance(self.physics_plugin,
             self.dataset, self.task
         ).value
 
@@ -214,7 +215,7 @@ class ArchitectureV4Tests(unittest.TestCase):
     def test_direct_eval_can_plan_explicit_cases(self) -> None:
         value = copy.deepcopy(self.task.value)
         selected = self.dataset.cases[0]["case_id"]
-        value["selection"]["scene_ids"] = [
+        value["selection"]["evaluation_scene_ids"] = [
             self.dataset.cases[0]["scene_id"]
         ]
         value["selection"]["case_ids"] = [selected]

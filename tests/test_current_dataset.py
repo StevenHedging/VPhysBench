@@ -10,8 +10,8 @@ from physbench.tasks import load_task, plan_atomic_task
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FINETUNE_TASK = ROOT / "tasks/official/five_scene_finetune_eval.json"
-DIRECT_TASK = ROOT / "tasks/official/five_scene_direct_eval.json"
+FINETUNE_TASK = ROOT / "tasks/official/seven_scene_train_five_scene_eval_v1.json"
+DIRECT_TASK = ROOT / "tasks/official/five_scene_direct_eval_v1.json"
 
 
 class CurrentDatasetTests(unittest.TestCase):
@@ -72,16 +72,20 @@ class CurrentDatasetTests(unittest.TestCase):
             )),
         )
 
-    def test_official_tasks_score_five_scenes_and_use_v13(self) -> None:
+    def test_official_v1_tasks_use_seven_train_and_five_eval_scenes(self) -> None:
         finetune_task = load_task(FINETUNE_TASK)
         direct_task = load_task(DIRECT_TASK)
-        self.assertEqual("five_scene_finetune_eval_v13", finetune_task.task_id)
-        self.assertEqual("five_scene_direct_eval_v13", direct_task.task_id)
+        self.assertEqual(
+            "seven_scene_train_five_scene_eval_v1",
+            finetune_task.task_id,
+        )
+        self.assertEqual("five_scene_direct_eval_v1", direct_task.task_id)
         finetune = plan_atomic_task(finetune_task, self.dataset).value
         direct = plan_atomic_task(direct_task, self.dataset).value
         self.assertEqual(5, len(finetune["scene_ids"]))
         self.assertEqual(5, len(direct["scene_ids"]))
-        self.assertEqual(582, len(finetune["train_case_ids"]))
+        self.assertEqual(7, len(finetune["training_scene_ids"]))
+        self.assertEqual(806, len(finetune["train_case_ids"]))
         self.assertEqual(76, len(finetune["jobs"]))
         self.assertEqual(658, len(direct["jobs"]))
         self.assertNotIn("push_bottle", direct["scene_ids"])

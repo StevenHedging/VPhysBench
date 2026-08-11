@@ -1,8 +1,0 @@
-{
-  "schema_version": "2.0",
-  "recipe_id": "abc_to_d_example",
-  "official": false,
-  "train_scenes": ["pendulum", "collision_1d", "inclined_plane_slide"],
-  "heldout_scenes": ["uniform_circular_motion"],
-  "note": "OOD2 is task-relative. Enable only after the held-out scene exists in the selected Dataset and the scientific transfer question is justified."
-}

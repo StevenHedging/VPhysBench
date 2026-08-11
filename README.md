@@ -1,18 +1,17 @@
 # VPhysBench
 
 VPhysBench 是面向物理视频生成模型的训练与评测框架。日期分支
-`2026-08-08` 是供协作者使用的干净近似发行版：它保留 Dataset、Task、Evaluator、
-通用 baseline 接口和 submission 导入能力，但不集成任何生成算法、模型配置或权重。
+`2026-08-11` 是干净发行版：它保留冻结的 Dataset、Task v1、Evaluation v1、
+通用 Baseline 接口和运行时，但不集成任何具体生成算法、已注册 Baseline、模型配置、
+权重或运行结果。
 
-Dataset 13.0.0 包含 916 个 case、7 个场景。其中 5 个场景进入正式计分 Task：
+Dataset 13.0.0 包含 916 个 case、7 个场景。Task v1 定义两个可复现工作负载：
 
-- `pendulum`
-- `collision_1d`
-- `inclined_plane_slide`
-- `uniform_circular_motion`
-- `parabolic_motion`
+- `five_scene_direct_eval_v1`：直接评估五个计分场景的全部 658 个 case；
+- `seven_scene_train_five_scene_eval_v1`：使用七场景 806 个训练 case，随后在五个
+  计分场景的 76 个留出 case 上评估。
 
-`push_bottle` 和 `vertical_spring_oscillator` 是 preview/data-only 场景，不进入正式总分。
+两个 Task 都绑定唯一公开协议 `scene_default_v1`。
 
 ## 快速开始
 
@@ -39,13 +38,15 @@ physbench baseline init my_model --backend managed-i2v
 physbench baseline validate my_model
 ```
 
-脚手架位于 `baselines/my_model/`。把其中的通用命令替换为自己的推理入口后，先运行
-一个 case：
+Baseline 可以在自己的目录内实现训练和推理脚本，但不能重写官方 Task 的数据选择、
+种子或评分协议。基准先冻结 canonical plan，随后 Baseline 只负责适配、编译和执行。
+
+先运行一个 case：
 
 ```bash
 physbench atomic-run \
   --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval.json \
+  --task tasks/official/five_scene_direct_eval_v1.json \
   --baseline baselines/my_model \
   --case-id circular_r1_silver02cm_img_0370 \
   --run-id my_model_smoke \
@@ -53,32 +54,32 @@ physbench atomic-run \
   --execute
 ```
 
-所有预测、日志和评测结果都属于 `run/<run_id>/`；生成视频位于
-`run/<run_id>/predictions/`。不要把运行结果写入 Dataset。
+所有预测、日志和评测结果都属于 `run/<run_id>/`；不要把运行结果写入 Dataset。
 
 ## 仓库边界
 
 ```text
 datasets/          Dataset 元数据与固定 Hugging Face 绑定
-tasks/official/    模型无关的正式 Task
-baselines/         用户算法接入目录；初始只有 README
-configs/           场景与评测协议
-schemas/           Dataset、Task、Baseline 和 Run 契约
-src/physbench/     CLI、运行时和 evaluator
-examples/          未注册的协议夹具
+tasks/official/    两个模型无关的 Task v1
+baselines/         用户接入目录；发行版初始只有 README
+configs/           唯一公开 Evaluation v1 与场景配置
+schemas/           Dataset、Task、Baseline、Evaluation 和 Run 契约
+src/physbench/     规划、通用运行时与 evaluator
+examples/          非 Baseline 的接口测试夹具
 tests/             CPU 元数据、接口和 evaluator 回归
-run/               唯一运行输出根；初始只有 README
+run/               唯一运行输出根；发行版初始只有 README
 ```
 
 ## 文档
 
+- [架构与解耦边界](docs/ARCHITECTURE.md)
+- [Task v1](docs/TASKS.md)
+- [Benchmark 协议](docs/BENCHMARK_PROTOCOL.md)
+- [Evaluation v1](docs/EVALUATION.md)
 - [安装与首个运行](docs/GETTING_STARTED.md)
 - [接入自定义 I2V/V2V 算法](docs/CUSTOM_BASELINE_QUICKSTART.md)
 - [导入已有预测视频](docs/SUBMISSION_QUICKSTART.md)
-- [Benchmark 协议](docs/BENCHMARK_PROTOCOL.md)
 - [Run 目录契约](docs/RUN_LAYOUT.md)
 - [复现实验](docs/REPRODUCIBILITY.md)
-- [完整 baseline 接口](docs/BASELINE_INTEGRATION.md)
-- [Evaluator 细节](docs/EVALUATION.md)
 
-`examples/dummy_i2v_command.py` 只验证命令和视频协议，不是参考算法，其分数没有研究意义。
+`examples/dummy_i2v_command.py` 只验证外部命令和视频协议，不是参考算法。

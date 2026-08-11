@@ -1,0 +1,99 @@
+from __future__ import annotations
+
+import json
+import unittest
+
+from _paths import ROOT
+from physbench.evaluation import load_evaluation_protocol
+from physbench.evaluation.registry import SceneEvaluatorRegistry
+from physbench.evaluation.scenes.circular_motion.v7_evaluator import (
+    CircularMotionOpenWorldCaseEvaluatorV7,
+)
+from physbench.evaluation.scenes.collision.v6_evaluator import (
+    CollisionFailClosedCaseEvaluator,
+)
+from physbench.evaluation.scenes.inclined_plane.v7_evaluator import (
+    InclinedPlaneOpenWorldCaseEvaluatorV7,
+)
+from physbench.evaluation.scenes.parabolic_motion.v2_evaluator import (
+    ParabolicMotionCaseEvaluatorV2,
+)
+from physbench.evaluation.scenes.pendulum.v8_evaluator import (
+    PendulumOpenWorldCaseEvaluatorV8,
+)
+
+
+class EvaluationProtocolV1Tests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.protocol = load_evaluation_protocol("scene_default_v1")
+
+    def test_v1_routes_each_scene_to_the_latest_implementation(self) -> None:
+        expected = {
+            "pendulum": PendulumOpenWorldCaseEvaluatorV8,
+            "collision_1d": CollisionFailClosedCaseEvaluator,
+            "inclined_plane_slide": InclinedPlaneOpenWorldCaseEvaluatorV7,
+            "uniform_circular_motion": CircularMotionOpenWorldCaseEvaluatorV7,
+            "parabolic_motion": ParabolicMotionCaseEvaluatorV2,
+        }
+        registry = SceneEvaluatorRegistry(self.protocol)
+        for scene_id, evaluator_class in expected.items():
+            with self.subTest(scene_id=scene_id):
+                evaluator = registry.resolve(scene_id)
+                self.assertIsInstance(evaluator, evaluator_class)
+                self.assertEqual("1.0", evaluator.evaluator_version)
+
+    def test_v1_keeps_the_latest_fail_closed_scoring_contract(self) -> None:
+        self.assertEqual(
+            "exact_full_tube_edt",
+            self.protocol["general_metrics"]["csti"]["algorithm"],
+        )
+        self.assertEqual(
+            "frozen_dataset_subject_identity",
+            self.protocol["scenes"]["pendulum"][
+                "reference_observation_policy"
+            ],
+        )
+        self.assertEqual(
+            "fail_closed_v1",
+            self.protocol["scenes"]["collision_1d"]["subject_identity"][
+                "failure_policy"
+            ],
+        )
+        self.assertEqual(
+            "strict_multiplicative_v2",
+            self.protocol["scenes"]["parabolic_motion"]["scoring"][
+                "composition"
+            ],
+        )
+
+    def test_unversioned_schema_declares_only_public_v1_types(self) -> None:
+        schema = json.loads(
+            (ROOT / "schemas/evaluation_protocol.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        definitions = schema["$defs"]
+        self.assertEqual(
+            {
+                "pendulum_v1",
+                "collision_1d_v1",
+                "inclined_plane_slide_v1",
+                "uniform_circular_motion_v1",
+                "parabolic_motion_v1",
+            },
+            {
+                definitions[name]["allOf"][1]["properties"]["type"]["const"]
+                for name in (
+                    "pendulum",
+                    "collision",
+                    "inclinedPlane",
+                    "circularMotion",
+                    "parabolicMotion",
+                )
+            },
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

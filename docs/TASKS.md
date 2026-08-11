@@ -1,38 +1,70 @@
-# Tasks
+# Task v1
 
-Tasks are model-agnostic experiment specifications. They own the family,
-Dataset view, selected scenes/cases, training and inference seeds, evaluation
-protocol and reporting policy. They never select a baseline conditioning mode.
+Task 是模型无关、可冻结的工作负载声明。发行版只接受 `schema_version: "1.0"`，规范位于
+`schemas/task.schema.json`。
 
-The near-release provides two official Task files:
+## 官方任务
 
-- `tasks/official/five_scene_direct_eval.json`
-- `tasks/official/five_scene_finetune_eval.json`
+- `tasks/official/five_scene_direct_eval_v1.json`
+  - Task ID：`five_scene_direct_eval_v1`
+  - 训练：无
+  - 评估：五场景全部 658 个 case
+- `tasks/official/seven_scene_train_five_scene_eval_v1.json`
+  - Task ID：`seven_scene_train_five_scene_eval_v1`
+  - 训练：七场景 806 个 View A train case
+  - 评估：五场景 76 个 View A ID test case
 
-Both target Dataset 13.0.0 and protocol `scene_default_v10`. Both select the
-same five scored scenes. The two preview scenes are intentionally absent.
+二者都绑定 Dataset `physics_video_seven_scene_v13`、推理种子 42 和协议
+`scene_default_v1`。
 
-Compile a Task for one baseline without running it:
+## 字段
+
+所有 Task 都包含：
+
+- `task_id`、`family`、`dataset_id`；
+- `selection`：只声明数据选择，不声明模型输入或训练实现；
+- `seeds.training` 与 `seeds.inference`；
+- `evaluation.protocol` 与 `evaluation.reporting`。
+
+`direct_eval` 的 selection 使用 `evaluation_scene_ids`、`groups` 和可选 `case_ids`。
+`finetune_eval` 使用彼此独立的 `training_scene_ids`、`evaluation_scene_ids` 与
+`test_regimes`。Dataset view 由 family 唯一推导，因此 v1 不再重复保存
+`dataset_view`。
+
+Task 禁止模型名称、checkpoint、prompt 改写、物理量注入方式、runner 命令和训练超参。
+这些均属于 Baseline bundle 与 DataAdapter。
+
+## 编译与覆盖
+
+planner 先将 Task 展开为 canonical plan。计划中的 `training_scene_ids` 和
+`train_case_ids` 描述训练侧；`scene_ids` 和 `jobs` 描述评估侧。每个 job 固定
+`case_id`、`scene_id`、partition 和 inference seed。
+
+Baseline 内可以编写并注册它自己的训练/推理脚本，但只能消费 canonical plan。通用编排
+层调用 `TaskBuilder.compile(dataset, task, canonical_plan)`；Baseline 编译器没有重新规划
+Task 的入口。
+
+只编译而不运行：
 
 ```bash
 physbench task-build \
   --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval.json \
+  --task tasks/official/five_scene_direct_eval_v1.json \
   --baseline baselines/my_model \
   --output task_instance.json
 ```
 
-Run the same Task over multiple user baselines:
+对多个 Baseline 运行同一 Task：
 
 ```bash
 physbench matrix-run \
   --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval.json \
+  --task tasks/official/five_scene_direct_eval_v1.json \
   --baseline baselines/model_a \
   --baseline baselines/model_b \
   --matrix-id comparison \
   --output-root run
 ```
 
-Each matrix element remains an independent AtomicRun with its own frozen
-baseline identity. A planned dry run is not a completed benchmark result.
+矩阵会比较 canonical plan 签名；训练场景、训练 case、评估场景、jobs 或种子不同都会
+拒绝配对。计划或 dry run 不是已完成的 benchmark 结果。

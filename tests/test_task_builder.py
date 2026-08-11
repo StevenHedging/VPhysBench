@@ -12,15 +12,18 @@ from physbench.datasets import load_dataset
 from physbench.datasets.physics import flat_physics_quantities
 from physbench.domain import BaselineTaskInstance
 from physbench.io import load_json, load_jsonl
-from physbench.orchestration.atomic_runner import run_atomic
+from physbench.orchestration.atomic_runner import (
+    compile_task_instance,
+    run_atomic,
+)
 from physbench.tasks import load_task
 
 
 DIRECT_TASK = (
-    ROOT / "tasks" / "official" / "five_scene_direct_eval.json"
+    ROOT / "tasks" / "official" / "five_scene_direct_eval_v1.json"
 )
 FINETUNE_TASK = (
-    ROOT / "tasks" / "official" / "five_scene_finetune_eval.json"
+    ROOT / "tasks" / "official" / "seven_scene_train_five_scene_eval_v1.json"
 )
 def _contains_key(value: object, target: str) -> bool:
     if isinstance(value, dict):
@@ -51,10 +54,10 @@ class TaskBuilderContractTests(unittest.TestCase):
 
     def test_builder_is_deterministic_and_instance_is_sealed(self) -> None:
         task = load_task(FINETUNE_TASK)
-        first = self.generic_plugin.task_builder.build(
+        first = compile_task_instance(self.generic_plugin,
             self.dataset, task
         )
-        second = self.generic_plugin.task_builder.build(
+        second = compile_task_instance(self.generic_plugin,
             self.dataset, task
         )
         self.assertEqual(first.digest, second.digest)
@@ -70,7 +73,7 @@ class TaskBuilderContractTests(unittest.TestCase):
         self,
     ) -> None:
         task = load_task(DIRECT_TASK)
-        instance = self.generic_plugin.task_builder.build(
+        instance = compile_task_instance(self.generic_plugin,
             self.dataset, task
         ).value
         self.assertFalse(_contains_key(task.value, "conditioning"))
@@ -91,7 +94,7 @@ class TaskBuilderContractTests(unittest.TestCase):
         self,
     ) -> None:
         task = load_task(FINETUNE_TASK)
-        instance = self.generic_plugin.task_builder.build(
+        instance = compile_task_instance(self.generic_plugin,
             self.dataset, task
         ).value
         self.assertIsNotNone(instance["training"])
@@ -117,7 +120,7 @@ class TaskBuilderContractTests(unittest.TestCase):
 
     def test_direct_eval_instance_has_no_training_operation(self) -> None:
         task = load_task(DIRECT_TASK)
-        instance = self.generic_plugin.task_builder.build(
+        instance = compile_task_instance(self.generic_plugin,
             self.dataset, task
         ).value
         self.assertIsNone(instance["training"])
@@ -135,10 +138,10 @@ class TaskBuilderContractTests(unittest.TestCase):
         self,
     ) -> None:
         task = load_task(FINETUNE_TASK)
-        generic = self.generic_plugin.task_builder.build(
+        generic = compile_task_instance(self.generic_plugin,
             self.dataset, task
         )
-        physics = self.physics_plugin.task_builder.build(
+        physics = compile_task_instance(self.physics_plugin,
             self.dataset, task
         )
         generic_value = generic.value
@@ -176,7 +179,7 @@ class TaskBuilderContractTests(unittest.TestCase):
         self,
     ) -> None:
         task = load_task(DIRECT_TASK)
-        instance = self.physics_plugin.task_builder.build(
+        instance = compile_task_instance(self.physics_plugin,
             self.dataset, task
         ).value
         source = instance["source"]["cases"][0]

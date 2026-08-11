@@ -1,11 +1,20 @@
 {
-  "schema_version": "4.0",
-  "task_id": "five_scene_finetune_eval_v13_csti",
+  "$schema": "../../schemas/task.schema.json",
+  "schema_version": "1.0",
+  "task_id": "seven_scene_train_five_scene_eval_v1",
   "family": "finetune_eval",
   "dataset_id": "physics_video_seven_scene_v13",
-  "dataset_view": "view_a",
   "selection": {
-    "scene_ids": [
+    "training_scene_ids": [
+      "pendulum",
+      "collision_1d",
+      "inclined_plane_slide",
+      "uniform_circular_motion",
+      "parabolic_motion",
+      "push_bottle",
+      "vertical_spring_oscillator"
+    ],
+    "evaluation_scene_ids": [
       "pendulum",
       "collision_1d",
       "inclined_plane_slide",
@@ -19,7 +28,7 @@
     "inference": [42]
   },
   "evaluation": {
-    "protocol": "scene_default_v11",
+    "protocol": "scene_default_v1",
     "reporting": {
       "primary_score": "overall_test",
       "breakdowns": [],

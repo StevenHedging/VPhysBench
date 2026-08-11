@@ -459,6 +459,9 @@ def _validate_native_evaluation(
         **aggregate_task_results(
             plan=plan,
             case_results=case_results,
+            include_degraded_diagnostics=bool(
+                native_protocol.get("robustness")
+            ),
             general_metrics=native_protocol.get("general_metrics"),
         ),
     }
@@ -731,8 +734,7 @@ def _git_metadata(project_root: Path) -> dict[str, Any]:
                 "src/physbench/evaluation",
                 "src/physbench/orchestration/evaluation_variants.py",
                 "configs/evaluation/protocols",
-                "schemas/v2/evaluation_protocol.schema.json",
-                "schemas/v3/evaluation_protocol.schema.json",
+                "schemas/evaluation_protocol.schema.json",
             ],
             check=True,
             capture_output=True,
@@ -764,14 +766,7 @@ def _evaluator_source_manifest(project_root: Path) -> dict[str, Any]:
         / "physbench"
         / "orchestration"
         / "evaluation_variants.py",
-        project_root
-        / "schemas"
-        / "v2"
-        / "evaluation_protocol.schema.json",
-        project_root
-        / "schemas"
-        / "v3"
-        / "evaluation_protocol.schema.json",
+        project_root / "schemas" / "evaluation_protocol.schema.json",
     ])
     records = [
         {

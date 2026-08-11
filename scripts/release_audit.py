@@ -27,6 +27,13 @@ FORBIDDEN_MODEL_MARKERS = {
     "symbol_value_cross_attention",
 }
 LOCAL_ONLY_NAMES = {"baseline.local.json"}
+OFFICIAL_TASKS = {
+    "tasks/official/five_scene_direct_eval_v1.json",
+    "tasks/official/seven_scene_train_five_scene_eval_v1.json",
+}
+PUBLIC_PROTOCOLS = {
+    "configs/evaluation/protocols/scene_default_v1.json",
+}
 CONTENT_POLICY_FILES = {
     "scripts/release_audit.py",
     "tests/test_release_audit.py",
@@ -70,6 +77,33 @@ def audit_release(
         set(tracked_files if tracked_files is not None else _git_tracked_files(repository))
     )
     issues: list[str] = []
+    existing = {
+        relative
+        for relative in tracked
+        if (repository / relative).is_file()
+    }
+    if "RELEASE_MANIFEST.json" in existing:
+        observed_tasks = {
+            relative
+            for relative in existing
+            if relative.startswith("tasks/") and relative.endswith(".json")
+        }
+        if observed_tasks != OFFICIAL_TASKS:
+            issues.append(
+                "release Task inventory mismatch: "
+                f"{sorted(observed_tasks)}"
+            )
+        observed_protocols = {
+            relative
+            for relative in existing
+            if relative.startswith("configs/evaluation/protocols/")
+            and relative.endswith(".json")
+        }
+        if observed_protocols != PUBLIC_PROTOCOLS:
+            issues.append(
+                "release evaluation protocol inventory mismatch: "
+                f"{sorted(observed_protocols)}"
+            )
     for relative in tracked:
         normalized = Path(relative).as_posix()
         parts = Path(normalized).parts

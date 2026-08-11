@@ -350,7 +350,10 @@ class CollisionV6IdentityTests(unittest.TestCase):
         )
 
     def test_real_img1073_ignores_static_frozen_mask_locations(self) -> None:
-        dataset = load_dataset(LATEST_DATASET, check_assets=True)
+        try:
+            dataset = load_dataset(LATEST_DATASET, check_assets=True)
+        except FileNotFoundError:
+            self.skipTest("full collision media assets are not published")
         catalog = {case["case_id"]: case for case in dataset.cases}
         case_id = (
             "collision_supp_20260729_img_1073_"

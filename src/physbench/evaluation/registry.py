@@ -8,27 +8,11 @@ from .scenes.unsupported import UnsupportedSceneEvaluator
 
 SUPPORTED_EVALUATOR_TYPES = frozenset(
     {
-        "pendulum_state_v1",
-        "pendulum_state_v2",
-        "pendulum_state_v3",
-        "pendulum_state_v6",
-        "pendulum_state_v7",
-        "pendulum_state_v8",
-        "inclined_plane_state_v1",
-        "inclined_plane_state_v2",
-        "inclined_plane_state_v6",
-        "inclined_plane_state_v7",
-        "uniform_circular_motion_state_v1",
-        "uniform_circular_motion_state_v2",
-        "uniform_circular_motion_state_v6",
-        "uniform_circular_motion_state_v7",
-        "collision_1d_state_v1",
-        "collision_1d_state_v2",
-        "collision_1d_state_v3",
-        "collision_1d_state_v5",
-        "collision_1d_state_v6",
-        "parabolic_motion_state_v1",
-        "parabolic_motion_state_v2",
+        "pendulum_v1",
+        "collision_1d_v1",
+        "inclined_plane_slide_v1",
+        "uniform_circular_motion_v1",
+        "parabolic_motion_v1",
         "unsupported",
     }
 )
@@ -57,101 +41,33 @@ class SceneEvaluatorRegistry:
         if "general_metrics" in self.protocol:
             config["general_metrics"] = self.protocol["general_metrics"]
         evaluator_type = config.get("type", "unsupported")
-        if evaluator_type in {
-            "pendulum_state_v1",
-            "pendulum_state_v2",
-            "pendulum_state_v3",
-        }:
-            from .scenes.pendulum.evaluator import PendulumCaseEvaluator
-
-            evaluator: SceneCaseEvaluator = PendulumCaseEvaluator(config)
-        elif evaluator_type == "pendulum_state_v6":
-            from .scenes.pendulum.v6_evaluator import (
-                PendulumOpenWorldCaseEvaluator,
-            )
-
-            evaluator = PendulumOpenWorldCaseEvaluator(config)
-        elif evaluator_type == "pendulum_state_v7":
-            from .scenes.pendulum.v7_evaluator import (
-                PendulumOpenWorldCaseEvaluatorV7,
-            )
-
-            evaluator = PendulumOpenWorldCaseEvaluatorV7(config)
-        elif evaluator_type == "pendulum_state_v8":
+        if evaluator_type == "pendulum_v1":
             from .scenes.pendulum.v8_evaluator import (
                 PendulumOpenWorldCaseEvaluatorV8,
             )
 
-            evaluator = PendulumOpenWorldCaseEvaluatorV8(config)
-        elif evaluator_type in {
-            "inclined_plane_state_v1",
-            "inclined_plane_state_v2",
-        }:
-            from .scenes.inclined_plane.evaluator import (
-                InclinedPlaneCaseEvaluator,
+            evaluator: SceneCaseEvaluator = PendulumOpenWorldCaseEvaluatorV8(
+                config
             )
-
-            evaluator = InclinedPlaneCaseEvaluator(config)
-        elif evaluator_type == "inclined_plane_state_v6":
-            from .scenes.inclined_plane.v6_evaluator import (
-                InclinedPlaneOpenWorldCaseEvaluator,
-            )
-
-            evaluator = InclinedPlaneOpenWorldCaseEvaluator(config)
-        elif evaluator_type == "inclined_plane_state_v7":
+        elif evaluator_type == "inclined_plane_slide_v1":
             from .scenes.inclined_plane.v7_evaluator import (
                 InclinedPlaneOpenWorldCaseEvaluatorV7,
             )
 
             evaluator = InclinedPlaneOpenWorldCaseEvaluatorV7(config)
-        elif evaluator_type in {
-            "uniform_circular_motion_state_v1",
-            "uniform_circular_motion_state_v2",
-        }:
-            from .scenes.circular_motion.evaluator import (
-                CircularMotionCaseEvaluator,
-            )
-
-            evaluator = CircularMotionCaseEvaluator(config)
-        elif evaluator_type == "uniform_circular_motion_state_v6":
-            from .scenes.circular_motion.v6_evaluator import (
-                CircularMotionOpenWorldCaseEvaluator,
-            )
-
-            evaluator = CircularMotionOpenWorldCaseEvaluator(config)
-        elif evaluator_type == "uniform_circular_motion_state_v7":
+        elif evaluator_type == "uniform_circular_motion_v1":
             from .scenes.circular_motion.v7_evaluator import (
                 CircularMotionOpenWorldCaseEvaluatorV7,
             )
 
             evaluator = CircularMotionOpenWorldCaseEvaluatorV7(config)
-        elif evaluator_type in {
-            "collision_1d_state_v1",
-            "collision_1d_state_v2",
-            "collision_1d_state_v3",
-        }:
-            from .scenes.collision.evaluator import CollisionCaseEvaluator
-
-            evaluator = CollisionCaseEvaluator(config)
-        elif evaluator_type == "collision_1d_state_v5":
-            from .scenes.collision.v5_evaluator import (
-                CollisionOpenWorldCaseEvaluator,
-            )
-
-            evaluator = CollisionOpenWorldCaseEvaluator(config)
-        elif evaluator_type == "collision_1d_state_v6":
+        elif evaluator_type == "collision_1d_v1":
             from .scenes.collision.v6_evaluator import (
                 CollisionFailClosedCaseEvaluator,
             )
 
             evaluator = CollisionFailClosedCaseEvaluator(config)
-        elif evaluator_type == "parabolic_motion_state_v1":
-            from .scenes.parabolic_motion.evaluator import (
-                ParabolicMotionCaseEvaluator,
-            )
-
-            evaluator = ParabolicMotionCaseEvaluator(config)
-        elif evaluator_type == "parabolic_motion_state_v2":
+        elif evaluator_type == "parabolic_motion_v1":
             from .scenes.parabolic_motion.v2_evaluator import (
                 ParabolicMotionCaseEvaluatorV2,
             )

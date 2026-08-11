@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vphysbench.org/schemas/evaluation_protocol.schema.json",
+  "title": "VPhysBench Evaluation Protocol v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "protocol_id",
+    "description",
+    "robustness",
+    "general_metrics",
+    "scenes"
+  ],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schema_version": {"const": "1.0"},
+    "protocol_id": {"const": "scene_default_v1"},
+    "description": {"type": "string", "minLength": 1},
+    "robustness": {
+      "type": "object",
+      "required": [
+        "prediction_record_failure_policy",
+        "prediction_media_failure_policy",
+        "prediction_observation_failure_policy",
+        "reference_failure_policy",
+        "internal_failure_policy"
+      ],
+      "properties": {
+        "prediction_record_failure_policy": {"const": "evaluated_zero"},
+        "prediction_media_failure_policy": {"const": "evaluated_zero"},
+        "prediction_observation_failure_policy": {"const": "evaluated_zero"},
+        "reference_failure_policy": {"const": "unavailable"},
+        "internal_failure_policy": {"const": "error"}
+      },
+      "additionalProperties": false
+    },
+    "general_metrics": {
+      "type": "object",
+      "required": ["csti"],
+      "properties": {
+        "csti": {
+          "type": "object",
+          "required": [
+            "enabled",
+            "algorithm",
+            "spatial_tolerance_fraction",
+            "temporal_tolerance_s",
+            "condition_frame_policy",
+            "initial_frames_excluded",
+            "score_aggregation",
+            "diagnostic_prefix_fractions",
+            "case_aggregation",
+            "timeline_policy",
+            "mask_resolution"
+          ],
+          "properties": {
+            "enabled": {"const": true},
+            "algorithm": {"const": "exact_full_tube_edt"},
+            "spatial_tolerance_fraction": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "temporal_tolerance_s": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "condition_frame_policy": {"const": "exclude_initial_samples"},
+            "initial_frames_excluded": {"type": "integer", "minimum": 1},
+            "score_aggregation": {"const": "full_tube"},
+            "diagnostic_prefix_fractions": {
+              "const": [0.25, 0.5, 0.75, 1]
+            },
+            "case_aggregation": {"const": "mean_gt_entities"},
+            "timeline_policy": {"const": "physical_overlap"},
+            "mask_resolution": {"const": "scene_analysis_native"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "scenes": {
+      "type": "object",
+      "required": [
+        "pendulum",
+        "collision_1d",
+        "inclined_plane_slide",
+        "uniform_circular_motion",
+        "parabolic_motion"
+      ],
+      "properties": {
+        "pendulum": {
+          "$ref": "#/$defs/pendulum"
+        },
+        "collision_1d": {
+          "$ref": "#/$defs/collision"
+        },
+        "inclined_plane_slide": {
+          "$ref": "#/$defs/inclinedPlane"
+        },
+        "uniform_circular_motion": {
+          "$ref": "#/$defs/circularMotion"
+        },
+        "parabolic_motion": {
+          "$ref": "#/$defs/parabolicMotion"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sceneBase": {
+      "type": "object",
+      "required": ["type", "timeline", "spatial", "scoring"]
+    },
+    "pendulum": {
+      "allOf": [
+        {"$ref": "#/$defs/sceneBase"},
+        {
+          "properties": {"type": {"const": "pendulum_v1"}}
+        }
+      ]
+    },
+    "collision": {
+      "allOf": [
+        {"$ref": "#/$defs/sceneBase"},
+        {
+          "properties": {"type": {"const": "collision_1d_v1"}}
+        }
+      ]
+    },
+    "inclinedPlane": {
+      "allOf": [
+        {"$ref": "#/$defs/sceneBase"},
+        {
+          "properties": {
+            "type": {"const": "inclined_plane_slide_v1"}
+          }
+        }
+      ]
+    },
+    "circularMotion": {
+      "allOf": [
+        {"$ref": "#/$defs/sceneBase"},
+        {
+          "properties": {
+            "type": {"const": "uniform_circular_motion_v1"}
+          }
+        }
+      ]
+    },
+    "parabolicMotion": {
+      "allOf": [
+        {"$ref": "#/$defs/sceneBase"},
+        {
+          "properties": {"type": {"const": "parabolic_motion_v1"}}
+        }
+      ]
+    }
+  }
+}

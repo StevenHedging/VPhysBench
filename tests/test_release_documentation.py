@@ -79,7 +79,16 @@ class ReleaseDocumentationTests(unittest.TestCase):
     def test_release_manifest_matches_dataset_binding(self) -> None:
         release = json.loads((ROOT / "RELEASE_MANIFEST.json").read_text())
         binding = json.loads((ROOT / "datasets" / "huggingface.json").read_text())
-        self.assertEqual("2026-08-08", release["branch"])
+        self.assertEqual("2026-08-11", release["branch"])
+        self.assertEqual("1.0", release["task_schema"])
+        self.assertEqual("scene_default_v1", release["evaluation_protocol"])
+        self.assertEqual(
+            [
+                "tasks/official/five_scene_direct_eval_v1.json",
+                "tasks/official/seven_scene_train_five_scene_eval_v1.json",
+            ],
+            release["official_tasks"],
+        )
         self.assertEqual(binding["repo_id"], release["dataset"]["repo_id"])
         self.assertEqual(binding["revision"], release["dataset"]["revision"])
         self.assertEqual(5, len(release["scored_scenes"]))

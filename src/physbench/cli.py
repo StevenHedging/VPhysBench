@@ -15,12 +15,6 @@ from .baseline_api import (
 from .io import load_json, load_jsonl, write_json
 from .datasets import load_dataset
 from .dataset_hub import diagnose_project, diagnostics_succeeded, pull_dataset
-from .orchestration import (
-    build_task_instance,
-    reevaluate_atomic_variant,
-    run_atomic,
-    run_matrix,
-)
 from .runner import reevaluate_run
 from .splitters import build_view_a, build_view_b
 from .validation import errors, load_scene_configs, validate_cases
@@ -64,6 +58,8 @@ def _split(args: argparse.Namespace) -> int:
 
 
 def _evaluate(args: argparse.Namespace) -> int:
+    from .orchestration import reevaluate_atomic_variant
+
     directory = Path(args.run_dir).resolve(strict=True)
     if not directory.is_dir():
         raise ValueError(f"run directory is not a directory: {directory}")
@@ -153,6 +149,8 @@ def _doctor(args: argparse.Namespace) -> int:
 
 
 def _atomic_run(args: argparse.Namespace) -> int:
+    from .orchestration import run_atomic
+
     directory = run_atomic(
         dataset_path=args.dataset,
         task_path=args.task,
@@ -171,6 +169,8 @@ def _atomic_run(args: argparse.Namespace) -> int:
 
 
 def _task_build(args: argparse.Namespace) -> int:
+    from .orchestration import build_task_instance
+
     instance = build_task_instance(
         dataset_path=args.dataset,
         task_path=args.task,
@@ -186,6 +186,8 @@ def _task_build(args: argparse.Namespace) -> int:
 
 
 def _matrix_run(args: argparse.Namespace) -> int:
+    from .orchestration import run_matrix
+
     directories = run_matrix(
         dataset_path=args.dataset,
         task_path=args.task,

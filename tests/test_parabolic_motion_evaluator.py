@@ -281,7 +281,7 @@ class ParabolicMotionEvaluatorTests(unittest.TestCase):
         self.assertIsNone(observation.diagnostics["identity_termination_frame"])
 
     def test_identical_projectile_analysis_exposes_unit_csti(self) -> None:
-        protocol = load_evaluation_protocol("scene_default_v10")
+        protocol = load_evaluation_protocol("scene_default_v1")
         config = copy.deepcopy(protocol["scenes"]["parabolic_motion"])
         config["general_metrics"] = {"csti": _CSTI_MAPPING}
         evaluator = ParabolicMotionCaseEvaluator(config)
@@ -351,7 +351,7 @@ class ParabolicMotionEvaluatorTests(unittest.TestCase):
         )
 
     def test_rejected_projectile_binding_is_csti_unmatched_zero(self) -> None:
-        protocol = load_evaluation_protocol("scene_default_v10")
+        protocol = load_evaluation_protocol("scene_default_v1")
         config = copy.deepcopy(protocol["scenes"]["parabolic_motion"])
         config["general_metrics"] = {"csti": _CSTI_MAPPING}
         evaluator = ParabolicMotionCaseEvaluator(config)
@@ -552,7 +552,7 @@ class ParabolicMotionEvaluatorTests(unittest.TestCase):
         self.assertLess(score["score"], 1.0)
 
     def test_missing_prediction_record_is_fail_closed_evaluated_zero(self) -> None:
-        protocol = load_evaluation_protocol("scene_default_v8")
+        protocol = load_evaluation_protocol("scene_default_v1")
         evaluator = SceneEvaluatorRegistry(protocol).resolve(
             "parabolic_motion"
         )
@@ -594,14 +594,14 @@ class ParabolicMotionEvaluatorTests(unittest.TestCase):
         self.assertEqual("prediction_record_missing", result.reason_code)
 
     def test_protocol_registry_routes_parabolic_scene(self) -> None:
-        protocol = load_evaluation_protocol("scene_default_v8")
+        protocol = load_evaluation_protocol("scene_default_v1")
         evaluator = SceneEvaluatorRegistry(protocol).resolve(
             "parabolic_motion"
         )
         self.assertEqual("parabolic_motion", evaluator.scene_id)
-        self.assertEqual("parabolic_motion_state", evaluator.evaluator_id)
+        self.assertEqual("parabolic_motion_fail_closed", evaluator.evaluator_id)
         self.assertIn(
-            "parabolic_motion_state_v1",
+            "parabolic_motion_v1",
             SceneEvaluatorRegistry.supported_evaluator_types(),
         )
 

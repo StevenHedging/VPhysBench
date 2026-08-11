@@ -37,9 +37,14 @@
     },
     "semantics": {
       "type": "object",
-      "required": ["family", "scene_ids"],
+      "required": ["family", "training_scene_ids", "scene_ids"],
       "properties": {
         "family": {"enum": ["finetune_eval", "direct_eval"]},
+        "training_scene_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
         "scene_ids": {
           "type": "array",
           "items": {"type": "string", "minLength": 1},

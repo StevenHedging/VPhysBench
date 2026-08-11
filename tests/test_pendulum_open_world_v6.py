@@ -111,6 +111,11 @@ class PendulumOpenWorldV6Tests(unittest.TestCase):
                 0.01 / 0.155,
             ),
         }
+        if any(
+            not list((root / case_id / "canonical").glob("first_frame.*"))
+            for case_id in expected
+        ):
+            self.skipTest("full pendulum media assets are not published")
         for case_id, (target, ratio) in expected.items():
             with self.subTest(case_id=case_id):
                 candidates = list(
