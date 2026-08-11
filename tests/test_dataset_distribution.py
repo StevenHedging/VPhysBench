@@ -20,6 +20,7 @@ from physbench.dataset_distribution import (
 )
 from physbench.datasets import load_dataset
 from physbench.io import canonical_sha256
+from scripts import build_dataset_distribution as distribution_builder
 
 
 DATASET_ID = "physics_video_seven_scene_v13"
@@ -1080,6 +1081,130 @@ class DatasetDistributionBuilderTests(unittest.TestCase):
 
             self.assertNotEqual(0, result.returncode)
             self.assertIn("symlink", result.stderr)
+
+    def test_uses_the_validated_case_snapshot_if_the_index_is_replaced(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self.make_dataset(root / "source")
+            real_load_dataset = distribution_builder.load_dataset
+
+            def load_then_replace(*args, **kwargs):
+                snapshot = real_load_dataset(*args, **kwargs)
+                indexed_case = json.loads(
+                    (snapshot.root / "cases.jsonl").read_text(encoding="utf-8")
+                )
+                indexed_case["assets"] = {
+                    key: "assets/unreferenced.bin"
+                    for key in indexed_case["assets"]
+                }
+                (snapshot.root / "cases.jsonl").write_text(
+                    json.dumps(indexed_case) + "\n",
+                    encoding="utf-8",
+                )
+                return snapshot
+
+            with patch.object(
+                distribution_builder,
+                "load_dataset",
+                side_effect=load_then_replace,
+            ):
+                manifest_path = distribution_builder.build_distribution(
+                    descriptor,
+                    output_root=root / "output",
+                    max_shard_bytes=300,
+                )
+
+            value = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                [
+                    "assets/00-caption.json",
+                    "assets/01-frame.bin",
+                    "assets/02-mask.bin",
+                    "assets/03-physics.json",
+                ],
+                [record["path"] for record in value["files"]],
+            )
+
+    def test_rejects_source_path_replacement_after_inventory(self) -> None:
+        for mutation in ("parent-symlink", "leaf-replacement"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                descriptor = self.make_dataset(root / "source")
+                release = descriptor.parent
+                indexed_case = json.loads(
+                    (release / "cases.jsonl").read_text(encoding="utf-8")
+                )
+                indexed_case["assets"]["first_frame"] = (
+                    "assets/sub/01-frame.bin"
+                )
+                indexed_case["assets"]["reference_video"] = (
+                    "assets/sub/01-frame.bin"
+                )
+                (release / "cases.jsonl").write_text(
+                    json.dumps(indexed_case) + "\n",
+                    encoding="utf-8",
+                )
+                assets = root / "source" / "assets"
+                nested = assets / "sub"
+                nested.mkdir()
+                (assets / "01-frame.bin").rename(nested / "01-frame.bin")
+                real_write_shard = distribution_builder._write_shard
+                swapped = False
+
+                def write_after_swap(*args, **kwargs):
+                    nonlocal swapped
+                    if not swapped:
+                        swapped = True
+                        if mutation == "parent-symlink":
+                            held = assets / "held-sub"
+                            external = root / "external"
+                            external.mkdir()
+                            (external / "01-frame.bin").write_bytes(b"EEEEEEEEEE")
+                            nested.rename(held)
+                            nested.symlink_to(external, target_is_directory=True)
+                        else:
+                            frame = nested / "01-frame.bin"
+                            frame.unlink()
+                            frame.write_bytes(b"EEEEEEEEEE")
+                    return real_write_shard(*args, **kwargs)
+
+                with patch.object(
+                    distribution_builder,
+                    "_write_shard",
+                    side_effect=write_after_swap,
+                ), self.assertRaisesRegex(ValueError, "changed|symlink|directory"):
+                    distribution_builder.build_distribution(
+                        descriptor,
+                        output_root=root / "output",
+                        max_shard_bytes=300,
+                    )
+
+    def test_rejects_rebuilding_over_an_existing_distribution(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self.make_dataset(root / "source")
+            output = root / "output"
+            self.run_builder(descriptor, output)
+            distribution = output / "distribution" / "v1"
+            before = {
+                path.relative_to(distribution).as_posix(): path.read_bytes()
+                for path in sorted(distribution.rglob("*"))
+                if path.is_file()
+            }
+
+            with self.assertRaisesRegex(FileExistsError, "already exists"):
+                distribution_builder.build_distribution(
+                    descriptor,
+                    output_root=output,
+                    max_shard_bytes=400,
+                )
+
+            after = {
+                path.relative_to(distribution).as_posix(): path.read_bytes()
+                for path in sorted(distribution.rglob("*"))
+                if path.is_file()
+            }
+            self.assertEqual(before, after)
 
 
 if __name__ == "__main__":
