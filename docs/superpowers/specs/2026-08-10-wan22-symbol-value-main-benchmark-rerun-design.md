@@ -63,10 +63,12 @@ Match the recent WAN controls' training budget and sampling contract:
 - learning rate `1e-4`, AdamW, ConstantLR, weight decay `0.01`;
 - one dataset repeat, scene balancing by
   `oversample_each_scene_to_largest_world_aligned`;
-- eight GPUs, seed 42, bf16 model training and fp32 conditioner parameters;
+- effective global batch 8 with micro batch 1; gradient accumulation is derived
+  from the deployment world size (2 on the authorized GPU 4–7 four-card run);
+- seed 42, bf16 model training and fp32 conditioner parameters;
 - 273 optimizer steps per epoch for eight epochs, 2184 total steps; this is
   derived from the latest Task's seven scene-balanced 312-row buckets across
-  eight workers;
+  effective global batches of eight;
 - optimizer state and recoverable checkpoints retained in the AtomicRun.
 
 Inference uses the frozen Task jobs, first-frame conditioning, 121 frames at

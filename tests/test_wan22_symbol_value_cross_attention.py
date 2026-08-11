@@ -25,6 +25,12 @@ from physbench.baselines.wan22_symbol_value_model import (
     pool_symbol_embeddings,
     symbol_value_inference_conditioning,
 )
+from physbench.baselines.wan22_symbol_value import (
+    Wan22SymbolValueLoraAdapter,
+)
+from scripts.wan22_symbol_value_train import (
+    record_completed_optimizer_step,
+)
 from physbench.baseline_api import (
     discover_baseline_bundles,
     load_baseline_bundle,
@@ -330,6 +336,9 @@ class SymbolValueBaselineIntegrationTests(unittest.TestCase):
         self.assertEqual(1, trainer["dataset_repeat"])
         self.assertEqual(8, trainer["num_epochs"])
         self.assertEqual(273, trainer["save_steps"])
+        self.assertEqual(1, trainer["micro_batch_size"])
+        self.assertEqual(8, trainer["global_batch_size"])
+        self.assertNotIn("gradient_accumulation", trainer)
         self.assertEqual(42, trainer["seed"])
         conditioner = bundle.value["model"]["symbol_value_conditioner"]
         self.assertEqual(4096, conditioner["text_hidden_size"])
@@ -363,6 +372,56 @@ class SymbolValueBaselineIntegrationTests(unittest.TestCase):
             ROOT / "src" / "physbench" / "baseline_runtime" / "drivers" / "wan22_symbol_value.py",
         ]
         self.assertTrue(all(path.is_file() for path in expected))
+
+
+class FourGpuTrainingTests(unittest.TestCase):
+    def test_four_gpus_derive_accumulation_two_and_2184_updates(self) -> None:
+        adapter = object.__new__(Wan22SymbolValueLoraAdapter)
+        adapter.runtime = {"cuda_visible_devices": "4,5,6,7"}
+        adapter.config = {
+            "lora": {
+                "micro_batch_size": 1,
+                "global_batch_size": 8,
+                "dataset_repeat": 1,
+                "num_epochs": 8,
+            }
+        }
+
+        contract = adapter._training_parallelism(metadata_row_count=2184)
+
+        self.assertEqual(4, contract["world_size"])
+        self.assertEqual(2, contract["gradient_accumulation_steps"])
+        self.assertEqual(546, contract["micro_steps_per_epoch"])
+        self.assertEqual(273, contract["optimizer_steps_per_epoch"])
+        self.assertEqual(2184, contract["total_optimizer_steps"])
+
+    def test_logger_counts_only_completed_optimizer_steps(self) -> None:
+        calls = []
+        logger = SimpleNamespace(
+            on_step_end=lambda *args, **kwargs: calls.append((args, kwargs))
+        )
+        model = object()
+        loss = object()
+
+        recorded = record_completed_optimizer_step(
+            SimpleNamespace(sync_gradients=False),
+            logger,
+            model,
+            save_steps=273,
+            loss=loss,
+        )
+        self.assertFalse(recorded)
+        self.assertEqual([], calls)
+
+        recorded = record_completed_optimizer_step(
+            SimpleNamespace(sync_gradients=True),
+            logger,
+            model,
+            save_steps=273,
+            loss=loss,
+        )
+        self.assertTrue(recorded)
+        self.assertEqual(1, len(calls))
 
 
 class LatestSevenSceneTaskTests(unittest.TestCase):

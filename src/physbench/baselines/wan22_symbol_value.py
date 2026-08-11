@@ -36,6 +36,66 @@ _LORA_KEY = re.compile(
 class Wan22SymbolValueLoraAdapter(Wan22QuantityLoraAdapter):
     """WAN media orchestration for symbol/value text cross-attention."""
 
+    def _training_parallelism(
+        self,
+        *,
+        metadata_row_count: int | None = None,
+    ) -> dict[str, int]:
+        visible_devices = [
+            item.strip()
+            for item in str(
+                self.runtime.get("cuda_visible_devices", "0")
+            ).split(",")
+            if item.strip()
+        ]
+        world_size = len(visible_devices)
+        if world_size < 1:
+            raise ValueError("symbol-value training requires at least one GPU")
+        lora = self.config["lora"]
+        micro_batch_size = int(lora["micro_batch_size"])
+        global_batch_size = int(lora["global_batch_size"])
+        if micro_batch_size < 1 or global_batch_size < 1:
+            raise ValueError("training batch sizes must be positive")
+        distributed_micro_batch = world_size * micro_batch_size
+        if global_batch_size % distributed_micro_batch:
+            raise ValueError(
+                "global_batch_size must be divisible by world_size times "
+                "micro_batch_size: "
+                f"{global_batch_size} vs {world_size}*{micro_batch_size}"
+            )
+        gradient_accumulation_steps = (
+            global_batch_size // distributed_micro_batch
+        )
+        contract = {
+            "world_size": world_size,
+            "micro_batch_size": micro_batch_size,
+            "global_batch_size": global_batch_size,
+            "gradient_accumulation_steps": gradient_accumulation_steps,
+        }
+        if metadata_row_count is None:
+            return contract
+        dataset_repeat = int(lora["dataset_repeat"])
+        num_epochs = int(lora["num_epochs"])
+        repeated_rows = metadata_row_count * dataset_repeat
+        if repeated_rows % world_size:
+            raise ValueError(
+                "repeated training rows must divide the distributed world"
+            )
+        micro_steps_per_epoch = repeated_rows // world_size
+        if micro_steps_per_epoch % gradient_accumulation_steps:
+            raise ValueError(
+                "micro steps per epoch must divide gradient accumulation"
+            )
+        optimizer_steps_per_epoch = (
+            micro_steps_per_epoch // gradient_accumulation_steps
+        )
+        contract.update({
+            "micro_steps_per_epoch": micro_steps_per_epoch,
+            "optimizer_steps_per_epoch": optimizer_steps_per_epoch,
+            "total_optimizer_steps": optimizer_steps_per_epoch * num_epochs,
+        })
+        return contract
+
     def prepare_training(
         self,
         train_case_ids: list[str],
@@ -89,7 +149,7 @@ class Wan22SymbolValueLoraAdapter(Wan22QuantityLoraAdapter):
         by_scene: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for row in rows:
             by_scene[row["scene_id"]].append(row)
-        world_size = len(str(self.runtime.get("cuda_visible_devices", "0")).split(","))
+        world_size = self._training_parallelism()["world_size"]
         scene_count = len(by_scene)
         alignment = world_size // math.gcd(world_size, scene_count)
         largest = max((len(items) for items in by_scene.values()), default=0)
@@ -101,6 +161,9 @@ class Wan22SymbolValueLoraAdapter(Wan22QuantityLoraAdapter):
         if len(balanced) % world_size:
             raise AssertionError("world-aligned balancing did not divide world size")
         lora = self.config["lora"]
+        parallelism = self._training_parallelism(
+            metadata_row_count=len(balanced),
+        )
         plan = {
             "policy": policy,
             "unique_case_count": len(rows),
@@ -111,14 +174,13 @@ class Wan22SymbolValueLoraAdapter(Wan22QuantityLoraAdapter):
             "world_alignment": alignment,
             "dataset_repeat": int(lora["dataset_repeat"]),
             "num_epochs": int(lora["num_epochs"]),
-            "world_size": world_size,
-            "expected_optimizer_steps_per_epoch": (
-                len(balanced) * int(lora["dataset_repeat"]) // world_size
-            ),
-            "expected_total_optimizer_steps": (
-                len(balanced) * int(lora["dataset_repeat"]) // world_size
-                * int(lora["num_epochs"])
-            ),
+            **parallelism,
+            "expected_optimizer_steps_per_epoch": parallelism[
+                "optimizer_steps_per_epoch"
+            ],
+            "expected_total_optimizer_steps": parallelism[
+                "total_optimizer_steps"
+            ],
             "shuffle": True,
             "sampler_seed": int(lora["seed"]),
             "sampler_generator": "torch.Generator",
@@ -140,6 +202,7 @@ class Wan22SymbolValueLoraAdapter(Wan22QuantityLoraAdapter):
         environment = Wan22LoraAdapter._training_environment(
             self, run_dir, dataset_dir, metadata
         )
+        parallelism = self._training_parallelism()
         environment.update({
             "WAN_PROJECT_ROOT": str(self.runtime["project_root"]),
             "WAN_PYTHON": str(self.runtime["python"]),
@@ -154,6 +217,9 @@ class Wan22SymbolValueLoraAdapter(Wan22QuantityLoraAdapter):
             ),
             "SAVE_OPTIMIZER_STATE": (
                 "1" if self.config.get("lora", {}).get("save_optimizer_state") else "0"
+            ),
+            "GRAD_ACCUM": str(
+                parallelism["gradient_accumulation_steps"]
             ),
         })
         accelerate = self._freeze_accelerate_config(run_dir)

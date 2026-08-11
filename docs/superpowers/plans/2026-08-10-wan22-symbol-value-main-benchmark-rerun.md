@@ -13,7 +13,7 @@
 - Preserve `baselines/wan22_symbol_value_cross_attention/baseline.local.json` exactly; it is an ignored machine-local deployment override.
 - Do not modify the historical `run/wan22_ti2v_5b_lora_r32_symbol_value_cross_attention_v1` directory.
 - Use `datasets/releases/13.0.0/dataset.json` and `tasks/experiments/seven_scene_entity_vector_finetune_eval.json`.
-- Use seed 42, rank 32, learning rate `1e-4`, one dataset repeat, eight epochs, 273 steps per epoch, and 2184 total optimizer steps.
+- Use seed 42, rank 32, learning rate `1e-4`, one dataset repeat, eight epochs, effective global batch 8, 273 optimizer steps per epoch, and 2184 total optimizer steps.
 - Any code-fingerprint change after a dry-run or failed execution requires a new immutable run ID.
 - Do not omit failed or unavailable evaluation cases from coverage reporting.
 

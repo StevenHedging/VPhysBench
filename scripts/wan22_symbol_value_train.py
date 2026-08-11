@@ -475,10 +475,11 @@ def launch_symbol_value_training(
                 optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad()
-                model_logger.on_step_end(
+                record_completed_optimizer_step(
                     accelerator,
+                    model_logger,
                     model,
-                    args.save_steps,
+                    save_steps=args.save_steps,
                     loss=loss,
                 )
         if args.save_steps is None:
@@ -492,6 +493,27 @@ def launch_symbol_value_training(
         model,
         args.save_steps,
     )
+
+
+def record_completed_optimizer_step(
+    accelerator,
+    model_logger,
+    model,
+    *,
+    save_steps: int | None,
+    loss,
+) -> bool:
+    """Advance audit/checkpoint steps only after a synchronized update."""
+
+    if not accelerator.sync_gradients:
+        return False
+    model_logger.on_step_end(
+        accelerator,
+        model,
+        save_steps,
+        loss=loss,
+    )
+    return True
 
 
 def main() -> int:
