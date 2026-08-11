@@ -96,6 +96,42 @@ else:
     raise AssertionError("evaluate_task did not trigger the injected failure")
 """
 
+SPRING_PACKAGE_IMPORT_SCRIPT = """
+import importlib.abc
+import sys
+
+BLOCKED_MODULE_ROOTS = {blocked_module_roots!r}
+
+
+class BlockedOptionalModuleFinder(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.', 1)[0] in BLOCKED_MODULE_ROOTS:
+            raise ModuleNotFoundError(
+                "blocked optional module: {{}}".format(fullname), name=fullname
+            )
+        return None
+
+
+sys.meta_path.insert(0, BlockedOptionalModuleFinder())
+
+import physbench.evaluation.scenes.vertical_spring_oscillator as spring
+
+loaded_blocked_roots = {{
+    name.split('.', 1)[0]
+    for name in sys.modules
+    if name.split('.', 1)[0] in BLOCKED_MODULE_ROOTS
+}}
+assert not loaded_blocked_roots, loaded_blocked_roots
+
+for export_name in ("SpringTrace", "VerticalSpringOscillatorCaseEvaluator"):
+    try:
+        getattr(spring, export_name)
+    except ModuleNotFoundError as exc:
+        assert exc.name.split('.', 1)[0] in BLOCKED_MODULE_ROOTS, exc.name
+    else:
+        raise AssertionError(export_name + " did not load its real dependency graph")
+""".format(blocked_module_roots=BLOCKED_MODULE_ROOTS)
+
 
 class LightweightPublicImportBoundaryTests(unittest.TestCase):
     def _run_subprocess(self, script: str) -> subprocess.CompletedProcess[str]:
@@ -115,6 +151,12 @@ class LightweightPublicImportBoundaryTests(unittest.TestCase):
     def test_public_imports_and_protocol_loading_avoid_optional_runtime_modules(self) -> None:
         """Catch eager optional-runtime imports from the public lightweight APIs."""
         result = self._run_subprocess(IMPORT_CONTRACT_SCRIPT)
+
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_spring_scene_package_defers_all_heavy_exports(self) -> None:
+        """Catch eager imports from the public spring scene package itself."""
+        result = self._run_subprocess(SPRING_PACKAGE_IMPORT_SCRIPT)
 
         self.assertEqual(0, result.returncode, result.stderr)
 

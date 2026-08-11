@@ -381,6 +381,28 @@ def resize_mask_tube(
     ]
 
 
+def evaluation_sinusoidal_masks(
+    times_s: list[float], *, width: int, height: int
+) -> list[np.ndarray]:
+    """Rasterize the same motion directly on the evaluation canvas."""
+    center_x = int(round((48.0 + 0.5) * width / 96.0 - 0.5))
+    equilibrium_y = (48.0 + 0.5) * height / 96.0 - 0.5
+    amplitude_y = 16.0 * height / 96.0
+    radius = int(round(6.0 * math.sqrt(width * height) / 96.0))
+    output: list[np.ndarray] = []
+    for time_s in times_s:
+        mask = np.zeros((height, width), dtype=np.uint8)
+        center_y = int(
+            round(
+                equilibrium_y
+                + amplitude_y * math.cos(2.0 * math.pi * time_s / 0.8)
+            )
+        )
+        cv2.circle(mask, (center_x, center_y), radius, 255, -1)
+        output.append(mask)
+    return output
+
+
 class VerticalSpringEvaluatorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = TemporaryDirectory()
@@ -410,12 +432,14 @@ class VerticalSpringEvaluatorTests(unittest.TestCase):
         self.temporary.cleanup()
 
     @staticmethod
-    def evaluator():
+    def evaluator(config: dict[str, object] | None = None):
         from physbench.evaluation.scenes.vertical_spring_oscillator.evaluator import (
             VerticalSpringOscillatorCaseEvaluator,
         )
 
-        return VerticalSpringOscillatorCaseEvaluator(deepcopy(EVALUATOR_CONFIG))
+        return VerticalSpringOscillatorCaseEvaluator(
+            deepcopy(EVALUATOR_CONFIG if config is None else config)
+        )
 
     def test_identity_analysis_scores_one_reuses_segmentation_and_binds_csti(
         self,
@@ -491,10 +515,10 @@ class VerticalSpringEvaluatorTests(unittest.TestCase):
         self.assertEqual(0, np.count_nonzero(tube[20]))
         self.assertGreater(np.count_nonzero(tube[19]), 0)
 
-    def test_segmentation_exception_origin_is_reference_or_prediction_specific(
+    def test_segmenter_internal_failures_are_not_charged_to_either_video(
         self,
     ) -> None:
-        """Would fail if SAM2 failures are attributed to the wrong robustness side."""
+        """Would fail if SAM2 infrastructure faults become benchmark outcomes."""
         reference = sampled_video(self.frames)
         prediction_frames = [frame.copy() for frame in self.frames]
         prediction_frames[0][0, 0] = (1, 2, 3)
@@ -502,34 +526,80 @@ class VerticalSpringEvaluatorTests(unittest.TestCase):
         with patch.object(
             Sam2VideoSegmenter,
             "segment",
-            side_effect=SceneAnalysisError("sam2_test_failure", "reference failed"),
+            side_effect=RuntimeError("reference model crashed"),
         ):
-            with self.assertRaises(ReferenceAnalysisError) as caught:
+            with self.assertRaises(RuntimeError) as caught:
                 self.evaluator().analyze(
                     self.request,
                     times_s=self.times,
                     reference_video=reference,
                     prediction_video=prediction,
                 )
-        self.assertEqual("reference_spring_segmentation_failed", caught.exception.code)
+        self.assertIs(type(caught.exception), RuntimeError)
+        self.assertEqual("reference model crashed", str(caught.exception))
 
         with patch.object(
             Sam2VideoSegmenter,
             "segment",
             side_effect=[
                 (self.masks, {"role": "reference"}),
-                SceneAnalysisError("sam2_test_failure", "prediction failed"),
+                SceneAnalysisError(
+                    "sam2_model_load_failed", "prediction model failed"
+                ),
             ],
         ):
-            with self.assertRaises(SceneAnalysisError) as caught:
+            with self.assertRaises(RuntimeError) as caught:
                 self.evaluator().analyze(
                     self.request,
                     times_s=self.times,
                     reference_video=reference,
                     prediction_video=prediction,
                 )
-        self.assertNotIsInstance(caught.exception, ReferenceAnalysisError)
-        self.assertEqual("prediction_spring_segmentation_failed", caught.exception.code)
+        self.assertNotIsInstance(caught.exception, SceneAnalysisError)
+        self.assertIn("sam2_model_load_failed", str(caught.exception))
+
+    def test_scorer_runtime_failure_is_not_a_prediction_zero(self) -> None:
+        """Would fail if a scorer bug is relabelled as prediction invalidity."""
+        video = sampled_video(self.frames)
+        with (
+            patch.object(
+                Sam2VideoSegmenter,
+                "segment",
+                return_value=(self.masks, {"role": "reference"}),
+            ),
+            patch(
+                "physbench.evaluation.scenes.vertical_spring_oscillator."
+                "evaluator.score_spring_traces",
+                side_effect=RuntimeError("scorer implementation defect"),
+            ),
+        ):
+            with self.assertRaises(RuntimeError) as caught:
+                self.evaluator().analyze(
+                    self.request,
+                    times_s=self.times,
+                    reference_video=video,
+                    prediction_video=video,
+                )
+        self.assertIs(type(caught.exception), RuntimeError)
+        self.assertEqual("scorer implementation defect", str(caught.exception))
+
+    def test_invalid_content_weight_config_is_an_internal_error(self) -> None:
+        """Would fail if malformed evaluator config is charged to a prediction."""
+        config = deepcopy(EVALUATOR_CONFIG)
+        config["content_weights"] = {"physics_state": 1.0}
+        video = sampled_video(self.frames)
+        with patch.object(
+            Sam2VideoSegmenter,
+            "segment",
+            return_value=(self.masks, {"role": "reference"}),
+        ):
+            with self.assertRaisesRegex(ValueError, "content_weights"):
+                self.evaluator(config).analyze(
+                    self.request,
+                    times_s=self.times,
+                    reference_video=video,
+                    prediction_video=video,
+                )
 
     def test_trace_exception_origin_is_reference_or_prediction_specific(self) -> None:
         """Would fail if invalid trace coverage crosses the reference/prediction boundary."""
@@ -608,27 +678,104 @@ class VerticalSpringEvaluatorTests(unittest.TestCase):
             result.metrics["csti"]["objects"][0]["matched_prediction_track_ids"],
         )
 
+    def test_prediction_media_defect_is_evaluated_zero_for_robust_spring(self) -> None:
+        """Would fail if corrupt prediction media bypasses the zero policy."""
+        write_video(self.root / "reference.mp4", self.frames)
+        corrupt = self.root / "corrupt-prediction.mp4"
+        corrupt.write_bytes(b"not a video")
+        self.request.prediction["video_path"] = str(corrupt)  # type: ignore[index]
+
+        result = self.evaluator().evaluate(self.request)
+
+        self.assertEqual("evaluated", result.status)
+        self.assertEqual(0.0, result.score)
+        self.assertEqual(0.0, result.metrics["csti"]["score"])
+        self.assertFalse(result.metrics["csti"]["objects"][0]["matched"])
+        self.assertEqual(
+            [],
+            result.metrics["csti"]["objects"][0][
+                "matched_prediction_track_ids"
+            ],
+        )
+        self.assertTrue(result.reason_code.startswith("prediction_"))
+
+    def test_reference_media_defect_remains_unavailable(self) -> None:
+        """Would fail if a broken benchmark reference is charged to a model."""
+        corrupt = self.root / "corrupt-reference.mp4"
+        corrupt.write_bytes(b"not a video")
+        self.case["assets"]["reference_video"] = corrupt.name  # type: ignore[index]
+        prediction = self.root / "prediction.mp4"
+        write_video(prediction, self.frames)
+        self.request.prediction["video_path"] = str(prediction)  # type: ignore[index]
+
+        result = self.evaluator().evaluate(self.request)
+
+        self.assertEqual("unavailable", result.status)
+        self.assertIsNone(result.score)
+        self.assertTrue(result.reason_code.startswith("reference_"))
+
+    def test_nonrobust_prediction_media_defect_preserves_protocol_error(self) -> None:
+        """Would fail if the spring policy silently changes older evaluators."""
+        write_video(self.root / "reference.mp4", self.frames)
+        corrupt = self.root / "corrupt-prediction.mp4"
+        corrupt.write_bytes(b"not a video")
+        self.request.prediction["video_path"] = str(corrupt)  # type: ignore[index]
+        config = deepcopy(EVALUATOR_CONFIG)
+        config.pop("evaluator_contract")
+
+        result = self.evaluator(config).evaluate(self.request)
+
+        self.assertEqual("protocol_error", result.status)
+        self.assertIsNone(result.score)
+
     def test_artifact_failure_is_audited_without_changing_the_score(self) -> None:
-        """Would fail if non-scoring artifact I/O can alter the numerical result."""
+        """Would fail if base artifact setup can alter a successful result."""
+        reference_path = self.root / "reference.mp4"
+        write_video(reference_path, self.frames)
+        self.request.prediction["video_path"] = str(reference_path)  # type: ignore[index]
         blocked = self.root / "blocked-artifact-directory"
         blocked.write_text("not a directory", encoding="utf-8")
         self.request = replace(self.request, artifact_dir=blocked)
-        video = sampled_video(self.frames)
+        evaluation_masks = evaluation_sinusoidal_masks(
+            self.times, width=480, height=480
+        )
         with patch.object(
             Sam2VideoSegmenter,
             "segment",
-            return_value=(self.masks, {"backend": "deterministic_test_sam2"}),
+            return_value=(
+                evaluation_masks,
+                {"backend": "deterministic_test_sam2"},
+            ),
         ):
-            analysis = self.evaluator().analyze(
-                self.request,
-                times_s=self.times,
-                reference_video=video,
-                prediction_video=video,
-            )
+            result = self.evaluator().evaluate(self.request)
 
-        self.assertEqual(1.0, analysis.score)
-        self.assertEqual({}, analysis.artifacts)
-        self.assertTrue(analysis.quality["artifact_failures"])
+        self.assertEqual("evaluated", result.status)
+        self.assertEqual(1.0, result.score)
+        self.assertEqual({}, result.artifacts)
+        self.assertTrue(result.quality["artifact_failures"])
+        self.assertTrue(result.provenance["artifact_failures"])
+
+    def test_degraded_artifact_failure_preserves_zero_and_is_audited(self) -> None:
+        """Would fail if degraded-curve I/O escapes or changes the zero."""
+        reference_path = self.root / "reference.mp4"
+        write_video(reference_path, self.frames)
+        self.request.prediction.update(  # type: ignore[union-attr]
+            {
+                "video_path": str(reference_path),
+                "media_contract": "invalid-contract",
+            }
+        )
+        blocked = self.root / "blocked-degraded-artifacts"
+        blocked.write_text("not a directory", encoding="utf-8")
+        self.request = replace(self.request, artifact_dir=blocked)
+
+        result = self.evaluator().evaluate(self.request)
+
+        self.assertEqual("evaluated", result.status)
+        self.assertEqual(0.0, result.score)
+        self.assertEqual("media_contract_invalid", result.reason_code)
+        self.assertTrue(result.quality["artifact_failures"])
+        self.assertTrue(result.provenance["artifact_failures"])
 
 
 def mask_y(mask: np.ndarray) -> float:

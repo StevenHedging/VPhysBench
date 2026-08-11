@@ -555,7 +555,7 @@ class ReferenceEvaluatorNoPadTests(unittest.TestCase):
             evaluator_config={},
         )
 
-    def test_missing_contract_with_different_aspect_is_protocol_error(
+    def test_missing_contract_with_different_aspect_is_robust_zero(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -580,14 +580,14 @@ class ReferenceEvaluatorNoPadTests(unittest.TestCase):
             ):
                 result = _SamplingEvaluator(self._config()).evaluate(request)
 
-        self.assertEqual("protocol_error", result.status)
-        self.assertIsNone(result.score)
+        self.assertEqual("evaluated", result.status)
+        self.assertEqual(0.0, result.score)
         self.assertEqual(
             "prediction_media_contract_missing",
             result.reason_code,
         )
 
-    def test_prediction_canvas_mismatch_is_protocol_error(self) -> None:
+    def test_prediction_canvas_mismatch_is_robust_zero(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             request = self._request(root, contract=self._contract())
@@ -615,8 +615,8 @@ class ReferenceEvaluatorNoPadTests(unittest.TestCase):
             ):
                 result = _SamplingEvaluator(self._config()).evaluate(request)
 
-        self.assertEqual("protocol_error", result.status)
-        self.assertIsNone(result.score)
+        self.assertEqual("evaluated", result.status)
+        self.assertEqual(0.0, result.score)
         self.assertEqual(
             "prediction_canvas_mismatch",
             result.reason_code,

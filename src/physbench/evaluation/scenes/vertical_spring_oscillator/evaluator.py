@@ -64,7 +64,7 @@ def _metadata(value: object) -> dict[str, Any]:
 
 def _bounded(value: float) -> float:
     if not math.isfinite(value):
-        return 0.0
+        raise ValueError("score must be finite")
     if value >= 1.0 - 1e-8:
         return 1.0
     return float(min(1.0, max(0.0, value)))
@@ -266,9 +266,7 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
             }:
                 raise ValueError("vertical spring apparatus attributes differ from v1")
             return manifest, entity, entity_attributes, apparatus_attributes
-        except ReferenceAnalysisError:
-            raise
-        except Exception as exc:
+        except (TypeError, ValueError) as exc:
             raise ReferenceAnalysisError(
                 "reference_entity_manifest_invalid",
                 "vertical spring entity manifest is invalid: "
@@ -294,13 +292,11 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
                 prompt=prompt,
                 temporary_prefix="physbench_vertical_spring_reference_",
             )
-            return masks, _metadata(metadata)
-        except Exception as exc:
-            raise ReferenceAnalysisError(
-                "reference_spring_segmentation_failed",
-                "reference vertical spring segmentation failed: "
-                f"{type(exc).__name__}: {exc}",
+        except SceneAnalysisError as exc:
+            raise RuntimeError(
+                f"SAM2 segmenter internal failure ({exc.code}): {exc}"
             ) from exc
+        return masks, _metadata(metadata)
 
     def _segment_prediction(
         self,
@@ -314,13 +310,11 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
                 prompt=prompt,
                 temporary_prefix="physbench_vertical_spring_prediction_",
             )
-            return masks, _metadata(metadata)
-        except Exception as exc:
-            raise SceneAnalysisError(
-                "prediction_spring_segmentation_failed",
-                "prediction vertical spring segmentation failed: "
-                f"{type(exc).__name__}: {exc}",
+        except SceneAnalysisError as exc:
+            raise RuntimeError(
+                f"SAM2 segmenter internal failure ({exc.code}): {exc}"
             ) from exc
+        return masks, _metadata(metadata)
 
     def _write_artifacts(
         self,
@@ -418,18 +412,16 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
                 "prediction and reference spring canvases differ",
             )
 
+        anchor = load_frozen_subject_anchor(
+            request,
+            logical_entity_id=entity.entity_id,
+            entity_class=entity.entity_class,
+            spatial_transform=reference_video.spatial_transform,
+            error_namespace="reference_spring_subject",
+        )
         try:
-            anchor = load_frozen_subject_anchor(
-                request,
-                logical_entity_id=entity.entity_id,
-                entity_class=entity.entity_class,
-                spatial_transform=reference_video.spatial_transform,
-                error_namespace="reference_spring_subject",
-            )
             prompt = prompt_from_anchor(anchor)
-        except ReferenceAnalysisError:
-            raise
-        except Exception as exc:
+        except (TypeError, ValueError) as exc:
             raise ReferenceAnalysisError(
                 "reference_spring_anchor_invalid",
                 "frozen vertical spring subject anchor is invalid: "
@@ -459,53 +451,40 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
             )
 
         mask_quality = self._mask_quality_config()
-        try:
-            reference_masks = validate_mask_tube(
-                raw_reference_masks,
-                availability=[True] * len(times_s),
-                anchor=anchor,
-                config=mask_quality,
-            )
-            reference_identity = validate_prediction_identity(
-                anchor_mask=anchor.mask,
-                prediction_mask=reference_masks[0],
-                config=self.config["identity"],
-            )
-            if not bool(reference_identity["accepted"]):
-                raise ValueError("reference frame-zero mask failed frozen identity")
-        except Exception as exc:
+        reference_masks = validate_mask_tube(
+            raw_reference_masks,
+            availability=[True] * len(times_s),
+            anchor=anchor,
+            config=mask_quality,
+        )
+        reference_identity = validate_prediction_identity(
+            anchor_mask=anchor.mask,
+            prediction_mask=reference_masks[0],
+            config=self.config["identity"],
+        )
+        if not bool(reference_identity["accepted"]):
             raise ReferenceAnalysisError(
                 "reference_spring_identity_rejected",
-                "reference vertical spring identity validation failed: "
-                f"{type(exc).__name__}: {exc}",
-            ) from exc
+                "reference frame-zero mask failed the frozen steel-ball identity gate",
+            )
 
         prediction_available = prediction_video.available or [True] * len(times_s)
-        try:
-            prediction_masks = validate_mask_tube(
-                raw_prediction_masks,
-                availability=prediction_available,
-                anchor=anchor,
-                config=mask_quality,
-            )
-            prediction_identity = validate_prediction_identity(
-                anchor_mask=anchor.mask,
-                prediction_mask=prediction_masks[0],
-                config=self.config["identity"],
-            )
-            if not bool(prediction_identity["accepted"]):
-                raise SceneAnalysisError(
-                    "prediction_spring_identity_rejected",
-                    "prediction frame-zero mask failed the frozen steel-ball identity gate",
-                )
-        except SceneAnalysisError:
-            raise
-        except Exception as exc:
+        prediction_masks = validate_mask_tube(
+            raw_prediction_masks,
+            availability=prediction_available,
+            anchor=anchor,
+            config=mask_quality,
+        )
+        prediction_identity = validate_prediction_identity(
+            anchor_mask=anchor.mask,
+            prediction_mask=prediction_masks[0],
+            config=self.config["identity"],
+        )
+        if not bool(prediction_identity["accepted"]):
             raise SceneAnalysisError(
                 "prediction_spring_identity_rejected",
-                "prediction vertical spring identity validation failed: "
-                f"{type(exc).__name__}: {exc}",
-            ) from exc
+                "prediction frame-zero mask failed the frozen steel-ball identity gate",
+            )
 
         trace_quality = self._trace_quality_config()
         try:
@@ -514,11 +493,10 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
                 times_s,
                 quality_config=trace_quality,
             )
-        except Exception as exc:
-            code = exc.code if isinstance(exc, SpringTraceError) else type(exc).__name__
+        except SpringTraceError as exc:
             raise ReferenceAnalysisError(
                 "reference_spring_trace_invalid",
-                f"reference vertical spring trace failed ({code}): {exc}",
+                f"reference vertical spring trace failed ({exc.code}): {exc}",
             ) from exc
         try:
             prediction_trace = extract_spring_trace(
@@ -526,88 +504,69 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
                 times_s,
                 quality_config=trace_quality,
             )
-        except Exception as exc:
-            code = exc.code if isinstance(exc, SpringTraceError) else type(exc).__name__
+        except SpringTraceError as exc:
             raise SceneAnalysisError(
                 "prediction_spring_trace_invalid",
-                f"prediction vertical spring trace failed ({code}): {exc}",
+                f"prediction vertical spring trace failed ({exc.code}): {exc}",
             ) from exc
 
-        try:
-            reference_topology = observe_spring_topology(
-                reference_video.frames,
-                reference_masks,
-                availability=[True] * len(times_s),
-                config=self.config["topology"],
-            )
-            if not reference_topology.valid.any():
-                raise ValueError("reference topology contains no valid corridor")
-        except Exception as exc:
+        reference_topology = observe_spring_topology(
+            reference_video.frames,
+            reference_masks,
+            availability=[True] * len(times_s),
+            config=self.config["topology"],
+        )
+        if not reference_topology.valid.any():
             raise ReferenceAnalysisError(
                 "reference_spring_topology_invalid",
-                "reference vertical spring topology failed: "
-                f"{type(exc).__name__}: {exc}",
-            ) from exc
-        try:
-            prediction_topology = (
-                reference_topology
-                if exact_reuse and all(prediction_available)
-                else observe_spring_topology(
-                    prediction_video.frames,
-                    prediction_masks,
-                    availability=prediction_available,
-                    config=self.config["topology"],
-                )
+                "reference topology contains no valid spring corridor",
             )
-            topology_metric = _compare_topology(
-                reference_topology,
-                prediction_topology,
+        prediction_topology = (
+            reference_topology
+            if exact_reuse and all(prediction_available)
+            else observe_spring_topology(
+                prediction_video.frames,
+                prediction_masks,
+                availability=prediction_available,
+                config=self.config["topology"],
             )
-        except Exception as exc:
-            raise SceneAnalysisError(
-                "prediction_spring_topology_invalid",
-                "prediction vertical spring topology failed: "
-                f"{type(exc).__name__}: {exc}",
-            ) from exc
+        )
+        topology_metric = _compare_topology(
+            reference_topology,
+            prediction_topology,
+        )
 
-        try:
-            physics_metric = score_spring_traces(
-                reference_trace,
-                prediction_trace,
-                mass_kg=entity_attributes["mass"],
-                stiffness_n_m=apparatus_attributes["spring_stiffness"],
-                scoring_config=self.config["scoring"],
-            )
-            reference_mode = infer_reference_mode(request.case)
-            subject = compare_subjects(
-                reference_frames=reference_video.frames,
-                prediction_frames=prediction_video.frames,
-                reference_masks=list(reference_masks),
-                prediction_masks=list(prediction_masks),
-                reference_mode=reference_mode,
-                config=self.config["subject_scoring"],
-            )
-            content_weights = _normalized_content_weights(
-                self.config["content_weights"]
-            )
-            subject_state = compose_subject_and_state_score(
-                state_score=float(physics_metric["score"]),
-                subject=subject,
-                reference_mode=reference_mode,
-                config={
-                    **self.config["subject_scoring"],
-                    "case_weights": {
-                        "physics_state": content_weights["physics_state"],
-                        "subject": content_weights["subject"],
-                    },
+        physics_metric = score_spring_traces(
+            reference_trace,
+            prediction_trace,
+            mass_kg=entity_attributes["mass"],
+            stiffness_n_m=apparatus_attributes["spring_stiffness"],
+            scoring_config=self.config["scoring"],
+        )
+        reference_mode = infer_reference_mode(request.case)
+        subject = compare_subjects(
+            reference_frames=reference_video.frames,
+            prediction_frames=prediction_video.frames,
+            reference_masks=list(reference_masks),
+            prediction_masks=list(prediction_masks),
+            reference_mode=reference_mode,
+            config=self.config["subject_scoring"],
+        )
+        content_weights = _normalized_content_weights(
+            self.config["content_weights"]
+        )
+        subject_state = compose_subject_and_state_score(
+            state_score=float(physics_metric["score"]),
+            subject=subject,
+            reference_mode=reference_mode,
+            config={
+                **self.config["subject_scoring"],
+                "case_weights": {
+                    "physics_state": content_weights["physics_state"],
+                    "subject": content_weights["subject"],
                 },
-            )
-        except Exception as exc:
-            raise SceneAnalysisError(
-                "prediction_spring_scoring_failed",
-                "vertical spring prediction scoring failed: "
-                f"{type(exc).__name__}: {exc}",
-            ) from exc
+            },
+        )
 
         subject_state_weight = (
             content_weights["physics_state"] + content_weights["subject"]
@@ -730,6 +689,7 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
                     "prediction": dict(prediction_identity),
                     "matched_prediction_track_id": "bound_spring_ball",
                 },
+                "artifact_failures": artifact_failures,
                 "time_alignment": "common_physical_timeline_no_dtw",
                 "future_reference_pixels_used_for_prediction_localization": False,
             },
