@@ -31,6 +31,24 @@ class SpringTrace:
     horizontal_drift_ratio: float
     release_sign: int
 
+    def __post_init__(self) -> None:
+        """Make the public trace model immutable and reject incoherent state."""
+        values = _validated_trace_data(self)
+        object.__setattr__(self, "times_s", _readonly(values["times_s"]))
+        object.__setattr__(self, "xy", _readonly(values["xy"]))
+        object.__setattr__(self, "area_px2", _readonly(values["area_px2"]))
+        object.__setattr__(self, "valid", _readonly(values["valid"]))
+        object.__setattr__(self, "envelope_px", _readonly(values["envelope_px"]))
+        for name in (
+            "valid_ratio",
+            "equilibrium_y_px",
+            "amplitude_px",
+            "horizontal_drift_ratio",
+        ):
+            object.__setattr__(self, name, values[name])
+        object.__setattr__(self, "period_s", values["period_s"])
+        object.__setattr__(self, "release_sign", values["release_sign"])
+
 
 def theoretical_period_s(*, mass_kg: float, stiffness_n_m: float) -> float:
     """Return the ideal small-amplitude mass-spring period in seconds."""
@@ -45,6 +63,128 @@ def _readonly(values: np.ndarray) -> np.ndarray:
     result = np.asarray(values).copy()
     result.flags.writeable = False
     return result
+
+
+_CADENCE_RELATIVE_TOLERANCE = 0.02
+_MINIMUM_PERIOD_CORRELATION = 0.60
+_MINIMUM_PERIOD_PROMINENCE = 0.001
+_MINIMUM_COMPLETE_CYCLES = 2.0
+_FUNDAMENTAL_CORRELATION_TOLERANCE = 0.02
+
+
+def _invalid_trace(message: str) -> SpringTraceError:
+    return SpringTraceError("invalid_trace", message)
+
+
+def _validated_trace_data(trace: SpringTrace) -> dict[str, Any]:
+    """Validate every externally constructible SpringTrace field before scoring."""
+    try:
+        times = np.asarray(trace.times_s, dtype=np.float64)
+        xy = np.asarray(trace.xy, dtype=np.float64)
+        areas = np.asarray(trace.area_px2, dtype=np.float64)
+        valid = np.asarray(trace.valid)
+        envelope = np.asarray(trace.envelope_px, dtype=np.float64)
+    except (TypeError, ValueError) as exc:
+        raise _invalid_trace("trace arrays must be numeric") from exc
+    if times.ndim != 1 or len(times) < 3 or not np.all(np.isfinite(times)):
+        raise _invalid_trace("trace times must be a non-empty finite one-dimensional sequence")
+    if not np.all(np.diff(times) > 0.0):
+        raise SpringTraceError("non_monotonic_times", "trace times must be strictly increasing")
+    _require_uniform_cadence(times)
+    count = len(times)
+    if xy.shape != (count, 2) or not np.all(np.isfinite(xy)):
+        raise _invalid_trace("trace xy must be finite with shape (frames, 2)")
+    if areas.shape != (count,) or not np.all(np.isfinite(areas)) or np.any(areas < 0.0):
+        raise _invalid_trace("trace areas must be finite non-negative frame values")
+    if valid.shape != (count,) or valid.dtype != np.bool_:
+        raise _invalid_trace("trace valid flags must be a boolean value per frame")
+    if int(valid.sum()) < 3:
+        raise _invalid_trace("trace requires at least three valid samples")
+    if envelope.shape != (count,) or not np.all(np.isfinite(envelope)) or np.any(envelope < 0.0):
+        raise _invalid_trace("trace envelope must be finite non-negative frame values")
+    try:
+        valid_ratio = float(trace.valid_ratio)
+        equilibrium = float(trace.equilibrium_y_px)
+        amplitude = float(trace.amplitude_px)
+        drift = float(trace.horizontal_drift_ratio)
+    except (TypeError, ValueError) as exc:
+        raise _invalid_trace("trace scalar fields must be numeric") from exc
+    if not all(math.isfinite(value) for value in (valid_ratio, equilibrium, amplitude, drift)):
+        raise _invalid_trace("trace scalar fields must be finite")
+    if not 0.0 <= valid_ratio <= 1.0 or not math.isclose(
+        valid_ratio, float(np.mean(valid)), rel_tol=0.0, abs_tol=1e-9
+    ):
+        raise _invalid_trace("trace valid_ratio must match the valid flags")
+    if amplitude < 0.0 or drift < 0.0:
+        raise _invalid_trace("trace amplitude and horizontal drift must be non-negative")
+    expected_equilibrium = float(np.median(xy[valid, 1]))
+    expected_amplitude = float(
+        0.5
+        * (
+            np.quantile(xy[valid, 1] - expected_equilibrium, 0.95)
+            - np.quantile(xy[valid, 1] - expected_equilibrium, 0.05)
+        )
+    )
+    expected_envelope = np.abs(xy[:, 1] - expected_equilibrium)
+    expected_horizontal_span = float(
+        0.5 * (np.quantile(xy[valid, 0], 0.95) - np.quantile(xy[valid, 0], 0.05))
+    )
+    expected_drift = expected_horizontal_span / max(expected_amplitude, 1e-12)
+    if not math.isclose(equilibrium, expected_equilibrium, rel_tol=0.0, abs_tol=1e-6):
+        raise _invalid_trace("trace equilibrium is inconsistent with valid positions")
+    if not math.isclose(amplitude, expected_amplitude, rel_tol=1e-6, abs_tol=1e-6):
+        raise _invalid_trace("trace amplitude is inconsistent with valid positions")
+    if not np.allclose(envelope, expected_envelope, rtol=1e-6, atol=1e-6):
+        raise _invalid_trace("trace envelope is inconsistent with vertical displacement")
+    if not math.isclose(drift, expected_drift, rel_tol=1e-6, abs_tol=1e-6):
+        raise _invalid_trace("trace horizontal drift is inconsistent with valid positions")
+    release_sign = trace.release_sign
+    if isinstance(release_sign, bool) or release_sign not in (-1, 0, 1):
+        raise _invalid_trace("trace release_sign must be -1, 0, or 1")
+    expected_release = _release_sign(xy[:, 1] - expected_equilibrium, expected_amplitude)
+    if release_sign != expected_release:
+        raise _invalid_trace("trace release_sign is inconsistent with vertical displacement")
+    period = trace.period_s
+    if period is not None:
+        try:
+            period = float(period)
+        except (TypeError, ValueError) as exc:
+            raise _invalid_trace("trace period must be numeric or None") from exc
+        if not math.isfinite(period) or period <= 0.0:
+            raise _invalid_trace("trace period must be finite and positive")
+    return {
+        "times_s": times,
+        "xy": xy,
+        "area_px2": areas,
+        "valid": valid,
+        "valid_ratio": valid_ratio,
+        "equilibrium_y_px": equilibrium,
+        "amplitude_px": amplitude,
+        "envelope_px": envelope,
+        "period_s": period,
+        "horizontal_drift_ratio": drift,
+        "release_sign": int(release_sign),
+    }
+
+
+def _require_uniform_cadence(
+    times_s: np.ndarray,
+    *,
+    relative_tolerance: float = _CADENCE_RELATIVE_TOLERANCE,
+) -> float:
+    if not math.isfinite(relative_tolerance) or relative_tolerance <= 0.0:
+        raise ValueError("cadence relative tolerance must be finite and positive")
+    steps = np.diff(times_s)
+    step_s = float(np.median(steps))
+    if not math.isfinite(step_s) or step_s <= 0.0:
+        raise SpringTraceError("non_monotonic_times", "time cadence must be positive")
+    deviation = float(np.max(np.abs(steps - step_s)) / step_s)
+    if deviation > relative_tolerance:
+        raise SpringTraceError(
+            "irregular_cadence",
+            "time cadence exceeds the supported relative deviation",
+        )
+    return step_s
 
 
 def _require_quality(quality_config: dict[str, Any], name: str) -> float:
@@ -68,64 +208,63 @@ def _interpolate(values: np.ndarray, valid: np.ndarray) -> np.ndarray:
     return result
 
 
-def _autocorrelation_period(
+def _configured_period_threshold(
+    quality_config: dict[str, Any], name: str, default: float
+) -> float:
+    value = float(quality_config.get(name, default))
+    if not math.isfinite(value) or value <= 0.0:
+        raise ValueError(f"quality_config {name!r} must be finite and positive")
+    return value
+
+
+def _qualified_autocorrelation_period(
     displacement: np.ndarray,
     times_s: np.ndarray,
     *,
-    minimum_s: float,
-    maximum_s: float,
+    minimum_correlation: float,
+    minimum_prominence: float,
+    minimum_complete_cycles: float,
 ) -> float | None:
-    """Find the first significant autocorrelation maximum inside configured lags."""
+    """Return a repeat-supported fundamental candidate, never an ACF fallback."""
     if len(displacement) < 5:
         return None
     centered = displacement - float(np.mean(displacement))
     energy = float(np.dot(centered, centered))
     if energy <= 1e-12:
         return None
-    step_s = float(np.median(np.diff(times_s)))
-    if not math.isfinite(step_s) or step_s <= 0.0:
+    step_s = _require_uniform_cadence(times_s)
+    maximum_lag = min(
+        len(centered) - 2,
+        int(math.floor((times_s[-1] - times_s[0]) / (minimum_complete_cycles * step_s))),
+    )
+    if maximum_lag < 3:
         return None
-    minimum_lag = max(2, int(math.ceil(minimum_s / step_s)))
-    maximum_lag = min(len(centered) - 2, int(math.floor(maximum_s / step_s)))
-    if minimum_lag > maximum_lag:
-        return None
-    correlations = np.correlate(centered, centered, mode="full")[len(centered) - 1 :]
-    normalized = correlations / energy
-    for lag in range(minimum_lag + 1, maximum_lag):
+    correlations = np.full(maximum_lag + 1, np.nan, dtype=np.float64)
+    for lag in range(1, maximum_lag + 1):
+        left = centered[:-lag]
+        right = centered[lag:]
+        denominator = float(np.linalg.norm(left) * np.linalg.norm(right))
+        if denominator > 1e-12:
+            correlations[lag] = float(np.dot(left, right) / denominator)
+    candidates: list[tuple[int, float]] = []
+    for lag in range(2, maximum_lag):
+        correlation = correlations[lag]
+        prominence = correlation - max(correlations[lag - 1], correlations[lag + 1])
         if (
-            normalized[lag] >= normalized[lag - 1]
-            and normalized[lag] > normalized[lag + 1]
-            and normalized[lag] >= 0.1
+            math.isfinite(correlation)
+            and correlation >= minimum_correlation
+            and prominence >= minimum_prominence
         ):
-            return float(lag * step_s)
-    window = normalized[minimum_lag : maximum_lag + 1]
-    if not len(window):
+            candidates.append((lag, float(correlation)))
+    if not candidates:
         return None
-    peak_lag = minimum_lag + int(np.argmax(window))
-    return float(peak_lag * step_s) if normalized[peak_lag] >= 0.1 else None
-
-
-def _first_autocorrelation_peak(
-    displacement: np.ndarray, times_s: np.ndarray
-) -> float | None:
-    """Expose the fundamental peak only to reject observable out-of-range motion."""
-    if len(displacement) < 5:
-        return None
-    centered = displacement - float(np.mean(displacement))
-    energy = float(np.dot(centered, centered))
-    step_s = float(np.median(np.diff(times_s)))
-    if energy <= 1e-12 or not math.isfinite(step_s) or step_s <= 0.0:
-        return None
-    correlations = np.correlate(centered, centered, mode="full")[len(centered) - 1 :]
-    normalized = correlations / energy
-    for lag in range(2, len(normalized) - 1):
-        if (
-            normalized[lag] >= normalized[lag - 1]
-            and normalized[lag] > normalized[lag + 1]
-            and normalized[lag] >= 0.1
-        ):
-            return float(lag * step_s)
-    return None
+    strongest = max(correlation for _, correlation in candidates)
+    tied = [
+        lag
+        for lag, correlation in candidates
+        if correlation >= strongest - _FUNDAMENTAL_CORRELATION_TOLERANCE
+    ]
+    return float(min(tied) * step_s)
 
 
 def _release_sign(displacement: np.ndarray, amplitude_px: float) -> int:
@@ -153,7 +292,6 @@ def extract_spring_trace(
         raise SpringTraceError("invalid_times", "times must be a finite one-dimensional sequence")
     if not np.all(np.diff(times) > 0.0):
         raise SpringTraceError("non_monotonic_times", "times must be strictly increasing")
-
     first = np.asarray(masks[0])
     if first.ndim != 2:
         raise SpringTraceError("invalid_mask_shape", "masks must be two-dimensional")
@@ -176,6 +314,25 @@ def extract_spring_trace(
         raise ValueError("minimum quality bounds must be non-negative and minimum_s positive")
     if maximum_s < minimum_s:
         raise ValueError("maximum_s must be at least minimum_s")
+    minimum_correlation = _configured_period_threshold(
+        quality_config, "minimum_period_correlation", _MINIMUM_PERIOD_CORRELATION
+    )
+    minimum_prominence = _configured_period_threshold(
+        quality_config, "minimum_period_peak_prominence", _MINIMUM_PERIOD_PROMINENCE
+    )
+    minimum_complete_cycles = _configured_period_threshold(
+        quality_config, "minimum_complete_cycles", _MINIMUM_COMPLETE_CYCLES
+    )
+    cadence_tolerance = _configured_period_threshold(
+        quality_config,
+        "maximum_cadence_relative_deviation",
+        _CADENCE_RELATIVE_TOLERANCE,
+    )
+    if minimum_correlation > 1.0:
+        raise ValueError("minimum_period_correlation must be at most one")
+    if cadence_tolerance > 1.0:
+        raise ValueError("maximum_cadence_relative_deviation must be at most one")
+    _require_uniform_cadence(times, relative_tolerance=cadence_tolerance)
 
     frame_area = float(frame_shape[0] * frame_shape[1])
     minimum_area = max(minimum_pixels, frame_area * minimum_area_ratio)
@@ -217,15 +374,18 @@ def extract_spring_trace(
     horizontal_span = float(
         0.5 * (np.quantile(xy[valid, 0], 0.95) - np.quantile(xy[valid, 0], 0.05))
     )
-    observed_period = _first_autocorrelation_peak(displacement, times)
-    if observed_period is not None and not minimum_s <= observed_period <= maximum_s:
+    period = _qualified_autocorrelation_period(
+        displacement,
+        times,
+        minimum_correlation=minimum_correlation,
+        minimum_prominence=minimum_prominence,
+        minimum_complete_cycles=minimum_complete_cycles,
+    )
+    if period is not None and not minimum_s <= period <= maximum_s:
         raise SpringTraceError(
             "period_out_of_bounds",
             "observable autocorrelation period is outside configured bounds",
         )
-    period = _autocorrelation_period(
-        displacement, times, minimum_s=minimum_s, maximum_s=maximum_s
-    )
 
     return SpringTrace(
         times_s=_readonly(times),
@@ -251,6 +411,8 @@ def _bounded(value: float) -> float:
 def _exponential_similarity(error: float, *, scale: float) -> float:
     if not math.isfinite(scale) or scale <= 0.0:
         raise ValueError("similarity scales must be finite and positive")
+    if not math.isfinite(error):
+        return 0.0
     return _bounded(math.exp(-max(0.0, error) / scale))
 
 
@@ -269,6 +431,32 @@ def _period_similarity(
     return _exponential_similarity(delta_s / max(abs(expected_s), 1e-12), scale=1.0)
 
 
+def _periodicity_evidence(
+    trace_data: dict[str, Any], *, scoring_config: dict[str, Any]
+) -> float:
+    """Return one only for an accepted, repeat-supported period in this trace."""
+    period = trace_data["period_s"]
+    if period is None:
+        return 0.0
+    qualified = _qualified_autocorrelation_period(
+        trace_data["xy"][:, 1] - trace_data["equilibrium_y_px"],
+        trace_data["times_s"],
+        minimum_correlation=float(
+            scoring_config.get("minimum_period_correlation", _MINIMUM_PERIOD_CORRELATION)
+        ),
+        minimum_prominence=float(
+            scoring_config.get("minimum_period_peak_prominence", _MINIMUM_PERIOD_PROMINENCE)
+        ),
+        minimum_complete_cycles=float(
+            scoring_config.get("minimum_complete_cycles", _MINIMUM_COMPLETE_CYCLES)
+        ),
+    )
+    if qualified is None:
+        return 0.0
+    resolution = _require_uniform_cadence(trace_data["times_s"])
+    return 1.0 if abs(qualified - period) <= 0.5 * resolution else 0.0
+
+
 def score_spring_traces(
     reference: SpringTrace,
     prediction: SpringTrace,
@@ -278,11 +466,13 @@ def score_spring_traces(
     scoring_config: dict[str, Any],
 ) -> dict[str, Any]:
     """Score traces at their exact samples; no warping or reference realignment."""
-    if reference.times_s.shape != prediction.times_s.shape or not np.allclose(
-        reference.times_s, prediction.times_s, atol=1e-9, rtol=0.0
+    reference_data = _validated_trace_data(reference)
+    prediction_data = _validated_trace_data(prediction)
+    if reference_data["times_s"].shape != prediction_data["times_s"].shape or not np.allclose(
+        reference_data["times_s"], prediction_data["times_s"], atol=1e-9, rtol=0.0
     ):
         raise ValueError("reference and prediction traces use different timelines")
-    if reference.xy.shape != prediction.xy.shape:
+    if reference_data["xy"].shape != prediction_data["xy"].shape:
         raise ValueError("reference and prediction trace coordinates differ in shape")
     theory = theoretical_period_s(mass_kg=mass_kg, stiffness_n_m=stiffness_n_m)
     try:
@@ -309,35 +499,43 @@ def score_spring_traces(
     weights = {name: weight / total_weight for name, weight in configured_weights.items()}
 
     trajectory_error = float(
-        np.sqrt(np.mean(np.square(prediction.xy[:, 1] - reference.xy[:, 1])))
-        / max(reference.amplitude_px, 1e-12)
+        np.sqrt(
+            np.mean(
+                np.square(prediction_data["xy"][:, 1] - reference_data["xy"][:, 1])
+            )
+        )
+        / max(reference_data["amplitude_px"], 1e-12)
     )
     trajectory = _exponential_similarity(
         trajectory_error, scale=float(scoring_config["trajectory_scale"])
     )
-    if reference.period_s is None or prediction.period_s is None:
+    if reference_data["period_s"] is None or prediction_data["period_s"] is None:
         period = 0.0
     else:
-        sample_resolution_s = float(np.median(np.diff(reference.times_s)))
+        sample_resolution_s = _require_uniform_cadence(reference_data["times_s"])
         reference_similarity = _period_similarity(
-            prediction.period_s,
-            reference.period_s,
+            prediction_data["period_s"],
+            reference_data["period_s"],
             sample_resolution_s=sample_resolution_s,
         )
         theory_similarity = _period_similarity(
-            prediction.period_s,
+            prediction_data["period_s"],
             theory,
             sample_resolution_s=sample_resolution_s,
         )
         period = _bounded(math.sqrt(reference_similarity * theory_similarity))
 
     amplitude_similarity = _exponential_similarity(
-        _relative_error(prediction.amplitude_px, reference.amplitude_px),
+        _relative_error(prediction_data["amplitude_px"], reference_data["amplitude_px"]),
         scale=float(scoring_config["amplitude_scale"]),
     )
     envelope_error = float(
-        np.sqrt(np.mean(np.square(prediction.envelope_px - reference.envelope_px)))
-        / max(reference.amplitude_px, 1e-12)
+        np.sqrt(
+            np.mean(
+                np.square(prediction_data["envelope_px"] - reference_data["envelope_px"])
+            )
+        )
+        / max(reference_data["amplitude_px"], 1e-12)
     )
     envelope_similarity = _exponential_similarity(
         envelope_error, scale=float(scoring_config["amplitude_scale"])
@@ -345,24 +543,29 @@ def score_spring_traces(
     amplitude_envelope = _bounded(0.5 * (amplitude_similarity + envelope_similarity))
 
     equilibrium_similarity = _exponential_similarity(
-        _relative_error(prediction.equilibrium_y_px, reference.equilibrium_y_px),
+        abs(
+            prediction_data["equilibrium_y_px"]
+            - reference_data["equilibrium_y_px"]
+        )
+        / max(reference_data["amplitude_px"], 1e-12),
         scale=float(scoring_config["equilibrium_scale"]),
     )
     release_similarity = (
         1.0
-        if prediction.release_sign != 0 and prediction.release_sign == reference.release_sign
+        if prediction_data["release_sign"] != 0
+        and prediction_data["release_sign"] == reference_data["release_sign"]
         else 0.0
     )
     equilibrium_release_phase = _bounded(equilibrium_similarity * release_similarity)
     oscillation_evidence = _exponential_similarity(
-        _relative_error(prediction.amplitude_px, reference.amplitude_px),
+        _relative_error(prediction_data["amplitude_px"], reference_data["amplitude_px"]),
         scale=float(scoring_config["oscillation_amplitude_scale"]),
-    )
+    ) * _periodicity_evidence(prediction_data, scoring_config=scoring_config)
     # A stationary point is geometrically confined but does not establish a
     # vertical motion axis, so confinement requires observable oscillation.
     vertical_axis_confinement = _bounded(
         _exponential_similarity(
-            prediction.horizontal_drift_ratio,
+            prediction_data["horizontal_drift_ratio"],
             scale=float(scoring_config["axis_drift_scale"]),
         )
         * oscillation_evidence
@@ -382,10 +585,10 @@ def score_spring_traces(
         "components": components,
         "weights": weights,
         "diagnostics": {
-            "reference_period_s": reference.period_s,
-            "prediction_period_s": prediction.period_s,
+            "reference_period_s": reference_data["period_s"],
+            "prediction_period_s": prediction_data["period_s"],
             "theoretical_period_s": theory,
-            "reference_amplitude_px": reference.amplitude_px,
-            "prediction_amplitude_px": prediction.amplitude_px,
+            "reference_amplitude_px": reference_data["amplitude_px"],
+            "prediction_amplitude_px": prediction_data["amplitude_px"],
         },
     }
