@@ -11,7 +11,7 @@ from ..artifacts import ARTIFACT_POLICY, validate_prediction_records
 from ..baseline_api import load_baseline_bundle, load_baseline_plugin
 from ..datasets import load_dataset
 from ..domain import TaskSpec
-from ..evaluation import evaluate_task, load_evaluation_protocol
+from ..evaluation import load_evaluation_protocol
 from ..identifiers import require_safe_id
 from ..io import (
     canonical_sha256,
@@ -241,6 +241,17 @@ def run_atomic(
         prediction_artifacts,
     )
     write_jsonl(run_dir / "predictions.jsonl", predictions)
+
+    # Scene evaluators depend on the optional scene-evaluation extra.  Keep
+    # their import in the evaluation phase so planning and execution staging
+    # remain usable in lightweight installations.
+    try:
+        from ..evaluation import evaluate_task
+    except RuntimeError as exc:
+        raise RuntimeError(
+            "AtomicRun evaluation requires optional dependencies; install "
+            "them with `pip install '.[scene-evaluation]'`."
+        ) from exc
 
     case_metrics, summary = evaluate_task(
         plan=plan.value,
