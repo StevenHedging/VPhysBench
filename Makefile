@@ -1,7 +1,10 @@
-.PHONY: test data-test smoke smoke-interface smoke-data release-check release-archive-check
+.PHONY: test test-interface data-test smoke smoke-interface smoke-data release-check release-archive-check
 
-test:
+test: test-interface
+
+test-interface:
 	PYTHONPATH=src:tests:. python3 -m unittest \
+		tests.test_lightweight_import_boundaries \
 		tests.test_current_dataset \
 		tests.test_release_v1_contract \
 		tests.test_evaluation_protocol_v1 \
