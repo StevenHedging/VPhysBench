@@ -51,8 +51,8 @@ BASELINE = (
 TASK = (
     ROOT
     / "tasks"
-    / "official"
-    / "five_scene_finetune_eval_csti_identity_v3.json"
+    / "experiments"
+    / "seven_scene_entity_vector_finetune_eval.json"
 )
 
 
@@ -329,7 +329,7 @@ class SymbolValueBaselineIntegrationTests(unittest.TestCase):
         self.assertEqual(32, trainer["rank"])
         self.assertEqual(1, trainer["dataset_repeat"])
         self.assertEqual(8, trainer["num_epochs"])
-        self.assertEqual(195, trainer["save_steps"])
+        self.assertEqual(273, trainer["save_steps"])
         self.assertEqual(42, trainer["seed"])
         conditioner = bundle.value["model"]["symbol_value_conditioner"]
         self.assertEqual(4096, conditioner["text_hidden_size"])
@@ -365,7 +365,7 @@ class SymbolValueBaselineIntegrationTests(unittest.TestCase):
         self.assertTrue(all(path.is_file() for path in expected))
 
 
-class OfficialFiveSceneTaskTests(unittest.TestCase):
+class LatestSevenSceneTaskTests(unittest.TestCase):
     def test_task_compiles_every_view_a_train_and_test_case(self) -> None:
         dataset = load_dataset(LATEST_DATASET, check_assets=False)
         task = load_task(TASK)
@@ -379,10 +379,12 @@ class OfficialFiveSceneTaskTests(unittest.TestCase):
             "inclined_plane_slide": (80, 15),
             "uniform_circular_motion": (30, 6),
             "parabolic_motion": (82, 15),
+            "push_bottle": (127, 14),
+            "vertical_spring_oscillator": (97, 20),
         }
         train_ids = set(instance.canonical_plan.train_case_ids)
-        self.assertEqual(582, len(train_ids))
-        self.assertEqual(76, len(instance.canonical_plan.jobs))
+        self.assertEqual(806, len(train_ids))
+        self.assertEqual(110, len(instance.canonical_plan.jobs))
         self.assertFalse(train_ids & {
             job["case_id"] for job in instance.canonical_plan.jobs
         })
@@ -399,7 +401,7 @@ class OfficialFiveSceneTaskTests(unittest.TestCase):
                     for job in instance.canonical_plan.jobs),
             )
 
-    def test_protocol_is_latest_official_five_scene_v14(self) -> None:
+    def test_protocol_is_latest_scored_five_scene_v14(self) -> None:
         protocol = load_evaluation_protocol("scene_default_v14")
 
         self.assertEqual(
