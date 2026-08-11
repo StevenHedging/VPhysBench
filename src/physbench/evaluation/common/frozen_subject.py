@@ -192,13 +192,13 @@ def load_frozen_subject_anchor(
             f"frozen subject mask NPZ does not exist: {npz_path}",
         )
     try:
-        source_mask = _load_npz_mask(
+        source_mask, npz_object_id = _load_npz_mask(
             npz_path,
             instance=instance,
             image_shape=image_shape,
             logical_entity_id=logical_entity_id,
         )
-        _validate_geometry(source_mask, instance=instance)
+        bbox_policy = _validate_geometry(source_mask, instance=instance)
     except Exception as exc:
         raise ReferenceAnalysisError(
             f"{error_namespace}_mask_invalid",
@@ -246,7 +246,8 @@ def load_frozen_subject_anchor(
             "mask_id": str(instance["mask_id"]),
             "dataset_object_id": selected_object_id,
             "logical_entity_id": logical_entity_id,
-            "npz_object_id": logical_entity_id,
+            "npz_object_id": npz_object_id,
+            "bbox_policy": bbox_policy,
             "entity_class": entity_class,
             "source_shape_hw": list(source_mask.shape),
             "target_shape_hw": list(transformed.shape),
@@ -354,7 +355,7 @@ def _load_npz_mask(
     instance: Mapping[str, Any],
     image_shape: tuple[int, int],
     logical_entity_id: str,
-) -> np.ndarray:
+) -> tuple[np.ndarray, str]:
     with np.load(path, allow_pickle=False) as payload:
         if set(payload.files) != {
             "masks",
@@ -377,12 +378,17 @@ def _load_npz_mask(
             or str(mask_ids[0]) != instance["mask_id"]
         ):
             raise ValueError("mask_ids does not identify this mask")
+        npz_object_id = str(object_ids[0]) if object_ids.shape == (1,) else ""
         if (
             object_ids.shape != (1,)
             or object_ids.dtype.kind != "U"
-            or str(object_ids[0]) != logical_entity_id
+            or npz_object_id
+            not in {logical_entity_id, str(instance["object_id"])}
         ):
-            raise ValueError("object_ids does not identify the logical entity")
+            raise ValueError(
+                "object_ids identifies neither the logical nor selected "
+                "Dataset entity"
+            )
         if (
             frame_index.shape != ()
             or frame_index.dtype != np.int64
@@ -392,12 +398,12 @@ def _load_npz_mask(
         output = np.array(masks[0], copy=True)
     if not np.any(output):
         raise ValueError("subject mask must not be empty")
-    return output
+    return output, npz_object_id
 
 
 def _validate_geometry(
     mask: np.ndarray, *, instance: Mapping[str, Any]
-) -> None:
+) -> str:
     ys, xs = np.where(mask > 0)
     area = int(xs.size)
     bbox = [
@@ -409,13 +415,19 @@ def _validate_geometry(
     centroid = np.asarray([xs.mean(), ys.mean()], dtype=np.float64)
     if instance["area_pixels"] != area:
         raise ValueError("area_pixels differs from the NPZ mask")
-    if instance["bbox_xyxy"] != bbox:
+    inclusive_bbox = [bbox[0], bbox[1], bbox[2] - 1, bbox[3] - 1]
+    if instance["bbox_xyxy"] == bbox:
+        bbox_policy = "xyxy_half_open"
+    elif instance["bbox_xyxy"] == inclusive_bbox:
+        bbox_policy = "xyxy_inclusive_max_legacy"
+    else:
         raise ValueError("bbox_xyxy differs from the NPZ mask")
     declared_centroid = np.asarray(instance["centroid_xy"], dtype=np.float64)
     if declared_centroid.shape != (2,) or not np.allclose(
         centroid, declared_centroid, rtol=0.0, atol=1e-6
     ):
         raise ValueError("centroid_xy differs from the NPZ mask")
+    return bbox_policy
 
 
 def _finite_positive(value: object, *, name: str) -> float:

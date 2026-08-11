@@ -171,6 +171,51 @@ class VerticalSpringScoringTests(unittest.TestCase):
             self.assertGreaterEqual(value, 0.0)
             self.assertLessEqual(value, 1.0)
 
+    def test_identity_period_is_one_when_reference_differs_from_ideal(
+        self,
+    ) -> None:
+        """Would fail if the physical prior penalizes exact reference identity."""
+        reference = extract_spring_trace(
+            sinusoidal_masks(self.times, period=1.0),
+            self.times,
+            quality_config=QUALITY,
+        )
+
+        result = score_spring_traces(
+            reference,
+            reference,
+            mass_kg=0.5156,
+            stiffness_n_m=32.6213467096774,
+            scoring_config=SCORING,
+        )
+
+        self.assertEqual(1.0, result["components"]["period"])
+
+    def test_period_closer_to_theory_cannot_erase_empirical_mismatch(
+        self,
+    ) -> None:
+        """Would fail if the physical prior can compensate for the wrong period."""
+        reference = extract_spring_trace(
+            sinusoidal_masks(self.times, period=1.0),
+            self.times,
+            quality_config=QUALITY,
+        )
+        closer_to_theory = extract_spring_trace(
+            sinusoidal_masks(self.times, period=0.8),
+            self.times,
+            quality_config=QUALITY,
+        )
+
+        result = score_spring_traces(
+            reference,
+            closer_to_theory,
+            mass_kg=0.5156,
+            stiffness_n_m=32.6213467096774,
+            scoring_config=SCORING,
+        )
+
+        self.assertLess(result["components"]["period"], 1.0)
+
     def test_static_trace_scores_below_quarter(self) -> None:
         """Would fail if a no-motion tube can earn trajectory-only credit."""
         xy = np.column_stack((np.full(len(self.times), 48.0), np.full(len(self.times), 48.0)))
@@ -216,6 +261,29 @@ class VerticalSpringScoringTests(unittest.TestCase):
             self.score(self.reference)["components"]["vertical_axis_confinement"],
         )
         self.assertLess(result["score"], self.score(self.reference)["score"])
+
+    def test_identity_axis_confinement_is_one_with_shared_horizontal_drift(
+        self,
+    ) -> None:
+        """Would fail if reference camera drift penalizes an identical prediction."""
+        drifting_reference = extract_spring_trace(
+            sinusoidal_masks(self.times, horizontal_amplitude=8.0),
+            self.times,
+            quality_config=QUALITY,
+        )
+
+        result = score_spring_traces(
+            drifting_reference,
+            drifting_reference,
+            mass_kg=0.5156,
+            stiffness_n_m=32.6213467096774,
+            scoring_config=SCORING,
+        )
+
+        self.assertEqual(
+            1.0,
+            result["components"]["vertical_axis_confinement"],
+        )
 
     def test_theoretical_period_is_the_mass_spring_formula(self) -> None:
         """Would fail if the physical period calculation uses the wrong units/formula."""
@@ -498,16 +566,32 @@ class VerticalSpringScoringTests(unittest.TestCase):
             1.0,
         )
 
-    def test_period_component_requires_theory_agreement_when_reference_matches(
+    def test_period_component_penalizes_new_theory_error_beyond_reference(
         self,
     ) -> None:
-        """Would fail if an empirical match can ignore an incompatible physical period."""
+        """Would fail if worsening theory error adds no independent penalty."""
+        closer_to_theory = extract_spring_trace(
+            sinusoidal_masks(self.times, period=0.6),
+            self.times,
+            quality_config=QUALITY,
+        )
+        farther_from_theory = extract_spring_trace(
+            sinusoidal_masks(self.times, period=1.0),
+            self.times,
+            quality_config=QUALITY,
+        )
         stiffness = 0.5156 * (2.0 * math.pi / 0.6) ** 2
         self.assertLess(
             self.score_with_physics(
-                self.reference, mass_kg=0.5156, stiffness_n_m=stiffness
+                farther_from_theory,
+                mass_kg=0.5156,
+                stiffness_n_m=stiffness,
             )["components"]["period"],
-            1.0,
+            self.score_with_physics(
+                closer_to_theory,
+                mass_kg=0.5156,
+                stiffness_n_m=stiffness,
+            )["components"]["period"],
         )
 
 

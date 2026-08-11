@@ -515,8 +515,23 @@ def _period_similarity(
     sample_resolution_s: float,
 ) -> float:
     """Treat sub-frame period differences as indistinguishable observations."""
+    error = _period_relative_error(
+        observed_s,
+        expected_s,
+        sample_resolution_s=sample_resolution_s,
+    )
+    return _exponential_similarity(error, scale=1.0)
+
+
+def _period_relative_error(
+    observed_s: float,
+    expected_s: float,
+    *,
+    sample_resolution_s: float,
+) -> float:
+    """Return resolution-aware relative period error."""
     delta_s = max(0.0, abs(observed_s - expected_s) - 0.5 * sample_resolution_s)
-    return _exponential_similarity(delta_s / max(abs(expected_s), 1e-12), scale=1.0)
+    return delta_s / max(abs(expected_s), 1e-12)
 
 
 def _periodicity_evidence(
@@ -611,10 +626,19 @@ def score_spring_traces(
             reference_data["period_s"],
             sample_resolution_s=sample_resolution_s,
         )
-        theory_similarity = _period_similarity(
+        reference_theory_error = _period_relative_error(
+            reference_data["period_s"],
+            theory,
+            sample_resolution_s=sample_resolution_s,
+        )
+        prediction_theory_error = _period_relative_error(
             prediction_data["period_s"],
             theory,
             sample_resolution_s=sample_resolution_s,
+        )
+        theory_similarity = _exponential_similarity(
+            max(0.0, prediction_theory_error - reference_theory_error),
+            scale=1.0,
         )
         period = _bounded(math.sqrt(reference_similarity * theory_similarity))
 
@@ -658,7 +682,11 @@ def score_spring_traces(
     # vertical motion axis, so confinement requires observable oscillation.
     vertical_axis_confinement = _bounded(
         _exponential_similarity(
-            prediction_data["horizontal_drift_ratio"],
+            max(
+                0.0,
+                prediction_data["horizontal_drift_ratio"]
+                - reference_data["horizontal_drift_ratio"],
+            ),
             scale=float(scoring_config["axis_drift_scale"]),
         )
         * oscillation_evidence
@@ -683,5 +711,11 @@ def score_spring_traces(
             "theoretical_period_s": theory,
             "reference_amplitude_px": reference_data["amplitude_px"],
             "prediction_amplitude_px": prediction_data["amplitude_px"],
+            "reference_horizontal_drift_ratio": reference_data[
+                "horizontal_drift_ratio"
+            ],
+            "prediction_horizontal_drift_ratio": prediction_data[
+                "horizontal_drift_ratio"
+            ],
         },
     }

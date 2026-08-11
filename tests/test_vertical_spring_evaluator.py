@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import importlib.util
+import json
 import math
+import os
 import unittest
 from copy import deepcopy
 from dataclasses import replace
@@ -10,6 +13,12 @@ from unittest.mock import patch
 
 import cv2
 import numpy as np
+from _pytest.mark.structures import Mark
+
+try:
+    from jsonschema import Draft202012Validator
+except ImportError:  # pragma: no cover - exercised by minimal release installs
+    Draft202012Validator = None  # type: ignore[assignment,misc]
 
 from physbench.evaluation.common.errors import (
     ReferenceAnalysisError,
@@ -17,8 +26,15 @@ from physbench.evaluation.common.errors import (
 )
 from physbench.evaluation.common.frozen_subject import FrozenSubjectAnchor
 from physbench.evaluation.common.masks.sam2 import Sam2VideoSegmenter
-from physbench.evaluation.common.media import SampledVideo, VideoInfo
+from physbench.evaluation.common.media import (
+    SampledVideo,
+    VideoInfo,
+    probe_video,
+    resolve_evaluation_timeline,
+)
 from physbench.evaluation.contracts import CaseEvaluationRequest
+from physbench.evaluation import load_evaluation_protocol
+from physbench.evaluation.registry import SceneEvaluatorRegistry
 from physbench.evaluation.scenes.vertical_spring_oscillator.observation import (
     observe_spring_topology,
     prompt_from_anchor,
@@ -310,16 +326,18 @@ def spring_case() -> dict[str, object]:
 def write_frozen_spring_anchor(
     root: Path, *, case: dict[str, object], mask: np.ndarray
 ) -> None:
+    binary_mask = np.where(mask > 0, 1, 0).astype(np.uint8)
+    height, width = binary_mask.shape
     npz_path = root / "masks/ball_0.npz"
     npz_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         npz_path,
-        masks=np.asarray(mask[None, ...], dtype=np.uint8),
+        masks=binary_mask[None, ...],
         mask_ids=np.asarray(["spring-ball-mask"]),
         object_ids=np.asarray(["oscillator_ball"]),
         frame_index=np.asarray(0, dtype=np.int64),
     )
-    ys, xs = np.where(mask > 0)
+    ys, xs = np.where(binary_mask > 0)
     write_json(
         root / "masks/manifest.json",
         {
@@ -329,7 +347,7 @@ def write_frozen_spring_anchor(
             "frame_index": 0,
             "frame_scope": "first_frame_only",
             "source_first_frame": "condition.png",
-            "image_shape_hw": [96, 96],
+            "image_shape_hw": [height, width],
             "instances": [
                 {
                     "mask_id": "spring-ball-mask",
@@ -359,8 +377,13 @@ def write_frozen_spring_anchor(
 
 
 def write_video(path: Path, frames: list[np.ndarray]) -> None:
+    if not frames:
+        raise ValueError("test video requires at least one frame")
+    height, width = frames[0].shape[:2]
+    if any(frame.shape[:2] != (height, width) for frame in frames):
+        raise ValueError("test video frames must share one canvas")
     writer = cv2.VideoWriter(
-        str(path), cv2.VideoWriter_fourcc(*"mp4v"), 24.0, (96, 96)
+        str(path), cv2.VideoWriter_fourcc(*"mp4v"), 24.0, (width, height)
     )
     if not writer.isOpened():
         raise RuntimeError("test video writer could not open")
@@ -403,6 +426,290 @@ def evaluation_sinusoidal_masks(
     return output
 
 
+@unittest.skipIf(
+    Draft202012Validator is None,
+    "jsonschema unavailable: install a Draft 2020-12 consumer",
+)
+class VerticalSpringProtocolSchemaTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        root = Path(__file__).resolve().parents[1]
+        cls.schema = json.loads(
+            (root / "schemas/evaluation_protocol.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        cls.protocol = json.loads(
+            (
+                root
+                / "configs/evaluation/protocols/scene_default_v1.json"
+            ).read_text(encoding="utf-8")
+        )
+        assert Draft202012Validator is not None
+        Draft202012Validator.check_schema(cls.schema)
+        cls.validator = Draft202012Validator(cls.schema)
+
+    def assert_protocol_mutation_rejected(
+        self,
+        *,
+        container_path: tuple[str, ...],
+        key: str,
+        mutation: str,
+        validator_keyword: str,
+    ) -> None:
+        candidate = deepcopy(self.protocol)
+        container = candidate
+        for segment in container_path:
+            container = container[segment]
+        if mutation == "missing":
+            container.pop(key)
+        elif mutation == "unknown":
+            container[key] = 0.5
+        else:  # pragma: no cover - test helper misuse
+            raise AssertionError(f"unknown schema mutation: {mutation}")
+
+        matching = [
+            error
+            for error in self.validator.iter_errors(candidate)
+            if error.validator == validator_keyword
+            and tuple(error.absolute_path) == container_path
+        ]
+        self.assertTrue(
+            matching,
+            f"Draft 2020-12 accepted {mutation} {'.'.join((*container_path, key))}",
+        )
+
+    def test_draft202012_rejects_missing_and_unknown_spring_scene(self) -> None:
+        """Would fail if the public consumer can omit or invent a scene route."""
+        self.assertEqual([], list(self.validator.iter_errors(self.protocol)))
+        self.assert_protocol_mutation_rejected(
+            container_path=("scenes",),
+            key="vertical_spring_oscillator",
+            mutation="missing",
+            validator_keyword="required",
+        )
+        self.assert_protocol_mutation_rejected(
+            container_path=("scenes",),
+            key="vertical_spring_oscillator_typo",
+            mutation="unknown",
+            validator_keyword="additionalProperties",
+        )
+
+    def test_draft202012_rejects_missing_and_unknown_nested_spring_keys(
+        self,
+    ) -> None:
+        """Would fail if nested spring settings silently default or admit typos."""
+        spring_path = ("scenes", "vertical_spring_oscillator")
+        self.assert_protocol_mutation_rejected(
+            container_path=(*spring_path, "topology"),
+            key="minimum_connected_vertical_span_ratio",
+            mutation="missing",
+            validator_keyword="required",
+        )
+        self.assert_protocol_mutation_rejected(
+            container_path=(*spring_path, "identity"),
+            key="minimum_anchor_io",
+            mutation="unknown",
+            validator_keyword="additionalProperties",
+        )
+
+
+class VerticalSpringRealAssetTests(unittest.TestCase):
+    pytestmark = Mark("real_assets", (), {}, _ispytest=True)
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        configured_root = os.environ.get("PHYSBENCH_FULL_ASSET_ROOT")
+        if not configured_root:
+            raise unittest.SkipTest("PHYSBENCH_FULL_ASSET_ROOT is unset")
+        cls.full_asset_root = Path(configured_root).expanduser().resolve()
+        if not cls.full_asset_root.is_dir():
+            raise unittest.SkipTest(
+                "PHYSBENCH_FULL_ASSET_ROOT is not a directory: "
+                f"{cls.full_asset_root}"
+            )
+        for dependency in ("torch", "sam2", "huggingface_hub"):
+            if importlib.util.find_spec(dependency) is None:
+                raise unittest.SkipTest(
+                    f"SAM2 dependency unavailable: {dependency} is not installed"
+                )
+
+        repository_root = Path(__file__).resolve().parents[1]
+        indexed_cases = [
+            json.loads(line)
+            for line in (
+                repository_root
+                / "datasets/releases/13.0.0/cases.jsonl"
+            ).read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        spring_cases = [
+            candidate
+            for candidate in indexed_cases
+            if candidate.get("scene_id") == "vertical_spring_oscillator"
+        ]
+        protocol = load_evaluation_protocol("scene_default_v1")
+        spring_config = protocol["scenes"]["vertical_spring_oscillator"]
+        cadence_tolerance = float(
+            spring_config["period"]["maximum_cadence_relative_deviation"]
+        )
+        cls.cases = {}
+        for release_side in ("above", "below"):
+            eligible: list[tuple[int, str, dict[str, object]]] = []
+            for candidate in spring_cases:
+                if (
+                    candidate.get("appearance", {}).get("release_side")
+                    != release_side
+                ):
+                    continue
+                assets = candidate.get("assets")
+                if not isinstance(assets, dict):
+                    continue
+                reference_path = cls._asset_path(
+                    assets.get("reference_video"), role="reference_video"
+                )
+                info = probe_video(reference_path)
+                timeline = resolve_evaluation_timeline(
+                    reference_info=info,
+                    prediction_info=info,
+                    config=spring_config["timeline"],
+                )
+                steps = np.diff(timeline.sample_times_s)
+                median_step = float(np.median(steps))
+                deviation = float(
+                    np.max(np.abs(steps - median_step)) / median_step
+                )
+                if deviation <= cadence_tolerance:
+                    eligible.append(
+                        (
+                            len(timeline.sample_times_s),
+                            str(candidate["case_id"]),
+                            candidate,
+                        )
+                    )
+            if not eligible:
+                raise AssertionError(
+                    "canonical Dataset has no spring identity control within "
+                    f"the protocol cadence gate for release_side={release_side}"
+                )
+            selected = min(eligible)[2]
+            cls.cases[release_side] = cls._materialize_case(selected)
+
+        cls.evaluator = SceneEvaluatorRegistry(protocol).resolve(
+            "vertical_spring_oscillator"
+        )
+        cls.temporary = TemporaryDirectory()
+        cls.addClassCleanup(cls.temporary.cleanup)
+        cls.artifact_root = Path(cls.temporary.name)
+
+    @classmethod
+    def _asset_path(cls, relative: object, *, role: str) -> Path:
+        if not isinstance(relative, str) or not relative:
+            raise unittest.SkipTest(f"full asset missing: assets.{role} is unset")
+        parts = Path(relative).parts
+        if not parts or parts[0] != "assets":
+            raise AssertionError(
+                f"canonical assets.{role} is not rooted at assets/: {relative}"
+            )
+        resolved = cls.full_asset_root.joinpath(*parts[1:]).resolve()
+        try:
+            resolved.relative_to(cls.full_asset_root)
+        except ValueError as exc:
+            raise AssertionError(
+                f"canonical assets.{role} escapes the full asset root"
+            ) from exc
+        if not resolved.is_file():
+            raise unittest.SkipTest(
+                f"full asset missing for assets.{role}: {relative}"
+            )
+        return resolved
+
+    @classmethod
+    def _materialize_case(cls, indexed: dict[str, object]) -> dict[str, object]:
+        assets = indexed.get("assets")
+        if not isinstance(assets, dict):
+            raise AssertionError("canonical spring Case assets must be an object")
+        for role in (
+            "caption",
+            "physics_annotation",
+            "first_frame",
+            "first_frame_mask_manifest",
+            "reference_video",
+        ):
+            cls._asset_path(assets.get(role), role=role)
+
+        caption = json.loads(
+            cls._asset_path(assets["caption"], role="caption").read_text(
+                encoding="utf-8"
+            )
+        )
+        physics = json.loads(
+            cls._asset_path(
+                assets["physics_annotation"], role="physics_annotation"
+            ).read_text(encoding="utf-8")
+        )
+        manifest = json.loads(
+            cls._asset_path(
+                assets["first_frame_mask_manifest"],
+                role="first_frame_mask_manifest",
+            ).read_text(encoding="utf-8")
+        )
+        for instance in manifest.get("instances", []):
+            cls._asset_path(instance.get("npz_asset"), role="frozen_mask_npz")
+
+        case = deepcopy(indexed)
+        case["text"] = {"prompt": caption["caption"]}
+        case["physics"] = physics["physics"]
+        return case
+
+    def assert_real_reference_identity(self, release_side: str) -> None:
+        case = self.cases[release_side]
+        assets = case["assets"]
+        assert isinstance(assets, dict)
+        reference_path = self._asset_path(
+            assets["reference_video"], role="reference_video"
+        )
+        request = CaseEvaluationRequest(
+            job={"job_id": f"real_spring_identity_{release_side}"},
+            case=case,
+            case_catalog={str(case["case_id"]): case},
+            prediction={
+                "status": "complete",
+                "video_path": str(reference_path),
+            },
+            asset_root=self.full_asset_root.parent,
+            artifact_dir=self.artifact_root / release_side,
+            evaluator_config=deepcopy(self.evaluator.config),
+        )
+        try:
+            result = self.evaluator.evaluate(request)
+        except RuntimeError as exc:
+            explicit_environment_blockers = (
+                "SAM2 segmenter internal failure (sam2_dependency_missing):",
+                "SAM2 segmenter internal failure (sam2_model_load_failed):",
+                "SAM2 segmenter internal failure (cuda_unavailable):",
+            )
+            if str(exc).startswith(explicit_environment_blockers):
+                self.skipTest(str(exc))
+            raise
+
+        self.assertEqual("evaluated", result.status, result.to_dict())
+        assert result.score is not None
+        self.assertGreaterEqual(result.score, 0.98, result.to_dict())
+        self.assertGreaterEqual(
+            result.metrics["vertical_spring_dynamics_similarity"]["score"],
+            0.98,
+            result.to_dict(),
+        )
+        self.assertEqual(1.0, result.metrics["csti"]["score"])
+
+    def test_real_above_reference_identity_scores_near_one(self) -> None:
+        self.assert_real_reference_identity("above")
+
+    def test_real_below_reference_identity_scores_near_one(self) -> None:
+        self.assert_real_reference_identity("below")
+
+
 class VerticalSpringEvaluatorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = TemporaryDirectory()
@@ -439,6 +746,70 @@ class VerticalSpringEvaluatorTests(unittest.TestCase):
 
         return VerticalSpringOscillatorCaseEvaluator(
             deepcopy(EVALUATOR_CONFIG if config is None else config)
+        )
+
+    def test_real_portrait_mp4s_share_exact_no_pad_spring_transform(
+        self,
+    ) -> None:
+        """Would fail if the evaluator pads, distorts, or splits portrait roles."""
+        height, width = 832, 480
+        portrait_masks = evaluation_sinusoidal_masks(
+            self.times,
+            width=width,
+            height=height,
+        )
+        portrait_frames = [
+            spring_frame(mask, attached=True, ruler_and_border=False)
+            for mask in portrait_masks
+        ]
+        reference_path = self.root / "reference.mp4"
+        prediction_path = self.root / "portrait-prediction.mp4"
+        write_video(reference_path, portrait_frames)
+        write_video(prediction_path, portrait_frames)
+        write_frozen_spring_anchor(
+            self.root,
+            case=self.case,
+            mask=portrait_masks[0],
+        )
+        self.request.prediction["video_path"] = str(prediction_path)  # type: ignore[index]
+        config = load_evaluation_protocol("scene_default_v1")["scenes"][
+            "vertical_spring_oscillator"
+        ]
+        with patch.object(
+            Sam2VideoSegmenter,
+            "segment",
+            return_value=(
+                portrait_masks,
+                {"backend": "deterministic_test_sam2"},
+            ),
+        ):
+            result = self.evaluator(config).evaluate(self.request)
+
+        self.assertEqual("evaluated", result.status, result.to_dict())
+        contract = result.provenance["shared_media_contract"]
+        self.assertEqual([480, 832], contract["target_size"])
+        self.assertEqual([0, 0, 480, 832], contract["reference_crop_xywh"])
+        self.assertEqual(
+            contract["reference_crop_xywh"],
+            contract["prediction_crop_xywh"],
+        )
+        self.assertFalse(contract["padding_used_for_evaluation"])
+        self.assertFalse(contract["aspect_ratio_distortion"])
+        sampling = result.provenance["sampling"]
+        self.assertEqual(
+            sampling["reference"]["spatial_transform"],
+            sampling["prediction"]["spatial_transform"],
+        )
+        self.assertEqual(
+            {
+                "policy": "reference_content_crop_resize_no_pad",
+                "crop_xywh": [0, 0, 480, 832],
+                "scale": 1.0,
+                "source_size": [480, 832],
+                "target_size": [480, 832],
+                "padding": None,
+            },
+            sampling["reference"]["spatial_transform"],
         )
 
     def test_identity_analysis_scores_one_reuses_segmentation_and_binds_csti(
@@ -483,6 +854,35 @@ class VerticalSpringEvaluatorTests(unittest.TestCase):
             },
             set(analysis.artifacts),
         )
+
+    def test_removed_spring_cannot_earn_identity_motion_credit(self) -> None:
+        """Would fail if ball identity and motion can compensate for no spring."""
+        reference = sampled_video(self.frames)
+        removed_frames = [
+            spring_frame(mask, attached=False, ruler_and_border=False)
+            for mask in self.masks
+        ]
+        prediction = sampled_video(removed_frames)
+        with patch.object(
+            Sam2VideoSegmenter,
+            "segment",
+            side_effect=[
+                (self.masks, {"role": "reference"}),
+                (self.masks, {"role": "prediction"}),
+            ],
+        ):
+            analysis = self.evaluator().analyze(
+                self.request,
+                times_s=self.times,
+                reference_video=reference,
+                prediction_video=prediction,
+            )
+
+        dynamics = analysis.metrics["vertical_spring_dynamics_similarity"]
+        topology = analysis.metrics["vertical_spring_topology_integrity"]
+        self.assertEqual(1.0, dynamics["score"])
+        self.assertLess(topology["score"], 0.05)
+        self.assertLess(analysis.score, 0.05)
 
     def test_prediction_unavailable_samples_are_empty_in_the_accepted_csti_tube(
         self,
