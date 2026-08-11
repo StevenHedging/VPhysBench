@@ -78,7 +78,7 @@ length, or gravity raises `ValueError` instead of guessing.
 Run:
 
 ```bash
-/root/Steven/.venvs/wan22-pair-text/bin/python -m pytest tests/test_entity_manifest.py -k vertical_spring -q
+PYTHONPATH=src:tests:. python3 -m pytest tests/test_entity_manifest.py -k vertical_spring -q
 ```
 
 Expected: failure containing `has no legacy entity materializer`.
@@ -117,7 +117,7 @@ required, with selector `fixed_support_and_vertical_spring_axis`.
 Run:
 
 ```bash
-/root/Steven/.venvs/wan22-pair-text/bin/python -m pytest tests/test_entity_manifest.py -q
+PYTHONPATH=src:tests:. python3 -m pytest tests/test_entity_manifest.py -q
 ```
 
 Expected: all tests pass.
@@ -164,7 +164,7 @@ the required-valid-ratio check, and
 - [ ] **Step 2: Run the new test module and confirm RED**
 
 ```bash
-/root/Steven/.venvs/wan22-pair-text/bin/python -m pytest tests/test_vertical_spring_scoring.py -q
+PYTHONPATH=src:tests:. python3 -m pytest tests/test_vertical_spring_scoring.py -q
 ```
 
 Expected: import failure for the missing spring scoring module.
@@ -230,7 +230,7 @@ prediction period scores zero.
 - [ ] **Step 5: Run focused scoring tests and confirm GREEN**
 
 ```bash
-/root/Steven/.venvs/wan22-pair-text/bin/python -m pytest tests/test_vertical_spring_scoring.py -q
+PYTHONPATH=src:tests:. python3 -m pytest tests/test_vertical_spring_scoring.py -q
 ```
 
 Expected: all tests pass and no runtime warnings.
@@ -275,7 +275,7 @@ self.assertGreater(decision["anchor_iou"], 0.99)
 - [ ] **Step 2: Run focused observation tests and confirm RED**
 
 ```bash
-/root/Steven/.venvs/wan22-pair-text/bin/python -m pytest tests/test_vertical_spring_evaluator.py -k 'prompt or identity or topology' -q
+PYTHONPATH=src:tests:. python3 -m pytest tests/test_vertical_spring_evaluator.py -k 'prompt or identity or topology' -q
 ```
 
 Expected: import failure for `observation`.
@@ -309,7 +309,7 @@ class SpringTopology:
 - [ ] **Step 5: Run focused observation tests and confirm GREEN**
 
 ```bash
-/root/Steven/.venvs/wan22-pair-text/bin/python -m pytest tests/test_vertical_spring_evaluator.py -k 'prompt or identity or topology' -q
+PYTHONPATH=src:tests:. python3 -m pytest tests/test_vertical_spring_evaluator.py -k 'prompt or identity or topology' -q
 ```
 
 Expected: all selected tests pass.
@@ -360,7 +360,7 @@ evaluation jobs remain unchanged.
 - [ ] **Step 2: Run protocol/evaluator tests and confirm RED**
 
 ```bash
-/root/Steven/.venvs/wan22-pair-text/bin/python -m pytest \
+PYTHONPATH=src:tests:. python3 -m pytest \
   tests/test_vertical_spring_evaluator.py \
   tests/test_evaluation_protocol_v1.py \
   tests/test_release_v1_contract.py -q
@@ -407,7 +407,7 @@ design.
 - [ ] **Step 5: Run focused and boundary tests and confirm GREEN**
 
 ```bash
-/root/Steven/.venvs/wan22-pair-text/bin/python -m pytest \
+PYTHONPATH=src:tests:. python3 -m pytest \
   tests/test_vertical_spring_scoring.py \
   tests/test_vertical_spring_evaluator.py \
   tests/test_entity_manifest.py \
@@ -442,7 +442,7 @@ git commit -m "feat: evaluate vertical spring oscillator v1"
 - Modify: `docs/superpowers/plans/2026-08-11-vertical-spring-evaluator-v1.md`
 
 **Interfaces:**
-- Consumes: complete evaluator and read-only assets at `/root/Steven/VPhysBench/datasets/assets` when present.
+- Consumes: complete evaluator and read-only assets from `$PHYSBENCH_FULL_ASSET_ROOT` when present.
 - Produces: calibrated thresholds, public documentation, review evidence, pushed commit, and successful hosted CI.
 
 - [ ] **Step 1: Add guarded real-asset identity smokes**
@@ -457,7 +457,7 @@ dependency/asset reason.
 - [ ] **Step 2: Run calibration and adjust only protocol thresholds**
 
 ```bash
-/root/Steven/.venvs/wan22-pair-text/bin/python -m pytest \
+PYTHONPATH=src:tests:. python3 -m pytest \
   tests/test_vertical_spring_evaluator.py -m real_assets -vv
 ```
 
@@ -476,12 +476,12 @@ for training/future Task versions.
 - [ ] **Step 4: Run the full relevant verification matrix**
 
 ```bash
-/root/Steven/.venvs/wan22-pair-text/bin/python -m pytest tests/test_vertical_spring_scoring.py tests/test_vertical_spring_evaluator.py -q
+PYTHONPATH=src:tests:. python3 -m pytest tests/test_vertical_spring_scoring.py tests/test_vertical_spring_evaluator.py -q
 make test-evaluation
 make test-interface
-make test-release
-make check-release-archive
-/root/Steven/.venvs/wan22-pair-text/bin/python -m compileall -q src tests
+make release-check
+make release-archive-check
+PYTHONPATH=src:tests:. python3 -m compileall -q src tests
 git diff --check
 ```
 

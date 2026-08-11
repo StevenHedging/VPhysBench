@@ -14,9 +14,13 @@
 | `inclined_plane_slide` | `inclined_plane_slide_v1` | causal open-world block tracking |
 | `uniform_circular_motion` | `uniform_circular_motion_v1` | apparatus-frozen orbit tracking |
 | `parabolic_motion` | `parabolic_motion_v1` | fail-closed projectile identity and strict composition |
+| `vertical_spring_oscillator` | `vertical_spring_oscillator_v1` | frozen steel-ball identity + vertical spring dynamics/topology |
 
 所有公开 evaluator 的 `evaluator_version` 都是 `1.0`。源码中保留少量版本化辅助模块，
 因为当前算法复用它们；它们不是可选公共协议，也不能通过 registry 选择。
+
+协议可以解析上述六个 scene evaluator，但官方 Task v1 仍只选择前五个场景。公开 spring
+resolver 不会改变正式 job 集、五场景宏平均或 leaderboard 分数。
 
 ## Shared contract
 
@@ -31,7 +35,7 @@ asset root、输出目录和该 scene 的协议配置。它输出：
 Evaluator 是唯一允许读取 reference video、reference masks 和评分注释的组件。Baseline
 投影会排除这些字段，并审计媒体摘要，防止 V2V 输入别名到参考媒体。
 
-## Five scene scores
+## Scene expert scores
 
 - Pendulum 比较角轨迹、周期、振幅、结构一致性和条件主体身份；冻结首帧主体身份，预测
   不能用后来出现的相似物体替换目标。
@@ -43,12 +47,22 @@ Evaluator 是唯一允许读取 reference video、reference masks 和评分注�
   匀速性和对象完整性。
 - Parabolic motion 冻结抛射体主体身份，比较轨迹、水平速度、重力加速度、飞行时间和
   运动约束；physics 与 identity 采用严格乘法组合，任一关键门失败都不能被另一项补偿。
+- Vertical spring oscillator 冻结条件帧中的钢球身份，在 reference 与 prediction 的共同
+  物理时间轴和同一无 padding 画布上比较六项 dynamics：vertical trajectory、period、
+  amplitude envelope、equilibrium/release phase、vertical-axis confinement 和
+  oscillation evidence。period 同时保留 prediction-vs-reference 的经验相似度，并仅惩罚
+  prediction 相对 reference 新增的理想弹簧周期偏差；更接近理论不能覆盖经验周期不符。
+  subject appearance/shape/position 与当前帧 spring topology 作为另外两个内容组件；
+  topology 同时是乘法 integrity factor，因此移除或断开的弹簧不能靠钢球运动补偿。
 
 ## CSTI
 
-CSTI 使用 `exact_full_tube_edt`：在 scene 原生分析分辨率上构造参考与预测实体 tube，排除
-配置指定的初始条件帧，按物理重叠时间轴计算带空间/时间容差的完整 tube 一致性。case
-层按 GT entity 求均值，Task 层作为独立维度汇总；CSTI 不替代 scene expert score。
+CSTI 使用 `exact_full_tube_edt`。它的精确输入是：冻结 entity manifest 中的 GT
+`entity_id`、`role_id` 和 `same_case_gt` reference capability；scene evaluator 已验证并对齐
+到同一物理时间轴、同一原生分析画布的 reference/prediction mask tubes；以及只有通过冻结
+身份门后才写入的 matched prediction track IDs。配置指定的初始条件样本会在完整 tube
+评分前排除，prediction unavailable 样本保持空 mask，不会从 reference 补帧。case 层按
+全部 GT entities 求均值，Task 层作为独立维度汇总；CSTI 不替代 scene expert score。
 
 ## Failure semantics
 
@@ -59,6 +73,19 @@ CSTI 使用 `exact_full_tube_edt`：在 scene 原生分析分辨率上构造参�
 Reference 缺失或不可认证时结果为 `unavailable`；内部 evaluator 异常为 `error`。这些
 状态不会转换成成功分数。所有 case 结果都必须对应 canonical job，重复、越界或身份不符
 的记录会被拒绝。
+
+Spring evaluator 还保持明确的失败来源：reference mask/identity/trace 缺陷是
+`unavailable`，prediction identity/observation 缺陷按 robust contract 为已评估零分，
+依赖、模型、配置或实现内部故障不能伪装成任一视频的评分结果。
+
+## Artifacts and audit
+
+成功的 scene evaluator 可以写入逐帧 CSV、诊断曲线和 JSON audit；artifact 写入失败只进入
+`quality.artifact_failures` 与 `provenance.artifact_failures`，不能改变分数或状态。Spring
+结果具体发布 vertical-spring per-frame CSV、trajectory curve、subject-components CSV、
+subject-similarity curve 和 audit JSON。其 provenance 记录媒体摘要、共同 timeline、双方
+无 padding spatial transform、冻结 anchor/NPZ 摘要、SAM2 prompt/传播、identity 决策、
+topology、CSTI 绑定和是否复用完全相同的 sampled frames。
 
 ## Aggregation
 

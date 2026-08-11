@@ -24,9 +24,10 @@
 1. `push_bottle`
 2. `vertical_spring_oscillator`
 
-`vertical_spring_oscillator` 在 finetune Task v1 中参与训练，但没有公开 evaluator，
-不进入正式评估 job、五场景聚合或 leaderboard 分数。`push_bottle` 的数据完整保留，
-但不被任何官方 Task v1 的训练或评估集合选择。
+`vertical_spring_oscillator` 已有公开可解析的 `vertical_spring_oscillator_v1` evaluator，
+但官方 Task v1 仍不选择它，因此它不进入正式评估 job、五场景聚合或 leaderboard 分数。
+它的数据继续用于 finetune Task v1 的训练，并为未来 Task 版本保留。`push_bottle` 的数据
+完整保留，但不被任何官方 Task v1 的训练或评估集合选择，也没有公开 scene evaluator。
 
 ## Official Tasks
 
@@ -37,6 +38,10 @@
 两者都使用 `scene_default_v1`。Task 拥有数据选择、种子和报告策略；Baseline 拥有输入
 适配、是否使用物理信息、模型训练和推理实现。
 
+`scene_default_v1` 的 registry 共公开解析六个 scene evaluators：五个正式评分场景加
+`vertical_spring_oscillator`。协议可解析范围与 Task 选择范围彼此独立；增加 resolver 不会
+隐式扩大任何已封印 Task 的 scene IDs 或 canonical jobs。
+
 ## Media contract
 
 Managed I2V/V2V job 会封印允许使用的媒体通道、输出画布、FPS、物理时间零点、帧数规则
@@ -45,7 +50,7 @@ Managed I2V/V2V job 会封印允许使用的媒体通道、输出画布、FPS、
 
 ## Scoring, degradation and coverage
 
-Evaluation v1 对五场景运行对象级物理评分，并计算独立 CSTI 时空一致性维度。以下预测侧
+官方 Task v1 对五场景运行对象级物理评分，并计算独立 CSTI 时空一致性维度。以下预测侧
 失败按“已评估零分”处理，同时写入 degradation reason：
 
 - 缺失或未完成的 prediction record；
