@@ -290,7 +290,7 @@ class VerticalSpringScoringTests(unittest.TestCase):
     def test_weak_fundamental_sweep_rejects_harmonic_aliases(self) -> None:
         """Would fail if a 0.75 s harmonic hides any observable 1.5 s fundamental."""
         times = np.arange(240, dtype=float) / 60.0
-        for fundamental_amplitude in (1.0, 2.0, 4.0, 8.0):
+        for fundamental_amplitude in (0.10, 0.25, 0.50, 0.75, 1.0, 2.0, 4.0, 8.0):
             with self.subTest(fundamental_amplitude=fundamental_amplitude):
                 positions = (
                     48.0
@@ -315,13 +315,34 @@ class VerticalSpringScoringTests(unittest.TestCase):
         )
         self.assertAlmostEqual(0.75, trace.period_s, delta=1 / 60)
 
-    def test_rejects_nonfinite_fundamental_tie_tolerance(self) -> None:
-        """Would fail if the harmonic-selection threshold accepts non-finite values."""
+    def test_subharmonic_residual_gate_selects_only_observable_fundamentals(self) -> None:
+        """Would fail if any weak harmonic perturbation is forced into a long period."""
+        times = np.arange(240, dtype=float) / 60.0
+        high_residual = 48.0 + 0.10 * np.cos(2.0 * math.pi * times / 1.5) + 20.0 * np.cos(
+            4.0 * math.pi * times / 1.5
+        )
+        with self.assertRaises(SpringTraceError) as caught:
+            extract_spring_trace(
+                masks_for_vertical_positions(high_residual),
+                times,
+                quality_config=QUALITY,
+            )
+        self.assertEqual("period_out_of_bounds", caught.exception.code)
+        low_residual = 48.0 + 0.01 * np.cos(2.0 * math.pi * times / 1.5) + 20.0 * np.cos(
+            4.0 * math.pi * times / 1.5
+        )
+        trace = extract_spring_trace(
+            masks_for_vertical_positions(low_residual), times, quality_config=QUALITY
+        )
+        self.assertAlmostEqual(0.75, trace.period_s, delta=1 / 60)
+
+    def test_rejects_nonfinite_subharmonic_residual_gate(self) -> None:
+        """Would fail if the physical observability threshold accepts non-finite values."""
         with self.assertRaises(ValueError):
             extract_spring_trace(
                 self.reference_masks,
                 self.times,
-                quality_config={**QUALITY, "fundamental_peak_tie_tolerance": math.nan},
+                quality_config={**QUALITY, "minimum_subharmonic_residual_px": math.nan},
             )
 
     def test_rejects_irregular_cadence_instead_of_using_index_lags(self) -> None:

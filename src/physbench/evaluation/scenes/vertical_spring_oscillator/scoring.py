@@ -69,7 +69,7 @@ _CADENCE_RELATIVE_TOLERANCE = 0.02
 _MINIMUM_PERIOD_CORRELATION = 0.60
 _MINIMUM_PERIOD_PROMINENCE = 0.001
 _MINIMUM_COMPLETE_CYCLES = 2.0
-_FUNDAMENTAL_PEAK_TIE_TOLERANCE = 0.001
+_MINIMUM_SUBHARMONIC_RESIDUAL_PX = 0.15
 
 
 def _invalid_trace(message: str) -> SpringTraceError:
@@ -236,7 +236,7 @@ def _qualified_autocorrelation_period(
     minimum_correlation: float,
     minimum_prominence: float,
     minimum_complete_cycles: float,
-    fundamental_peak_tie_tolerance: float,
+    minimum_subharmonic_residual_px: float,
 ) -> float | None:
     """Return a repeat-supported fundamental candidate, never an ACF fallback."""
     if len(displacement) < 5:
@@ -275,13 +275,21 @@ def _qualified_autocorrelation_period(
         _refine_periodic_delay(centered, step_s=step_s, lag=lag)
         for lag in candidates
     ]
-    strongest = max(correlation for _, correlation in refined)
-    tied = [
-        period
-        for period, correlation in refined
-        if correlation >= strongest - fundamental_peak_tie_tolerance
-    ]
-    return float(min(tied))
+    candidate_periods = sorted({period for period, _ in refined})
+    shortest = candidate_periods[0]
+    shortest_residual = _periodic_recurrence_residual(
+        centered, step_s=step_s, period_s=shortest
+    )
+    for longer in candidate_periods[1:]:
+        multiple = int(round(longer / shortest))
+        if multiple < 2 or abs(longer - multiple * shortest) > step_s:
+            continue
+        longer_residual = _periodic_recurrence_residual(
+            centered, step_s=step_s, period_s=longer
+        )
+        if shortest_residual - longer_residual >= minimum_subharmonic_residual_px:
+            return float(longer)
+    return float(shortest)
 
 
 def _refine_periodic_delay(
@@ -308,6 +316,22 @@ def _refine_periodic_delay(
             best_period = float(offset_frames * step_s)
             best_correlation = correlation
     return best_period, best_correlation
+
+
+def _periodic_recurrence_residual(
+    centered: np.ndarray, *, step_s: float, period_s: float
+) -> float:
+    """RMS centroid displacement left unexplained by a fractional recurrence."""
+    offset_frames = period_s / step_s
+    last_start = (len(centered) - 1) - offset_frames
+    if offset_frames <= 0.0 or last_start < 2.0:
+        return math.inf
+    indices = np.arange(len(centered), dtype=np.float64)
+    starts = np.arange(int(math.floor(last_start)) + 1, dtype=np.float64)
+    differences = np.interp(starts, indices, centered) - np.interp(
+        starts + offset_frames, indices, centered
+    )
+    return float(np.sqrt(np.mean(np.square(differences))))
 
 
 def _release_sign(displacement: np.ndarray, amplitude_px: float) -> int:
@@ -366,10 +390,10 @@ def extract_spring_trace(
     minimum_complete_cycles = _configured_period_threshold(
         quality_config, "minimum_complete_cycles", _MINIMUM_COMPLETE_CYCLES
     )
-    fundamental_peak_tie_tolerance = _configured_period_threshold(
+    minimum_subharmonic_residual_px = _configured_period_threshold(
         quality_config,
-        "fundamental_peak_tie_tolerance",
-        _FUNDAMENTAL_PEAK_TIE_TOLERANCE,
+        "minimum_subharmonic_residual_px",
+        _MINIMUM_SUBHARMONIC_RESIDUAL_PX,
     )
     cadence_tolerance = _configured_period_threshold(
         quality_config,
@@ -378,8 +402,6 @@ def extract_spring_trace(
     )
     if minimum_correlation > 1.0:
         raise ValueError("minimum_period_correlation must be at most one")
-    if fundamental_peak_tie_tolerance > 1.0:
-        raise ValueError("fundamental_peak_tie_tolerance must be at most one")
     if cadence_tolerance > 1.0:
         raise ValueError("maximum_cadence_relative_deviation must be at most one")
     _require_uniform_cadence(times, relative_tolerance=cadence_tolerance)
@@ -430,7 +452,7 @@ def extract_spring_trace(
         minimum_correlation=minimum_correlation,
         minimum_prominence=minimum_prominence,
         minimum_complete_cycles=minimum_complete_cycles,
-        fundamental_peak_tie_tolerance=fundamental_peak_tie_tolerance,
+        minimum_subharmonic_residual_px=minimum_subharmonic_residual_px,
     )
     if period is not None and not minimum_s <= period <= maximum_s:
         raise SpringTraceError(
@@ -501,10 +523,10 @@ def _periodicity_evidence(
         minimum_complete_cycles=float(
             scoring_config.get("minimum_complete_cycles", _MINIMUM_COMPLETE_CYCLES)
         ),
-        fundamental_peak_tie_tolerance=_configured_scoring_threshold(
+        minimum_subharmonic_residual_px=_configured_scoring_threshold(
             scoring_config,
-            "fundamental_peak_tie_tolerance",
-            _FUNDAMENTAL_PEAK_TIE_TOLERANCE,
+            "minimum_subharmonic_residual_px",
+            _MINIMUM_SUBHARMONIC_RESIDUAL_PX,
         ),
     )
     if qualified is None:
