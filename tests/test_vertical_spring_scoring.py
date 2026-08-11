@@ -667,6 +667,46 @@ class VerticalSpringScoringTests(unittest.TestCase):
             )["components"]["period"],
         )
 
+    def test_exactly_two_complete_cycles_qualify_the_endpoint_period(self) -> None:
+        """Would fail if the maximum eligible lag cannot be an ACF peak."""
+        times = np.arange(25, dtype=float) / 24.0
+        trace = extract_spring_trace(
+            sinusoidal_masks(times, period=0.5),
+            times,
+            quality_config=QUALITY,
+        )
+
+        result = score_spring_traces(
+            trace,
+            trace,
+            mass_kg=0.5156,
+            stiffness_n_m=32.6213467096774,
+            scoring_config=SCORING,
+        )
+
+        self.assertAlmostEqual(0.5, trace.period_s, delta=1 / 24)
+        self.assertEqual(1.0, result["score"])
+
+    def test_more_than_two_complete_cycles_remain_identity(self) -> None:
+        """Would fail if endpoint qualification disrupts an interior ACF peak."""
+        times = np.arange(27, dtype=float) / 24.0
+        trace = extract_spring_trace(
+            sinusoidal_masks(times, period=0.5),
+            times,
+            quality_config=QUALITY,
+        )
+
+        result = score_spring_traces(
+            trace,
+            trace,
+            mass_kg=0.5156,
+            stiffness_n_m=32.6213467096774,
+            scoring_config=SCORING,
+        )
+
+        self.assertAlmostEqual(0.5, trace.period_s, delta=1 / 24)
+        self.assertEqual(1.0, result["score"])
+
 
 if __name__ == "__main__":
     unittest.main()

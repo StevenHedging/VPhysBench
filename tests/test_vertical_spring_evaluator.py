@@ -35,6 +35,7 @@ from physbench.evaluation.common.media import (
 from physbench.evaluation.contracts import CaseEvaluationRequest
 from physbench.evaluation import load_evaluation_protocol
 from physbench.evaluation.registry import SceneEvaluatorRegistry
+from physbench.evaluation.task_evaluator import evaluate_task
 from physbench.evaluation.scenes.vertical_spring_oscillator.observation import (
     observe_spring_topology,
     prompt_from_anchor,
@@ -68,6 +69,7 @@ TOPOLOGY = {
     "connectivity_dilation_px": 1,
     "minimum_corridor_height_radius_ratio": 2.00,
     "minimum_connected_vertical_span_ratio": 0.60,
+    "minimum_reference_score": 0.10,
 }
 
 EVALUATOR_CONFIG = {
@@ -188,6 +190,11 @@ def nested_string_values(value: object) -> tuple[str, ...]:
             for item in nested_string_values(nested)
         )
     return (value,) if isinstance(value, str) else ()
+
+
+class ExplodingArray:
+    def __array__(self, *_args: object, **_kwargs: object) -> np.ndarray:
+        raise RuntimeError("observation array conversion crashed")
 
 
 def frozen_circle_anchor(
@@ -393,14 +400,14 @@ def write_frozen_spring_anchor(
     )
 
 
-def write_video(path: Path, frames: list[np.ndarray]) -> None:
+def write_video(path: Path, frames: list[np.ndarray], *, fps: float = 24.0) -> None:
     if not frames:
         raise ValueError("test video requires at least one frame")
     height, width = frames[0].shape[:2]
     if any(frame.shape[:2] != (height, width) for frame in frames):
         raise ValueError("test video frames must share one canvas")
     writer = cv2.VideoWriter(
-        str(path), cv2.VideoWriter_fourcc(*"mp4v"), 24.0, (width, height)
+        str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
     )
     if not writer.isOpened():
         raise RuntimeError("test video writer could not open")
@@ -556,6 +563,62 @@ class VerticalSpringProtocolSchemaTests(unittest.TestCase):
             mutation="unknown",
             validator_keyword="additionalProperties",
         )
+
+    def test_draft202012_requires_strict_reference_topology_score(self) -> None:
+        """Would fail if the reference-support gate is optional or nonnumeric."""
+        topology_path = (
+            "scenes",
+            "vertical_spring_oscillator",
+            "topology",
+        )
+        candidate = deepcopy(self.protocol)
+        candidate["scenes"]["vertical_spring_oscillator"]["topology"][
+            "minimum_reference_score"
+        ] = 0.10
+        self.assertEqual([], list(self.validator.iter_errors(candidate)))
+        self.assert_protocol_mutation_rejected(
+            container_path=topology_path,
+            key="minimum_reference_score",
+            mutation="missing",
+            validator_keyword="required",
+        )
+        self.assert_protocol_mutation_rejected(
+            container_path=topology_path,
+            key="minimum_reference_score_typo",
+            mutation="unknown",
+            validator_keyword="additionalProperties",
+        )
+        candidate["scenes"]["vertical_spring_oscillator"]["topology"][
+            "minimum_reference_score"
+        ] = True
+        matching = [
+            error
+            for error in self.validator.iter_errors(candidate)
+            if error.validator == "type"
+            and tuple(error.absolute_path)
+            == (*topology_path, "minimum_reference_score")
+        ]
+        self.assertTrue(matching, "Draft 2020-12 accepted a bool support gate")
+
+    def test_draft202012_rejects_zero_minimum_edge_pixels_per_row(self) -> None:
+        """Would fail while schema admits a value rejected by runtime."""
+        topology_path = (
+            "scenes",
+            "vertical_spring_oscillator",
+            "topology",
+        )
+        candidate = deepcopy(self.protocol)
+        candidate["scenes"]["vertical_spring_oscillator"]["topology"][
+            "minimum_edge_pixels_per_row"
+        ] = 0
+        matching = [
+            error
+            for error in self.validator.iter_errors(candidate)
+            if error.validator == "minimum"
+            and tuple(error.absolute_path)
+            == (*topology_path, "minimum_edge_pixels_per_row")
+        ]
+        self.assertTrue(matching, "Draft 2020-12 accepted a zero row minimum")
 
 
 class VerticalSpringRealAssetTests(unittest.TestCase):
@@ -840,6 +903,32 @@ class VerticalSpringEvaluatorTests(unittest.TestCase):
             deepcopy(EVALUATOR_CONFIG if config is None else config)
         )
 
+    def evaluate_single_spring_task(self) -> dict[str, object]:
+        protocol = load_evaluation_protocol("scene_default_v1")
+        plan = {
+            "task_id": "spring_internal_error_task",
+            "family": "direct_eval",
+            "scene_ids": ["vertical_spring_oscillator"],
+            "jobs": [
+                {
+                    "job_id": "spring_eval",
+                    "case_id": self.case["case_id"],
+                    "scene_id": "vertical_spring_oscillator",
+                    "evaluation_partition": "group_1",
+                    "seed": 42,
+                }
+            ],
+        }
+        results, _ = evaluate_task(
+            plan=plan,
+            cases=[self.case],
+            predictions=[self.request.prediction],
+            asset_root=self.root,
+            protocol=protocol,
+            output_dir=self.root / "task-evaluation",
+        )
+        return results[0]
+
     def test_real_portrait_mp4s_share_exact_no_pad_spring_transform(
         self,
     ) -> None:
@@ -903,6 +992,85 @@ class VerticalSpringEvaluatorTests(unittest.TestCase):
             },
             sampling["reference"]["spatial_transform"],
         )
+
+    def test_shorter_30fps_prediction_uses_uniform_spring_dynamics_prefix(
+        self,
+    ) -> None:
+        """Would fail if one common-timeline tail step is blamed on reference."""
+        reference_times = np.arange(96, dtype=float) / 24.0
+        prediction_times = np.arange(119, dtype=float) / 30.0
+        reference_masks = sinusoidal_spring_masks(reference_times)
+        prediction_masks = sinusoidal_spring_masks(prediction_times)
+        reference_frames = [
+            spring_frame(mask, attached=True, ruler_and_border=False)
+            for mask in reference_masks
+        ]
+        prediction_frames = [
+            spring_frame(mask, attached=True, ruler_and_border=False)
+            for mask in prediction_masks
+        ]
+        reference_path = self.root / "reference.mp4"
+        prediction_path = self.root / "shorter-30fps-prediction.mp4"
+        write_video(reference_path, reference_frames, fps=24.0)
+        write_video(prediction_path, prediction_frames, fps=30.0)
+        self.request.prediction["video_path"] = str(prediction_path)  # type: ignore[index]
+
+        overlap_duration = float(prediction_times[-1])
+        regular_times = (np.arange(95, dtype=float) / 24.0).tolist()
+        common_times = [*regular_times, overlap_duration]
+        self.assertLess(common_times[-1] - common_times[-2], 1.0 / 24.0)
+        evaluation_masks = evaluation_sinusoidal_masks(
+            common_times,
+            width=480,
+            height=480,
+        )
+        with patch.object(
+            Sam2VideoSegmenter,
+            "segment",
+            side_effect=[
+                (evaluation_masks, {"role": "reference"}),
+                (evaluation_masks, {"role": "prediction"}),
+            ],
+        ):
+            result = self.evaluator().evaluate(self.request)
+
+        self.assertEqual("evaluated", result.status, result.to_dict())
+        self.assertGreater(result.score, 0.90, result.to_dict())
+        self.assertEqual(1.0, result.metrics["csti"]["score"])
+        self.assertEqual(96, result.metrics["csti"]["frame_count"])
+        self.assertEqual(96, result.provenance["timeline"]["frame_count"])
+        dynamics_timeline = result.provenance["dynamics_timeline"]
+        self.assertEqual(96, dynamics_timeline["full_sample_count"])
+        self.assertEqual(95, dynamics_timeline["dynamics_sample_count"])
+        self.assertEqual([95], dynamics_timeline["excluded_sample_indices"])
+        self.assertEqual(96, result.quality["evaluated_frames"])
+        self.assertEqual(95, result.quality["dynamics_evaluated_frames"])
+        audit = json.loads(
+            Path(str(result.artifacts["audit_json"])).read_text(encoding="utf-8")
+        )
+        self.assertEqual(dynamics_timeline, audit["dynamics_timeline"])
+
+    def test_internal_and_terminal_cadence_defects_still_fail_closed(self) -> None:
+        """Would fail if the scene prefix policy hides more than one bad step."""
+        irregular_times = self.times.copy()
+        irregular_times[40] += 0.01
+        irregular_times[-1] = irregular_times[-2] + 0.5 / 24.0
+        video = sampled_video(self.frames)
+        with patch.object(
+            Sam2VideoSegmenter,
+            "segment",
+            return_value=(self.masks, {"role": "reference"}),
+        ):
+            with self.assertRaises(ReferenceAnalysisError) as caught:
+                self.evaluator().analyze(
+                    self.request,
+                    times_s=irregular_times,
+                    reference_video=video,
+                    prediction_video=video,
+                )
+
+        self.assertEqual("reference_spring_trace_invalid", caught.exception.code)
+        self.assertIn("irregular_cadence", str(caught.exception))
 
     def test_identity_analysis_scores_one_reuses_segmentation_and_binds_csti(
         self,
@@ -1005,6 +1173,61 @@ class VerticalSpringEvaluatorTests(unittest.TestCase):
         self.assertEqual(1.0, dynamics["score"])
         self.assertLess(topology["score"], 0.05)
         self.assertLess(analysis.score, 0.05)
+
+    def test_reference_without_spring_support_is_unavailable(self) -> None:
+        """Would fail if a zero-support reference validates itself by identity."""
+        removed_frames = [
+            spring_frame(mask, attached=False, ruler_and_border=False)
+            for mask in self.masks
+        ]
+        reference_path = self.root / "reference.mp4"
+        write_video(reference_path, removed_frames)
+        self.request.prediction["video_path"] = str(reference_path)  # type: ignore[index]
+        evaluation_masks = evaluation_sinusoidal_masks(
+            self.times,
+            width=480,
+            height=480,
+        )
+        with patch.object(
+            Sam2VideoSegmenter,
+            "segment",
+            return_value=(evaluation_masks, {"role": "reference"}),
+        ):
+            result = self.evaluator().evaluate(self.request)
+
+        self.assertEqual("unavailable", result.status, result.to_dict())
+        self.assertIsNone(result.score)
+        self.assertEqual("reference_spring_topology_invalid", result.reason_code)
+
+    def test_prediction_without_spring_support_remains_evaluated_zero(self) -> None:
+        """Would fail if the reference support gate is charged to prediction."""
+        reference_path = self.root / "reference.mp4"
+        prediction_path = self.root / "prediction-without-spring.mp4"
+        write_video(reference_path, self.frames)
+        removed_frames = [
+            spring_frame(mask, attached=False, ruler_and_border=False)
+            for mask in self.masks
+        ]
+        write_video(prediction_path, removed_frames)
+        self.request.prediction["video_path"] = str(prediction_path)  # type: ignore[index]
+        evaluation_masks = evaluation_sinusoidal_masks(
+            self.times,
+            width=480,
+            height=480,
+        )
+        with patch.object(
+            Sam2VideoSegmenter,
+            "segment",
+            side_effect=[
+                (evaluation_masks, {"role": "reference"}),
+                (evaluation_masks, {"role": "prediction"}),
+            ],
+        ):
+            result = self.evaluator().evaluate(self.request)
+
+        self.assertEqual("evaluated", result.status, result.to_dict())
+        self.assertEqual(0.0, result.score)
+        self.assertEqual(1.0, result.metrics["csti"]["score"])
 
     def test_prediction_unavailable_samples_are_empty_in_the_accepted_csti_tube(
         self,
@@ -1164,6 +1387,58 @@ class VerticalSpringEvaluatorTests(unittest.TestCase):
                 )
         self.assertNotIsInstance(caught.exception, ReferenceAnalysisError)
         self.assertEqual("prediction_spring_trace_invalid", caught.exception.code)
+
+    def test_mask_array_runtime_error_reaches_task_internal_error(self) -> None:
+        """Would fail if an observation implementation crash becomes rejection."""
+        reference_path = self.root / "reference.mp4"
+        prediction_path = self.root / "prediction.mp4"
+        write_video(reference_path, self.frames)
+        prediction_frames = [frame.copy() for frame in self.frames]
+        for frame in prediction_frames:
+            frame[0:20, 0:20] = (255, 0, 0)
+        write_video(prediction_path, prediction_frames)
+        self.request.prediction["job_id"] = "spring_eval"  # type: ignore[index]
+        self.request.prediction["video_path"] = str(prediction_path)  # type: ignore[index]
+        evaluation_masks = evaluation_sinusoidal_masks(
+            self.times,
+            width=480,
+            height=480,
+        )
+        faulty_prediction_masks: list[object] = [
+            ExplodingArray(),
+            *evaluation_masks[1:],
+        ]
+
+        with patch.object(
+            Sam2VideoSegmenter,
+            "segment",
+            side_effect=[
+                (evaluation_masks, {"role": "reference"}),
+                (faulty_prediction_masks, {"role": "prediction"}),
+            ],
+        ):
+            result = self.evaluate_single_spring_task()
+
+        self.assertEqual("error", result["status"], result)
+        self.assertEqual("unhandled_case_evaluator_error", result["reason_code"])
+        self.assertIn("observation array conversion crashed", result["reason"])
+
+    def test_frozen_loader_runtime_error_reaches_task_internal_error(self) -> None:
+        """Would fail if a frozen-loader implementation crash looks like bad data."""
+        reference_path = self.root / "reference.mp4"
+        write_video(reference_path, self.frames)
+        self.request.prediction["job_id"] = "spring_eval"  # type: ignore[index]
+        self.request.prediction["video_path"] = str(reference_path)  # type: ignore[index]
+
+        with patch(
+            "physbench.evaluation.common.frozen_subject.load_json",
+            side_effect=RuntimeError("frozen manifest loader crashed"),
+        ):
+            result = self.evaluate_single_spring_task()
+
+        self.assertEqual("error", result["status"], result)
+        self.assertEqual("unhandled_case_evaluator_error", result["reason_code"])
+        self.assertIn("frozen manifest loader crashed", result["reason"])
 
     def test_identity_rejection_is_evaluated_zero_with_no_csti_match(self) -> None:
         """Would fail if subject/topology can bypass the frozen identity gate."""
@@ -1554,6 +1829,27 @@ class VerticalSpringObservationTests(unittest.TestCase):
                     invalid[key] = value
                     with self.assertRaises(ValueError):
                         self.call_with_config(family, invalid)
+
+    def test_reference_topology_score_is_a_strict_unit_interval(self) -> None:
+        """Would fail if the runtime support gate accepts bool or out-of-range."""
+        for valid in (0.0, 1.0):
+            with self.subTest(valid=valid):
+                result = observe_spring_topology(
+                    [spring_frame(self.anchor.mask, attached=True)],
+                    [self.anchor.mask],
+                    availability=[True],
+                    config={**TOPOLOGY, "minimum_reference_score": valid},
+                )
+                self.assertTrue(result.valid[0])
+        for invalid in (True, -0.01, 1.01, math.nan):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    observe_spring_topology(
+                        [spring_frame(self.anchor.mask, attached=True)],
+                        [self.anchor.mask],
+                        availability=[True],
+                        config={**TOPOLOGY, "minimum_reference_score": invalid},
+                    )
 
     def test_topology_uses_each_current_ball_corridor(self) -> None:
         """Would fail if topology localizes from a frozen or future ball position."""

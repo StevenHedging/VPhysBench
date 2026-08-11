@@ -74,6 +74,7 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
         spring = self.protocol["scenes"]["vertical_spring_oscillator"]
         self.assertEqual(0.90, spring["quality"]["minimum_valid_frame_ratio"])
         self.assertEqual(0.30, spring["scoring"]["horizontal_trajectory_scale"])
+        self.assertEqual(0.10, spring["topology"]["minimum_reference_score"])
         self.assertEqual(
             {
                 "minimum_anchor_iou",
@@ -94,6 +95,7 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
                 "connectivity_dilation_px",
                 "minimum_corridor_height_radius_ratio",
                 "minimum_connected_vertical_span_ratio",
+                "minimum_reference_score",
             },
             set(spring["topology"]),
         )

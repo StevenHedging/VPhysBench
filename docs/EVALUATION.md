@@ -55,8 +55,14 @@ Evaluator 是唯一允许读取 reference video、reference masks 和评分注�
   vertical-axis confinement 同时检查新增横向跨度，以及首帧归零后按共同时间样本比较的
   横向轨迹 RMSE；后者按 reference 垂直振幅和 `horizontal_trajectory_scale` 归一，因此
   相同横向跨度不能掩盖不同的横向运动历史。
+  若共同 overlap timeline 只追加了一个短于网格步长的终点，spring dynamics 使用剔除该
+  唯一末点的严格均匀 prefix；subject、topology 与 CSTI 仍使用完整共同 timeline，二者的
+  sample counts 和被排除 index 会写入 audit/provenance。内部或多处 cadence 异常继续
+  fail-closed。
   subject appearance/shape/position 与当前帧 spring topology 作为另外两个内容组件；
   topology 同时是乘法 integrity factor，因此移除或断开的弹簧不能靠钢球运动补偿。
+  reference topology 还必须达到协议的 `minimum_reference_score`；reference 无弹簧支持是
+  `unavailable`，而 prediction 无支持仍是已评估零分，不能倒置缺陷归属。
 
 ## CSTI
 

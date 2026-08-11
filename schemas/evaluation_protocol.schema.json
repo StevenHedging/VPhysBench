@@ -391,18 +391,20 @@
                 "boundary_exclusion_px",
                 "connectivity_dilation_px",
                 "minimum_corridor_height_radius_ratio",
-                "minimum_connected_vertical_span_ratio"
+                "minimum_connected_vertical_span_ratio",
+                "minimum_reference_score"
               ],
               "properties": {
                 "canny_low_threshold": {"type": "number", "minimum": 0},
                 "canny_high_threshold": {"type": "number", "minimum": 0},
                 "corridor_half_width_radius_ratio": {"type": "number", "exclusiveMinimum": 0},
-                "minimum_edge_pixels_per_row": {"type": "integer", "minimum": 0},
+                "minimum_edge_pixels_per_row": {"type": "integer", "minimum": 1},
                 "endpoint_height_radius_ratio": {"type": "number", "exclusiveMinimum": 0},
                 "boundary_exclusion_px": {"type": "integer", "minimum": 0},
                 "connectivity_dilation_px": {"type": "integer", "minimum": 0},
                 "minimum_corridor_height_radius_ratio": {"type": "number", "exclusiveMinimum": 0},
-                "minimum_connected_vertical_span_ratio": {"type": "number", "exclusiveMinimum": 0, "maximum": 1}
+                "minimum_connected_vertical_span_ratio": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+                "minimum_reference_score": {"type": "number", "minimum": 0, "maximum": 1}
               },
               "additionalProperties": false
             },

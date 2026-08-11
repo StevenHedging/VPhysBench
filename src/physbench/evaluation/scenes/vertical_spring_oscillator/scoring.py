@@ -269,6 +269,16 @@ def _qualified_autocorrelation_period(
             and prominence >= minimum_prominence
         ):
             candidates.append(lag)
+    endpoint_correlation = correlations[maximum_lag]
+    endpoint_prominence = (
+        endpoint_correlation - correlations[maximum_lag - 1]
+    )
+    if (
+        math.isfinite(endpoint_correlation)
+        and endpoint_correlation >= minimum_correlation
+        and endpoint_prominence >= minimum_prominence
+    ):
+        candidates.append(maximum_lag)
     if not candidates:
         return None
     refined = [

@@ -158,9 +158,12 @@ def _trace_rows(
     prediction: SpringTrace,
     reference_topology: SpringTopology,
     prediction_topology: SpringTopology,
+    topology_indices: Sequence[int],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for index, time_s in enumerate(times_s):
+    for index, (time_s, topology_index) in enumerate(
+        zip(times_s, topology_indices)
+    ):
         rows.append(
             {
                 "time_s": float(time_s),
@@ -171,12 +174,14 @@ def _trace_rows(
                 "reference_displacement_px": float(
                     reference.xy[index, 1] - reference.equilibrium_y_px
                 ),
-                "reference_topology_valid": bool(reference_topology.valid[index]),
+                "reference_topology_valid": bool(
+                    reference_topology.valid[topology_index]
+                ),
                 "reference_topology_row_coverage": float(
-                    reference_topology.row_coverage[index]
+                    reference_topology.row_coverage[topology_index]
                 ),
                 "reference_topology_endpoint_support": float(
-                    reference_topology.endpoint_support[index]
+                    reference_topology.endpoint_support[topology_index]
                 ),
                 "prediction_x_px": float(prediction.xy[index, 0]),
                 "prediction_y_px": float(prediction.xy[index, 1]),
@@ -185,16 +190,71 @@ def _trace_rows(
                 "prediction_displacement_px": float(
                     prediction.xy[index, 1] - prediction.equilibrium_y_px
                 ),
-                "prediction_topology_valid": bool(prediction_topology.valid[index]),
+                "prediction_topology_valid": bool(
+                    prediction_topology.valid[topology_index]
+                ),
                 "prediction_topology_row_coverage": float(
-                    prediction_topology.row_coverage[index]
+                    prediction_topology.row_coverage[topology_index]
                 ),
                 "prediction_topology_endpoint_support": float(
-                    prediction_topology.endpoint_support[index]
+                    prediction_topology.endpoint_support[topology_index]
                 ),
             }
         )
     return rows
+
+
+def _spring_dynamics_timeline(
+    times_s: Sequence[float],
+    *,
+    maximum_relative_deviation: float,
+) -> tuple[list[int], list[float], dict[str, Any]]:
+    """Remove only one off-grid terminal overlap sample from spring dynamics."""
+    full_times = np.asarray(times_s, dtype=np.float64)
+    full_indices = list(range(len(full_times)))
+    dynamics_indices = full_indices
+    excluded_indices: list[int] = []
+    nominal_step_s: float | None = None
+    tolerance = float(maximum_relative_deviation)
+    if not math.isfinite(tolerance) or tolerance <= 0.0:
+        raise ValueError(
+            "maximum cadence relative deviation must be finite and positive"
+        )
+    if (
+        full_times.ndim == 1
+        and len(full_times) >= 4
+        and np.all(np.isfinite(full_times))
+        and np.all(np.diff(full_times) > 0.0)
+    ):
+        steps = np.diff(full_times)
+        prefix_steps = steps[:-1]
+        nominal_step_s = float(np.median(prefix_steps))
+        if math.isfinite(nominal_step_s) and nominal_step_s > 0.0:
+            prefix_deviation = float(
+                np.max(np.abs(prefix_steps - nominal_step_s))
+                / nominal_step_s
+            )
+            terminal_step = float(steps[-1])
+            terminal_deviation = abs(terminal_step - nominal_step_s) / nominal_step_s
+            if (
+                prefix_deviation <= tolerance
+                and terminal_step < nominal_step_s
+                and terminal_deviation > tolerance
+            ):
+                dynamics_indices = full_indices[:-1]
+                excluded_indices = [full_indices[-1]]
+    dynamics_times = [float(full_times[index]) for index in dynamics_indices]
+    return dynamics_indices, dynamics_times, {
+        "policy": "uniform_common_prefix_without_terminal_short_step_v1",
+        "full_sample_count": len(full_indices),
+        "dynamics_sample_count": len(dynamics_indices),
+        "excluded_sample_indices": excluded_indices,
+        "nominal_step_s": nominal_step_s,
+        "full_overlap_end_s": (
+            float(full_times[-1]) if len(full_times) else None
+        ),
+        "dynamics_end_s": dynamics_times[-1] if dynamics_times else None,
+    }
 
 
 class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
@@ -320,7 +380,9 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
         self,
         request: CaseEvaluationRequest,
         *,
-        times_s: list[float],
+        observation_times_s: list[float],
+        dynamics_times_s: list[float],
+        dynamics_indices: list[int],
         reference_trace: SpringTrace,
         prediction_trace: SpringTrace,
         reference_topology: SpringTopology,
@@ -338,16 +400,17 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
             write_rows_csv(
                 csv_path,
                 _trace_rows(
-                    times_s=times_s,
+                    times_s=dynamics_times_s,
                     reference=reference_trace,
                     prediction=prediction_trace,
                     reference_topology=reference_topology,
                     prediction_topology=prediction_topology,
+                    topology_indices=dynamics_indices,
                 ),
             )
             save_series_comparison(
                 trajectory_path,
-                times_s=times_s,
+                times_s=dynamics_times_s,
                 reference=np.asarray(reference_trace.xy[:, 1]),
                 prediction=np.asarray(prediction_trace.xy[:, 1]),
                 ylabel="Vertical centroid y (px)",
@@ -358,7 +421,7 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
             )
             subject_artifacts = write_subject_artifacts(
                 directory=request.artifact_dir,
-                times_s=times_s,
+                times_s=observation_times_s,
                 comparison=subject,
                 case_id=str(request.case["case_id"]),
                 scene_name="Vertical spring oscillator",
@@ -487,10 +550,26 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
             )
 
         trace_quality = self._trace_quality_config()
+        dynamics_indices, dynamics_times_s, dynamics_timeline = (
+            _spring_dynamics_timeline(
+                times_s,
+                maximum_relative_deviation=float(
+                    self.config["period"][
+                        "maximum_cadence_relative_deviation"
+                    ]
+                ),
+            )
+        )
+        reference_dynamics_masks = [
+            reference_masks[index] for index in dynamics_indices
+        ]
+        prediction_dynamics_masks = [
+            prediction_masks[index] for index in dynamics_indices
+        ]
         try:
             reference_trace = extract_spring_trace(
-                reference_masks,
-                times_s,
+                reference_dynamics_masks,
+                dynamics_times_s,
                 quality_config=trace_quality,
             )
         except SpringTraceError as exc:
@@ -500,8 +579,8 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
             ) from exc
         try:
             prediction_trace = extract_spring_trace(
-                prediction_masks,
-                times_s,
+                prediction_dynamics_masks,
+                dynamics_times_s,
                 quality_config=trace_quality,
             )
         except SpringTraceError as exc:
@@ -516,10 +595,18 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
             availability=[True] * len(times_s),
             config=self.config["topology"],
         )
-        if not reference_topology.valid.any():
+        minimum_reference_topology_score = float(
+            self.config["topology"]["minimum_reference_score"]
+        )
+        if (
+            not reference_topology.valid.any()
+            or reference_topology.score < minimum_reference_topology_score
+        ):
             raise ReferenceAnalysisError(
                 "reference_spring_topology_invalid",
-                "reference topology contains no valid spring corridor",
+                "reference topology contains insufficient spring support: "
+                f"score={reference_topology.score:.6f}, minimum="
+                f"{minimum_reference_topology_score:.6f}",
             )
         prediction_topology = (
             reference_topology
@@ -605,13 +692,16 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
                 "prediction": dict(prediction_identity),
             },
             "physics": physics_metric,
+            "dynamics_timeline": dynamics_timeline,
             "topology": topology_metric,
             "primary": primary_metric,
             "failures": [],
         }
         artifacts, artifact_failures = self._write_artifacts(
             request,
-            times_s=times_s,
+            observation_times_s=times_s,
+            dynamics_times_s=dynamics_times_s,
+            dynamics_indices=dynamics_indices,
             reference_trace=reference_trace,
             prediction_trace=prediction_trace,
             reference_topology=reference_topology,
@@ -661,6 +751,7 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
                 "artifact_failures": artifact_failures,
                 "reference_valid_mask_ratio": float(reference_trace.valid_ratio),
                 "prediction_valid_mask_ratio": float(prediction_trace.valid_ratio),
+                "dynamics_evaluated_frames": len(dynamics_times_s),
                 "reference_topology_valid_ratio": float(
                     np.mean(reference_topology.valid)
                 ),
@@ -678,6 +769,7 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
                     "reference_capability": manifest.reference_capability.value,
                 },
                 "frozen_anchor": dict(anchor.provenance),
+                "dynamics_timeline": dynamics_timeline,
                 "segmentation": {
                     "adapter": self._segmenter.describe(),
                     "reference": reference_segmentation,

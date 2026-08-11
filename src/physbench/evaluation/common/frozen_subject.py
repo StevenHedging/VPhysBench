@@ -6,6 +6,7 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
+from zipfile import BadZipFile
 
 import cv2
 import numpy as np
@@ -13,6 +14,19 @@ import numpy as np
 from ...io import load_json, sha256_file
 from ..contracts import CaseEvaluationRequest
 from .errors import ReferenceAnalysisError
+
+
+_FROZEN_DATA_ERRORS = (
+    BadZipFile,
+    EOFError,
+    KeyError,
+    IndexError,
+    OSError,
+    TypeError,
+    UnicodeError,
+    ValueError,
+    cv2.error,
+)
 
 
 @dataclass(frozen=True)
@@ -174,7 +188,7 @@ def load_frozen_subject_anchor(
         )
     except ReferenceAnalysisError:
         raise
-    except Exception as exc:
+    except _FROZEN_DATA_ERRORS as exc:
         raise ReferenceAnalysisError(
             f"{error_namespace}_manifest_invalid",
             "frozen subject mask manifest violates schema 1.2: "
@@ -200,7 +214,7 @@ def load_frozen_subject_anchor(
             logical_entity_id=logical_entity_id,
         )
         bbox_policy = _validate_geometry(source_mask, instance=instance)
-    except Exception as exc:
+    except _FROZEN_DATA_ERRORS as exc:
         raise ReferenceAnalysisError(
             f"{error_namespace}_mask_invalid",
             "frozen subject mask NPZ violates the per-object contract: "
@@ -210,7 +224,7 @@ def load_frozen_subject_anchor(
         transformed = transform_frozen_subject_mask(
             source_mask, spatial_transform
         )
-    except Exception as exc:
+    except _FROZEN_DATA_ERRORS as exc:
         raise ReferenceAnalysisError(
             f"{error_namespace}_mask_transform_invalid",
             "frozen subject mask cannot use the evaluator transform: "

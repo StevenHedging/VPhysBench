@@ -42,6 +42,7 @@ _TOPOLOGY_CONFIG_KEYS = frozenset(
         "connectivity_dilation_px",
         "minimum_corridor_height_radius_ratio",
         "minimum_connected_vertical_span_ratio",
+        "minimum_reference_score",
     }
 )
 
@@ -124,7 +125,7 @@ def _binary_mask_or_none(
 ) -> np.ndarray | None:
     try:
         values = np.asarray(mask)
-    except Exception:
+    except (TypeError, ValueError):
         return None
     if (
         values.ndim != 2
@@ -389,6 +390,9 @@ def _topology_thresholds(config: Mapping[str, Any]) -> dict[str, float]:
         ),
         "minimum_connected_vertical_span_ratio": _unit_interval_config(
             config, "minimum_connected_vertical_span_ratio"
+        ),
+        "minimum_reference_score": _unit_interval_config(
+            config, "minimum_reference_score"
         ),
     }
     if thresholds["canny_low_threshold"] > thresholds["canny_high_threshold"]:

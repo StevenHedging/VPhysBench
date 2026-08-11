@@ -1015,7 +1015,8 @@
         "boundary_exclusion_px": 2,
         "connectivity_dilation_px": 1,
         "minimum_corridor_height_radius_ratio": 2,
-        "minimum_connected_vertical_span_ratio": 0.6
+        "minimum_connected_vertical_span_ratio": 0.6,
+        "minimum_reference_score": 0.1
       },
       "content_weights": {
         "physics_state": 0.55,
