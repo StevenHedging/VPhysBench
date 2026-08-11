@@ -89,6 +89,19 @@ class ReleaseDocumentationTests(unittest.TestCase):
             ],
             release["official_tasks"],
         )
+        self.assertEqual(
+            {
+                "five_scene_direct_eval_v1": {
+                    "training_cases": 0,
+                    "evaluation_jobs": 658,
+                },
+                "six_scene_train_five_scene_eval_v1": {
+                    "training_cases": 679,
+                    "evaluation_jobs": 76,
+                },
+            },
+            release["task_counts"],
+        )
         self.assertEqual(binding["repo_id"], release["dataset"]["repo_id"])
         self.assertEqual(binding["revision"], release["dataset"]["revision"])
         self.assertEqual(5, len(release["scored_scenes"]))

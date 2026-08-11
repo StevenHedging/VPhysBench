@@ -167,7 +167,9 @@ Run `git diff --stat`, `git diff -- tasks/official datasets RELEASE_MANIFEST.jso
 
 ```bash
 git add README.md RELEASE_MANIFEST.json docs/ARCHITECTURE.md \
-  docs/BENCHMARK_PROTOCOL.md docs/TASKS.md tasks/official tests
+  docs/BENCHMARK_PROTOCOL.md docs/TASKS.md \
+  docs/superpowers/plans/2026-08-11-exclude-push-bottle-task-v1.md \
+  scripts/release_audit.py tasks/official tests
 git commit -m "refactor: exclude push bottle from Task v1"
 ```
 
