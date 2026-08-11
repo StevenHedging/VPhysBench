@@ -29,6 +29,12 @@ physbench validate-dataset \
 release and immutable commit. It must never contain a token. Credentials belong
 in the user Hugging Face cache.
 
+The immutable revision provides `distribution/v1/manifest.json` plus a small
+set of bounded ZIP shards. `physbench dataset pull` downloads only those named
+objects, verifies archive and file hashes, and keeps resumable state under the
+Git-ignored `datasets/.vphysbench/` directory. The active asset tree is replaced
+only after complete Dataset validation succeeds.
+
 Each Case references a first frame, reference video, optional mask manifest,
 caption and structured physics annotation beneath `datasets/assets/`. The
 Dataset is authoritative and read-only during evaluation. Derived inputs,

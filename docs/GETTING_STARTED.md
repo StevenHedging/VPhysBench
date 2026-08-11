@@ -44,6 +44,21 @@ The command reads `datasets/huggingface.json`. It always passes the bound
 `main` branch. Credentials remain in the user-level Hugging Face cache and
 must not be placed in repository files.
 
+The bound revision exposes distribution v1: one manifest and a bounded set of
+stored ZIP shards. The downloader requests those filenames explicitly,
+validates the manifest identity, verifies every archive and file SHA-256, and
+extracts only declared regular files beneath `assets/`. It validates the
+complete staged Dataset and its digest before replacing the active asset tree.
+
+Downloads are resumable. Revision-specific archives and staging data remain
+under `datasets/.vphysbench/` after a recoverable interruption. Rerun the same
+command to reuse every shard whose size and SHA-256 already match. The
+directory is ignored by Git; do not copy it into a release archive.
+
+`--skip-asset-check` is intentionally prefetch-only: it still verifies the
+staged distribution and Dataset digest, but it does not publish staged files
+as the active `datasets/assets/` tree.
+
 `doctor --level metadata` reports missing media as a warning.
 
 ## 3. Install the evaluator stack
@@ -115,6 +130,12 @@ the full official Task.
 
 - `hf` unavailable: install `.[hub]` and reopen the environment.
 - Dataset denied: confirm `hf auth login` and private-repository membership.
+- Hub rate limit or interrupted transport: wait if necessary, then rerun the
+  same pull; verified revision-specific shards are retained.
+- Disk-space error: free space for both downloaded archives and staged
+  extraction before retrying.
+- Checksum or unsafe-archive error: do not bypass validation; preserve the
+  diagnostic and contact the Dataset owner.
 - Missing assets: rerun `physbench dataset pull`; do not change the revision.
 - Baseline schema error: run `physbench baseline validate <id>`.
 - Video rejection: inspect the sealed media contract and baseline log.

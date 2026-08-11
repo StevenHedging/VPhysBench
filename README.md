@@ -34,6 +34,12 @@ physbench dataset pull
 physbench baseline list
 ```
 
+`dataset pull` 只请求冻结 revision 中的 distribution v1 manifest 和 13 个
+校验分片，不再逐个解析数千个媒体文件。分片缓存在
+`datasets/.vphysbench/cache/<revision>/`；下载中断或遇到 Hub 限流后直接重跑即可，
+已通过 SHA-256 的分片会复用。全部分片、文件和 Dataset digest 验证完成前，
+正式 `datasets/assets/` 不会切换。
+
 干净 checkout 中 `baseline list` 应输出空数组。创建自己的 I2V 接入：
 
 ```bash
