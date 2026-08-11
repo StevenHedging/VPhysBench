@@ -329,7 +329,7 @@ class SymbolValueBaselineIntegrationTests(unittest.TestCase):
         self.assertEqual(32, trainer["rank"])
         self.assertEqual(1, trainer["dataset_repeat"])
         self.assertEqual(8, trainer["num_epochs"])
-        self.assertEqual(273, trainer["save_steps"])
+        self.assertEqual(195, trainer["save_steps"])
         self.assertEqual(42, trainer["seed"])
         conditioner = bundle.value["model"]["symbol_value_conditioner"]
         self.assertEqual(4096, conditioner["text_hidden_size"])

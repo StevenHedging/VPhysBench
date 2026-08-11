@@ -59,7 +59,9 @@ Match the recent WAN controls' training budget and sampling contract:
 - one dataset repeat, scene balancing by
   `oversample_each_scene_to_largest_world_aligned`;
 - eight GPUs, seed 42, bf16 model training and fp32 conditioner parameters;
-- 273 optimizer steps per epoch for eight epochs, 2184 total steps;
+- 195 optimizer steps per epoch for eight epochs, 1560 total steps; this is
+  derived from the official Task's five scene-balanced 312-row buckets across
+  eight workers;
 - optimizer state and recoverable checkpoints retained in the AtomicRun.
 
 Inference uses the frozen Task jobs, first-frame conditioning, 121 frames at
@@ -70,10 +72,10 @@ Inference uses the frozen Task jobs, first-frame conditioning, 121 frames at
 Before allocating GPUs, run focused unit tests, full baseline discovery and
 validation, deployment validation, compile checks, and an AtomicRun dry-run.
 Confirm the dry-run freezes Dataset release 13.0.0, the v14 Task, the expected
-five scenes, and the 2184-step training contract.
+five scenes, and the 1560-step training contract.
 
 The executed run uses a new immutable ID such as
-`wan22_symbol_value_cross_attention_2184_v1_v14`. It owns all staged training
+`wan22_symbol_value_cross_attention_1560_v1_v14`. It owns all staged training
 media, checkpoints, inference outputs, logs, provenance, and evaluation
 artifacts. The old run remains unchanged.
 
@@ -90,7 +92,7 @@ tests pass on current main.
 
 Experiment success requires:
 
-1. a completed 2184-step training stage with sealed LoRA and conditioner
+1. a completed 1560-step training stage with sealed LoRA and conditioner
    checkpoints;
 2. one valid prediction record and artifact for every official inference job;
 3. canonical `scene_default_v14` case and Task results under the new run;

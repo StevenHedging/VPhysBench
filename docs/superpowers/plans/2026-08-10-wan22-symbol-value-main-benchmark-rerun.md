@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Register the WAN2.2 symbol-value cross-attention baseline on current main and complete a comparable 2184-step training, inference, and v14 evaluation AtomicRun.
+**Goal:** Register the WAN2.2 symbol-value cross-attention baseline on current main and complete a comparable 1560-step training, inference, and v14 evaluation AtomicRun.
 
 **Architecture:** Restore the already-developed dedicated bundle and its symbol-value adapter/model/runtime modules from repository history, then make the smallest compatibility changes required by current main. Run it only through the current Registry, TaskBuilder, AtomicRun, and official five-scene v14 Task so all identity, artifact, and evaluation contracts remain benchmark-owned.
 
@@ -13,7 +13,7 @@
 - Preserve `baselines/wan22_symbol_value_cross_attention/baseline.local.json` exactly; it is an ignored machine-local deployment override.
 - Do not modify the historical `run/wan22_ti2v_5b_lora_r32_symbol_value_cross_attention_v1` directory.
 - Use `datasets/releases/13.0.0/dataset.json` and `tasks/official/five_scene_finetune_eval_csti_identity_v3.json`.
-- Use seed 42, rank 32, learning rate `1e-4`, one dataset repeat, eight epochs, 273 steps per epoch, and 2184 total optimizer steps.
+- Use seed 42, rank 32, learning rate `1e-4`, one dataset repeat, eight epochs, 195 steps per epoch, and 1560 total optimizer steps.
 - Any code-fingerprint change after a dry-run or failed execution requires a new immutable run ID.
 - Do not omit failed or unavailable evaluation cases from coverage reporting.
 
@@ -68,7 +68,7 @@ Set the trainer portion of `baseline.json` to:
   "learning_rate": 0.0001,
   "dataset_repeat": 1,
   "num_epochs": 8,
-  "save_steps": 273,
+  "save_steps": 195,
   "scene_balancing": "oversample_each_scene_to_largest_world_aligned",
   "seed": 42,
   "precision": "bf16",
@@ -123,7 +123,7 @@ Ensure the focused tests assert:
 ```python
 bundle = registry.get("wan22_ti2v_5b_lora_r32_symbol_value_cross_attention_v1")
 assert bundle.manifest["trainer"]["config"]["num_epochs"] == 8
-assert bundle.manifest["trainer"]["config"]["save_steps"] == 273
+assert bundle.manifest["trainer"]["config"]["save_steps"] == 195
 assert bundle.manifest["input_policy"]["physics"]["representations"] == [
     "symbol_value_cross_attention_v1"
 ]
@@ -178,7 +178,7 @@ git commit -m "fix: align symbol-value baseline with current benchmark"
 ### Task 3: Compile and Audit the Official v14 Dry-Run
 
 **Files:**
-- Create: `run/wan22_symbol_value_cross_attention_2184_v1_v14_dryrun/`
+- Create: `run/wan22_symbol_value_cross_attention_1560_v1_v14_dryrun/`
 
 **Interfaces:**
 - Consumes: validated baseline ID, Dataset 13.0.0, and official v14 fine-tune/eval Task.
@@ -193,7 +193,7 @@ PYTHONPATH=src ./.venv/bin/python -m physbench atomic-run \
   --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval_csti_identity_v3.json \
   --baseline wan22_ti2v_5b_lora_r32_symbol_value_cross_attention_v1 \
-  --run-id wan22_symbol_value_cross_attention_2184_v1_v14_dryrun \
+  --run-id wan22_symbol_value_cross_attention_1560_v1_v14_dryrun \
   --output-root run
 ```
 
@@ -209,7 +209,7 @@ task_id = five_scene_finetune_eval_v14_csti_identity_v3
 evaluation protocol = scene_default_v14
 training seed = 42
 num_epochs = 8
-save_steps = 273
+save_steps = 195
 selected scenes = pendulum, collision_1d, inclined_plane_slide,
                   uniform_circular_motion, parabolic_motion
 ```
@@ -223,11 +223,11 @@ Confirm all writable model outputs resolve inside the dry-run directory and all 
 ### Task 4: Execute and Monitor the Full Experiment
 
 **Files:**
-- Create: `run/wan22_symbol_value_cross_attention_2184_v1_v14/`
+- Create: `run/wan22_symbol_value_cross_attention_1560_v1_v14/`
 
 **Interfaces:**
 - Consumes: the audited portable baseline, local deployment override, Dataset 13.0.0, and official v14 Task.
-- Produces: 2184-step checkpoints, all inference videos, artifact records, case results, Task result, and terminal AtomicRun state.
+- Produces: 1560-step checkpoints, all inference videos, artifact records, case results, Task result, and terminal AtomicRun state.
 
 - [ ] **Step 1: Start the immutable execution**
 
@@ -238,14 +238,14 @@ PYTHONPATH=src ./.venv/bin/python -m physbench atomic-run \
   --dataset datasets/releases/13.0.0/dataset.json \
   --task tasks/official/five_scene_finetune_eval_csti_identity_v3.json \
   --baseline wan22_ti2v_5b_lora_r32_symbol_value_cross_attention_v1 \
-  --run-id wan22_symbol_value_cross_attention_2184_v1_v14 \
+  --run-id wan22_symbol_value_cross_attention_1560_v1_v14 \
   --output-root run \
   --execute
 ```
 
 - [ ] **Step 2: Monitor training to the sealed checkpoint**
 
-Track `state.json`, run-local training logs, GPU processes, and checkpoint audits. Success requires optimizer step 2184 plus sealed LoRA, symbol-value conditioner, and optimizer-state artifacts.
+Track `state.json`, run-local training logs, GPU processes, and checkpoint audits. Success requires optimizer step 1560 plus sealed LoRA, symbol-value conditioner, and optimizer-state artifacts.
 
 - [ ] **Step 3: Monitor inference coverage**
 
@@ -258,10 +258,10 @@ Confirm evaluation uses the run-frozen `scene_default_v14` protocol and produces
 ### Task 5: Final Verification and Handoff
 
 **Files:**
-- Read: `run/wan22_symbol_value_cross_attention_2184_v1_v14/state.json`
-- Read: `run/wan22_symbol_value_cross_attention_2184_v1_v14/artifacts/`
-- Read: `run/wan22_symbol_value_cross_attention_2184_v1_v14/predictions.jsonl`
-- Read: `run/wan22_symbol_value_cross_attention_2184_v1_v14/evaluation/task_result.json`
+- Read: `run/wan22_symbol_value_cross_attention_1560_v1_v14/state.json`
+- Read: `run/wan22_symbol_value_cross_attention_1560_v1_v14/artifacts/`
+- Read: `run/wan22_symbol_value_cross_attention_1560_v1_v14/predictions.jsonl`
+- Read: `run/wan22_symbol_value_cross_attention_1560_v1_v14/evaluation/task_result.json`
 
 **Interfaces:**
 - Consumes: all registration and experiment artifacts.
@@ -281,7 +281,7 @@ git status --short --branch
 
 - [ ] **Step 2: Verify run completeness from fresh evidence**
 
-Require terminal `state.stage == "complete"`, checkpoint step 2184, expected prediction count equal to recorded prediction count, v14 evaluation manifest, and explicit Task coverage. Do not claim a complete score when strict coverage leaves the Task score null.
+Require terminal `state.stage == "complete"`, checkpoint step 1560, expected prediction count equal to recorded prediction count, v14 evaluation manifest, and explicit Task coverage. Do not claim a complete score when strict coverage leaves the Task score null.
 
 - [ ] **Step 3: Report the outcome**
 
