@@ -8,8 +8,11 @@ VPhysBench 是面向物理视频生成模型的训练与评测框架。日期分
 Dataset 13.0.0 包含 916 个 case、7 个场景。Task v1 定义两个可复现工作负载：
 
 - `five_scene_direct_eval_v1`：直接评估五个计分场景的全部 658 个 case；
-- `seven_scene_train_five_scene_eval_v1`：使用七场景 806 个训练 case，随后在五个
+- `six_scene_train_five_scene_eval_v1`：使用六场景 679 个训练 case，随后在五个
   计分场景的 76 个留出 case 上评估。
+
+Dataset 中仍保留 `push_bottle` 的全部 127 个训练 case 和 14 个 test case，但两个
+官方 Task v1 都不会选择它们。
 
 两个 Task 都绑定唯一公开协议 `scene_default_v1`。
 

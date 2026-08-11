@@ -85,7 +85,7 @@ class ReleaseDocumentationTests(unittest.TestCase):
         self.assertEqual(
             [
                 "tasks/official/five_scene_direct_eval_v1.json",
-                "tasks/official/seven_scene_train_five_scene_eval_v1.json",
+                "tasks/official/six_scene_train_five_scene_eval_v1.json",
             ],
             release["official_tasks"],
         )

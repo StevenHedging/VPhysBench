@@ -10,7 +10,7 @@ from physbench.tasks import load_task, plan_atomic_task
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FINETUNE_TASK = ROOT / "tasks/official/seven_scene_train_five_scene_eval_v1.json"
+FINETUNE_TASK = ROOT / "tasks/official/six_scene_train_five_scene_eval_v1.json"
 DIRECT_TASK = ROOT / "tasks/official/five_scene_direct_eval_v1.json"
 
 
@@ -71,12 +71,14 @@ class CurrentDatasetTests(unittest.TestCase):
                 for value in self.view["test_annotations"].values()
             )),
         )
+        self.assertEqual(127, len(self.view["scenes"]["push_bottle"]["train"]))
+        self.assertEqual(14, len(self.view["scenes"]["push_bottle"]["test"]))
 
-    def test_official_v1_tasks_use_seven_train_and_five_eval_scenes(self) -> None:
+    def test_official_v1_tasks_exclude_push_bottle(self) -> None:
         finetune_task = load_task(FINETUNE_TASK)
         direct_task = load_task(DIRECT_TASK)
         self.assertEqual(
-            "seven_scene_train_five_scene_eval_v1",
+            "six_scene_train_five_scene_eval_v1",
             finetune_task.task_id,
         )
         self.assertEqual("five_scene_direct_eval_v1", direct_task.task_id)
@@ -84,10 +86,22 @@ class CurrentDatasetTests(unittest.TestCase):
         direct = plan_atomic_task(direct_task, self.dataset).value
         self.assertEqual(5, len(finetune["scene_ids"]))
         self.assertEqual(5, len(direct["scene_ids"]))
-        self.assertEqual(7, len(finetune["training_scene_ids"]))
-        self.assertEqual(806, len(finetune["train_case_ids"]))
+        self.assertEqual(6, len(finetune["training_scene_ids"]))
+        self.assertEqual(679, len(finetune["train_case_ids"]))
         self.assertEqual(76, len(finetune["jobs"]))
         self.assertEqual(658, len(direct["jobs"]))
+        selected_training_scenes = {
+            case["scene_id"]
+            for case in self.dataset.cases
+            if case["case_id"] in set(finetune["train_case_ids"])
+        }
+        self.assertNotIn("push_bottle", finetune["training_scene_ids"])
+        self.assertNotIn("push_bottle", selected_training_scenes)
+        self.assertNotIn("push_bottle", finetune["scene_ids"])
+        self.assertNotIn(
+            "push_bottle",
+            {job["scene_id"] for job in finetune["jobs"]},
+        )
         self.assertNotIn("push_bottle", direct["scene_ids"])
         self.assertNotIn("vertical_spring_oscillator", direct["scene_ids"])
 

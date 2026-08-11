@@ -32,7 +32,7 @@ DIRECT_TASK = (
     ROOT / "tasks" / "official" / "five_scene_direct_eval_v1.json"
 )
 FINETUNE_TASK = (
-    ROOT / "tasks" / "official" / "seven_scene_train_five_scene_eval_v1.json"
+    ROOT / "tasks" / "official" / "six_scene_train_five_scene_eval_v1.json"
 )
 class TaskRuntimeContractTests(unittest.TestCase):
     @classmethod

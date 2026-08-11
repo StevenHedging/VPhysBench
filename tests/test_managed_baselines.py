@@ -187,7 +187,7 @@ class ManagedBaselineTests(unittest.TestCase):
             ROOT
             / "tasks"
             / "official"
-            / "seven_scene_train_five_scene_eval_v1.json"
+            / "six_scene_train_five_scene_eval_v1.json"
         )
 
     def _one_case_task(self) -> TaskSpec:
@@ -371,7 +371,7 @@ class ManagedBaselineTests(unittest.TestCase):
 
             with self.assertRaisesRegex(
                 ValueError,
-                "push_bottle.*vertical_spring_oscillator",
+                "vertical_spring_oscillator",
             ):
                 compile_task_instance(plugin, self.dataset, self.finetune)
 

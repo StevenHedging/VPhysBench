@@ -1,7 +1,7 @@
 {
   "$schema": "../../schemas/task.schema.json",
   "schema_version": "1.0",
-  "task_id": "seven_scene_train_five_scene_eval_v1",
+  "task_id": "six_scene_train_five_scene_eval_v1",
   "family": "finetune_eval",
   "dataset_id": "physics_video_seven_scene_v13",
   "selection": {
@@ -11,7 +11,6 @@
       "inclined_plane_slide",
       "uniform_circular_motion",
       "parabolic_motion",
-      "push_bottle",
       "vertical_spring_oscillator"
     ],
     "evaluation_scene_ids": [

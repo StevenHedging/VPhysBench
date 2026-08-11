@@ -24,13 +24,14 @@
 1. `push_bottle`
 2. `vertical_spring_oscillator`
 
-这两个场景在 finetune Task v1 中参与训练，但没有公开 evaluator，不进入正式评估 job、
-五场景聚合或 leaderboard 分数。
+`vertical_spring_oscillator` 在 finetune Task v1 中参与训练，但没有公开 evaluator，
+不进入正式评估 job、五场景聚合或 leaderboard 分数。`push_bottle` 的数据完整保留，
+但不被任何官方 Task v1 的训练或评估集合选择。
 
 ## Official Tasks
 
 - `five_scene_direct_eval_v1`：五场景 658 个直接评估 job，无训练；
-- `seven_scene_train_five_scene_eval_v1`：七场景 806 个训练 case，五场景 76 个 ID
+- `six_scene_train_five_scene_eval_v1`：六场景 679 个训练 case，五场景 76 个 ID
   评估 job。
 
 两者都使用 `scene_default_v1`。Task 拥有数据选择、种子和报告策略；Baseline 拥有输入

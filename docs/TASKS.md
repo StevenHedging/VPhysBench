@@ -9,13 +9,16 @@ Task 是模型无关、可冻结的工作负载声明。发行版只接受 `sche
   - Task ID：`five_scene_direct_eval_v1`
   - 训练：无
   - 评估：五场景全部 658 个 case
-- `tasks/official/seven_scene_train_five_scene_eval_v1.json`
-  - Task ID：`seven_scene_train_five_scene_eval_v1`
-  - 训练：七场景 806 个 View A train case
+- `tasks/official/six_scene_train_five_scene_eval_v1.json`
+  - Task ID：`six_scene_train_five_scene_eval_v1`
+  - 训练：六场景 679 个 View A train case
   - 评估：五场景 76 个 View A ID test case
 
 二者都绑定 Dataset `physics_video_seven_scene_v13`、推理种子 42 和协议
 `scene_default_v1`。
+
+`push_bottle` 的 127 个训练 case 和 14 个 test case 仍保留在 Dataset 中，但不被任何
+官方 Task v1 选择。
 
 ## 字段
 

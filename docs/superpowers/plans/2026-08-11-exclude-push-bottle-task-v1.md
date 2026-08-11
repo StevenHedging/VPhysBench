@@ -147,20 +147,19 @@ Run:
 
 Expected: PASS with the six-scene canonical plan and all existing runtime contracts intact.
 
-- [ ] **Step 7: Run release verification**
+- [ ] **Step 7: Run pre-commit verification**
 
 Run:
 
 ```bash
-make test-interface
 make test-evaluation
 make smoke-interface
-make release-check
-make release-archive-check
 git diff --check
 ```
 
-Expected: every command exits 0; release audit and exported archive report `ok`.
+Expected: every command exits 0. The release archive gate is intentionally
+deferred until after the commit because it audits an archive exported from
+`HEAD`, not the uncommitted working tree.
 
 - [ ] **Step 8: Verify scope and commit**
 
@@ -172,6 +171,17 @@ git add README.md RELEASE_MANIFEST.json docs/ARCHITECTURE.md \
 git commit -m "refactor: exclude push bottle from Task v1"
 ```
 
-- [ ] **Step 9: Push and verify hosted checks**
+- [ ] **Step 9: Verify the committed release, push, and inspect hosted checks**
+
+Run from the new `HEAD`:
+
+```bash
+make test-interface
+make test-evaluation
+make smoke-interface
+make release-check
+make release-archive-check
+git diff --check
+```
 
 Push `2026-08-11`, then verify that the exact pushed SHA has a completed successful `clean-release` workflow, with both `interface-and-release` and `evaluation-contract` jobs completed successfully.

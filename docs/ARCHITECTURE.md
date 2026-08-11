@@ -44,8 +44,8 @@ canonical plan 明确保存两个集合：
 - `training_scene_ids`：Baseline 训练能力必须覆盖的场景；
 - `scene_ids`：推理、聚合和计分场景。
 
-七场景训练、五场景评估不再依赖含糊的单一 `scene_ids`。命令行 `--scene-id` 只缩小
-评估集合，不会静默改变官方七场景训练集合。Baseline 的 `supported_scenes` 同时校验这
+六场景训练、五场景评估不再依赖含糊的单一 `scene_ids`。命令行 `--scene-id` 只缩小
+评估集合，不会静默改变官方六场景训练集合。Baseline 的 `supported_scenes` 同时校验这
 两个集合。
 
 ## 发行边界

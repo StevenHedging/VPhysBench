@@ -12,15 +12,15 @@
   "evaluation_protocol": "scene_default_v1",
   "official_tasks": [
     "tasks/official/five_scene_direct_eval_v1.json",
-    "tasks/official/seven_scene_train_five_scene_eval_v1.json"
+    "tasks/official/six_scene_train_five_scene_eval_v1.json"
   ],
   "task_counts": {
     "five_scene_direct_eval_v1": {
       "training_cases": 0,
       "evaluation_jobs": 658
     },
-    "seven_scene_train_five_scene_eval_v1": {
-      "training_cases": 806,
+    "six_scene_train_five_scene_eval_v1": {
+      "training_cases": 679,
       "evaluation_jobs": 76
     }
   },

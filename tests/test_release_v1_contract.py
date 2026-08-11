@@ -19,7 +19,7 @@ OFFICIAL_TASKS = ROOT / "tasks" / "official"
 PROTOCOLS = ROOT / "configs" / "evaluation" / "protocols"
 DIRECT_TASK = OFFICIAL_TASKS / "five_scene_direct_eval_v1.json"
 FINETUNE_TASK = (
-    OFFICIAL_TASKS / "seven_scene_train_five_scene_eval_v1.json"
+    OFFICIAL_TASKS / "six_scene_train_five_scene_eval_v1.json"
 )
 SCORED_SCENES = {
     "pendulum",
@@ -28,10 +28,7 @@ SCORED_SCENES = {
     "uniform_circular_motion",
     "parabolic_motion",
 }
-ALL_SCENES = SCORED_SCENES | {
-    "push_bottle",
-    "vertical_spring_oscillator",
-}
+TRAINING_SCENES = SCORED_SCENES | {"vertical_spring_oscillator"}
 PUBLIC_EVALUATOR_TYPES = {
     "pendulum_v1",
     "collision_1d_v1",
@@ -51,7 +48,7 @@ class ReleaseV1ContractTests(unittest.TestCase):
         self.assertEqual(
             {
                 "five_scene_direct_eval_v1.json",
-                "seven_scene_train_five_scene_eval_v1.json",
+                "six_scene_train_five_scene_eval_v1.json",
             },
             {path.name for path in OFFICIAL_TASKS.glob("*.json")},
         )
@@ -79,25 +76,33 @@ class ReleaseV1ContractTests(unittest.TestCase):
             dict(Counter(job["scene_id"] for job in plan["jobs"])),
         )
 
-    def test_finetune_v1_trains_seven_and_evaluates_five_scenes(self) -> None:
+    def test_finetune_v1_excludes_push_bottle(self) -> None:
         self.assertTrue(FINETUNE_TASK.is_file(), FINETUNE_TASK)
         task = load_task(FINETUNE_TASK)
         plan = plan_atomic_task(task, self.dataset).value
         by_case = {case["case_id"]: case for case in self.dataset.cases}
 
         self.assertEqual("1.0", task.value["schema_version"])
-        self.assertEqual("seven_scene_train_five_scene_eval_v1", task.task_id)
+        self.assertEqual("six_scene_train_five_scene_eval_v1", task.task_id)
         self.assertEqual("scene_default_v1", task.value["evaluation"]["protocol"])
-        self.assertEqual(ALL_SCENES, set(plan["training_scene_ids"]))
+        self.assertEqual(TRAINING_SCENES, set(plan["training_scene_ids"]))
         self.assertEqual(SCORED_SCENES, set(plan["scene_ids"]))
-        self.assertEqual(806, len(plan["train_case_ids"]))
+        self.assertEqual(679, len(plan["train_case_ids"]))
         self.assertEqual(76, len(plan["jobs"]))
         self.assertEqual(
-            ALL_SCENES,
+            TRAINING_SCENES,
             {
                 by_case[case_id]["scene_id"]
                 for case_id in plan["train_case_ids"]
             },
+        )
+        self.assertNotIn(
+            "push_bottle",
+            {by_case[case_id]["scene_id"] for case_id in plan["train_case_ids"]},
+        )
+        self.assertNotIn(
+            "push_bottle",
+            {job["scene_id"] for job in plan["jobs"]},
         )
         self.assertEqual(
             {"id": 76},
