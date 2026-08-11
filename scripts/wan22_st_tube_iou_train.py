@@ -243,15 +243,25 @@ class LoadSubjectMaskTube:
         return torch.from_numpy(tube.copy())
 
 
+def configure_occupancy_head(head: nn.Module, *, enabled: bool) -> nn.Module:
+    """Keep disabled ablations out of DDP's trainable parameter set."""
+
+    head.train(mode=enabled)
+    head.requires_grad_(enabled)
+    return head
+
+
 class STTubeIoUWanTrainingModule(WanTrainingModule):
     def __init__(self, *args, st_config: dict[str, Any], **kwargs):
         super().__init__(*args, **kwargs)
         self.st_config = dict(st_config)
-        self.occupancy_head = LatentOccupancyHead(
-            latent_channels=int(st_config["latent_channels"]),
-            hidden_channels=int(st_config["hidden_channels"]),
-        ).to(device=self.pipe.device, dtype=torch.float32)
-        self.occupancy_head.train().requires_grad_(True)
+        self.occupancy_head = configure_occupancy_head(
+            LatentOccupancyHead(
+                latent_channels=int(st_config["latent_channels"]),
+                hidden_channels=int(st_config["hidden_channels"]),
+            ).to(device=self.pipe.device, dtype=torch.float32),
+            enabled=bool(st_config["enable_st_iou_loss"]),
+        )
         self.optimizer_step = 0
         self.last_metrics: dict[str, torch.Tensor] = {}
 

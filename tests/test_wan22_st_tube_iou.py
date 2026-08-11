@@ -775,6 +775,18 @@ class STTubeIoUTrainerContractTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "occupancy-head"):
             module._gradient_audit(model, require_head=True)
 
+    def test_disabled_auxiliary_freezes_unused_head_for_ddp(self) -> None:
+        module = _trainer_module()
+        head = torch.nn.Conv3d(1, 1, 1)
+
+        module.configure_occupancy_head(head, enabled=False)
+
+        self.assertFalse(head.training)
+        self.assertFalse(any(parameter.requires_grad for parameter in head.parameters()))
+        module.configure_occupancy_head(head, enabled=True)
+        self.assertTrue(head.training)
+        self.assertTrue(all(parameter.requires_grad for parameter in head.parameters()))
+
     def test_lora_export_and_head_path_cannot_pollute_stock_checkpoint(self) -> None:
         module = _trainer_module()
         state = {
