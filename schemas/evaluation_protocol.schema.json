@@ -86,7 +86,8 @@
         "collision_1d",
         "inclined_plane_slide",
         "uniform_circular_motion",
-        "parabolic_motion"
+        "parabolic_motion",
+        "vertical_spring_oscillator"
       ],
       "properties": {
         "pendulum": {
@@ -103,6 +104,9 @@
         },
         "parabolic_motion": {
           "$ref": "#/$defs/parabolicMotion"
+        },
+        "vertical_spring_oscillator": {
+          "$ref": "#/$defs/verticalSpring"
         }
       },
       "additionalProperties": false
@@ -155,6 +159,263 @@
         {"$ref": "#/$defs/sceneBase"},
         {
           "properties": {"type": {"const": "parabolic_motion_v1"}}
+        }
+      ]
+    },
+    "verticalSpring": {
+      "allOf": [
+        {"$ref": "#/$defs/sceneBase"},
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "evaluator_contract",
+            "timeline",
+            "spatial",
+            "sam2",
+            "quality",
+            "period",
+            "scoring",
+            "subject_scoring",
+            "identity",
+            "topology",
+            "content_weights"
+          ],
+          "properties": {
+            "type": {"const": "vertical_spring_oscillator_v1"},
+            "evaluator_contract": {"const": "robust_subject_v3"},
+            "timeline": {
+              "type": "object",
+              "required": [
+                "policy",
+                "fps",
+                "minimum_evaluation_fps",
+                "minimum_source_fps",
+                "duration_tolerance_s",
+                "decode_policy"
+              ],
+              "properties": {
+                "policy": {"const": "physical_overlap_common_fps_v1"},
+                "fps": {"const": 24},
+                "minimum_evaluation_fps": {"type": "number", "exclusiveMinimum": 0},
+                "minimum_source_fps": {"type": "number", "exclusiveMinimum": 0},
+                "duration_tolerance_s": {"type": "number", "minimum": 0},
+                "decode_policy": {"const": "sequential_forward"}
+              },
+              "additionalProperties": false
+            },
+            "spatial": {
+              "type": "object",
+              "required": ["width", "height", "policy", "pad_value"],
+              "properties": {
+                "width": {"const": 480},
+                "height": {"const": 832},
+                "policy": {"const": "shared_reference_content_no_pad_v1"},
+                "pad_value": {"const": 0}
+              },
+              "additionalProperties": false
+            },
+            "sam2": {
+              "type": "object",
+              "required": ["model_id", "device"],
+              "properties": {
+                "model_id": {"const": "facebook/sam2.1-hiera-tiny"},
+                "device": {"enum": ["auto", "cpu", "cuda"]}
+              },
+              "additionalProperties": false
+            },
+            "quality": {
+              "type": "object",
+              "required": [
+                "minimum_mask_pixels",
+                "minimum_mask_area_ratio",
+                "maximum_mask_area_ratio",
+                "minimum_anchor_area_ratio",
+                "maximum_anchor_area_ratio",
+                "minimum_valid_frame_ratio",
+                "minimum_amplitude_px"
+              ],
+              "properties": {
+                "minimum_mask_pixels": {"type": "number", "minimum": 0},
+                "minimum_mask_area_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+                "maximum_mask_area_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+                "minimum_anchor_area_ratio": {"type": "number", "minimum": 0},
+                "maximum_anchor_area_ratio": {"type": "number", "exclusiveMinimum": 0},
+                "minimum_valid_frame_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+                "minimum_amplitude_px": {"type": "number", "minimum": 0}
+              },
+              "additionalProperties": false
+            },
+            "period": {
+              "type": "object",
+              "required": [
+                "minimum_s",
+                "maximum_s",
+                "minimum_period_correlation",
+                "minimum_period_peak_prominence",
+                "minimum_complete_cycles",
+                "minimum_subharmonic_residual_px",
+                "maximum_cadence_relative_deviation"
+              ],
+              "properties": {
+                "minimum_s": {"type": "number", "exclusiveMinimum": 0},
+                "maximum_s": {"type": "number", "exclusiveMinimum": 0},
+                "minimum_period_correlation": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+                "minimum_period_peak_prominence": {"type": "number", "exclusiveMinimum": 0},
+                "minimum_complete_cycles": {"type": "number", "exclusiveMinimum": 0},
+                "minimum_subharmonic_residual_px": {"type": "number", "exclusiveMinimum": 0},
+                "maximum_cadence_relative_deviation": {"type": "number", "exclusiveMinimum": 0, "maximum": 1}
+              },
+              "additionalProperties": false
+            },
+            "scoring": {
+              "type": "object",
+              "required": [
+                "weights",
+                "trajectory_scale",
+                "amplitude_scale",
+                "equilibrium_scale",
+                "axis_drift_scale",
+                "oscillation_amplitude_scale",
+                "minimum_period_correlation",
+                "minimum_period_peak_prominence",
+                "minimum_complete_cycles",
+                "minimum_subharmonic_residual_px"
+              ],
+              "properties": {
+                "weights": {
+                  "type": "object",
+                  "required": [
+                    "vertical_trajectory",
+                    "period",
+                    "amplitude_envelope",
+                    "equilibrium_release_phase",
+                    "vertical_axis_confinement",
+                    "oscillation_evidence"
+                  ],
+                  "properties": {
+                    "vertical_trajectory": {"type": "number", "minimum": 0},
+                    "period": {"type": "number", "minimum": 0},
+                    "amplitude_envelope": {"type": "number", "minimum": 0},
+                    "equilibrium_release_phase": {"type": "number", "minimum": 0},
+                    "vertical_axis_confinement": {"type": "number", "minimum": 0},
+                    "oscillation_evidence": {"type": "number", "minimum": 0}
+                  },
+                  "additionalProperties": false
+                },
+                "trajectory_scale": {"type": "number", "exclusiveMinimum": 0},
+                "amplitude_scale": {"type": "number", "exclusiveMinimum": 0},
+                "equilibrium_scale": {"type": "number", "exclusiveMinimum": 0},
+                "axis_drift_scale": {"type": "number", "exclusiveMinimum": 0},
+                "oscillation_amplitude_scale": {"type": "number", "exclusiveMinimum": 0},
+                "minimum_period_correlation": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+                "minimum_period_peak_prominence": {"type": "number", "exclusiveMinimum": 0},
+                "minimum_complete_cycles": {"type": "number", "exclusiveMinimum": 0},
+                "minimum_subharmonic_residual_px": {"type": "number", "exclusiveMinimum": 0}
+              },
+              "additionalProperties": false
+            },
+            "subject_scoring": {
+              "type": "object",
+              "required": [
+                "minimum_observed_pixels",
+                "position_distance_scale",
+                "canonical_crop_size",
+                "boundary_tolerance_px",
+                "weights",
+                "case_weights",
+                "parent_weights"
+              ],
+              "properties": {
+                "minimum_observed_pixels": {"type": "integer", "minimum": 1},
+                "position_distance_scale": {"type": "number", "exclusiveMinimum": 0},
+                "canonical_crop_size": {"type": "integer", "minimum": 1},
+                "boundary_tolerance_px": {"type": "integer", "minimum": 0},
+                "weights": {
+                  "type": "object",
+                  "required": ["position", "shape", "appearance"],
+                  "properties": {
+                    "position": {"type": "number", "minimum": 0},
+                    "shape": {"type": "number", "minimum": 0},
+                    "appearance": {"type": "number", "minimum": 0}
+                  },
+                  "additionalProperties": false
+                },
+                "case_weights": {
+                  "type": "object",
+                  "required": ["physics_state", "subject"],
+                  "properties": {
+                    "physics_state": {"type": "number", "minimum": 0},
+                    "subject": {"type": "number", "minimum": 0}
+                  },
+                  "additionalProperties": false
+                },
+                "parent_weights": {
+                  "type": "object",
+                  "required": ["physics_state", "conditioned_appearance"],
+                  "properties": {
+                    "physics_state": {"type": "number", "minimum": 0},
+                    "conditioned_appearance": {"type": "number", "minimum": 0}
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "identity": {
+              "type": "object",
+              "required": [
+                "minimum_anchor_iou",
+                "maximum_centroid_distance_radii",
+                "minimum_anchor_area_ratio",
+                "maximum_anchor_area_ratio"
+              ],
+              "properties": {
+                "minimum_anchor_iou": {"type": "number", "minimum": 0, "maximum": 1},
+                "maximum_centroid_distance_radii": {"type": "number", "minimum": 0},
+                "minimum_anchor_area_ratio": {"type": "number", "minimum": 0},
+                "maximum_anchor_area_ratio": {"type": "number", "exclusiveMinimum": 0}
+              },
+              "additionalProperties": false
+            },
+            "topology": {
+              "type": "object",
+              "required": [
+                "canny_low_threshold",
+                "canny_high_threshold",
+                "corridor_half_width_radius_ratio",
+                "minimum_edge_pixels_per_row",
+                "endpoint_height_radius_ratio",
+                "boundary_exclusion_px",
+                "connectivity_dilation_px",
+                "minimum_corridor_height_radius_ratio",
+                "minimum_connected_vertical_span_ratio"
+              ],
+              "properties": {
+                "canny_low_threshold": {"type": "number", "minimum": 0},
+                "canny_high_threshold": {"type": "number", "minimum": 0},
+                "corridor_half_width_radius_ratio": {"type": "number", "exclusiveMinimum": 0},
+                "minimum_edge_pixels_per_row": {"type": "integer", "minimum": 0},
+                "endpoint_height_radius_ratio": {"type": "number", "exclusiveMinimum": 0},
+                "boundary_exclusion_px": {"type": "integer", "minimum": 0},
+                "connectivity_dilation_px": {"type": "integer", "minimum": 0},
+                "minimum_corridor_height_radius_ratio": {"type": "number", "exclusiveMinimum": 0},
+                "minimum_connected_vertical_span_ratio": {"type": "number", "exclusiveMinimum": 0, "maximum": 1}
+              },
+              "additionalProperties": false
+            },
+            "content_weights": {
+              "type": "object",
+              "required": ["physics_state", "subject", "topology"],
+              "properties": {
+                "physics_state": {"type": "number", "minimum": 0},
+                "subject": {"type": "number", "minimum": 0},
+                "topology": {"type": "number", "minimum": 0}
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
         }
       ]
     }

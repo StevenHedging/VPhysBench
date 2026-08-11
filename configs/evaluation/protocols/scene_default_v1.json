@@ -2,7 +2,7 @@
   "$schema": "../../../schemas/evaluation_protocol.schema.json",
   "schema_version": "1.0",
   "protocol_id": "scene_default_v1",
-  "description": "Official five-scene evaluation protocol with exact CSTI, fail-closed subject identity, and strict physics scoring.",
+  "description": "Public scene evaluator protocol with exact CSTI, fail-closed subject identity, and strict physics scoring.",
   "robustness": {
     "prediction_record_failure_policy": "evaluated_zero",
     "prediction_media_failure_policy": "evaluated_zero",
@@ -920,6 +920,106 @@
       "subject_identity": {
         "anchor_policy": "first_frame_subject_mask_manifest_v1",
         "failure_policy": "fail_closed_v1"
+      }
+    },
+    "vertical_spring_oscillator": {
+      "type": "vertical_spring_oscillator_v1",
+      "evaluator_contract": "robust_subject_v3",
+      "timeline": {
+        "policy": "physical_overlap_common_fps_v1",
+        "fps": 24,
+        "minimum_evaluation_fps": 8,
+        "minimum_source_fps": 8,
+        "duration_tolerance_s": 0.02,
+        "decode_policy": "sequential_forward"
+      },
+      "spatial": {
+        "width": 480,
+        "height": 832,
+        "policy": "shared_reference_content_no_pad_v1",
+        "pad_value": 0
+      },
+      "sam2": {
+        "model_id": "facebook/sam2.1-hiera-tiny",
+        "device": "auto"
+      },
+      "quality": {
+        "minimum_mask_pixels": 40,
+        "minimum_mask_area_ratio": 0.00005,
+        "maximum_mask_area_ratio": 0.1,
+        "minimum_anchor_area_ratio": 0.5,
+        "maximum_anchor_area_ratio": 1.8,
+        "minimum_valid_frame_ratio": 0.9,
+        "minimum_amplitude_px": 5
+      },
+      "period": {
+        "minimum_s": 0.35,
+        "maximum_s": 2.5,
+        "minimum_period_correlation": 0.6,
+        "minimum_period_peak_prominence": 0.001,
+        "minimum_complete_cycles": 2,
+        "minimum_subharmonic_residual_px": 0.15,
+        "maximum_cadence_relative_deviation": 0.02
+      },
+      "scoring": {
+        "weights": {
+          "vertical_trajectory": 0.3,
+          "period": 0.15,
+          "amplitude_envelope": 0.15,
+          "equilibrium_release_phase": 0.15,
+          "vertical_axis_confinement": 0.1,
+          "oscillation_evidence": 0.15
+        },
+        "trajectory_scale": 1,
+        "amplitude_scale": 0.3,
+        "equilibrium_scale": 0.3,
+        "axis_drift_scale": 0.3,
+        "oscillation_amplitude_scale": 0.3,
+        "minimum_period_correlation": 0.6,
+        "minimum_period_peak_prominence": 0.001,
+        "minimum_complete_cycles": 2,
+        "minimum_subharmonic_residual_px": 0.15
+      },
+      "subject_scoring": {
+        "minimum_observed_pixels": 4,
+        "position_distance_scale": 0.08,
+        "canonical_crop_size": 64,
+        "boundary_tolerance_px": 2,
+        "weights": {
+          "position": 0.5,
+          "shape": 0.2,
+          "appearance": 0.3
+        },
+        "case_weights": {
+          "physics_state": 0.55,
+          "subject": 0.25
+        },
+        "parent_weights": {
+          "physics_state": 0.7,
+          "conditioned_appearance": 0.3
+        }
+      },
+      "identity": {
+        "minimum_anchor_iou": 0.6,
+        "maximum_centroid_distance_radii": 1.5,
+        "minimum_anchor_area_ratio": 0.5,
+        "maximum_anchor_area_ratio": 1.8
+      },
+      "topology": {
+        "canny_low_threshold": 40,
+        "canny_high_threshold": 120,
+        "corridor_half_width_radius_ratio": 1.5,
+        "minimum_edge_pixels_per_row": 2,
+        "endpoint_height_radius_ratio": 1,
+        "boundary_exclusion_px": 2,
+        "connectivity_dilation_px": 1,
+        "minimum_corridor_height_radius_ratio": 2,
+        "minimum_connected_vertical_span_ratio": 0.6
+      },
+      "content_weights": {
+        "physics_state": 0.55,
+        "subject": 0.25,
+        "topology": 0.2
       }
     }
   }

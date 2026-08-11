@@ -13,6 +13,7 @@ SUPPORTED_EVALUATOR_TYPES = frozenset(
         "inclined_plane_slide_v1",
         "uniform_circular_motion_v1",
         "parabolic_motion_v1",
+        "vertical_spring_oscillator_v1",
         "unsupported",
     }
 )
@@ -73,6 +74,12 @@ class SceneEvaluatorRegistry:
             )
 
             evaluator = ParabolicMotionCaseEvaluatorV2(config)
+        elif evaluator_type == "vertical_spring_oscillator_v1":
+            from .scenes.vertical_spring_oscillator.evaluator import (
+                VerticalSpringOscillatorCaseEvaluator,
+            )
+
+            evaluator = VerticalSpringOscillatorCaseEvaluator(config)
         elif evaluator_type == "unsupported":
             evaluator = UnsupportedSceneEvaluator(scene_id, config)
         else:

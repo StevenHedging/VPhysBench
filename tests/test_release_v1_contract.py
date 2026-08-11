@@ -35,6 +35,7 @@ PUBLIC_EVALUATOR_TYPES = {
     "inclined_plane_slide_v1",
     "uniform_circular_motion_v1",
     "parabolic_motion_v1",
+    "vertical_spring_oscillator_v1",
     "unsupported",
 }
 
@@ -138,6 +139,7 @@ class ReleaseV1ContractTests(unittest.TestCase):
                 "inclined_plane_slide": "inclined_plane_slide_v1",
                 "uniform_circular_motion": "uniform_circular_motion_v1",
                 "parabolic_motion": "parabolic_motion_v1",
+                "vertical_spring_oscillator": "vertical_spring_oscillator_v1",
             },
             {
                 scene_id: config["type"]

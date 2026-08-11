@@ -7,6 +7,7 @@ from .scoring import (
     score_spring_traces,
     theoretical_period_s,
 )
+from .evaluator import VerticalSpringOscillatorCaseEvaluator
 
 __all__ = [
     "SpringTrace",
@@ -14,4 +15,5 @@ __all__ = [
     "extract_spring_trace",
     "score_spring_traces",
     "theoretical_period_s",
+    "VerticalSpringOscillatorCaseEvaluator",
 ]

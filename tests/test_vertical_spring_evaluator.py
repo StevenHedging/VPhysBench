@@ -2,18 +2,30 @@ from __future__ import annotations
 
 import math
 import unittest
+from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import cv2
 import numpy as np
 
+from physbench.evaluation.common.errors import (
+    ReferenceAnalysisError,
+    SceneAnalysisError,
+)
 from physbench.evaluation.common.frozen_subject import FrozenSubjectAnchor
+from physbench.evaluation.common.masks.sam2 import Sam2VideoSegmenter
+from physbench.evaluation.common.media import SampledVideo, VideoInfo
+from physbench.evaluation.contracts import CaseEvaluationRequest
 from physbench.evaluation.scenes.vertical_spring_oscillator.observation import (
     observe_spring_topology,
     prompt_from_anchor,
     validate_mask_tube,
     validate_prediction_identity,
 )
+from physbench.io import write_json
 
 
 IDENTITY = {
@@ -40,6 +52,100 @@ TOPOLOGY = {
     "connectivity_dilation_px": 1,
     "minimum_corridor_height_radius_ratio": 2.00,
     "minimum_connected_vertical_span_ratio": 0.60,
+}
+
+EVALUATOR_CONFIG = {
+    "type": "vertical_spring_oscillator_v1",
+    "evaluator_contract": "robust_subject_v3",
+    "timeline": {
+        "policy": "physical_overlap_common_fps_v1",
+        "fps": 24,
+        "minimum_evaluation_fps": 8,
+        "minimum_source_fps": 8,
+        "duration_tolerance_s": 0.02,
+        "decode_policy": "sequential_forward",
+    },
+    "spatial": {
+        "width": 480,
+        "height": 832,
+        "policy": "shared_reference_content_no_pad_v1",
+        "pad_value": 0,
+    },
+    "sam2": {
+        "model_id": "facebook/sam2.1-hiera-tiny",
+        "device": "auto",
+    },
+    "quality": {
+        "minimum_mask_pixels": 40,
+        "minimum_mask_area_ratio": 0.002,
+        "maximum_mask_area_ratio": 0.10,
+        "minimum_anchor_area_ratio": 0.50,
+        "maximum_anchor_area_ratio": 1.80,
+        "minimum_valid_frame_ratio": 0.90,
+        "minimum_amplitude_px": 5.0,
+    },
+    "period": {
+        "minimum_s": 0.35,
+        "maximum_s": 1.20,
+        "minimum_period_correlation": 0.60,
+        "minimum_period_peak_prominence": 0.001,
+        "minimum_complete_cycles": 2.0,
+        "minimum_subharmonic_residual_px": 0.15,
+        "maximum_cadence_relative_deviation": 0.02,
+    },
+    "scoring": {
+        "weights": {
+            "vertical_trajectory": 0.30,
+            "period": 0.15,
+            "amplitude_envelope": 0.15,
+            "equilibrium_release_phase": 0.15,
+            "vertical_axis_confinement": 0.10,
+            "oscillation_evidence": 0.15,
+        },
+        "trajectory_scale": 1.0,
+        "amplitude_scale": 0.30,
+        "equilibrium_scale": 0.30,
+        "axis_drift_scale": 0.30,
+        "oscillation_amplitude_scale": 0.30,
+        "minimum_period_correlation": 0.60,
+        "minimum_period_peak_prominence": 0.001,
+        "minimum_complete_cycles": 2.0,
+        "minimum_subharmonic_residual_px": 0.15,
+    },
+    "subject_scoring": {
+        "minimum_observed_pixels": 4,
+        "position_distance_scale": 0.08,
+        "canonical_crop_size": 64,
+        "boundary_tolerance_px": 2,
+        "weights": {"position": 0.5, "shape": 0.2, "appearance": 0.3},
+        "case_weights": {"physics_state": 0.55, "subject": 0.25},
+        "parent_weights": {
+            "physics_state": 0.7,
+            "conditioned_appearance": 0.3,
+        },
+    },
+    "identity": IDENTITY,
+    "topology": TOPOLOGY,
+    "content_weights": {
+        "physics_state": 0.55,
+        "subject": 0.25,
+        "topology": 0.20,
+    },
+    "general_metrics": {
+        "csti": {
+            "enabled": True,
+            "algorithm": "exact_full_tube_edt",
+            "spatial_tolerance_fraction": 0.004204482076268572,
+            "temporal_tolerance_s": 0.025,
+            "condition_frame_policy": "exclude_initial_samples",
+            "initial_frames_excluded": 3,
+            "score_aggregation": "full_tube",
+            "diagnostic_prefix_fractions": [0.25, 0.5, 0.75, 1],
+            "case_aggregation": "mean_gt_entities",
+            "timeline_policy": "physical_overlap",
+            "mask_resolution": "scene_analysis_native",
+        }
+    },
 }
 
 
@@ -105,6 +211,429 @@ def spring_frame(
         )
     frame[ball_mask > 0] = (160, 160, 160)
     return frame
+
+
+def sinusoidal_spring_masks(times_s: np.ndarray) -> list[np.ndarray]:
+    """Rasterize an independent 0.8 s vertical oscillator fixture."""
+    return [
+        circle_mask(
+            48,
+            int(round(48.0 + 16.0 * math.cos(2.0 * math.pi * time_s / 0.8))),
+        )
+        for time_s in times_s
+    ]
+
+
+def sampled_video(
+    frames: list[np.ndarray], *, available: list[bool] | None = None
+) -> SampledVideo:
+    count = len(frames)
+    times = (np.arange(count, dtype=float) / 24.0).tolist()
+    return SampledVideo(
+        frames=frames,
+        info=VideoInfo(
+            frame_count=count,
+            fps=24.0,
+            width=96,
+            height=96,
+            last_frame_time_s=times[-1],
+        ),
+        sample_times_s=times,
+        source_indices=list(range(count)),
+        spatial_transform={
+            "policy": "reference_content_crop_resize_no_pad",
+            "crop_xywh": [0, 0, 96, 96],
+            "scale": 1.0,
+            "source_size": [96, 96],
+            "target_size": [96, 96],
+            "padding": None,
+        },
+        available=available,
+        temporal_transform={"source_time_scale": 1.0},
+    )
+
+
+def spring_case() -> dict[str, object]:
+    return {
+        "case_id": "vertical_spring_case",
+        "scene_id": "vertical_spring_oscillator",
+        "appearance": {
+            "spring_id": "spring_a",
+            "release_side": "below_equilibrium",
+        },
+        "physics": {
+            "objects": {
+                "object_1": {
+                    "initial_displacement": {
+                        "value": 0.03,
+                        "unit": "m",
+                        "symbol": "x_0",
+                    },
+                    "mass": {
+                        "value": 0.1,
+                        "unit": "kg",
+                        "symbol": "m",
+                    },
+                    "radius": {
+                        "value": 0.01,
+                        "unit": "m",
+                        "symbol": "r",
+                    },
+                }
+            },
+            "environment": {
+                "gravity_acceleration": {
+                    "value": 9.81,
+                    "unit": "m/s^2",
+                    "symbol": "g",
+                },
+                "natural_spring_length": {
+                    "value": 0.2,
+                    "unit": "m",
+                    "symbol": "L_0",
+                },
+                "spring_stiffness": {
+                    "value": 6.168502750680848,
+                    "unit": "N/m",
+                    "symbol": "k",
+                },
+            },
+        },
+        "assets": {
+            "first_frame": "condition.png",
+            "first_frame_mask_manifest": "masks/manifest.json",
+            "reference_video": "reference.mp4",
+        },
+    }
+
+
+def write_frozen_spring_anchor(
+    root: Path, *, case: dict[str, object], mask: np.ndarray
+) -> None:
+    npz_path = root / "masks/ball_0.npz"
+    npz_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        npz_path,
+        masks=np.asarray(mask[None, ...], dtype=np.uint8),
+        mask_ids=np.asarray(["spring-ball-mask"]),
+        object_ids=np.asarray(["oscillator_ball"]),
+        frame_index=np.asarray(0, dtype=np.int64),
+    )
+    ys, xs = np.where(mask > 0)
+    write_json(
+        root / "masks/manifest.json",
+        {
+            "schema_version": "1.2",
+            "case_id": case["case_id"],
+            "scene_id": case["scene_id"],
+            "frame_index": 0,
+            "frame_scope": "first_frame_only",
+            "source_first_frame": "condition.png",
+            "image_shape_hw": [96, 96],
+            "instances": [
+                {
+                    "mask_id": "spring-ball-mask",
+                    "object_id": "ball_0",
+                    "entity_class": "steel_ball",
+                    "npz_asset": "masks/ball_0.npz",
+                    "area_pixels": int(xs.size),
+                    "bbox_xyxy": [
+                        int(xs.min()),
+                        int(ys.min()),
+                        int(xs.max()) + 1,
+                        int(ys.max()) + 1,
+                    ],
+                    "centroid_xy": [float(xs.mean()), float(ys.mean())],
+                }
+            ],
+            "storage": {
+                "model": {
+                    "array_key": "masks",
+                    "layout": "1HW",
+                    "dtype": "uint8",
+                    "values": [0, 1],
+                }
+            },
+        },
+    )
+
+
+def write_video(path: Path, frames: list[np.ndarray]) -> None:
+    writer = cv2.VideoWriter(
+        str(path), cv2.VideoWriter_fourcc(*"mp4v"), 24.0, (96, 96)
+    )
+    if not writer.isOpened():
+        raise RuntimeError("test video writer could not open")
+    try:
+        for frame in frames:
+            writer.write(frame)
+    finally:
+        writer.release()
+
+
+def resize_mask_tube(
+    masks: list[np.ndarray], *, width: int, height: int
+) -> list[np.ndarray]:
+    """Mirror SAM2's native evaluation-canvas mask contract."""
+    return [
+        cv2.resize(mask, (width, height), interpolation=cv2.INTER_NEAREST)
+        for mask in masks
+    ]
+
+
+class VerticalSpringEvaluatorTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.times_array = np.arange(96, dtype=float) / 24.0
+        self.times = self.times_array.tolist()
+        self.masks = sinusoidal_spring_masks(self.times_array)
+        self.frames = [
+            spring_frame(mask, attached=True, ruler_and_border=False)
+            for mask in self.masks
+        ]
+        self.case = spring_case()
+        write_frozen_spring_anchor(
+            self.root, case=self.case, mask=self.masks[0]
+        )
+        self.request = CaseEvaluationRequest(
+            job={"job_id": "spring_eval"},
+            case=self.case,
+            case_catalog={str(self.case["case_id"]): self.case},
+            prediction={"status": "complete", "video_path": "unused.mp4"},
+            asset_root=self.root,
+            artifact_dir=self.root / "artifacts",
+            evaluator_config=deepcopy(EVALUATOR_CONFIG),
+        )
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    @staticmethod
+    def evaluator():
+        from physbench.evaluation.scenes.vertical_spring_oscillator.evaluator import (
+            VerticalSpringOscillatorCaseEvaluator,
+        )
+
+        return VerticalSpringOscillatorCaseEvaluator(deepcopy(EVALUATOR_CONFIG))
+
+    def test_identity_analysis_scores_one_reuses_segmentation_and_binds_csti(
+        self,
+    ) -> None:
+        """Would fail if identity, one-pass reuse, scoring, or CSTI binding regresses."""
+        video = sampled_video(self.frames)
+        with patch.object(
+            Sam2VideoSegmenter,
+            "segment",
+            return_value=(self.masks, {"backend": "deterministic_test_sam2"}),
+        ) as segment:
+            analysis = self.evaluator().analyze(
+                self.request,
+                times_s=self.times,
+                reference_video=video,
+                prediction_video=video,
+            )
+
+        self.assertEqual(1, segment.call_count)
+        self.assertEqual(1.0, analysis.score)
+        self.assertEqual(
+            1.0,
+            analysis.metrics["vertical_spring_oscillator_similarity"]["score"],
+        )
+        self.assertIsNotNone(analysis.csti_input)
+        assert analysis.csti_input is not None
+        self.assertEqual(1, len(analysis.csti_input.entities))
+        entity = analysis.csti_input.entities[0]
+        self.assertEqual("oscillator_ball", entity.entity_id)
+        self.assertEqual("spring_oscillator", entity.role_id)
+        self.assertEqual(("bound_spring_ball",), entity.matched_prediction_track_ids)
+        self.assertIsNotNone(entity.prediction_masks)
+        self.assertEqual("same_case_gt", analysis.csti_input.reference_capability.value)
+        self.assertEqual(
+            {
+                "per_frame_csv",
+                "trajectory_curve",
+                "subject_components_csv",
+                "subject_similarity_curve",
+                "audit_json",
+            },
+            set(analysis.artifacts),
+        )
+
+    def test_prediction_unavailable_samples_are_empty_in_the_accepted_csti_tube(
+        self,
+    ) -> None:
+        """Would fail if partial media availability leaks a fabricated subject mask."""
+        availability = [True] * len(self.frames)
+        availability[20] = False
+        reference = sampled_video(self.frames)
+        prediction_frames = [frame.copy() for frame in self.frames]
+        prediction_frames[0][0, 0] = (1, 2, 3)
+        prediction = sampled_video(prediction_frames, available=availability)
+        with patch.object(
+            Sam2VideoSegmenter,
+            "segment",
+            side_effect=[
+                (self.masks, {"role": "reference"}),
+                (self.masks, {"role": "prediction"}),
+            ],
+        ):
+            analysis = self.evaluator().analyze(
+                self.request,
+                times_s=self.times,
+                reference_video=reference,
+                prediction_video=prediction,
+            )
+
+        assert analysis.csti_input is not None
+        tube = analysis.csti_input.entities[0].prediction_masks
+        assert tube is not None
+        self.assertEqual(0, np.count_nonzero(tube[20]))
+        self.assertGreater(np.count_nonzero(tube[19]), 0)
+
+    def test_segmentation_exception_origin_is_reference_or_prediction_specific(
+        self,
+    ) -> None:
+        """Would fail if SAM2 failures are attributed to the wrong robustness side."""
+        reference = sampled_video(self.frames)
+        prediction_frames = [frame.copy() for frame in self.frames]
+        prediction_frames[0][0, 0] = (1, 2, 3)
+        prediction = sampled_video(prediction_frames)
+        with patch.object(
+            Sam2VideoSegmenter,
+            "segment",
+            side_effect=SceneAnalysisError("sam2_test_failure", "reference failed"),
+        ):
+            with self.assertRaises(ReferenceAnalysisError) as caught:
+                self.evaluator().analyze(
+                    self.request,
+                    times_s=self.times,
+                    reference_video=reference,
+                    prediction_video=prediction,
+                )
+        self.assertEqual("reference_spring_segmentation_failed", caught.exception.code)
+
+        with patch.object(
+            Sam2VideoSegmenter,
+            "segment",
+            side_effect=[
+                (self.masks, {"role": "reference"}),
+                SceneAnalysisError("sam2_test_failure", "prediction failed"),
+            ],
+        ):
+            with self.assertRaises(SceneAnalysisError) as caught:
+                self.evaluator().analyze(
+                    self.request,
+                    times_s=self.times,
+                    reference_video=reference,
+                    prediction_video=prediction,
+                )
+        self.assertNotIsInstance(caught.exception, ReferenceAnalysisError)
+        self.assertEqual("prediction_spring_segmentation_failed", caught.exception.code)
+
+    def test_trace_exception_origin_is_reference_or_prediction_specific(self) -> None:
+        """Would fail if invalid trace coverage crosses the reference/prediction boundary."""
+        reference = sampled_video(self.frames)
+        prediction_frames = [frame.copy() for frame in self.frames]
+        prediction_frames[0][0, 0] = (1, 2, 3)
+        prediction = sampled_video(prediction_frames)
+        trace_defect = [self.masks[0], *[np.zeros((96, 96), np.uint8) for _ in self.masks[1:]]]
+        with patch.object(
+            Sam2VideoSegmenter,
+            "segment",
+            side_effect=[
+                (trace_defect, {"role": "reference"}),
+                (self.masks, {"role": "prediction"}),
+            ],
+        ):
+            with self.assertRaises(ReferenceAnalysisError) as caught:
+                self.evaluator().analyze(
+                    self.request,
+                    times_s=self.times,
+                    reference_video=reference,
+                    prediction_video=prediction,
+                )
+        self.assertEqual("reference_spring_trace_invalid", caught.exception.code)
+
+        with patch.object(
+            Sam2VideoSegmenter,
+            "segment",
+            side_effect=[
+                (self.masks, {"role": "reference"}),
+                (trace_defect, {"role": "prediction"}),
+            ],
+        ):
+            with self.assertRaises(SceneAnalysisError) as caught:
+                self.evaluator().analyze(
+                    self.request,
+                    times_s=self.times,
+                    reference_video=reference,
+                    prediction_video=prediction,
+                )
+        self.assertNotIsInstance(caught.exception, ReferenceAnalysisError)
+        self.assertEqual("prediction_spring_trace_invalid", caught.exception.code)
+
+    def test_identity_rejection_is_evaluated_zero_with_no_csti_match(self) -> None:
+        """Would fail if subject/topology can bypass the frozen identity gate."""
+        write_video(self.root / "reference.mp4", self.frames)
+        prediction_frames = [frame.copy() for frame in self.frames]
+        for frame in prediction_frames:
+            frame[0:2, 0:2] = (10, 20, 30)
+        prediction_path = self.root / "prediction.mp4"
+        write_video(prediction_path, prediction_frames)
+        self.request.prediction["video_path"] = str(prediction_path)  # type: ignore[index]
+        reference_masks = resize_mask_tube(self.masks, width=480, height=480)
+        displaced = resize_mask_tube(
+            [circle_mask(70, int(round(mask_y(mask)))) for mask in self.masks],
+            width=480,
+            height=480,
+        )
+        with patch.object(
+            Sam2VideoSegmenter,
+            "segment",
+            side_effect=[
+                (reference_masks, {"role": "reference"}),
+                (displaced, {"role": "prediction"}),
+            ],
+        ):
+            result = self.evaluator().evaluate(self.request)
+
+        self.assertEqual("evaluated", result.status)
+        self.assertEqual(0.0, result.score)
+        self.assertEqual("prediction_spring_identity_rejected", result.reason_code)
+        self.assertEqual(0.0, result.metrics["csti"]["score"])
+        self.assertFalse(result.metrics["csti"]["objects"][0]["matched"])
+        self.assertEqual(
+            [],
+            result.metrics["csti"]["objects"][0]["matched_prediction_track_ids"],
+        )
+
+    def test_artifact_failure_is_audited_without_changing_the_score(self) -> None:
+        """Would fail if non-scoring artifact I/O can alter the numerical result."""
+        blocked = self.root / "blocked-artifact-directory"
+        blocked.write_text("not a directory", encoding="utf-8")
+        self.request = replace(self.request, artifact_dir=blocked)
+        video = sampled_video(self.frames)
+        with patch.object(
+            Sam2VideoSegmenter,
+            "segment",
+            return_value=(self.masks, {"backend": "deterministic_test_sam2"}),
+        ):
+            analysis = self.evaluator().analyze(
+                self.request,
+                times_s=self.times,
+                reference_video=video,
+                prediction_video=video,
+            )
+
+        self.assertEqual(1.0, analysis.score)
+        self.assertEqual({}, analysis.artifacts)
+        self.assertTrue(analysis.quality["artifact_failures"])
+
+
+def mask_y(mask: np.ndarray) -> float:
+    ys, _ = np.where(mask > 0)
+    return float(ys.mean())
 
 
 class VerticalSpringObservationTests(unittest.TestCase):

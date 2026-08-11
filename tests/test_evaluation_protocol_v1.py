@@ -29,12 +29,17 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
         cls.protocol = load_evaluation_protocol("scene_default_v1")
 
     def test_v1_routes_each_scene_to_the_latest_implementation(self) -> None:
+        from physbench.evaluation.scenes.vertical_spring_oscillator.evaluator import (
+            VerticalSpringOscillatorCaseEvaluator,
+        )
+
         expected = {
             "pendulum": PendulumOpenWorldCaseEvaluatorV8,
             "collision_1d": CollisionFailClosedCaseEvaluator,
             "inclined_plane_slide": InclinedPlaneOpenWorldCaseEvaluatorV7,
             "uniform_circular_motion": CircularMotionOpenWorldCaseEvaluatorV7,
             "parabolic_motion": ParabolicMotionCaseEvaluatorV2,
+            "vertical_spring_oscillator": VerticalSpringOscillatorCaseEvaluator,
         }
         registry = SceneEvaluatorRegistry(self.protocol)
         for scene_id, evaluator_class in expected.items():
@@ -66,6 +71,32 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
                 "composition"
             ],
         )
+        spring = self.protocol["scenes"]["vertical_spring_oscillator"]
+        self.assertEqual(0.90, spring["quality"]["minimum_valid_frame_ratio"])
+        self.assertEqual(
+            {
+                "minimum_anchor_iou",
+                "maximum_centroid_distance_radii",
+                "minimum_anchor_area_ratio",
+                "maximum_anchor_area_ratio",
+            },
+            set(spring["identity"]),
+        )
+        self.assertEqual(
+            {
+                "canny_low_threshold",
+                "canny_high_threshold",
+                "corridor_half_width_radius_ratio",
+                "minimum_edge_pixels_per_row",
+                "endpoint_height_radius_ratio",
+                "boundary_exclusion_px",
+                "connectivity_dilation_px",
+                "minimum_corridor_height_radius_ratio",
+                "minimum_connected_vertical_span_ratio",
+            },
+            set(spring["topology"]),
+        )
+        self.assertAlmostEqual(1.0, sum(spring["content_weights"].values()))
 
     def test_unversioned_schema_declares_only_public_v1_types(self) -> None:
         schema = json.loads(
@@ -81,6 +112,7 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
                 "inclined_plane_slide_v1",
                 "uniform_circular_motion_v1",
                 "parabolic_motion_v1",
+                "vertical_spring_oscillator_v1",
             },
             {
                 definitions[name]["allOf"][1]["properties"]["type"]["const"]
@@ -90,8 +122,41 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
                     "inclinedPlane",
                     "circularMotion",
                     "parabolicMotion",
+                    "verticalSpring",
                 )
             },
+        )
+
+    def test_v1_schema_requires_the_sixth_public_scene_contract(self) -> None:
+        schema = json.loads(
+            (ROOT / "schemas/evaluation_protocol.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        scenes = schema["properties"]["scenes"]
+        self.assertIn("vertical_spring_oscillator", scenes["required"])
+        self.assertEqual(
+            {"$ref": "#/$defs/verticalSpring"},
+            scenes["properties"]["vertical_spring_oscillator"],
+        )
+        spring = schema["$defs"]["verticalSpring"]
+        required = set(spring["allOf"][1]["required"])
+        self.assertEqual(
+            {
+                "type",
+                "evaluator_contract",
+                "timeline",
+                "spatial",
+                "sam2",
+                "quality",
+                "period",
+                "scoring",
+                "subject_scoring",
+                "identity",
+                "topology",
+                "content_weights",
+            },
+            required,
         )
 
 
