@@ -32,6 +32,23 @@ from .media import (
 from .reference import resolve_physics_reference
 
 
+_PREDICTION_SPATIAL_FAILURE_CODES = frozenset(
+    {
+        "conditioning_aspect_not_exact",
+        "media_contract_invalid",
+        "media_contract_missing",
+        "media_contract_unsupported",
+    }
+)
+
+
+def _is_prediction_spatial_failure(code: str) -> bool:
+    return (
+        code.startswith("prediction_")
+        or code in _PREDICTION_SPATIAL_FAILURE_CODES
+    )
+
+
 @dataclass
 class SceneAnalysis:
     score: float
@@ -597,7 +614,13 @@ class ReferenceCaseEvaluator(ABC):
                             "different aspect ratios",
                         )
                 if prediction_info is None:
-                    prediction_info = probe_video(prediction_path)
+                    try:
+                        prediction_info = probe_video(prediction_path)
+                    except VideoProtocolError as exc:
+                        raise VideoProtocolError(
+                            f"prediction_{exc.code}",
+                            f"cannot inspect prediction video: {exc}",
+                        ) from exc
                 spatial_plan = resolve_shared_spatial_plan(
                     reference_info=reference_info,
                     prediction_info=prediction_info,
@@ -636,14 +659,22 @@ class ReferenceCaseEvaluator(ABC):
                         code=exc.code,
                         reason=str(exc),
                     )
-                return self._prediction_media_failure(
+                if _is_prediction_spatial_failure(exc.code):
+                    return self._prediction_media_failure(
+                        request,
+                        evaluator,
+                        code=exc.code,
+                        reason=str(exc),
+                        times_s=times_s,
+                        reference_path=reference_path,
+                        prediction_path=prediction_path,
+                    )
+                return self._outcome(
                     request,
                     evaluator,
+                    status="error",
                     code=exc.code,
                     reason=str(exc),
-                    times_s=times_s,
-                    reference_path=reference_path,
-                    prediction_path=prediction_path,
                 )
         else:
             return self._outcome(
