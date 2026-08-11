@@ -42,31 +42,59 @@ loaded_blocked_roots = {{
 assert not loaded_blocked_roots, loaded_blocked_roots
 """.format(blocked_module_roots=BLOCKED_MODULE_ROOTS)
 
-EVALUATOR_EXTRA_ERROR_SCRIPT = """
+EVALUATOR_IMPORT_FAILURE_SCRIPT = """
 import importlib.abc
 import sys
 
-BLOCKED_MODULE_ROOTS = {blocked_module_roots!r}
+FAILURE_KIND = {failure_kind!r}
 
 
-class BlockedOptionalModuleFinder(importlib.abc.MetaPathFinder):
+class EvaluatorImportFailureFinder(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.split('.', 1)[0] in BLOCKED_MODULE_ROOTS:
+        if (
+            FAILURE_KIND == "optional"
+            and fullname == "physbench.evaluation.task_evaluator"
+        ):
             raise ModuleNotFoundError(
-                "blocked optional module: {{}}".format(fullname), name=fullname
+                "blocked optional module: cv2", name="cv2"
             )
+        if (
+            FAILURE_KIND == "internal"
+            and fullname == "physbench.evaluation.task_evaluator"
+        ):
+            raise ModuleNotFoundError(
+                "injected missing internal module",
+                name="physbench.evaluation.common.csti",
+            )
+        if (
+            FAILURE_KIND == "runtime"
+            and fullname == "physbench.evaluation.task_evaluator"
+        ):
+            raise RuntimeError("injected evaluator runtime failure")
         return None
 
 
-sys.meta_path.insert(0, BlockedOptionalModuleFinder())
+sys.meta_path.insert(0, EvaluatorImportFailureFinder())
 
 try:
     from physbench.evaluation import evaluate_task
-except (ModuleNotFoundError, RuntimeError) as exc:
-    assert ".[scene-evaluation]" in str(exc), str(exc)
+except Exception as exc:
+    if FAILURE_KIND == "optional":
+        assert type(exc).__name__ == "SceneEvaluationDependencyError", type(exc)
+        assert ".[scene-evaluation]" in str(exc), str(exc)
+        assert type(exc.__cause__) is ModuleNotFoundError, type(exc.__cause__)
+        assert exc.__cause__.name == "cv2", exc.__cause__.name
+    elif FAILURE_KIND == "internal":
+        assert type(exc) is ModuleNotFoundError, type(exc)
+        assert exc.name == "physbench.evaluation.common.csti", exc.name
+        assert str(exc) == "injected missing internal module", str(exc)
+    else:
+        assert type(exc) is RuntimeError, type(exc)
+        assert type(exc).__name__ == "RuntimeError", type(exc).__name__
+        assert str(exc) == "injected evaluator runtime failure", str(exc)
 else:
-    raise AssertionError("evaluate_task did not require scene-evaluation extras")
-""".format(blocked_module_roots=BLOCKED_MODULE_ROOTS)
+    raise AssertionError("evaluate_task did not trigger the injected failure")
+"""
 
 
 class LightweightPublicImportBoundaryTests(unittest.TestCase):
@@ -91,8 +119,26 @@ class LightweightPublicImportBoundaryTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
 
     def test_evaluator_access_explains_required_scene_evaluation_extra(self) -> None:
-        """Catch evaluator imports that expose missing optional modules directly."""
-        result = self._run_subprocess(EVALUATOR_EXTRA_ERROR_SCRIPT)
+        """Catch missing optional evaluator extras that lack install guidance."""
+        result = self._run_subprocess(
+            EVALUATOR_IMPORT_FAILURE_SCRIPT.format(failure_kind="optional")
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_evaluator_access_preserves_missing_internal_modules(self) -> None:
+        """Catch lazy imports that misclassify a missing package module as an extra."""
+        result = self._run_subprocess(
+            EVALUATOR_IMPORT_FAILURE_SCRIPT.format(failure_kind="internal")
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_evaluator_access_preserves_runtime_failures(self) -> None:
+        """Catch lazy imports that rewrite evaluator runtime failures as extras."""
+        result = self._run_subprocess(
+            EVALUATOR_IMPORT_FAILURE_SCRIPT.format(failure_kind="runtime")
+        )
 
         self.assertEqual(0, result.returncode, result.stderr)
 

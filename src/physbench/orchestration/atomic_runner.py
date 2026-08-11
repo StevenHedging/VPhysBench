@@ -245,13 +245,7 @@ def run_atomic(
     # Scene evaluators depend on the optional scene-evaluation extra.  Keep
     # their import in the evaluation phase so planning and execution staging
     # remain usable in lightweight installations.
-    try:
-        from ..evaluation import evaluate_task
-    except RuntimeError as exc:
-        raise RuntimeError(
-            "AtomicRun evaluation requires optional dependencies; install "
-            "them with `pip install '.[scene-evaluation]'`."
-        ) from exc
+    from ..evaluation import evaluate_task
 
     case_metrics, summary = evaluate_task(
         plan=plan.value,
