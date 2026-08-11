@@ -1316,6 +1316,35 @@ class DatasetDistributionBuilderTests(unittest.TestCase):
                     max_shard_bytes=800,
                 )
 
+    def test_allows_unrelated_sibling_changes_in_an_asset_root_ancestor(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self.make_dataset(root / "source")
+            real_write_shard = distribution_builder._write_shard
+            changed = False
+
+            def write_then_change_unrelated_sibling(*args, **kwargs):
+                nonlocal changed
+                records = real_write_shard(*args, **kwargs)
+                if not changed:
+                    changed = True
+                    (root / "unrelated-sibling").mkdir()
+                return records
+
+            with patch.object(
+                distribution_builder,
+                "_write_shard",
+                side_effect=write_then_change_unrelated_sibling,
+            ):
+                manifest = distribution_builder.build_distribution(
+                    descriptor,
+                    output_root=root / "output",
+                    max_shard_bytes=800,
+                )
+
+            self.assertTrue(changed)
+            self.assertTrue(manifest.is_file())
+
     def test_rejects_rebuilding_over_an_existing_distribution(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

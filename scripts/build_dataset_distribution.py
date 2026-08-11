@@ -54,7 +54,6 @@ class _DirectoryChain:
     descriptors: list[int]
     links: list[tuple[int, str, int]]
     identities: list[tuple[int, int, int]]
-    check_ctime: bool = True
     label: str = "directory"
 
     @property
@@ -68,9 +67,7 @@ class _DirectoryChain:
             strict=True,
         ):
             opened = _directory_identity(os.fstat(descriptor))
-            if opened[:2] != expected[:2] or (
-                self.check_ctime and opened != expected
-            ):
+            if opened[:2] != expected[:2]:
                 raise ValueError("held directory changed after anchoring")
         for index, (parent, name, child) in enumerate(self.links, 1):
             linked = os.stat(name, dir_fd=parent, follow_symlinks=False)
@@ -80,7 +77,6 @@ class _DirectoryChain:
                 stat.S_ISLNK(linked.st_mode)
                 or not stat.S_ISDIR(linked.st_mode)
                 or linked_identity[:2] != expected[:2]
-                or (self.check_ctime and linked_identity != expected)
             ):
                 raise ValueError(
                     f"{self.label} changed or is a symlink: {name}"
@@ -137,7 +133,6 @@ def _open_directory_chain(
     path: Path,
     *,
     label: str,
-    check_ctime: bool,
 ) -> _DirectoryChain:
     _require_secure_source_io()
     if not path.is_absolute():
@@ -148,7 +143,6 @@ def _open_directory_chain(
         descriptors=[anchor],
         links=[],
         identities=[_directory_identity(os.fstat(anchor))],
-        check_ctime=check_ctime,
         label=label,
     )
     try:
@@ -174,7 +168,6 @@ def _open_asset_root(path: Path) -> _DirectoryChain:
     return _open_directory_chain(
         path,
         label="Dataset asset_root directory",
-        check_ctime=True,
     )
 
 
@@ -182,7 +175,6 @@ def _open_distribution_root(path: Path) -> _DirectoryChain:
     return _open_directory_chain(
         path,
         label="Dataset distribution parent",
-        check_ctime=False,
     )
 
 
