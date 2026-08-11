@@ -287,6 +287,23 @@ class VerticalSpringScoringTests(unittest.TestCase):
             )
         self.assertEqual("period_out_of_bounds", caught.exception.code)
 
+    def test_rejects_intermediate_alias_in_three_harmonic_chain(self) -> None:
+        """Would fail if selection stops before the true 1.5 s recurrence."""
+        times = np.arange(240, dtype=float) / 60.0
+        positions = (
+            48.0
+            + 0.25 * np.cos(2.0 * math.pi * times / 1.5)
+            + 5.0 * np.cos(4.0 * math.pi * times / 1.5)
+            + 15.0 * np.cos(8.0 * math.pi * times / 1.5)
+        )
+        with self.assertRaises(SpringTraceError) as caught:
+            extract_spring_trace(
+                masks_for_vertical_positions(positions),
+                times,
+                quality_config=QUALITY,
+            )
+        self.assertEqual("period_out_of_bounds", caught.exception.code)
+
     def test_weak_fundamental_sweep_rejects_harmonic_aliases(self) -> None:
         """Would fail if a 0.75 s harmonic hides any observable 1.5 s fundamental."""
         times = np.arange(240, dtype=float) / 60.0

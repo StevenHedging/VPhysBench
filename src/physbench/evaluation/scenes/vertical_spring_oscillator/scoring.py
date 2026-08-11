@@ -277,19 +277,34 @@ def _qualified_autocorrelation_period(
     ]
     candidate_periods = sorted({period for period, _ in refined})
     shortest = candidate_periods[0]
-    shortest_residual = _periodic_recurrence_residual(
-        centered, step_s=step_s, period_s=shortest
-    )
+    candidate_chain = [
+        (
+            shortest,
+            _periodic_recurrence_residual(
+                centered, step_s=step_s, period_s=shortest
+            ),
+        )
+    ]
     for longer in candidate_periods[1:]:
         multiple = int(round(longer / shortest))
         if multiple < 2 or abs(longer - multiple * shortest) > step_s:
             continue
-        longer_residual = _periodic_recurrence_residual(
-            centered, step_s=step_s, period_s=longer
+        candidate_chain.append(
+            (
+                longer,
+                _periodic_recurrence_residual(
+                    centered, step_s=step_s, period_s=longer
+                ),
+            )
         )
-        if shortest_residual - longer_residual >= minimum_subharmonic_residual_px:
-            return float(longer)
-    return float(shortest)
+    minimum_residual = min(residual for _, residual in candidate_chain)
+    return float(
+        next(
+            period
+            for period, residual in candidate_chain
+            if residual <= minimum_residual + minimum_subharmonic_residual_px
+        )
+    )
 
 
 def _refine_periodic_delay(
