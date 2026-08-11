@@ -974,6 +974,7 @@
         "amplitude_scale": 0.3,
         "equilibrium_scale": 0.3,
         "axis_drift_scale": 0.3,
+        "horizontal_trajectory_scale": 0.3,
         "oscillation_amplitude_scale": 0.3,
         "minimum_period_correlation": 0.6,
         "minimum_period_peak_prominence": 0.001,

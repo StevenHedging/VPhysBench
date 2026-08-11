@@ -122,6 +122,7 @@ EVALUATOR_CONFIG = {
         "amplitude_scale": 0.30,
         "equilibrium_scale": 0.30,
         "axis_drift_scale": 0.30,
+        "horizontal_trajectory_scale": 0.30,
         "oscillation_amplitude_scale": 0.30,
         "minimum_period_correlation": 0.60,
         "minimum_period_peak_prominence": 0.001,
@@ -171,6 +172,22 @@ def circle_mask(center_x: int, center_y: int, *, radius: int = 6) -> np.ndarray:
     return (
         (x - center_x) ** 2 + (y - center_y) ** 2 <= radius**2
     ).astype(np.uint8)
+
+
+def nested_string_values(value: object) -> tuple[str, ...]:
+    if isinstance(value, dict):
+        return tuple(
+            item
+            for nested in value.values()
+            for item in nested_string_values(nested)
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(
+            item
+            for nested in value
+            for item in nested_string_values(nested)
+        )
+    return (value,) if isinstance(value, str) else ()
 
 
 def frozen_circle_anchor(
@@ -513,6 +530,33 @@ class VerticalSpringProtocolSchemaTests(unittest.TestCase):
             validator_keyword="additionalProperties",
         )
 
+    def test_draft202012_requires_horizontal_trajectory_scale_and_rejects_typo(
+        self,
+    ) -> None:
+        """Would fail if the new protocol knob can be omitted or misspelled."""
+        scoring_path = (
+            "scenes",
+            "vertical_spring_oscillator",
+            "scoring",
+        )
+        candidate = deepcopy(self.protocol)
+        candidate["scenes"]["vertical_spring_oscillator"]["scoring"][
+            "horizontal_trajectory_scale"
+        ] = 0.30
+        self.assertEqual([], list(self.validator.iter_errors(candidate)))
+        self.assert_protocol_mutation_rejected(
+            container_path=scoring_path,
+            key="horizontal_trajectory_scale",
+            mutation="missing",
+            validator_keyword="required",
+        )
+        self.assert_protocol_mutation_rejected(
+            container_path=scoring_path,
+            key="horizontal_trajectory_scale_typo",
+            mutation="unknown",
+            validator_keyword="additionalProperties",
+        )
+
 
 class VerticalSpringRealAssetTests(unittest.TestCase):
     pytestmark = Mark("real_assets", (), {}, _ispytest=True)
@@ -702,6 +746,54 @@ class VerticalSpringRealAssetTests(unittest.TestCase):
             result.to_dict(),
         )
         self.assertEqual(1.0, result.metrics["csti"]["score"])
+        audit = json.loads(
+            Path(str(result.artifacts["audit_json"])).read_text(encoding="utf-8")
+        )
+        manifest = json.loads(
+            self._asset_path(
+                assets["first_frame_mask_manifest"],
+                role="first_frame_mask_manifest",
+            ).read_text(encoding="utf-8")
+        )
+        expected_npz_assets = {
+            str(instance["npz_asset"])
+            for instance in manifest["instances"]
+        }
+        for location, frozen_anchor in (
+            ("result", result.provenance["frozen_anchor"]),
+            ("audit", audit["frozen_anchor"]),
+        ):
+            with self.subTest(release_side=release_side, location=location):
+                self.assertEqual(
+                    "dataset_relative_asset_reference_v1",
+                    frozen_anchor["path_policy"],
+                )
+                self.assertEqual(
+                    assets["first_frame_mask_manifest"],
+                    frozen_anchor["manifest"],
+                )
+                self.assertIn(frozen_anchor["npz"], expected_npz_assets)
+                self.assertRegex(
+                    str(frozen_anchor["manifest_sha256"]),
+                    "^[0-9a-f]{64}$",
+                )
+                self.assertRegex(
+                    str(frozen_anchor["npz_sha256"]),
+                    "^[0-9a-f]{64}$",
+                )
+                published_strings = nested_string_values(frozen_anchor)
+                self.assertFalse(
+                    any(
+                        str(self.full_asset_root) in value
+                        for value in published_strings
+                    )
+                )
+                self.assertFalse(
+                    any(
+                        str(self.artifact_root) in value
+                        for value in published_strings
+                    )
+                )
 
     def test_real_above_reference_identity_scores_near_one(self) -> None:
         self.assert_real_reference_identity("above")
@@ -854,6 +946,36 @@ class VerticalSpringEvaluatorTests(unittest.TestCase):
             },
             set(analysis.artifacts),
         )
+        audit = json.loads(
+            Path(str(analysis.artifacts["audit_json"])).read_text(encoding="utf-8")
+        )
+        for location, frozen_anchor in (
+            ("result", analysis.provenance["frozen_anchor"]),
+            ("audit", audit["frozen_anchor"]),
+        ):
+            with self.subTest(location=location):
+                self.assertEqual(
+                    "dataset_relative_asset_reference_v1",
+                    frozen_anchor["path_policy"],
+                )
+                self.assertEqual(
+                    self.case["assets"]["first_frame_mask_manifest"],
+                    frozen_anchor["manifest"],
+                )
+                self.assertRegex(
+                    str(frozen_anchor["manifest_sha256"]),
+                    "^[0-9a-f]{64}$",
+                )
+                self.assertRegex(
+                    str(frozen_anchor["npz_sha256"]),
+                    "^[0-9a-f]{64}$",
+                )
+                self.assertFalse(
+                    any(
+                        str(self.root) in value
+                        for value in nested_string_values(frozen_anchor)
+                    )
+                )
 
     def test_removed_spring_cannot_earn_identity_motion_credit(self) -> None:
         """Would fail if ball identity and motion can compensate for no spring."""

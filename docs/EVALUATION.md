@@ -52,6 +52,9 @@ Evaluator 是唯一允许读取 reference video、reference masks 和评分注�
   amplitude envelope、equilibrium/release phase、vertical-axis confinement 和
   oscillation evidence。period 同时保留 prediction-vs-reference 的经验相似度，并仅惩罚
   prediction 相对 reference 新增的理想弹簧周期偏差；更接近理论不能覆盖经验周期不符。
+  vertical-axis confinement 同时检查新增横向跨度，以及首帧归零后按共同时间样本比较的
+  横向轨迹 RMSE；后者按 reference 垂直振幅和 `horizontal_trajectory_scale` 归一，因此
+  相同横向跨度不能掩盖不同的横向运动历史。
   subject appearance/shape/position 与当前帧 spring topology 作为另外两个内容组件；
   topology 同时是乘法 integrity factor，因此移除或断开的弹簧不能靠钢球运动补偿。
 
@@ -86,6 +89,8 @@ Spring evaluator 还保持明确的失败来源：reference mask/identity/trace 
 subject-similarity curve 和 audit JSON。其 provenance 记录媒体摘要、共同 timeline、双方
 无 padding spatial transform、冻结 anchor/NPZ 摘要、SAM2 prompt/传播、identity 决策、
 topology、CSTI 绑定和是否复用完全相同的 sampled frames。
+冻结 anchor 的 manifest/NPZ 路径按 `dataset_relative_asset_reference_v1` 发布；本机解析出的
+绝对路径只供 evaluator 内部读取，不进入 result 或 audit provenance。
 
 ## Aggregation
 

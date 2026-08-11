@@ -73,6 +73,7 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
         )
         spring = self.protocol["scenes"]["vertical_spring_oscillator"]
         self.assertEqual(0.90, spring["quality"]["minimum_valid_frame_ratio"])
+        self.assertEqual(0.30, spring["scoring"]["horizontal_trajectory_scale"])
         self.assertEqual(
             {
                 "minimum_anchor_iou",

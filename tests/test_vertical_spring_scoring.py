@@ -37,6 +37,7 @@ SCORING = {
     "amplitude_scale": 0.30,
     "equilibrium_scale": 0.30,
     "axis_drift_scale": 0.30,
+    "horizontal_trajectory_scale": 0.30,
     "oscillation_amplitude_scale": 0.30,
 }
 
@@ -55,10 +56,12 @@ def sinusoidal_masks(
     period: float = 0.8,
     phase: float = 0.0,
     horizontal_amplitude: float = 0.0,
+    horizontal_period: float | None = None,
 ) -> list[np.ndarray]:
+    x_period = period if horizontal_period is None else horizontal_period
     return [
         circle_mask(
-            48.0 + horizontal_amplitude * math.cos(2.0 * math.pi * time / period),
+            48.0 + horizontal_amplitude * math.cos(2.0 * math.pi * time / x_period),
             equilibrium + amplitude * math.cos(2.0 * math.pi * time / period + phase),
         )
         for time in times_s
@@ -284,6 +287,76 @@ class VerticalSpringScoringTests(unittest.TestCase):
             1.0,
             result["components"]["vertical_axis_confinement"],
         )
+
+    def test_equal_horizontal_span_with_wrong_timing_loses_confinement(self) -> None:
+        """Would fail if a scalar horizontal span hides trajectory divergence."""
+        reference = extract_spring_trace(
+            sinusoidal_masks(
+                self.times,
+                horizontal_amplitude=8.0,
+                horizontal_period=0.8,
+            ),
+            self.times,
+            quality_config=QUALITY,
+        )
+        wrong_timing = extract_spring_trace(
+            sinusoidal_masks(
+                self.times,
+                horizontal_amplitude=8.0,
+                horizontal_period=1.6,
+            ),
+            self.times,
+            quality_config=QUALITY,
+        )
+        horizontal_delta = (
+            wrong_timing.xy[:, 0]
+            - wrong_timing.xy[0, 0]
+            - (reference.xy[:, 0] - reference.xy[0, 0])
+        )
+
+        self.assertAlmostEqual(reference.xy[0, 0], wrong_timing.xy[0, 0])
+        self.assertAlmostEqual(
+            reference.horizontal_drift_ratio,
+            wrong_timing.horizontal_drift_ratio,
+            delta=0.02,
+        )
+        self.assertGreater(
+            float(np.sqrt(np.mean(np.square(horizontal_delta)))),
+            7.5,
+        )
+        self.assertGreater(float(np.max(np.abs(horizontal_delta))), 15.0)
+
+        result = score_spring_traces(
+            reference,
+            wrong_timing,
+            mass_kg=0.5156,
+            stiffness_n_m=32.6213467096774,
+            scoring_config=SCORING,
+        )
+
+        self.assertLess(
+            result["components"]["vertical_axis_confinement"],
+            0.50,
+        )
+
+    def test_horizontal_trajectory_scale_must_be_finite_and_positive(self) -> None:
+        """Would fail if the protocol-facing divergence scale accepts bad values."""
+        for invalid in (0.0, -0.1, math.nan, math.inf):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "similarity scales must be finite and positive",
+                ):
+                    score_spring_traces(
+                        self.reference,
+                        self.reference,
+                        mass_kg=0.5156,
+                        stiffness_n_m=32.6213467096774,
+                        scoring_config={
+                            **SCORING,
+                            "horizontal_trajectory_scale": invalid,
+                        },
+                    )
 
     def test_theoretical_period_is_the_mass_spring_formula(self) -> None:
         """Would fail if the physical period calculation uses the wrong units/formula."""

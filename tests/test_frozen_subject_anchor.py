@@ -98,7 +98,8 @@ class FrozenSubjectAnchorTests(unittest.TestCase):
 
     def test_loads_logical_entity_from_distinct_dataset_object(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            request, manifest_path, npz_path = self._fixture(Path(temporary))
+            temporary_root = Path(temporary)
+            request, manifest_path, npz_path = self._fixture(temporary_root)
 
             anchor = load_frozen_subject_anchor(
                 request,
@@ -117,8 +118,21 @@ class FrozenSubjectAnchorTests(unittest.TestCase):
         np.testing.assert_allclose([3.5, 3.5], anchor.centroid_xy)
         self.assertFalse(anchor.mask.flags.writeable)
         self.assertFalse(anchor.source_mask.flags.writeable)
-        self.assertEqual(str(manifest_path), anchor.provenance["manifest"])
-        self.assertEqual(str(npz_path), anchor.provenance["npz"])
+        self.assertEqual(manifest_path.resolve(), anchor.manifest_path)
+        self.assertEqual(npz_path.resolve(), anchor.npz_path)
+        self.assertEqual(
+            "dataset_relative_asset_reference_v1",
+            anchor.provenance["path_policy"],
+        )
+        self.assertEqual(
+            "case/canonical/masks/manifest.json",
+            anchor.provenance["manifest"],
+        )
+        self.assertEqual(
+            "case/canonical/masks/01.npz",
+            anchor.provenance["npz"],
+        )
+        self.assertNotIn(str(temporary_root), repr(anchor.provenance))
         self.assertEqual(64, len(anchor.provenance["manifest_sha256"]))
         self.assertEqual(64, len(anchor.provenance["npz_sha256"]))
 

@@ -180,9 +180,10 @@ def load_frozen_subject_anchor(
             "frozen subject mask manifest violates schema 1.2: "
             f"{type(exc).__name__}: {exc}",
         ) from exc
+    npz_value = instance.get("npz_asset")
     npz_path = _resolve_asset(
         root,
-        instance.get("npz_asset"),
+        npz_value,
         code=f"{error_namespace}_mask_path_escape",
         label="frozen subject mask NPZ",
     )
@@ -239,9 +240,10 @@ def load_frozen_subject_anchor(
         equivalent_radius_px=float(math.sqrt(area / math.pi)),
         provenance={
             "policy": "frozen_dataset_subject_annotation_v1",
-            "manifest": str(manifest_path),
+            "path_policy": "dataset_relative_asset_reference_v1",
+            "manifest": manifest_value,
             "manifest_sha256": sha256_file(manifest_path),
-            "npz": str(npz_path),
+            "npz": str(npz_value),
             "npz_sha256": sha256_file(npz_path),
             "mask_id": str(instance["mask_id"]),
             "dataset_object_id": selected_object_id,

@@ -678,17 +678,38 @@ def score_spring_traces(
         _relative_error(prediction_data["amplitude_px"], reference_data["amplitude_px"]),
         scale=float(scoring_config["oscillation_amplitude_scale"]),
     ) * _periodicity_evidence(prediction_data, scoring_config=scoring_config)
+    reference_horizontal = (
+        reference_data["xy"][:, 0] - reference_data["xy"][0, 0]
+    )
+    prediction_horizontal = (
+        prediction_data["xy"][:, 0] - prediction_data["xy"][0, 0]
+    )
+    horizontal_trajectory_error = float(
+        np.sqrt(
+            np.mean(np.square(prediction_horizontal - reference_horizontal))
+        )
+        / max(reference_data["amplitude_px"], 1e-12)
+    )
+    horizontal_trajectory_similarity = _exponential_similarity(
+        horizontal_trajectory_error,
+        scale=float(scoring_config["horizontal_trajectory_scale"]),
+    )
+    excess_horizontal_drift_similarity = _exponential_similarity(
+        max(
+            0.0,
+            prediction_data["horizontal_drift_ratio"]
+            - reference_data["horizontal_drift_ratio"],
+        ),
+        scale=float(scoring_config["axis_drift_scale"]),
+    )
     # A stationary point is geometrically confined but does not establish a
     # vertical motion axis, so confinement requires observable oscillation.
+    # The scalar span protects against excess drift while the centered exact-
+    # timeline trajectory prevents equal-span horizontal motion from hiding a
+    # different axis history. Centering preserves invariance to camera origin.
     vertical_axis_confinement = _bounded(
-        _exponential_similarity(
-            max(
-                0.0,
-                prediction_data["horizontal_drift_ratio"]
-                - reference_data["horizontal_drift_ratio"],
-            ),
-            scale=float(scoring_config["axis_drift_scale"]),
-        )
+        excess_horizontal_drift_similarity
+        * horizontal_trajectory_similarity
         * oscillation_evidence
     )
 
@@ -717,5 +738,8 @@ def score_spring_traces(
             "prediction_horizontal_drift_ratio": prediction_data[
                 "horizontal_drift_ratio"
             ],
+            "horizontal_trajectory_error": horizontal_trajectory_error,
+            "horizontal_trajectory_similarity": horizontal_trajectory_similarity,
+            "excess_horizontal_drift_similarity": excess_horizontal_drift_similarity,
         },
     }
