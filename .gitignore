@@ -28,5 +28,6 @@ datasets/assets/*/*/*
 !datasets/assets/*/*/caption.json
 !datasets/assets/*/*/physics.json
 datasets/provenance/
+datasets/.vphysbench/
 cache/
 .worktrees/
