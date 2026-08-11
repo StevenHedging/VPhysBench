@@ -10,6 +10,7 @@ test-interface:
 		tests.test_dataset_contract_v4 \
 		tests.test_huggingface_dataset_binding \
 		tests.test_dataset_hub_cli \
+		tests.test_dataset_distribution \
 		tests.test_managed_baselines \
 		tests.test_clean_baseline_smoke \
 		tests.test_release_audit \

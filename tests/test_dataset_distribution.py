@@ -4,6 +4,8 @@ import hashlib
 import json
 import os
 import stat
+import subprocess
+import sys
 import tempfile
 import unittest
 import warnings
@@ -16,6 +18,8 @@ from physbench.dataset_distribution import (
     load_distribution_manifest,
     verify_and_extract_shard,
 )
+from physbench.datasets import load_dataset
+from physbench.io import canonical_sha256
 
 
 DATASET_ID = "physics_video_seven_scene_v13"
@@ -23,6 +27,7 @@ RELEASE = "13.0.0"
 DATASET_DIGEST = "d" * 64
 SHARD_SHA256 = "a" * 64
 FILE_SHA256 = "b" * 64
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 def valid_manifest_value() -> dict[str, object]:
@@ -778,6 +783,303 @@ class DistributionManifestValidationTests(unittest.TestCase):
                         dataset_id=DATASET_ID,
                         release=RELEASE,
                     )
+
+
+class DatasetDistributionBuilderTests(unittest.TestCase):
+    def write_json(self, path: Path, value: object) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(value), encoding="utf-8")
+
+    def make_dataset(self, root: Path) -> Path:
+        release = root / "releases" / "1.0.0"
+        assets = root / "assets"
+        release.mkdir(parents=True)
+        assets.mkdir()
+        contents = {
+            "00-caption.json": (
+                b'{"case_id":"fixture_case","scene_id":"pendulum",'
+                b'"caption":"fixture prompt"}'
+            ),
+            "01-frame.bin": b"ffffffffff",
+            "02-mask.bin": b"mmmmmmmm",
+            "03-physics.json": (
+                b'{"case_id":"fixture_case","scene_id":"pendulum",'
+                b'"physics":{"objects":{"object_1":{"radius":{"value":1,'
+                b'"unit":"m","symbol":"r"},"initial_angle":{"value":1,'
+                b'"unit":"rad","symbol":"theta"}}},"environment":{'
+                b'"string_length":{"value":1,"unit":"m","symbol":"L"}}}}'
+            ),
+        }
+        for name, content in contents.items():
+            (assets / name).write_bytes(content)
+        (assets / "unreferenced.bin").write_bytes(b"must not be distributed")
+        (root / "provenance").mkdir()
+        (root / "provenance" / "source.mov").write_bytes(
+            b"must not be distributed"
+        )
+
+        case = {
+            "case_id": "fixture_case",
+            "scene_id": "pendulum",
+            "assets": {
+                "caption": "assets/00-caption.json",
+                "first_frame": "assets/01-frame.bin",
+                "first_frame_mask_manifest": "assets/02-mask.bin",
+                "physics_annotation": "assets/03-physics.json",
+                "reference_video": "assets/01-frame.bin",
+            },
+            "appearance": {},
+            "temporal": {},
+        }
+        (release / "cases.jsonl").write_text(
+            json.dumps(case, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.write_json(
+            release / "scenes" / "pendulum.json",
+            {
+                "schema_version": "2.0",
+                "scene_id": "pendulum",
+                "display_name": "Pendulum",
+                "structured_physics_parameters": [
+                    "objects.object_1.radius",
+                    "objects.object_1.initial_angle",
+                    "environment.string_length",
+                ],
+                "generalization_factors": [],
+                "constraints": [],
+                "metric_spec": {},
+            },
+        )
+        case_set_digest = canonical_sha256(["fixture_case"])
+        self.write_json(
+            release / "views" / "view_a.json",
+            {
+                "schema_version": "3.0",
+                "view_id": "view_a",
+                "coverage": "complete",
+                "case_set_sha256": case_set_digest,
+                "split_semantics": {
+                    "primary_partitions": ["train", "test"],
+                    "generalization_regimes": ["id", "ood", "mixed"],
+                    "regime_is_relative_to": "view_a.train",
+                },
+                "scenes": {
+                    "pendulum": {"train": ["fixture_case"], "test": []}
+                },
+                "test_annotations": {},
+            },
+        )
+        self.write_json(
+            release / "views" / "view_b.json",
+            {
+                "schema_version": "2.0",
+                "view_id": "view_b",
+                "coverage": "complete",
+                "case_set_sha256": case_set_digest,
+                "scenes": {"pendulum": {"group_1": ["fixture_case"]}},
+            },
+        )
+        descriptor = release / "dataset.json"
+        self.write_json(
+            descriptor,
+            {
+                "schema_version": "5.0",
+                "dataset_id": "fixture_distribution",
+                "release": "1.0.0",
+                "cases": "cases.jsonl",
+                "asset_root": "../..",
+                "scene_catalog": "scenes",
+                "views": {
+                    "view_a": "views/view_a.json",
+                    "view_b": "views/view_b.json",
+                },
+            },
+        )
+        return descriptor
+
+    def invoke_builder(
+        self,
+        descriptor: Path,
+        output_root: Path,
+        *,
+        max_shard_bytes: int = 300,
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                sys.executable,
+                str(
+                    REPOSITORY_ROOT
+                    / "scripts"
+                    / "build_dataset_distribution.py"
+                ),
+                "--dataset",
+                str(descriptor),
+                "--output-root",
+                str(output_root),
+                "--max-shard-bytes",
+                str(max_shard_bytes),
+            ],
+            cwd=REPOSITORY_ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    def run_builder(self, descriptor: Path, output_root: Path) -> None:
+        result = self.invoke_builder(descriptor, output_root)
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_builds_stable_stored_shards_from_only_indexed_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self.make_dataset(root / "source")
+            first_output = root / "first"
+            second_output = root / "second"
+
+            self.run_builder(descriptor, first_output)
+            self.run_builder(descriptor, second_output)
+
+            first_distribution = first_output / "distribution" / "v1"
+            second_distribution = second_output / "distribution" / "v1"
+            first_files = {
+                path.relative_to(first_distribution).as_posix(): path.read_bytes()
+                for path in sorted(first_distribution.rglob("*"))
+                if path.is_file()
+            }
+            second_files = {
+                path.relative_to(second_distribution).as_posix(): path.read_bytes()
+                for path in sorted(second_distribution.rglob("*"))
+                if path.is_file()
+            }
+            self.assertEqual(first_files, second_files)
+            self.assertEqual(
+                {
+                    "manifest.json",
+                    "shards/shard-00001.zip",
+                    "shards/shard-00002.zip",
+                },
+                set(first_files),
+            )
+
+            manifest_path = first_distribution / "manifest.json"
+            value = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                json.dumps(
+                    value,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8") + b"\n",
+                manifest_path.read_bytes(),
+            )
+            snapshot = load_dataset(descriptor, check_assets=True)
+            self.assertEqual(snapshot.digest, value["dataset_digest"])
+            self.assertEqual(4, value["total_files"])
+            self.assertEqual(349, value["total_bytes"])
+            self.assertEqual(
+                [
+                    {
+                        "path": "assets/00-caption.json",
+                        "shard": "shard-00001.zip",
+                        "size_bytes": 75,
+                        "sha256": (
+                            "6995117aac8541e1d12c78704b3a312c41790dfc578b8e813"
+                            "eda9df041fbd8c6"
+                        ),
+                    },
+                    {
+                        "path": "assets/01-frame.bin",
+                        "shard": "shard-00001.zip",
+                        "size_bytes": 10,
+                        "sha256": (
+                            "d429d65fab713c3e8d9984b8f0a93fd1639eee4e7ad8ffca6"
+                            "7e0ce68e4fbf903"
+                        ),
+                    },
+                    {
+                        "path": "assets/02-mask.bin",
+                        "shard": "shard-00001.zip",
+                        "size_bytes": 8,
+                        "sha256": (
+                            "4c67aa086d2b2c9debcb8ea2571d00f9d4f00873508828e9f"
+                            "8089079d80af8b2"
+                        ),
+                    },
+                    {
+                        "path": "assets/03-physics.json",
+                        "shard": "shard-00002.zip",
+                        "size_bytes": 256,
+                        "sha256": (
+                            "e640ebbd9974003591c06b4f600c0a29ecf71f3a53804f85"
+                            "e4e8541414eea9d1"
+                        ),
+                    },
+                ],
+                value["files"],
+            )
+
+            manifest = load_distribution_manifest(
+                manifest_path,
+                dataset_id="fixture_distribution",
+                release="1.0.0",
+            )
+            self.assertEqual(2, len(manifest.shards))
+            expected_members = [
+                [
+                    "assets/00-caption.json",
+                    "assets/01-frame.bin",
+                    "assets/02-mask.bin",
+                ],
+                ["assets/03-physics.json"],
+            ]
+            for shard, members in zip(manifest.shards, expected_members, strict=True):
+                archive_path = first_output / shard.path
+                archive_bytes = archive_path.read_bytes()
+                self.assertEqual(len(archive_bytes), shard.size_bytes)
+                self.assertEqual(
+                    hashlib.sha256(archive_bytes).hexdigest(),
+                    shard.sha256,
+                )
+                with zipfile.ZipFile(archive_path) as archive:
+                    infos = archive.infolist()
+                    self.assertEqual(members, [info.filename for info in infos])
+                    for info in infos:
+                        self.assertEqual(zipfile.ZIP_STORED, info.compress_type)
+                        self.assertEqual((1980, 1, 1, 0, 0, 0), info.date_time)
+                        self.assertEqual(3, info.create_system)
+                        self.assertEqual(
+                            stat.S_IFREG | 0o644,
+                            info.external_attr >> 16,
+                        )
+
+    def test_rejects_a_single_asset_larger_than_the_shard_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self.make_dataset(root / "source")
+
+            result = self.invoke_builder(
+                descriptor,
+                root / "output",
+                max_shard_bytes=200,
+            )
+
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("exceeds max shard bytes", result.stderr)
+
+    def test_rejects_a_referenced_asset_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self.make_dataset(root / "source")
+            frame = root / "source" / "assets" / "01-frame.bin"
+            target = root / "source" / "frame-target.bin"
+            frame.rename(target)
+            frame.symlink_to(target)
+
+            result = self.invoke_builder(descriptor, root / "output")
+
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("symlink", result.stderr)
 
 
 if __name__ == "__main__":
