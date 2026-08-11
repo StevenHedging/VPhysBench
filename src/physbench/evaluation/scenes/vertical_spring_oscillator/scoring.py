@@ -69,7 +69,7 @@ _CADENCE_RELATIVE_TOLERANCE = 0.02
 _MINIMUM_PERIOD_CORRELATION = 0.60
 _MINIMUM_PERIOD_PROMINENCE = 0.001
 _MINIMUM_COMPLETE_CYCLES = 2.0
-_FUNDAMENTAL_CORRELATION_TOLERANCE = 0.02
+_FUNDAMENTAL_PEAK_TIE_TOLERANCE = 0.001
 
 
 def _invalid_trace(message: str) -> SpringTraceError:
@@ -217,6 +217,18 @@ def _configured_period_threshold(
     return value
 
 
+def _configured_scoring_threshold(
+    scoring_config: dict[str, Any], name: str, default: float
+) -> float:
+    try:
+        value = float(scoring_config.get(name, default))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"scoring_config {name!r} must be finite and positive") from exc
+    if not math.isfinite(value) or value <= 0.0:
+        raise ValueError(f"scoring_config {name!r} must be finite and positive")
+    return value
+
+
 def _qualified_autocorrelation_period(
     displacement: np.ndarray,
     times_s: np.ndarray,
@@ -224,6 +236,7 @@ def _qualified_autocorrelation_period(
     minimum_correlation: float,
     minimum_prominence: float,
     minimum_complete_cycles: float,
+    fundamental_peak_tie_tolerance: float,
 ) -> float | None:
     """Return a repeat-supported fundamental candidate, never an ACF fallback."""
     if len(displacement) < 5:
@@ -246,7 +259,7 @@ def _qualified_autocorrelation_period(
         denominator = float(np.linalg.norm(left) * np.linalg.norm(right))
         if denominator > 1e-12:
             correlations[lag] = float(np.dot(left, right) / denominator)
-    candidates: list[tuple[int, float]] = []
+    candidates: list[int] = []
     for lag in range(2, maximum_lag):
         correlation = correlations[lag]
         prominence = correlation - max(correlations[lag - 1], correlations[lag + 1])
@@ -255,16 +268,46 @@ def _qualified_autocorrelation_period(
             and correlation >= minimum_correlation
             and prominence >= minimum_prominence
         ):
-            candidates.append((lag, float(correlation)))
+            candidates.append(lag)
     if not candidates:
         return None
-    strongest = max(correlation for _, correlation in candidates)
-    tied = [
-        lag
-        for lag, correlation in candidates
-        if correlation >= strongest - _FUNDAMENTAL_CORRELATION_TOLERANCE
+    refined = [
+        _refine_periodic_delay(centered, step_s=step_s, lag=lag)
+        for lag in candidates
     ]
-    return float(min(tied) * step_s)
+    strongest = max(correlation for _, correlation in refined)
+    tied = [
+        period
+        for period, correlation in refined
+        if correlation >= strongest - fundamental_peak_tie_tolerance
+    ]
+    return float(min(tied))
+
+
+def _refine_periodic_delay(
+    centered: np.ndarray, *, step_s: float, lag: int
+) -> tuple[float, float]:
+    """Refine a frame-quantized correlation peak over one half-frame on either side."""
+    indices = np.arange(len(centered), dtype=np.float64)
+    best_period = float(lag * step_s)
+    best_correlation = -1.0
+    for offset_frames in np.linspace(lag - 0.5, lag + 0.5, 41):
+        if offset_frames <= 0.0:
+            continue
+        last_start = (len(centered) - 1) - offset_frames
+        if last_start < 2.0:
+            continue
+        starts = np.arange(int(math.floor(last_start)) + 1, dtype=np.float64)
+        left = np.interp(starts, indices, centered)
+        right = np.interp(starts + offset_frames, indices, centered)
+        denominator = float(np.linalg.norm(left) * np.linalg.norm(right))
+        if denominator <= 1e-12:
+            continue
+        correlation = float(np.dot(left, right) / denominator)
+        if correlation > best_correlation:
+            best_period = float(offset_frames * step_s)
+            best_correlation = correlation
+    return best_period, best_correlation
 
 
 def _release_sign(displacement: np.ndarray, amplitude_px: float) -> int:
@@ -323,6 +366,11 @@ def extract_spring_trace(
     minimum_complete_cycles = _configured_period_threshold(
         quality_config, "minimum_complete_cycles", _MINIMUM_COMPLETE_CYCLES
     )
+    fundamental_peak_tie_tolerance = _configured_period_threshold(
+        quality_config,
+        "fundamental_peak_tie_tolerance",
+        _FUNDAMENTAL_PEAK_TIE_TOLERANCE,
+    )
     cadence_tolerance = _configured_period_threshold(
         quality_config,
         "maximum_cadence_relative_deviation",
@@ -330,6 +378,8 @@ def extract_spring_trace(
     )
     if minimum_correlation > 1.0:
         raise ValueError("minimum_period_correlation must be at most one")
+    if fundamental_peak_tie_tolerance > 1.0:
+        raise ValueError("fundamental_peak_tie_tolerance must be at most one")
     if cadence_tolerance > 1.0:
         raise ValueError("maximum_cadence_relative_deviation must be at most one")
     _require_uniform_cadence(times, relative_tolerance=cadence_tolerance)
@@ -380,6 +430,7 @@ def extract_spring_trace(
         minimum_correlation=minimum_correlation,
         minimum_prominence=minimum_prominence,
         minimum_complete_cycles=minimum_complete_cycles,
+        fundamental_peak_tie_tolerance=fundamental_peak_tie_tolerance,
     )
     if period is not None and not minimum_s <= period <= maximum_s:
         raise SpringTraceError(
@@ -449,6 +500,11 @@ def _periodicity_evidence(
         ),
         minimum_complete_cycles=float(
             scoring_config.get("minimum_complete_cycles", _MINIMUM_COMPLETE_CYCLES)
+        ),
+        fundamental_peak_tie_tolerance=_configured_scoring_threshold(
+            scoring_config,
+            "fundamental_peak_tie_tolerance",
+            _FUNDAMENTAL_PEAK_TIE_TOLERANCE,
         ),
     )
     if qualified is None:

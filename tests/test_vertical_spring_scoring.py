@@ -287,6 +287,43 @@ class VerticalSpringScoringTests(unittest.TestCase):
             )
         self.assertEqual("period_out_of_bounds", caught.exception.code)
 
+    def test_weak_fundamental_sweep_rejects_harmonic_aliases(self) -> None:
+        """Would fail if a 0.75 s harmonic hides any observable 1.5 s fundamental."""
+        times = np.arange(240, dtype=float) / 60.0
+        for fundamental_amplitude in (1.0, 2.0, 4.0, 8.0):
+            with self.subTest(fundamental_amplitude=fundamental_amplitude):
+                positions = (
+                    48.0
+                    + fundamental_amplitude * np.cos(2.0 * math.pi * times / 1.5)
+                    + 20.0 * np.cos(4.0 * math.pi * times / 1.5)
+                )
+                with self.assertRaises(SpringTraceError) as caught:
+                    extract_spring_trace(
+                        masks_for_vertical_positions(positions),
+                        times,
+                        quality_config=QUALITY,
+                    )
+                self.assertEqual("period_out_of_bounds", caught.exception.code)
+
+    def test_single_frequency_multiple_repeats_selects_shortest_fundamental(self) -> None:
+        """Would fail if strict harmonic safety chooses an integer repeat of a pure tone."""
+        times = np.arange(240, dtype=float) / 60.0
+        trace = extract_spring_trace(
+            masks_for_vertical_positions(48.0 + 16.0 * np.cos(2.0 * math.pi * times / 0.75)),
+            times,
+            quality_config=QUALITY,
+        )
+        self.assertAlmostEqual(0.75, trace.period_s, delta=1 / 60)
+
+    def test_rejects_nonfinite_fundamental_tie_tolerance(self) -> None:
+        """Would fail if the harmonic-selection threshold accepts non-finite values."""
+        with self.assertRaises(ValueError):
+            extract_spring_trace(
+                self.reference_masks,
+                self.times,
+                quality_config={**QUALITY, "fundamental_peak_tie_tolerance": math.nan},
+            )
+
     def test_rejects_irregular_cadence_instead_of_using_index_lags(self) -> None:
         """Would fail if strictly increasing but irregular timestamps are accepted."""
         irregular = self.times.copy()
@@ -354,6 +391,39 @@ class VerticalSpringScoringTests(unittest.TestCase):
         self.assertLess(
             self.score(prediction)["components"]["amplitude_envelope"],
             self.score(self.reference)["components"]["amplitude_envelope"],
+        )
+
+    def test_same_amplitude_period_phase_with_changed_envelope_loses_credit(self) -> None:
+        """Would fail if amplitude_envelope ignores a physically different envelope."""
+        raw = (1.0 - 0.45 * self.times / self.times[-1]) * np.cos(
+            2.0 * math.pi * self.times / 0.8
+        )
+        centered = raw - np.median(raw)
+        raw_amplitude = 0.5 * (
+            np.quantile(centered, 0.95) - np.quantile(centered, 0.05)
+        )
+        positions = 48.0 + self.reference.amplitude_px * centered / raw_amplitude
+        equilibrium = float(np.median(positions))
+        prediction = SpringTrace(
+            times_s=self.times,
+            xy=np.column_stack((np.full(len(self.times), 48.0), positions)),
+            area_px2=np.full(len(self.times), 81.0),
+            valid=np.ones(len(self.times), dtype=bool),
+            valid_ratio=1.0,
+            equilibrium_y_px=equilibrium,
+            amplitude_px=self.reference.amplitude_px,
+            envelope_px=np.abs(positions - equilibrium),
+            period_s=self.reference.period_s,
+            horizontal_drift_ratio=0.0,
+            release_sign=1,
+        )
+        self.assertAlmostEqual(
+            self.reference.amplitude_px, prediction.amplitude_px, places=12
+        )
+        self.assertEqual(self.reference.period_s, prediction.period_s)
+        self.assertEqual(self.reference.release_sign, prediction.release_sign)
+        self.assertLess(
+            self.score(prediction)["components"]["amplitude_envelope"], 0.90
         )
 
     def test_score_rejects_an_envelope_inconsistent_with_trace_positions(self) -> None:
