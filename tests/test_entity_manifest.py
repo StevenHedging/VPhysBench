@@ -129,6 +129,10 @@ class EntityManifestTests(unittest.TestCase):
         self.assertEqual("spring_oscillator", manifest.entities[0].role_id)
         self.assertEqual("steel_ball", manifest.entities[0].entity_class)
         self.assertEqual(("spring",), manifest.entities[0].parts)
+        self.assertIs(
+            LifecyclePolicy.PERSISTENT,
+            manifest.entities[0].lifecycle,
+        )
         self.assertEqual(
             {"initial_displacement", "mass", "radius"},
             {
@@ -137,8 +141,42 @@ class EntityManifestTests(unittest.TestCase):
             },
         )
         self.assertEqual(
+            {
+                "initial_displacement": "initial_displacement",
+                "mass": "oscillator_mass",
+                "radius": "ball_radius",
+            },
+            {
+                value.name: value.source_parameter
+                for value in manifest.entities[0].physical_attributes
+            },
+        )
+        self.assertEqual(
+            "spring_a",
+            manifest.entities[0].condition_anchor["spring_id"],
+        )
+        self.assertEqual(
+            "below_equilibrium",
+            manifest.entities[0].condition_anchor["release_side"],
+        )
+        self.assertEqual(
             "vertical_spring_and_support",
             manifest.apparatus[0].apparatus_class,
+        )
+        self.assertEqual(
+            {
+                "natural_spring_length": "natural_spring_length",
+                "spring_stiffness": "spring_stiffness",
+                "gravity_acceleration": "gravity_acceleration",
+            },
+            {
+                value.name: value.source_parameter
+                for value in manifest.apparatus[0].physical_attributes
+            },
+        )
+        self.assertEqual(
+            "fixed_support_and_vertical_spring_axis",
+            manifest.apparatus[0].condition_anchor["selector"],
         )
         self.assertIs(
             manifest.reference_capability,
