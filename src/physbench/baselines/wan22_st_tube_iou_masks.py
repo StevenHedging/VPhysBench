@@ -33,9 +33,13 @@ def resolve_training_mask_manifest(
 
     root = Path(dataset_root).resolve()
     reference = _contained(Path(reference_video), root, label="reference video")
-    if reference.name != "reference.mp4" or reference.parent.name != "canonical":
+    if (
+        reference.stem != "reference"
+        or reference.suffix.lower() not in {".mp4", ".mov"}
+        or reference.parent.name != "canonical"
+    ):
         raise ValueError(
-            "training mask discovery requires canonical/reference.mp4"
+            "training mask discovery requires canonical/reference.mp4 or .mov"
         )
     manifest = _contained(
         reference.parent / "masks" / "manifest.json",

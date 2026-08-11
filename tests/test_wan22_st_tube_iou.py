@@ -354,6 +354,16 @@ class MaskTubeMaterializerTests(unittest.TestCase):
             )
 
             self.assertEqual(manifest.resolve(), resolved)
+            mov_reference = reference.with_suffix(".mov")
+            mov_reference.write_bytes(reference.read_bytes())
+            self.assertEqual(
+                manifest.resolve(),
+                module.resolve_training_mask_manifest(
+                    mov_reference,
+                    dataset_root=root,
+                    case_id="case-a",
+                ),
+            )
             with self.assertRaisesRegex(ValueError, "case_id"):
                 module.resolve_training_mask_manifest(
                     reference,
