@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import numbers
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
@@ -14,6 +15,35 @@ from ...common.masks.sam2 import MaskPrompt
 
 
 _PROMPT_EXPANSION_RATIO = 1.50
+_MASK_QUALITY_CONFIG_KEYS = frozenset(
+    {
+        "minimum_mask_pixels",
+        "maximum_mask_area_ratio",
+        "minimum_anchor_area_ratio",
+        "maximum_anchor_area_ratio",
+    }
+)
+_IDENTITY_CONFIG_KEYS = frozenset(
+    {
+        "minimum_anchor_iou",
+        "maximum_centroid_distance_radii",
+        "minimum_anchor_area_ratio",
+        "maximum_anchor_area_ratio",
+    }
+)
+_TOPOLOGY_CONFIG_KEYS = frozenset(
+    {
+        "canny_low_threshold",
+        "canny_high_threshold",
+        "corridor_half_width_radius_ratio",
+        "minimum_edge_pixels_per_row",
+        "endpoint_height_radius_ratio",
+        "boundary_exclusion_px",
+        "connectivity_dilation_px",
+        "minimum_corridor_height_radius_ratio",
+        "minimum_connected_vertical_span_ratio",
+    }
+)
 
 
 class _ImmutableDict(dict[str, Any]):
@@ -42,22 +72,44 @@ class SpringTopology:
 
 
 def _readonly(values: np.ndarray) -> np.ndarray:
-    result = np.asarray(values).copy()
-    result.flags.writeable = False
-    return result
+    contiguous = np.ascontiguousarray(values)
+    immutable_bytes = contiguous.tobytes()
+    return np.frombuffer(immutable_bytes, dtype=contiguous.dtype).reshape(
+        contiguous.shape
+    )
 
 
 def _finite_config(
     config: Mapping[str, Any], name: str, *, minimum: float | None = None
 ) -> float:
     try:
-        value = float(config[name])
-    except (KeyError, TypeError, ValueError) as exc:
+        raw_value = config[name]
+    except (KeyError, TypeError) as exc:
         raise ValueError(f"config requires a finite {name!r}") from exc
+    if isinstance(raw_value, (bool, np.bool_)) or not isinstance(
+        raw_value, numbers.Real
+    ):
+        raise ValueError(f"config {name!r} must be a real non-bool scalar")
+    value = float(raw_value)
     if not math.isfinite(value) or (minimum is not None and value < minimum):
         qualifier = f" at least {minimum}" if minimum is not None else ""
         raise ValueError(f"config {name!r} must be finite{qualifier}")
     return value
+
+
+def _require_exact_config(
+    config: Mapping[str, Any], required: frozenset[str], *, name: str
+) -> None:
+    try:
+        actual = set(config.keys())
+    except (AttributeError, TypeError) as exc:
+        raise ValueError(f"{name} config must be a mapping") from exc
+    if actual != required:
+        missing = sorted(required - actual)
+        unknown = sorted(str(key) for key in actual - required)
+        raise ValueError(
+            f"{name} config keys differ: missing={missing}, unknown={unknown}"
+        )
 
 
 def _unit_interval_config(config: Mapping[str, Any], name: str) -> float:
@@ -79,8 +131,9 @@ def _binary_mask_or_none(
         or values.size == 0
         or (expected_shape is not None and values.shape != expected_shape)
         or not (
-            np.issubdtype(values.dtype, np.number)
-            or np.issubdtype(values.dtype, np.bool_)
+            np.issubdtype(values.dtype, np.bool_)
+            or np.issubdtype(values.dtype, np.integer)
+            or np.issubdtype(values.dtype, np.floating)
         )
     ):
         return None
@@ -149,6 +202,9 @@ def prompt_from_anchor(anchor: FrozenSubjectAnchor) -> MaskPrompt:
 
 
 def _mask_quality_thresholds(config: Mapping[str, Any]) -> dict[str, float]:
+    _require_exact_config(
+        config, _MASK_QUALITY_CONFIG_KEYS, name="mask quality"
+    )
     thresholds = {
         "minimum_mask_pixels": _finite_config(
             config, "minimum_mask_pixels", minimum=0.0
@@ -211,6 +267,7 @@ def validate_mask_tube(
 
 
 def _identity_thresholds(config: Mapping[str, Any]) -> dict[str, float]:
+    _require_exact_config(config, _IDENTITY_CONFIG_KEYS, name="identity")
     thresholds = {
         "minimum_anchor_iou": _unit_interval_config(
             config, "minimum_anchor_iou"
@@ -304,6 +361,7 @@ def validate_prediction_identity(
 
 
 def _topology_thresholds(config: Mapping[str, Any]) -> dict[str, float]:
+    _require_exact_config(config, _TOPOLOGY_CONFIG_KEYS, name="topology")
     thresholds = {
         "canny_low_threshold": _finite_config(
             config, "canny_low_threshold", minimum=0.0
@@ -320,6 +378,18 @@ def _topology_thresholds(config: Mapping[str, Any]) -> dict[str, float]:
         "endpoint_height_radius_ratio": _finite_config(
             config, "endpoint_height_radius_ratio", minimum=0.0
         ),
+        "boundary_exclusion_px": _finite_config(
+            config, "boundary_exclusion_px", minimum=0.0
+        ),
+        "connectivity_dilation_px": _finite_config(
+            config, "connectivity_dilation_px", minimum=0.0
+        ),
+        "minimum_corridor_height_radius_ratio": _finite_config(
+            config, "minimum_corridor_height_radius_ratio", minimum=0.0
+        ),
+        "minimum_connected_vertical_span_ratio": _unit_interval_config(
+            config, "minimum_connected_vertical_span_ratio"
+        ),
     }
     if thresholds["canny_low_threshold"] > thresholds["canny_high_threshold"]:
         raise ValueError("canny_low_threshold exceeds canny_high_threshold")
@@ -327,9 +397,17 @@ def _topology_thresholds(config: Mapping[str, Any]) -> dict[str, float]:
         raise ValueError("corridor_half_width_radius_ratio must be positive")
     if thresholds["endpoint_height_radius_ratio"] <= 0.0:
         raise ValueError("endpoint_height_radius_ratio must be positive")
-    minimum_edges = thresholds["minimum_edge_pixels_per_row"]
-    if not minimum_edges.is_integer():
-        raise ValueError("minimum_edge_pixels_per_row must be an integer")
+    if thresholds["minimum_corridor_height_radius_ratio"] <= 0.0:
+        raise ValueError("minimum_corridor_height_radius_ratio must be positive")
+    if thresholds["minimum_connected_vertical_span_ratio"] <= 0.0:
+        raise ValueError("minimum_connected_vertical_span_ratio must be positive")
+    for name in (
+        "minimum_edge_pixels_per_row",
+        "boundary_exclusion_px",
+        "connectivity_dilation_px",
+    ):
+        if not thresholds[name].is_integer():
+            raise ValueError(f"{name} must be an integer")
     return thresholds
 
 
@@ -348,6 +426,8 @@ def observe_spring_topology(
     endpoint_support = np.zeros(len(masks), dtype=np.float64)
     valid = np.zeros(len(masks), dtype=bool)
     minimum_edges = int(thresholds["minimum_edge_pixels_per_row"])
+    boundary_exclusion = int(thresholds["boundary_exclusion_px"])
+    dilation_px = int(thresholds["connectivity_dilation_px"])
 
     for index, (frame_value, mask_value, available) in enumerate(
         zip(frames, masks, availability)
@@ -377,7 +457,18 @@ def observe_spring_topology(
         x0 = max(0, int(math.floor(center_x - half_width)))
         x1 = min(mask.shape[1], int(math.ceil(center_x + half_width)) + 1)
         spring_bottom = int(ys.min())
-        if x1 <= x0 or spring_bottom <= 0:
+        corridor_height = spring_bottom - boundary_exclusion
+        minimum_corridor_height = int(
+            math.ceil(
+                thresholds["minimum_corridor_height_radius_ratio"]
+                * equivalent_radius
+            )
+        )
+        if (
+            x1 <= x0
+            or corridor_height < minimum_corridor_height
+            or corridor_height <= 0
+        ):
             continue
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -386,16 +477,19 @@ def observe_spring_topology(
             thresholds["canny_low_threshold"],
             thresholds["canny_high_threshold"],
         )
+        if boundary_exclusion:
+            edges[:boundary_exclusion, :] = 0
+            edges[-boundary_exclusion:, :] = 0
+            edges[:, :boundary_exclusion] = 0
+            edges[:, -boundary_exclusion:] = 0
         ball_guard = cv2.dilate(
             mask,
             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
         )
         edges[ball_guard > 0] = 0
-        corridor = edges[:spring_bottom, x0:x1]
+        corridor = edges[boundary_exclusion:spring_bottom, x0:x1]
         if corridor.shape[0] == 0:
             continue
-        supported_rows = np.count_nonzero(corridor, axis=1) >= minimum_edges
-        row_coverage[index] = float(np.mean(supported_rows))
         endpoint_height = max(
             1,
             int(
@@ -405,11 +499,28 @@ def observe_spring_topology(
                 )
             ),
         )
-        endpoint_start = max(0, spring_bottom - endpoint_height)
-        endpoint = edges[endpoint_start:spring_bottom, x0:x1]
-        endpoint_support[index] = float(
-            np.any(np.count_nonzero(endpoint, axis=1) >= minimum_edges)
-        )
+        endpoint_start = max(0, corridor.shape[0] - endpoint_height)
+        connected = (corridor > 0).astype(np.uint8)
+        if dilation_px:
+            side = 2 * dilation_px + 1
+            connected = cv2.dilate(
+                connected,
+                cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (side, side)),
+            )
+        count, labels, stats, _ = cv2.connectedComponentsWithStats(connected)
+        accepted = np.zeros_like(connected, dtype=bool)
+        minimum_span = thresholds["minimum_connected_vertical_span_ratio"]
+        for label in range(1, count):
+            component_top = int(stats[label, cv2.CC_STAT_TOP])
+            component_height = int(stats[label, cv2.CC_STAT_HEIGHT])
+            vertical_span_ratio = component_height / float(corridor.shape[0])
+            reaches_endpoint = component_top + component_height > endpoint_start
+            if vertical_span_ratio >= minimum_span and reaches_endpoint:
+                accepted |= labels == label
+        if np.any(accepted):
+            supported_rows = np.count_nonzero(accepted, axis=1) >= minimum_edges
+            row_coverage[index] = float(np.mean(supported_rows))
+            endpoint_support[index] = float(np.any(accepted[endpoint_start:]))
         valid[index] = True
 
     if np.any(valid):

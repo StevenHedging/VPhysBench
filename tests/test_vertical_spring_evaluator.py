@@ -36,6 +36,10 @@ TOPOLOGY = {
     "corridor_half_width_radius_ratio": 1.50,
     "minimum_edge_pixels_per_row": 2,
     "endpoint_height_radius_ratio": 1.00,
+    "boundary_exclusion_px": 2,
+    "connectivity_dilation_px": 1,
+    "minimum_corridor_height_radius_ratio": 2.00,
+    "minimum_connected_vertical_span_ratio": 0.60,
 }
 
 
@@ -106,6 +110,41 @@ def spring_frame(
 class VerticalSpringObservationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.anchor = frozen_circle_anchor()
+
+    def call_with_config(self, family: str, config: dict[str, object]) -> None:
+        """Exercise config validation through each public observation boundary."""
+        if family == "mask_quality":
+            validate_mask_tube(
+                [self.anchor.mask],
+                availability=[True],
+                anchor=self.anchor,
+                config=config,
+            )
+            return
+        if family == "identity":
+            validate_prediction_identity(
+                anchor_mask=self.anchor.mask,
+                prediction_mask=self.anchor.mask,
+                config=config,
+            )
+            return
+        if family == "topology":
+            validate_mask = self.anchor.mask
+            observe_spring_topology(
+                [spring_frame(validate_mask, attached=True)],
+                [validate_mask],
+                availability=[True],
+                config=config,
+            )
+            return
+        raise AssertionError(f"unknown test config family: {family}")
+
+    def assert_irreversibly_readonly(self, values: np.ndarray) -> None:
+        """Require immutable backing storage, not only a cleared array flag."""
+        with self.assertRaises(ValueError):
+            values.flags.writeable = True
+        with self.assertRaises(ValueError):
+            values.flat[0] = values.flat[0]
 
     def test_prompt_expands_around_mask_and_has_one_positive_centroid(self) -> None:
         """Would fail if the prompt box, expansion, or centroid point regresses."""
@@ -185,6 +224,42 @@ class VerticalSpringObservationTests(unittest.TestCase):
             decision["area_ratio"], IDENTITY["maximum_anchor_area_ratio"]
         )
 
+    def test_identity_rejects_complex_object_and_string_masks(self) -> None:
+        """Would fail if non-real mask dtypes can satisfy identity geometry."""
+        for prediction in (
+            self.anchor.mask.astype(np.complex64),
+            self.anchor.mask.astype(object),
+            self.anchor.mask.astype("<U1"),
+        ):
+            with self.subTest(dtype=str(prediction.dtype)):
+                decision = validate_prediction_identity(
+                    anchor_mask=self.anchor.mask,
+                    prediction_mask=prediction,
+                    config=IDENTITY,
+                )
+                self.assertFalse(decision["accepted"])
+                self.assertEqual(0.0, decision["anchor_iou"])
+                self.assertEqual(0.0, decision["area_ratio"])
+
+    def test_identity_mask_tube_blanks_complex_object_and_string_masks(
+        self,
+    ) -> None:
+        """Would fail if non-real dtypes survive binary tube normalization."""
+        candidates = (
+            self.anchor.mask.astype(np.complex64),
+            self.anchor.mask.astype(object),
+            self.anchor.mask.astype("<U1"),
+        )
+        masks = validate_mask_tube(
+            candidates,
+            availability=[True] * len(candidates),
+            anchor=self.anchor,
+            config=MASK_QUALITY,
+        )
+        self.assertEqual(
+            [0, 0, 0], [int(np.count_nonzero(mask)) for mask in masks]
+        )
+
     def test_identity_mask_tube_normalizes_and_blanks_unavailable_or_bad_masks(
         self,
     ) -> None:
@@ -242,6 +317,46 @@ class VerticalSpringObservationTests(unittest.TestCase):
                 config=invalid,
             )
 
+    def test_configs_reject_unknown_keys_even_when_unknown_value_is_nan(self) -> None:
+        """Would fail if typo thresholds are silently ignored by any validator."""
+        for family, base in (
+            ("mask_quality", MASK_QUALITY),
+            ("identity", IDENTITY),
+            ("topology", TOPOLOGY),
+        ):
+            with self.subTest(family=family):
+                invalid = dict(base, typo_threshold=float("nan"))
+                with self.assertRaises(ValueError):
+                    self.call_with_config(family, invalid)
+
+    def test_configs_reject_omitted_required_keys(self) -> None:
+        """Would fail if a validator invents a default for an omitted threshold."""
+        for family, base in (
+            ("mask_quality", MASK_QUALITY),
+            ("identity", IDENTITY),
+            ("topology", TOPOLOGY),
+        ):
+            with self.subTest(family=family):
+                invalid = dict(base)
+                invalid.pop(next(iter(base)))
+                with self.assertRaises(ValueError):
+                    self.call_with_config(family, invalid)
+
+    def test_configs_reject_bool_string_and_complex_scalars(self) -> None:
+        """Would fail if float coercion admits values outside real scalars."""
+        for family, base in (
+            ("mask_quality", MASK_QUALITY),
+            ("identity", IDENTITY),
+            ("topology", TOPOLOGY),
+        ):
+            key = next(iter(base))
+            for value in (True, "1.0", 1.0 + 0.0j):
+                with self.subTest(family=family, value=repr(value)):
+                    invalid = dict(base)
+                    invalid[key] = value
+                    with self.assertRaises(ValueError):
+                        self.call_with_config(family, invalid)
+
     def test_topology_uses_each_current_ball_corridor(self) -> None:
         """Would fail if topology localizes from a frozen or future ball position."""
         first = circle_mask(48, 72)
@@ -280,6 +395,50 @@ class VerticalSpringObservationTests(unittest.TestCase):
         self.assertEqual(0.0, removed.endpoint_support[0])
         self.assertLess(removed.score, 0.05)
 
+    def test_topology_rejects_near_top_ball_with_only_canvas_border(self) -> None:
+        """Would fail if a one-row top border can masquerade as a spring."""
+        near_top = circle_mask(48, 4, radius=3)
+        result = observe_spring_topology(
+            [spring_frame(near_top, attached=False)],
+            [near_top],
+            availability=[True],
+            config=TOPOLOGY,
+        )
+        np.testing.assert_array_equal(result.valid, [False])
+        np.testing.assert_array_equal(result.row_coverage, [0.0])
+        np.testing.assert_array_equal(result.endpoint_support, [0.0])
+        self.assertEqual(0.0, result.score)
+
+    def test_topology_rejects_degenerate_short_attached_corridor(self) -> None:
+        """Would fail if a tiny connected segment receives full-span credit."""
+        short = circle_mask(48, 10, radius=6)
+        result = observe_spring_topology(
+            [spring_frame(short, attached=True)],
+            [short],
+            availability=[True],
+            config=TOPOLOGY,
+        )
+        np.testing.assert_array_equal(result.valid, [False])
+        self.assertEqual(0.0, result.score)
+
+    def test_topology_rejects_disconnected_in_corridor_texture(self) -> None:
+        """Would fail if unrelated row hits need not form one endpoint path."""
+        mask = circle_mask(48, 72)
+        frame = np.zeros((96, 96, 3), dtype=np.uint8)
+        for y in range(5, 66, 6):
+            cv2.line(frame, (40, y), (56, y), (255, 255, 255), 1)
+        frame[mask > 0] = (160, 160, 160)
+        result = observe_spring_topology(
+            [frame],
+            [mask],
+            availability=[True],
+            config=TOPOLOGY,
+        )
+        np.testing.assert_array_equal(result.valid, [True])
+        np.testing.assert_array_equal(result.row_coverage, [0.0])
+        np.testing.assert_array_equal(result.endpoint_support, [0.0])
+        self.assertEqual(0.0, result.score)
+
     def test_topology_fails_closed_per_frame_and_returns_immutable_finite_arrays(
         self,
     ) -> None:
@@ -311,6 +470,46 @@ class VerticalSpringObservationTests(unittest.TestCase):
                 availability=[True],
                 config=invalid,
             )
+
+    def test_published_arrays_cannot_be_made_writeable_or_mutated(self) -> None:
+        """Would fail if readonly output is only a reversible NumPy flag."""
+        prompt = prompt_from_anchor(self.anchor)
+        tube = validate_mask_tube(
+            [self.anchor.mask],
+            availability=[True],
+            anchor=self.anchor,
+            config=MASK_QUALITY,
+        )
+        topology = observe_spring_topology(
+            [spring_frame(self.anchor.mask, attached=True)],
+            [self.anchor.mask],
+            availability=[True],
+            config=TOPOLOGY,
+        )
+        arrays = {
+            "prompt_box": prompt.box_xyxy,
+            "prompt_points": prompt.points_xy,
+            "prompt_labels": prompt.point_labels,
+            "tube_mask": tube[0],
+            "topology_coverage": topology.row_coverage,
+            "topology_endpoint": topology.endpoint_support,
+            "topology_valid": topology.valid,
+        }
+        for name, values in arrays.items():
+            with self.subTest(name=name):
+                self.assert_irreversibly_readonly(values)
+
+    def test_published_masks_do_not_alias_mutable_inputs(self) -> None:
+        """Would fail if caller mutation can alter a published tube mask."""
+        candidate = self.anchor.mask.copy()
+        tube = validate_mask_tube(
+            [candidate],
+            availability=[True],
+            anchor=self.anchor,
+            config=MASK_QUALITY,
+        )
+        candidate[:] = 0
+        self.assertEqual(113, np.count_nonzero(tube[0]))
 
 
 if __name__ == "__main__":
