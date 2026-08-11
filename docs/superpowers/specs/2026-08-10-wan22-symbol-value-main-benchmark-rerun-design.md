@@ -38,8 +38,11 @@ remain frozen.
 
 Portable files live under
 `baselines/wan22_symbol_value_cross_attention/`. The existing ignored
-`baseline.local.json` is preserved and supplies this machine's Python, model,
-project, accelerator, and GPU paths.
+`baseline.local.json` is preserved when valid. Deployment validation found its
+historical Python and project paths no longer exist, so the local-only override
+is updated to the already validated `wan22_pair_text_runtime` deployment used
+by the recent comparable WAN experiments. Portable baseline identity and
+semantics remain unchanged.
 
 ## Comparable Training and Evaluation Contract
 
