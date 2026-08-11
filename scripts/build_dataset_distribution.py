@@ -42,7 +42,7 @@ class SourceFile:
     identity: tuple[int, int, int, int, int]
 
 
-@dataclass(frozen=True)
+@dataclass
 class _OwnedTemporary:
     name: str
     descriptor: int
@@ -452,13 +452,6 @@ def _create_owned_temporary(parent_descriptor: int) -> _OwnedTemporary:
                 dir_fd=parent_descriptor,
             )
         except BaseException:
-            linked = os.stat(
-                name,
-                dir_fd=parent_descriptor,
-                follow_symlinks=False,
-            )
-            if _entry_identity(linked) == identity:
-                os.rmdir(name, dir_fd=parent_descriptor)
             raise
         opened = os.fstat(descriptor)
         linked = os.stat(
@@ -498,9 +491,9 @@ def _verify_owned_temporary(
         raise ValueError("owned Dataset distribution temporary entry changed")
 
 
-def _exclusive_publish(
+def _rename_noreplace(
     parent_descriptor: int,
-    temporary: _OwnedTemporary,
+    source_name: str,
     destination_name: str,
 ) -> None:
     if os.name != "posix" or not sys.platform.startswith("linux"):
@@ -522,10 +515,9 @@ def _exclusive_publish(
         ctypes.c_uint,
     )
     renameat2.restype = ctypes.c_int
-    _verify_owned_temporary(parent_descriptor, temporary)
     result = renameat2(
         parent_descriptor,
-        os.fsencode(temporary.name),
+        os.fsencode(source_name),
         parent_descriptor,
         os.fsencode(destination_name),
         _RENAME_NOREPLACE,
@@ -543,18 +535,126 @@ def _exclusive_publish(
                 "exclusive Dataset distribution publication is unsupported"
             )
         raise OSError(error, os.strerror(error), destination_name)
-    opened = _entry_identity(os.fstat(temporary.descriptor))
-    linked = os.stat(
-        destination_name,
-        dir_fd=parent_descriptor,
-        follow_symlinks=False,
+
+
+def _private_move(
+    parent_descriptor: int,
+    source_name: str,
+    *,
+    prefix: str,
+) -> str:
+    for _ in range(32):
+        destination_name = f".{prefix}-{secrets.token_hex(16)}"
+        try:
+            _rename_noreplace(
+                parent_descriptor,
+                source_name,
+                destination_name,
+            )
+        except FileExistsError:
+            continue
+        return destination_name
+    raise FileExistsError(f"could not allocate private {prefix} name")
+
+
+def _claim_owned_temporary(
+    parent_descriptor: int,
+    temporary: _OwnedTemporary,
+    *,
+    prefix: str,
+) -> str:
+    source_name = temporary.name
+    claim_name = _private_move(
+        parent_descriptor,
+        source_name,
+        prefix=prefix,
     )
+    opened = _entry_identity(os.fstat(temporary.descriptor))
+    try:
+        linked = os.stat(
+            claim_name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+    except FileNotFoundError:
+        linked = None
     if (
-        not stat.S_ISDIR(linked.st_mode)
+        linked is None
+        or not stat.S_ISDIR(linked.st_mode)
         or opened != temporary.identity
         or _entry_identity(linked) != temporary.identity
     ):
-        raise RuntimeError("published Dataset distribution inode changed")
+        try:
+            _rename_noreplace(
+                parent_descriptor,
+                claim_name,
+                source_name,
+            )
+        except BaseException as exc:
+            raise RuntimeError(
+                "owned Dataset distribution claim changed and could not be restored"
+            ) from exc
+        raise ValueError("owned Dataset distribution temporary claim changed")
+    temporary.name = claim_name
+    return claim_name
+
+
+def _withdraw_destination(
+    parent_descriptor: int,
+    destination_name: str,
+) -> None:
+    try:
+        _private_move(
+            parent_descriptor,
+            destination_name,
+            prefix="v1-quarantine",
+        )
+    except FileNotFoundError:
+        pass
+    try:
+        os.stat(
+            destination_name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+    except FileNotFoundError:
+        return
+    raise RuntimeError(
+        "unverified Dataset distribution could not be withdrawn from v1"
+    )
+
+
+def _exclusive_publish(
+    parent_descriptor: int,
+    temporary: _OwnedTemporary,
+    destination_name: str,
+) -> None:
+    _verify_owned_temporary(parent_descriptor, temporary)
+    claim_name = _claim_owned_temporary(
+        parent_descriptor,
+        temporary,
+        prefix="v1-claim",
+    )
+    _rename_noreplace(parent_descriptor, claim_name, destination_name)
+    try:
+        linked = os.stat(
+            destination_name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+    except FileNotFoundError:
+        linked = None
+    opened = _entry_identity(os.fstat(temporary.descriptor))
+    if (
+        linked is None
+        or not stat.S_ISDIR(linked.st_mode)
+        or opened != temporary.identity
+        or _entry_identity(linked) != temporary.identity
+    ):
+        _withdraw_destination(parent_descriptor, destination_name)
+        raise RuntimeError(
+            "published Dataset distribution inode changed and was withdrawn"
+        )
 
 
 def _clear_directory_descriptor(descriptor: int) -> None:
@@ -587,25 +687,17 @@ def _cleanup_owned_temporary(
 ) -> None:
     if _entry_identity(os.fstat(temporary.descriptor)) != temporary.identity:
         raise RuntimeError("held owned Dataset distribution temporary changed")
-    _clear_directory_descriptor(temporary.descriptor)
     try:
-        linked = os.stat(
-            temporary.name,
-            dir_fd=parent_descriptor,
-            follow_symlinks=False,
+        _claim_owned_temporary(
+            parent_descriptor,
+            temporary,
+            prefix="v1-tombstone",
         )
     except FileNotFoundError as exc:
         raise RuntimeError(
-            "owned Dataset distribution temporary entry changed; refusing cleanup"
+            "owned Dataset distribution temporary missing; refusing cleanup"
         ) from exc
-    if (
-        not stat.S_ISDIR(linked.st_mode)
-        or _entry_identity(linked) != temporary.identity
-    ):
-        raise RuntimeError(
-            "owned Dataset distribution temporary entry changed; refusing cleanup"
-        )
-    os.rmdir(temporary.name, dir_fd=parent_descriptor)
+    _clear_directory_descriptor(temporary.descriptor)
 
 
 def _verify_output(

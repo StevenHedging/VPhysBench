@@ -1447,6 +1447,181 @@ class DatasetDistributionBuilderTests(unittest.TestCase):
                 (replacement / "do-not-delete.txt").read_text(encoding="utf-8"),
             )
 
+    def test_withdraws_tree_swapped_after_the_final_temp_check(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self.make_dataset(root / "source")
+            output = root / "output"
+            real_verify = distribution_builder._verify_owned_temporary
+            checks = 0
+            swapped_marker: Path | None = None
+
+            def verify_then_swap(parent_descriptor, owned_temporary):
+                nonlocal checks, swapped_marker
+                real_verify(parent_descriptor, owned_temporary)
+                checks += 1
+                if checks == 3:
+                    public = output / "distribution" / owned_temporary.name
+                    public.rename(output / "distribution" / "held-verified-tree")
+                    public.mkdir()
+                    swapped_marker = public / "unverified.txt"
+                    swapped_marker.write_text("unverified", encoding="utf-8")
+
+            with patch.object(
+                distribution_builder,
+                "_verify_owned_temporary",
+                side_effect=verify_then_swap,
+            ), self.assertRaisesRegex(
+                (ValueError, RuntimeError),
+                "published.*changed|temporary.*changed|owned.*changed",
+            ):
+                distribution_builder.build_distribution(
+                    descriptor,
+                    output_root=output,
+                    max_shard_bytes=800,
+                )
+
+            self.assertEqual(3, checks)
+            self.assertFalse((output / "distribution" / "v1").exists())
+            self.assertIsNotNone(swapped_marker)
+
+            rollback_output = root / "rollback-output"
+            real_claim = distribution_builder._claim_owned_temporary
+
+            def claim_then_swap(parent_descriptor, owned_temporary, *, prefix):
+                claim = real_claim(
+                    parent_descriptor,
+                    owned_temporary,
+                    prefix=prefix,
+                )
+                if prefix == "v1-claim":
+                    public = rollback_output / "distribution" / claim
+                    public.rename(
+                        rollback_output / "distribution" / "held-claimed-tree"
+                    )
+                    public.mkdir()
+                    (public / "unverified.txt").write_text(
+                        "unverified",
+                        encoding="utf-8",
+                    )
+                return claim
+
+            with patch.object(
+                distribution_builder,
+                "_claim_owned_temporary",
+                side_effect=claim_then_swap,
+            ), self.assertRaisesRegex(
+                (ValueError, RuntimeError),
+                "withdrawn|temporary.*missing|owned.*changed",
+            ):
+                distribution_builder.build_distribution(
+                    descriptor,
+                    output_root=rollback_output,
+                    max_shard_bytes=800,
+                )
+
+            self.assertFalse(
+                (rollback_output / "distribution" / "v1").exists()
+            )
+            quarantined = list(
+                (rollback_output / "distribution").glob(
+                    ".v1-quarantine-*/unverified.txt"
+                )
+            )
+            self.assertEqual(1, len(quarantined))
+            self.assertEqual(
+                "unverified",
+                quarantined[0].read_text(encoding="utf-8"),
+            )
+
+    def test_cleanup_never_rmdirs_the_public_temp_basename(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self.make_dataset(root / "source")
+            output = root / "output"
+            real_rmdir = distribution_builder.os.rmdir
+            real_cleanup = distribution_builder._cleanup_owned_temporary
+            public_rmdir_attempts: list[str] = []
+
+            def swap_before_public_rmdir(path, *args, **kwargs):
+                name = os.fspath(path)
+                if name.startswith(".v1-build-"):
+                    public_rmdir_attempts.append(name)
+                    public = output / "distribution" / name
+                    public.rename(output / "distribution" / "held-cleaned-tree")
+                    public.mkdir()
+                return real_rmdir(path, *args, **kwargs)
+
+            def cleanup_with_rmdir_race(*args, **kwargs):
+                with patch.object(
+                    distribution_builder.os,
+                    "rmdir",
+                    side_effect=swap_before_public_rmdir,
+                ):
+                    return real_cleanup(*args, **kwargs)
+
+            with patch.object(
+                distribution_builder,
+                "_write_shard",
+                side_effect=ValueError("forced cleanup failure"),
+            ), patch.object(
+                distribution_builder,
+                "_cleanup_owned_temporary",
+                side_effect=cleanup_with_rmdir_race,
+            ), self.assertRaisesRegex(ValueError, "forced cleanup failure"):
+                distribution_builder.build_distribution(
+                    descriptor,
+                    output_root=output,
+                    max_shard_bytes=800,
+                )
+
+            self.assertEqual([], public_rmdir_attempts)
+            self.assertFalse((output / "distribution" / "v1").exists())
+
+            creation_output = root / "creation-output"
+            real_create = distribution_builder._create_owned_temporary
+            real_open = distribution_builder.os.open
+            creation_rmdir_attempts: list[str] = []
+
+            def fail_owned_open(path, *args, **kwargs):
+                if os.fspath(path).startswith(".v1-build-"):
+                    raise OSError("forced owned temporary open failure")
+                return real_open(path, *args, **kwargs)
+
+            def record_creation_rmdir(path, *args, **kwargs):
+                name = os.fspath(path)
+                if name.startswith(".v1-build-"):
+                    creation_rmdir_attempts.append(name)
+                return real_rmdir(path, *args, **kwargs)
+
+            def create_with_open_failure(*args, **kwargs):
+                with patch.object(
+                    distribution_builder.os,
+                    "open",
+                    side_effect=fail_owned_open,
+                ), patch.object(
+                    distribution_builder.os,
+                    "rmdir",
+                    side_effect=record_creation_rmdir,
+                ):
+                    return real_create(*args, **kwargs)
+
+            with patch.object(
+                distribution_builder,
+                "_create_owned_temporary",
+                side_effect=create_with_open_failure,
+            ), self.assertRaisesRegex(OSError, "forced owned temporary open failure"):
+                distribution_builder.build_distribution(
+                    descriptor,
+                    output_root=creation_output,
+                    max_shard_bytes=800,
+                )
+
+            self.assertEqual([], creation_rmdir_attempts)
+            self.assertFalse(
+                (creation_output / "distribution" / "v1").exists()
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
