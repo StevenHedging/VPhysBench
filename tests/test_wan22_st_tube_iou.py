@@ -10,9 +10,15 @@ import cv2
 import numpy as np
 import torch
 
+from physbench.baseline_api import discover_baseline_bundles, load_baseline_bundle
+
 
 MODULE_NAME = "physbench.baselines.wan22_st_tube_iou_model"
 MASK_MODULE_NAME = "physbench.baselines.wan22_st_tube_iou_masks"
+ADAPTER_MODULE_NAME = "physbench.baselines.wan22_st_tube_iou"
+ROOT = Path(__file__).resolve().parents[1]
+BASELINE_ID = "wan22_ti2v_5b_lora_r32_st_tube_iou_v1"
+BASELINE_PATH = ROOT / "baselines" / "wan22_st_tube_iou" / "baseline.json"
 
 
 def _model_module():
@@ -30,6 +36,15 @@ def _mask_module():
     except ModuleNotFoundError as exc:
         raise AssertionError(
             f"production module {MASK_MODULE_NAME} has not been implemented"
+        ) from exc
+
+
+def _adapter_module():
+    try:
+        return importlib.import_module(ADAPTER_MODULE_NAME)
+    except ModuleNotFoundError as exc:
+        raise AssertionError(
+            f"production module {ADAPTER_MODULE_NAME} has not been implemented"
         ) from exc
 
 
@@ -416,6 +431,115 @@ class MaskTubeMaterializerTests(unittest.TestCase):
                     case_id="case-a",
                     segmenter=_DeterministicTubeSegmenter(),
                 )
+
+
+class STTubeIoUBaselineRegistrationTests(unittest.TestCase):
+    @staticmethod
+    def _adapter_config() -> dict:
+        return {
+            "schema_version": "1.0",
+            "baseline_id": BASELINE_ID,
+            "supported_scenes": [
+                "pendulum",
+                "collision_1d",
+                "inclined_plane_slide",
+                "uniform_circular_motion",
+                "parabolic_motion",
+                "push_bottle",
+                "vertical_spring_oscillator",
+            ],
+            "runtime": {
+                "project_root": "/runtime",
+                "python": "/runtime/python",
+                "model_base": "/runtime/models",
+                "cuda_visible_devices": "0,1,2,3",
+                "accelerate_config": "/runtime/accelerate.yaml",
+            },
+            "media_adapter": {
+                "width": 480,
+                "height": 832,
+                "fps": 24,
+                "max_frames": 121,
+                "min_frames": 5,
+                "pad_mode": "edge",
+            },
+            "lora": {
+                "micro_batch_size": 1,
+                "global_batch_size": 8,
+                "dataset_repeat": 1,
+                "num_epochs": 8,
+                "scene_balancing": "oversample_each_scene_to_largest_world_aligned",
+                "seed": 42,
+            },
+            "st_tube_iou": {
+                "enable_st_iou_loss": True,
+                "lambda_st": 0.1,
+                "st_iou_eps": 1e-6,
+                "st_loss_weighting": "linear_clean",
+                "st_noise_threshold": 0.5,
+                "st_loss_warmup_steps": 100,
+                "latent_channels": 16,
+                "hidden_channels": 32,
+                "mask_segmenter_model_id": "facebook/sam2.1-hiera-tiny",
+            },
+        }
+
+    def test_bundle_is_discovered_with_complete_auxiliary_recipe(self) -> None:
+        discovered = discover_baseline_bundles()
+        self.assertIn(BASELINE_ID, discovered)
+        self.assertEqual(BASELINE_PATH, discovered[BASELINE_ID])
+
+        bundle = load_baseline_bundle(BASELINE_PATH)
+        self.assertEqual("finetune_eval", bundle.value["capabilities"]["task_families"][0])
+        self.assertEqual("ignored", bundle.value["input_policy"]["physics"]["usage"])
+        self.assertEqual(7, len(bundle.value["supported_scenes"]))
+        config = bundle.value["trainer"]["config"]
+        expected = {
+            "enable_st_iou_loss": True,
+            "lambda_st": 0.1,
+            "st_iou_eps": 1e-6,
+            "st_loss_weighting": "linear_clean",
+            "st_noise_threshold": 0.5,
+            "st_loss_warmup_steps": 100,
+        }
+        self.assertEqual(expected, {
+            key: config[key]
+            for key in expected
+        })
+        self.assertEqual(1, config["micro_batch_size"])
+        self.assertEqual(8, config["global_batch_size"])
+
+    def test_four_gpu_parallelism_preserves_global_batch(self) -> None:
+        adapter = _adapter_module().Wan22STTubeIoULoraAdapter(
+            self._adapter_config(),
+            execute=False,
+        )
+
+        contract = adapter._training_parallelism(metadata_row_count=56)
+
+        self.assertEqual(4, contract["world_size"])
+        self.assertEqual(2, contract["gradient_accumulation_steps"])
+        self.assertEqual(7, contract["optimizer_steps_per_epoch"])
+        self.assertEqual(56, contract["total_optimizer_steps"])
+
+    def test_training_metadata_binds_tube_but_generation_stays_stock(self) -> None:
+        adapter = _adapter_module().Wan22STTubeIoULoraAdapter(
+            self._adapter_config(),
+            execute=False,
+        )
+        row = adapter._training_metadata_row(
+            case={"case_id": "case-a", "scene_id": "pendulum"},
+            adaptation={
+                "text_transform_id": "identity",
+                "native_inputs": {"text": {"prompt": "a pendulum swings"}},
+            },
+            video="videos/case-a.mp4",
+            subject_mask="masks/case-a.npz",
+        )
+
+        self.assertEqual("masks/case-a.npz", row["subject_mask"])
+        self.assertEqual("a pendulum swings", row["prompt"])
+        self.assertEqual(ROOT / "scripts" / "wan22_generate.py", adapter._generation_script())
 
 
 if __name__ == "__main__":
