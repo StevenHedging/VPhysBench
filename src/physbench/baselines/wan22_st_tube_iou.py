@@ -13,6 +13,7 @@ from .wan22_lora import Wan22LoraAdapter
 from .wan22_st_tube_iou_masks import (
     DEFAULT_SAM2_MODEL_ID,
     materialize_subject_mask_tube,
+    release_mask_segmenter,
     resolve_training_mask_manifest,
 )
 from ..evaluation.common.masks.sam2 import Sam2VideoSegmenter
@@ -319,6 +320,8 @@ class Wan22STTubeIoULoraAdapter(Wan22LoraAdapter):
                 ),
                 subject_mask=output_mask.relative_to(dataset_dir).as_posix(),
             ))
+        release_mask_segmenter(segmenter)
+        segmenter = None
         rows = self._balance_training_rows(rows, artifact_root)
         dataset_dir.mkdir(parents=True, exist_ok=True)
         self._write_training_metadata(metadata_path, rows)

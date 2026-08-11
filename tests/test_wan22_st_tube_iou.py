@@ -276,6 +276,15 @@ class _FailIfCalledSegmenter:
         raise AssertionError("valid cached mask tube should not rerun propagation")
 
 
+class _DeviceTrackingPredictor:
+    def __init__(self):
+        self.moves = []
+
+    def to(self, device):
+        self.moves.append(device)
+        return self
+
+
 class MaskTubeMaterializerTests(unittest.TestCase):
     @staticmethod
     def _write_video(path: Path, *, frames: int = 5) -> None:
@@ -451,6 +460,21 @@ class MaskTubeMaterializerTests(unittest.TestCase):
                     case_id="case-a",
                     segmenter=_DeterministicTubeSegmenter(),
                 )
+
+    def test_release_moves_sam2_off_gpu_and_clears_cached_predictor(self) -> None:
+        module = _mask_module()
+        predictor = _DeviceTrackingPredictor()
+        segmenter = type("Segmenter", (), {})()
+        segmenter._predictor = predictor
+        segmenter._torch = torch
+        segmenter.device = "cuda"
+
+        module.release_mask_segmenter(segmenter)
+
+        self.assertEqual(["cpu"], predictor.moves)
+        self.assertIsNone(segmenter._predictor)
+        self.assertIsNone(segmenter._torch)
+        self.assertIsNone(segmenter.device)
 
 
 class STTubeIoUBaselineRegistrationTests(unittest.TestCase):

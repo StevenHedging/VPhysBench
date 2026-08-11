@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import gc
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,29 @@ from ..io import load_json, sha256_file, write_json
 
 
 DEFAULT_SAM2_MODEL_ID = "facebook/sam2.1-hiera-tiny"
+
+
+def release_mask_segmenter(segmenter: Any | None) -> None:
+    """Release the offline SAM2 model before WAN workers claim the GPUs."""
+
+    if segmenter is None:
+        return
+    predictor = getattr(segmenter, "_predictor", None)
+    torch_module = getattr(segmenter, "_torch", None)
+    if predictor is not None and hasattr(predictor, "to"):
+        predictor.to("cpu")
+    if hasattr(segmenter, "_predictor"):
+        segmenter._predictor = None
+    if hasattr(segmenter, "_torch"):
+        segmenter._torch = None
+    if hasattr(segmenter, "device"):
+        segmenter.device = None
+    gc.collect()
+    if (
+        torch_module is not None
+        and torch_module.cuda.is_available()
+    ):
+        torch_module.cuda.empty_cache()
 
 
 def _contained(path: Path, root: Path, *, label: str) -> Path:
@@ -343,5 +367,6 @@ __all__ = [
     "DEFAULT_SAM2_MODEL_ID",
     "contain_mask",
     "materialize_subject_mask_tube",
+    "release_mask_segmenter",
     "resolve_training_mask_manifest",
 ]
