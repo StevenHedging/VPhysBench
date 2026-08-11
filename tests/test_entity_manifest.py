@@ -69,7 +69,120 @@ def _collision_case(count: int) -> dict[str, object]:
     }
 
 
+def _spring_case() -> dict[str, object]:
+    return {
+        "case_id": "vertical_spring_case",
+        "scene_id": "vertical_spring_oscillator",
+        "appearance": {
+            "spring_id": "spring_a",
+            "release_side": "below_equilibrium",
+        },
+        "physics": {
+            "objects": {
+                "object_1": {
+                    "initial_displacement": {
+                        "value": 0.03,
+                        "unit": "m",
+                        "symbol": "x_0",
+                    },
+                    "mass": {
+                        "value": 0.1,
+                        "unit": "kg",
+                        "symbol": "m",
+                    },
+                    "radius": {
+                        "value": 0.01,
+                        "unit": "m",
+                        "symbol": "r",
+                    },
+                },
+            },
+            "environment": {
+                "gravity_acceleration": {
+                    "value": 9.81,
+                    "unit": "m/s^2",
+                    "symbol": "g",
+                },
+                "natural_spring_length": {
+                    "value": 0.2,
+                    "unit": "m",
+                    "symbol": "L_0",
+                },
+                "spring_stiffness": {
+                    "value": 12.0,
+                    "unit": "N/m",
+                    "symbol": "k",
+                },
+            },
+        },
+        "assets": {"reference_video": "spring.mp4"},
+    }
+
+
 class EntityManifestTests(unittest.TestCase):
+    def test_vertical_spring_materializes_frozen_ball_and_apparatus(
+        self,
+    ) -> None:
+        manifest = materialize_entity_manifest(_spring_case())
+
+        self.assertEqual("oscillator_ball", manifest.entities[0].entity_id)
+        self.assertEqual("spring_oscillator", manifest.entities[0].role_id)
+        self.assertEqual("steel_ball", manifest.entities[0].entity_class)
+        self.assertEqual(("spring",), manifest.entities[0].parts)
+        self.assertEqual(
+            {"initial_displacement", "mass", "radius"},
+            {
+                value.name
+                for value in manifest.entities[0].physical_attributes
+            },
+        )
+        self.assertEqual(
+            "vertical_spring_and_support",
+            manifest.apparatus[0].apparatus_class,
+        )
+        self.assertIs(
+            manifest.reference_capability,
+            ReferenceCapability.SAME_CASE_GT,
+        )
+
+    def test_vertical_spring_rejects_missing_required_physics(
+        self,
+    ) -> None:
+        missing_parameters = {
+            "mass": ("objects", "object_1", "mass", "oscillator_mass"),
+            "radius": ("objects", "object_1", "radius", "ball_radius"),
+            "displacement": (
+                "objects",
+                "object_1",
+                "initial_displacement",
+                "initial_displacement",
+            ),
+            "stiffness": (
+                "environment",
+                "spring_stiffness",
+                "spring_stiffness",
+            ),
+            "natural length": (
+                "environment",
+                "natural_spring_length",
+                "natural_spring_length",
+            ),
+            "gravity": (
+                "environment",
+                "gravity_acceleration",
+                "gravity_acceleration",
+            ),
+        }
+        for name, path in missing_parameters.items():
+            with self.subTest(parameter=name):
+                case = _spring_case()
+                target: object = case["physics"]
+                for key in path[:-2]:
+                    target = target[key]  # type: ignore[index]
+                del target[path[-2]]  # type: ignore[index]
+                with self.assertRaises(ValueError):
+                    materialize_entity_manifest(case)
+
     def test_collision_cardinality_is_derived_for_two_and_four_bodies(
         self,
     ) -> None:
