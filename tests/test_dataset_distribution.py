@@ -1282,6 +1282,40 @@ class DatasetDistributionBuilderTests(unittest.TestCase):
                         max_shard_bytes=800,
                     )
 
+    def test_rejects_ordinary_asset_root_parent_swap_after_loader(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            work = base / "work"
+            descriptor = self.make_dataset(work / "source")
+            real_load_dataset = distribution_builder.load_dataset
+            swapped = False
+
+            def load_then_swap(*args, **kwargs):
+                nonlocal swapped
+                snapshot = real_load_dataset(*args, **kwargs)
+                if not swapped:
+                    swapped = True
+                    held = base / "held-work"
+                    work.rename(held)
+                    shutil.copytree(held, work)
+                    replacement = work / "source" / "assets" / "01-frame.bin"
+                    replacement.write_bytes(b"EEEEEEEEEE")
+                return snapshot
+
+            with patch.object(
+                distribution_builder,
+                "load_dataset",
+                side_effect=load_then_swap,
+            ), self.assertRaisesRegex(
+                ValueError,
+                "asset_root.*changed|directory changed",
+            ):
+                distribution_builder.build_distribution(
+                    descriptor,
+                    output_root=base / "output",
+                    max_shard_bytes=800,
+                )
+
     def test_rejects_rebuilding_over_an_existing_distribution(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -1368,6 +1402,49 @@ class DatasetDistributionBuilderTests(unittest.TestCase):
                 1,
                 sum(isinstance(item, FileExistsError) for item in results),
                 results,
+            )
+
+    def test_rejects_pre_publish_temp_swap_without_deleting_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self.make_dataset(root / "source")
+            output = root / "output"
+            real_verify = distribution_builder._verify_output
+            replacement: Path | None = None
+
+            def verify_then_swap(*args, **kwargs):
+                nonlocal replacement
+                real_verify(*args, **kwargs)
+                verified = Path(kwargs["version_root"])
+                held = verified.parent / "held-verified-tree"
+                verified.rename(held)
+                verified.mkdir()
+                replacement = verified
+                (verified / "do-not-delete.txt").write_text(
+                    "replacement",
+                    encoding="utf-8",
+                )
+
+            with patch.object(
+                distribution_builder,
+                "_verify_output",
+                side_effect=verify_then_swap,
+            ), self.assertRaisesRegex(
+                (ValueError, RuntimeError),
+                "temporary.*changed|owned.*changed",
+            ):
+                distribution_builder.build_distribution(
+                    descriptor,
+                    output_root=output,
+                    max_shard_bytes=800,
+                )
+
+            self.assertFalse((output / "distribution" / "v1").exists())
+            self.assertIsNotNone(replacement)
+            assert replacement is not None
+            self.assertEqual(
+                "replacement",
+                (replacement / "do-not-delete.txt").read_text(encoding="utf-8"),
             )
 
 

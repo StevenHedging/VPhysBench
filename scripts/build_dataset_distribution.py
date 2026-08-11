@@ -7,7 +7,7 @@ import errno
 import hashlib
 import json
 import os
-import shutil
+import secrets
 import stat
 import sys
 import tempfile
@@ -32,7 +32,6 @@ ZIP_MODE = stat.S_IFREG | 0o644
 # ZIP64 extra. The archive trailer may contain ZIP64 EOCD + locator + EOCD.
 _ZIP_MEMBER_FIXED_OVERHEAD_MAX = 30 + 20 + 24 + 46 + 28
 _ZIP_END_OVERHEAD_MAX = 56 + 20 + 22
-_AT_FDCWD = -100
 _RENAME_NOREPLACE = 1
 
 
@@ -43,26 +42,48 @@ class SourceFile:
     identity: tuple[int, int, int, int, int]
 
 
+@dataclass(frozen=True)
+class _OwnedTemporary:
+    name: str
+    descriptor: int
+    identity: tuple[int, int]
+
+
 @dataclass
 class _DirectoryChain:
     descriptors: list[int]
     links: list[tuple[int, str, int]]
+    identities: list[tuple[int, int, int]]
+    check_ctime: bool = True
+    label: str = "directory"
 
     @property
     def current(self) -> int:
         return self.descriptors[-1]
 
     def verify(self) -> None:
-        for parent, name, child in self.links:
+        for descriptor, expected in zip(
+            self.descriptors,
+            self.identities,
+            strict=True,
+        ):
+            opened = _directory_identity(os.fstat(descriptor))
+            if opened[:2] != expected[:2] or (
+                self.check_ctime and opened != expected
+            ):
+                raise ValueError("held directory changed after anchoring")
+        for index, (parent, name, child) in enumerate(self.links, 1):
             linked = os.stat(name, dir_fd=parent, follow_symlinks=False)
-            opened = os.fstat(child)
+            expected = self.identities[index]
+            linked_identity = _directory_identity(linked)
             if (
                 stat.S_ISLNK(linked.st_mode)
                 or not stat.S_ISDIR(linked.st_mode)
-                or (linked.st_dev, linked.st_ino) != (opened.st_dev, opened.st_ino)
+                or linked_identity[:2] != expected[:2]
+                or (self.check_ctime and linked_identity != expected)
             ):
                 raise ValueError(
-                    f"indexed Dataset asset directory changed or is a symlink: {name}"
+                    f"{self.label} changed or is a symlink: {name}"
                 )
 
     def close(self) -> None:
@@ -78,6 +99,10 @@ def _stat_identity(value: os.stat_result) -> tuple[int, int, int, int, int]:
         value.st_mtime_ns,
         value.st_ctime_ns,
     )
+
+
+def _directory_identity(value: os.stat_result) -> tuple[int, int, int]:
+    return (value.st_dev, value.st_ino, value.st_ctime_ns)
 
 
 def _directory_flags() -> int:
@@ -97,6 +122,10 @@ def _require_secure_source_io() -> None:
         or os.open not in os.supports_dir_fd
         or os.stat not in os.supports_dir_fd
         or os.stat not in os.supports_follow_symlinks
+        or os.mkdir not in os.supports_dir_fd
+        or os.rmdir not in os.supports_dir_fd
+        or os.unlink not in os.supports_dir_fd
+        or os.listdir not in os.supports_fd
     ):
         raise RuntimeError(
             "secure Dataset distribution building requires POSIX dir_fd, "
@@ -104,18 +133,23 @@ def _require_secure_source_io() -> None:
         )
 
 
-def _open_asset_root(
+def _open_directory_chain(
     path: Path,
     *,
-    expected_identity: tuple[int, int],
+    label: str,
+    check_ctime: bool,
 ) -> _DirectoryChain:
     _require_secure_source_io()
     if not path.is_absolute():
         raise ValueError("Dataset asset_root anchor must be absolute")
     components = path.parts[1:]
+    anchor = os.open(path.anchor, _directory_flags())
     chain = _DirectoryChain(
-        descriptors=[os.open(path.anchor, _directory_flags())],
+        descriptors=[anchor],
         links=[],
+        identities=[_directory_identity(os.fstat(anchor))],
+        check_ctime=check_ctime,
+        label=label,
     )
     try:
         for component in components:
@@ -123,30 +157,43 @@ def _open_asset_root(
             child = os.open(component, _directory_flags(), dir_fd=parent)
             chain.descriptors.append(child)
             chain.links.append((parent, component, child))
+            chain.identities.append(_directory_identity(os.fstat(child)))
             chain.verify()
     except OSError as exc:
         chain.close()
         raise ValueError(
-            f"Dataset asset_root is missing, a symlink, or not a directory: {path}"
+            f"{label} is missing, a symlink, or not a directory: {path}"
         ) from exc
     except BaseException:
         chain.close()
         raise
-    actual = os.fstat(chain.current)
-    if not stat.S_ISDIR(actual.st_mode) or (
-        actual.st_dev,
-        actual.st_ino,
-    ) != expected_identity:
-        chain.close()
-        raise ValueError("Dataset asset_root directory changed after validation")
     return chain
+
+
+def _open_asset_root(path: Path) -> _DirectoryChain:
+    return _open_directory_chain(
+        path,
+        label="Dataset asset_root directory",
+        check_ctime=True,
+    )
+
+
+def _open_distribution_root(path: Path) -> _DirectoryChain:
+    return _open_directory_chain(
+        path,
+        label="Dataset distribution parent",
+        check_ctime=False,
+    )
 
 
 def _open_source_descriptor(asset_root_descriptor: int, relative: str) -> int:
     components = PurePosixPath(relative).parts
+    anchor = os.dup(asset_root_descriptor)
     chain = _DirectoryChain(
-        descriptors=[os.dup(asset_root_descriptor)],
+        descriptors=[anchor],
         links=[],
+        identities=[_directory_identity(os.fstat(anchor))],
+        label="indexed Dataset asset directory",
     )
     descriptor: int | None = None
     try:
@@ -155,6 +202,7 @@ def _open_source_descriptor(asset_root_descriptor: int, relative: str) -> int:
             child = os.open(component, _directory_flags(), dir_fd=parent)
             chain.descriptors.append(child)
             chain.links.append((parent, component, child))
+            chain.identities.append(_directory_identity(os.fstat(child)))
             chain.verify()
         descriptor = os.open(
             components[-1],
@@ -384,7 +432,77 @@ def _write_canonical_json(path: Path, value: object) -> None:
         raise
 
 
-def _exclusive_publish(source: Path, destination: Path) -> None:
+def _entry_identity(value: os.stat_result) -> tuple[int, int]:
+    return (value.st_dev, value.st_ino)
+
+
+def _create_owned_temporary(parent_descriptor: int) -> _OwnedTemporary:
+    for _ in range(32):
+        name = f".v1-build-{secrets.token_hex(8)}"
+        try:
+            os.mkdir(name, mode=0o700, dir_fd=parent_descriptor)
+        except FileExistsError:
+            continue
+        created = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+        identity = _entry_identity(created)
+        try:
+            descriptor = os.open(
+                name,
+                _directory_flags(),
+                dir_fd=parent_descriptor,
+            )
+        except BaseException:
+            linked = os.stat(
+                name,
+                dir_fd=parent_descriptor,
+                follow_symlinks=False,
+            )
+            if _entry_identity(linked) == identity:
+                os.rmdir(name, dir_fd=parent_descriptor)
+            raise
+        opened = os.fstat(descriptor)
+        linked = os.stat(
+            name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+        if (
+            not stat.S_ISDIR(linked.st_mode)
+            or _entry_identity(opened) != identity
+            or _entry_identity(linked) != identity
+        ):
+            os.close(descriptor)
+            raise ValueError("owned Dataset distribution temporary changed at creation")
+        return _OwnedTemporary(name, descriptor, identity)
+    raise FileExistsError("could not allocate Dataset distribution temporary")
+
+
+def _verify_owned_temporary(
+    parent_descriptor: int,
+    temporary: _OwnedTemporary,
+) -> None:
+    opened = os.fstat(temporary.descriptor)
+    try:
+        linked = os.stat(
+            temporary.name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+    except FileNotFoundError as exc:
+        raise ValueError("owned Dataset distribution temporary entry changed") from exc
+    if (
+        not stat.S_ISDIR(linked.st_mode)
+        or _entry_identity(opened) != temporary.identity
+        or _entry_identity(linked) != temporary.identity
+    ):
+        raise ValueError("owned Dataset distribution temporary entry changed")
+
+
+def _exclusive_publish(
+    parent_descriptor: int,
+    temporary: _OwnedTemporary,
+    destination_name: str,
+) -> None:
     if os.name != "posix" or not sys.platform.startswith("linux"):
         raise RuntimeError(
             "exclusive Dataset distribution publication requires Linux renameat2"
@@ -404,45 +522,90 @@ def _exclusive_publish(source: Path, destination: Path) -> None:
         ctypes.c_uint,
     )
     renameat2.restype = ctypes.c_int
+    _verify_owned_temporary(parent_descriptor, temporary)
     result = renameat2(
-        _AT_FDCWD,
-        os.fsencode(source),
-        _AT_FDCWD,
-        os.fsencode(destination),
+        parent_descriptor,
+        os.fsencode(temporary.name),
+        parent_descriptor,
+        os.fsencode(destination_name),
         _RENAME_NOREPLACE,
     )
-    if result == 0:
-        return
-    error = ctypes.get_errno()
-    if error in {errno.EEXIST, errno.ENOTEMPTY}:
-        raise FileExistsError(
-            error,
-            f"Dataset distribution output already exists: {destination}",
-            destination,
-        )
-    if error in {errno.ENOSYS, errno.EINVAL, errno.ENOTSUP}:
-        raise RuntimeError(
-            "exclusive Dataset distribution publication is unsupported"
-        )
-    raise OSError(error, os.strerror(error), destination)
+    if result != 0:
+        error = ctypes.get_errno()
+        if error in {errno.EEXIST, errno.ENOTEMPTY}:
+            raise FileExistsError(
+                error,
+                f"Dataset distribution output already exists: {destination_name}",
+                destination_name,
+            )
+        if error in {errno.ENOSYS, errno.EINVAL, errno.ENOTSUP}:
+            raise RuntimeError(
+                "exclusive Dataset distribution publication is unsupported"
+            )
+        raise OSError(error, os.strerror(error), destination_name)
+    opened = _entry_identity(os.fstat(temporary.descriptor))
+    linked = os.stat(
+        destination_name,
+        dir_fd=parent_descriptor,
+        follow_symlinks=False,
+    )
+    if (
+        not stat.S_ISDIR(linked.st_mode)
+        or opened != temporary.identity
+        or _entry_identity(linked) != temporary.identity
+    ):
+        raise RuntimeError("published Dataset distribution inode changed")
+
+
+def _clear_directory_descriptor(descriptor: int) -> None:
+    for name in os.listdir(descriptor):
+        linked = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+        if stat.S_ISDIR(linked.st_mode):
+            child = os.open(name, _directory_flags(), dir_fd=descriptor)
+            try:
+                opened_identity = _entry_identity(os.fstat(child))
+                if opened_identity != _entry_identity(linked):
+                    raise RuntimeError("owned temporary child directory changed")
+                _clear_directory_descriptor(child)
+                current = os.stat(
+                    name,
+                    dir_fd=descriptor,
+                    follow_symlinks=False,
+                )
+                if _entry_identity(current) != opened_identity:
+                    raise RuntimeError("owned temporary child directory changed")
+            finally:
+                os.close(child)
+            os.rmdir(name, dir_fd=descriptor)
+        else:
+            os.unlink(name, dir_fd=descriptor)
 
 
 def _cleanup_owned_temporary(
-    path: Path,
-    *,
-    identity: tuple[int, int],
+    parent_descriptor: int,
+    temporary: _OwnedTemporary,
 ) -> None:
+    if _entry_identity(os.fstat(temporary.descriptor)) != temporary.identity:
+        raise RuntimeError("held owned Dataset distribution temporary changed")
+    _clear_directory_descriptor(temporary.descriptor)
     try:
-        metadata = path.stat(follow_symlinks=False)
-    except FileNotFoundError:
-        return
+        linked = os.stat(
+            temporary.name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "owned Dataset distribution temporary entry changed; refusing cleanup"
+        ) from exc
     if (
-        not stat.S_ISDIR(metadata.st_mode)
-        or stat.S_ISLNK(metadata.st_mode)
-        or (metadata.st_dev, metadata.st_ino) != identity
+        not stat.S_ISDIR(linked.st_mode)
+        or _entry_identity(linked) != temporary.identity
     ):
-        raise RuntimeError("owned Dataset distribution temporary changed")
-    shutil.rmtree(path)
+        raise RuntimeError(
+            "owned Dataset distribution temporary entry changed; refusing cleanup"
+        )
+    os.rmdir(temporary.name, dir_fd=parent_descriptor)
 
 
 def _verify_output(
@@ -484,10 +647,6 @@ def build_distribution(
     if isinstance(max_shard_bytes, bool) or max_shard_bytes <= 0:
         raise ValueError("max_shard_bytes must be a positive integer")
     descriptor = Path(os.path.abspath(os.fspath(dataset)))
-    snapshot = load_dataset(descriptor, check_assets=True)
-    release = snapshot.descriptor.get("release")
-    if not isinstance(release, str) or not release:
-        raise ValueError("Dataset release must be a non-empty string")
     root = Path(output_root).resolve()
     distribution_root = root / "distribution"
     version_root = root / "distribution" / "v1"
@@ -496,29 +655,41 @@ def build_distribution(
             f"Dataset distribution output already exists: {version_root}"
         )
     distribution_root.mkdir(parents=True, exist_ok=True)
-    temporary_root = Path(tempfile.mkdtemp(
-        prefix=".v1-build-",
-        dir=distribution_root,
-    ))
-    temporary_metadata = temporary_root.stat(follow_symlinks=False)
-    temporary_identity = (temporary_metadata.st_dev, temporary_metadata.st_ino)
-    published = False
+    distribution = _open_distribution_root(distribution_root)
+    asset_root: _DirectoryChain | None = None
     try:
-        configured_asset_root = snapshot.descriptor.get("asset_root", ".")
+        raw_descriptor = json.loads(descriptor.read_text(encoding="utf-8"))
+        if not isinstance(raw_descriptor, dict):
+            raise ValueError("Dataset descriptor must be an object")
+        configured_asset_root = raw_descriptor.get("asset_root", ".")
         if not isinstance(configured_asset_root, str):
             raise ValueError("Dataset asset_root must be a string")
         lexical_asset_root = Path(os.path.abspath(
             os.fspath(descriptor.parent / configured_asset_root)
         ))
-        expected_asset_root = snapshot.asset_root.stat()
-        asset_root = _open_asset_root(
-            lexical_asset_root,
-            expected_identity=(
-                expected_asset_root.st_dev,
-                expected_asset_root.st_ino,
-            ),
-        )
+        distribution.verify()
+        asset_root = _open_asset_root(lexical_asset_root)
+        snapshot = load_dataset(descriptor, check_assets=True)
+        asset_root.verify()
+        snapshot_asset_root = snapshot.asset_root.stat()
+        held_asset_root = os.fstat(asset_root.current)
+        if (
+            snapshot_asset_root.st_dev,
+            snapshot_asset_root.st_ino,
+        ) != (
+            held_asset_root.st_dev,
+            held_asset_root.st_ino,
+        ):
+            raise ValueError("Dataset asset_root changed during validation")
+        release = snapshot.descriptor.get("release")
+        if not isinstance(release, str) or not release:
+            raise ValueError("Dataset release must be a non-empty string")
+        distribution.verify()
+        temporary = _create_owned_temporary(distribution.current)
+        temporary_root = distribution_root / temporary.name
+        published = False
         try:
+            _verify_owned_temporary(distribution.current, temporary)
             asset_root.verify()
             files = _source_files(snapshot, asset_root.current)
             asset_root.verify()
@@ -550,38 +721,45 @@ def build_distribution(
                     "size_bytes": archive_path.stat().st_size,
                     "sha256": _sha256_file(archive_path),
                 })
-        finally:
-            asset_root.close()
-
-        manifest_value = {
-            "schema_version": "1.0",
-            "dataset_id": snapshot.dataset_id,
-            "release": release,
-            "dataset_digest": snapshot.digest,
-            "total_files": len(file_records),
-            "total_bytes": sum(
-                int(record["size_bytes"]) for record in file_records
-            ),
-            "shards": shard_records,
-            "files": file_records,
-        }
-        manifest_path = temporary_root / "manifest.json"
-        _write_canonical_json(manifest_path, manifest_value)
-        _verify_output(
-            manifest_path,
-            dataset_id=snapshot.dataset_id,
-            release=release,
-            version_root=temporary_root,
-        )
-        _exclusive_publish(temporary_root, version_root)
-        published = True
-        return version_root / "manifest.json"
-    finally:
-        if not published:
-            _cleanup_owned_temporary(
-                temporary_root,
-                identity=temporary_identity,
+            manifest_value = {
+                "schema_version": "1.0",
+                "dataset_id": snapshot.dataset_id,
+                "release": release,
+                "dataset_digest": snapshot.digest,
+                "total_files": len(file_records),
+                "total_bytes": sum(
+                    int(record["size_bytes"]) for record in file_records
+                ),
+                "shards": shard_records,
+                "files": file_records,
+            }
+            manifest_path = temporary_root / "manifest.json"
+            _write_canonical_json(manifest_path, manifest_value)
+            _verify_output(
+                manifest_path,
+                dataset_id=snapshot.dataset_id,
+                release=release,
+                version_root=temporary_root,
             )
+            _verify_owned_temporary(distribution.current, temporary)
+            distribution.verify()
+            _exclusive_publish(
+                distribution.current,
+                temporary,
+                version_root.name,
+            )
+            published = True
+            return version_root / "manifest.json"
+        finally:
+            try:
+                if not published:
+                    _cleanup_owned_temporary(distribution.current, temporary)
+            finally:
+                os.close(temporary.descriptor)
+    finally:
+        if asset_root is not None:
+            asset_root.close()
+        distribution.close()
 
 
 def build_parser() -> argparse.ArgumentParser:
