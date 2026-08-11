@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import stat
 import tempfile
 import unittest
@@ -9,6 +10,7 @@ import warnings
 import zipfile
 from dataclasses import FrozenInstanceError
 from pathlib import Path
+from unittest.mock import patch
 
 from physbench.dataset_distribution import (
     load_distribution_manifest,
@@ -115,11 +117,29 @@ class VerifiedShardExtractionTests(unittest.TestCase):
         *,
         symlinks: set[str] | None = None,
         force_zip64: bool = False,
+        compression: int = zipfile.ZIP_STORED,
+    ) -> None:
+        self.write_zip_to(
+            self.archive,
+            members,
+            symlinks=symlinks,
+            force_zip64=force_zip64,
+            compression=compression,
+        )
+
+    def write_zip_to(
+        self,
+        path: Path,
+        members: list[tuple[str, bytes]],
+        *,
+        symlinks: set[str] | None = None,
+        force_zip64: bool = False,
+        compression: int = zipfile.ZIP_STORED,
     ) -> None:
         with zipfile.ZipFile(
-            self.archive,
+            path,
             "w",
-            compression=zipfile.ZIP_STORED,
+            compression=compression,
         ) as archive:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", UserWarning)
@@ -176,12 +196,13 @@ class VerifiedShardExtractionTests(unittest.TestCase):
         path.write_text(json.dumps(value), encoding="utf-8")
         return path
 
-    def extract(self, manifest) -> list[Path]:
+    def extract(self, manifest, **kwargs: object) -> list[Path]:
         return verify_and_extract_shard(
             self.archive,
             manifest=manifest,
             shard_name="assets-00000.zip",
             staging_root=self.staging,
+            **kwargs,
         )
 
     def test_extracts_valid_zip64_archive_to_staging(self) -> None:
@@ -302,6 +323,157 @@ class VerifiedShardExtractionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid ZIP"):
             self.extract(manifest)
         self.assertFalse(self.staging.exists())
+
+    def test_rejects_symlink_staging_root_without_external_write(self) -> None:
+        members = [("assets/scene/file.bin", b"payload")]
+        self.write_zip(members)
+        manifest = self.load_manifest(members)
+        external = self.root / "external"
+        external.mkdir()
+        self.staging.symlink_to(external, target_is_directory=True)
+
+        with self.assertRaisesRegex((ValueError, OSError), "symlink|staging"):
+            self.extract(manifest)
+
+        self.assertFalse((external / "assets/scene/file.bin").exists())
+
+    def test_directory_fd_anchor_detects_parent_swap_without_external_write(self) -> None:
+        members = [("assets/scene/file.bin", b"payload")]
+        self.write_zip(members)
+        manifest = self.load_manifest(members)
+        external = self.root / "external"
+        external.mkdir()
+        held = self.root / "held-assets"
+        real_open = os.open
+        swapped = False
+
+        def racing_open(path, flags, mode=0o777, *, dir_fd=None):
+            nonlocal swapped
+            descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
+            if path == "assets" and dir_fd is not None and not swapped:
+                swapped = True
+                (self.staging / "assets").rename(held)
+                (self.staging / "assets").symlink_to(
+                    external,
+                    target_is_directory=True,
+                )
+            return descriptor
+
+        with patch("physbench.dataset_distribution.os.open", side_effect=racing_open):
+            with self.assertRaisesRegex((ValueError, OSError), "changed|symlink"):
+                self.extract(manifest)
+
+        self.assertTrue(swapped)
+        self.assertFalse((external / "scene/file.bin").exists())
+
+    def test_archive_is_opened_once_with_nofollow(self) -> None:
+        members = [("assets/file.bin", b"payload")]
+        self.write_zip(members)
+        manifest = self.load_manifest(members)
+        real_open = os.open
+        archive_flags: list[int] = []
+
+        def recording_open(path, flags, mode=0o777, *, dir_fd=None):
+            if os.fspath(path) == os.fspath(self.archive) and dir_fd is None:
+                archive_flags.append(flags)
+            return real_open(path, flags, mode, dir_fd=dir_fd)
+
+        with patch("physbench.dataset_distribution.os.open", side_effect=recording_open):
+            self.extract(manifest)
+
+        self.assertEqual(1, len(archive_flags))
+        self.assertTrue(archive_flags[0] & os.O_NOFOLLOW)
+
+    def test_archive_path_replacement_cannot_change_opened_inode(self) -> None:
+        members = [("assets/original.bin", b"trusted")]
+        self.write_zip(members)
+        manifest = self.load_manifest(members)
+        replacement = self.root / "replacement.zip"
+        self.write_zip_to(replacement, [("assets/original.bin", b"evil")])
+        real_zip_file = zipfile.ZipFile
+        opened_values: list[object] = []
+
+        def replacing_zip_file(opened, *args, **kwargs):
+            opened_values.append(opened)
+            os.replace(replacement, self.archive)
+            return real_zip_file(opened, *args, **kwargs)
+
+        with patch(
+            "physbench.dataset_distribution.zipfile.ZipFile",
+            side_effect=replacing_zip_file,
+        ):
+            extracted = self.extract(manifest)
+
+        self.assertEqual(b"trusted", extracted[0].read_bytes())
+        self.assertTrue(hasattr(opened_values[0], "read"))
+
+    def test_rejects_archive_metadata_change_during_hash(self) -> None:
+        members = [("assets/file.bin", b"payload")]
+        self.write_zip(members)
+        manifest = self.load_manifest(members)
+        real_fstat = os.fstat
+        calls = 0
+
+        def changing_fstat(descriptor):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                current = self.archive.stat()
+                os.utime(
+                    self.archive,
+                    ns=(current.st_atime_ns, current.st_mtime_ns + 1),
+                )
+            return real_fstat(descriptor)
+
+        with patch("physbench.dataset_distribution.os.fstat", side_effect=changing_fstat):
+            with self.assertRaisesRegex(ValueError, "changed during verification"):
+                self.extract(manifest)
+
+    def test_rejects_archive_symlink(self) -> None:
+        members = [("assets/file.bin", b"payload")]
+        self.write_zip(members)
+        target = self.root / "real.zip"
+        self.archive.rename(target)
+        self.archive.symlink_to(target.name)
+        manifest = self.load_manifest(members)
+
+        with self.assertRaisesRegex((ValueError, OSError), "symlink|loop"):
+            self.extract(manifest)
+
+    def test_rejects_member_size_metadata_before_creating_assets(self) -> None:
+        content = b"0" * (128 * 1024)
+        members = [("assets/bomb.bin", content)]
+        self.write_zip(members, compression=zipfile.ZIP_DEFLATED)
+        manifest = self.load_manifest(members, file_size=1)
+
+        with self.assertRaisesRegex(ValueError, "file_size|size"):
+            self.extract(manifest)
+
+        self.assertFalse((self.staging / "assets").exists())
+
+    def test_rejects_cumulative_extraction_budget_before_writing(self) -> None:
+        members = [
+            ("assets/a.bin", b"a" * 8),
+            ("assets/b.bin", b"b" * 8),
+        ]
+        self.write_zip(members, compression=zipfile.ZIP_DEFLATED)
+        manifest = self.load_manifest(members)
+
+        with self.assertRaisesRegex(ValueError, "budget"):
+            self.extract(manifest, max_extracted_bytes=15)
+
+        self.assertFalse((self.staging / "assets").exists())
+
+    def test_rejects_differently_normalized_zip_member(self) -> None:
+        nfd_member = "assets/cafe\u0301.bin"
+        nfc_member = "assets/caf\u00e9.bin"
+        self.write_zip([(nfd_member, b"payload")])
+        manifest = self.load_manifest([(nfc_member, b"payload")])
+
+        with self.assertRaisesRegex(ValueError, "NFC"):
+            self.extract(manifest)
+
+        self.assertFalse((self.staging / "assets").exists())
 
 
 class DistributionManifestValidationTests(unittest.TestCase):
@@ -538,6 +710,69 @@ class DistributionManifestValidationTests(unittest.TestCase):
                     shards[0]["name"] = "different.zip"
 
                 with self.assertRaisesRegex(ValueError, "shard path"):
+                    load_distribution_manifest(
+                        self.write_manifest(value),
+                        dataset_id=DATASET_ID,
+                        release=RELEASE,
+                    )
+
+    def test_rejects_strict_component_prefix_collision_across_shards(self) -> None:
+        value = valid_manifest_value()
+        shards = value["shards"]
+        assert isinstance(shards, list)
+        shards.append({
+            "name": "assets-00001.zip",
+            "path": "distribution/v1/shards/assets-00001.zip",
+            "size_bytes": 149,
+            "sha256": "c" * 64,
+        })
+        value["files"] = [
+            {
+                "path": "assets/a",
+                "shard": "assets-00000.zip",
+                "size_bytes": 1,
+                "sha256": "a" * 64,
+            },
+            {
+                "path": "assets/a/b",
+                "shard": "assets-00001.zip",
+                "size_bytes": 1,
+                "sha256": "b" * 64,
+            },
+        ]
+        value["total_files"] = 2
+        value["total_bytes"] = 2
+
+        with self.assertRaisesRegex(ValueError, "prefix collision"):
+            load_distribution_manifest(
+                self.write_manifest(value),
+                dataset_id=DATASET_ID,
+                release=RELEASE,
+            )
+
+    def test_rejects_non_nfc_manifest_paths_and_normalized_collisions(self) -> None:
+        nfd_path = "assets/cafe\u0301.bin"
+        for include_nfc in (False, True):
+            with self.subTest(include_nfc=include_nfc):
+                value = valid_manifest_value()
+                files = [{
+                    "path": nfd_path,
+                    "shard": "assets-00000.zip",
+                    "size_bytes": 1,
+                    "sha256": "a" * 64,
+                }]
+                if include_nfc:
+                    files.append({
+                        "path": "assets/caf\u00e9.bin",
+                        "shard": "assets-00000.zip",
+                        "size_bytes": 1,
+                        "sha256": "b" * 64,
+                    })
+                value["files"] = files
+                value["total_files"] = len(files)
+                value["total_bytes"] = len(files)
+
+                with self.assertRaisesRegex(ValueError, "NFC|duplicate"):
                     load_distribution_manifest(
                         self.write_manifest(value),
                         dataset_id=DATASET_ID,
