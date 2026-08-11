@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import importlib
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
+import cv2
+import numpy as np
 import torch
 
 
 MODULE_NAME = "physbench.baselines.wan22_st_tube_iou_model"
+MASK_MODULE_NAME = "physbench.baselines.wan22_st_tube_iou_masks"
 
 
 def _model_module():
@@ -15,6 +21,15 @@ def _model_module():
     except ModuleNotFoundError as exc:
         raise AssertionError(
             f"production module {MODULE_NAME} has not been implemented"
+        ) from exc
+
+
+def _mask_module():
+    try:
+        return importlib.import_module(MASK_MODULE_NAME)
+    except ModuleNotFoundError as exc:
+        raise AssertionError(
+            f"production module {MASK_MODULE_NAME} has not been implemented"
         ) from exc
 
 
@@ -202,6 +217,205 @@ class FlowMatchCleanEstimateTests(unittest.TestCase):
 
         self.assertGreater(float(velocity.grad.abs().sum()), 0.0)
         self.assertGreater(float(head.output.weight.grad.abs().sum()), 0.0)
+
+
+class _DeterministicTubeSegmenter:
+    model_id = "fixture/deterministic-segmenter"
+
+    def segment_instances(self, frames, *, prompts, **kwargs):
+        del kwargs
+        height, width = frames[0].shape[:2]
+        tubes = []
+        for instance_index, _prompt in enumerate(prompts):
+            masks = []
+            for frame_index in range(len(frames)):
+                mask = np.zeros((height, width), dtype=np.uint8)
+                if instance_index == 0:
+                    mask[1, min(width - 1, frame_index + 1)] = 255
+                else:
+                    mask[height - 2, max(0, width - 2 - frame_index)] = 255
+                masks.append(mask)
+            tubes.append(masks)
+        return tubes, {
+            "backend": "fixture",
+            "instance_count": len(prompts),
+            "frame_count": len(frames),
+        }
+
+
+class _FailIfCalledSegmenter:
+    model_id = "fixture/deterministic-segmenter"
+
+    def segment_instances(self, *args, **kwargs):
+        del args, kwargs
+        raise AssertionError("valid cached mask tube should not rerun propagation")
+
+
+class MaskTubeMaterializerTests(unittest.TestCase):
+    @staticmethod
+    def _write_video(path: Path, *, frames: int = 5) -> None:
+        writer = cv2.VideoWriter(
+            str(path),
+            cv2.VideoWriter_fourcc(*"mp4v"),
+            24.0,
+            (8, 8),
+        )
+        if not writer.isOpened():
+            raise RuntimeError("fixture video writer failed to open")
+        for index in range(frames):
+            frame = np.full((8, 8, 3), index * 20, dtype=np.uint8)
+            writer.write(frame)
+        writer.release()
+
+    @staticmethod
+    def _fixture(root: Path) -> tuple[Path, Path, Path]:
+        canonical = root / "assets" / "scene" / "case-a" / "canonical"
+        masks = canonical / "masks"
+        masks.mkdir(parents=True)
+        reference = canonical / "reference.mp4"
+        normalized = root / "normalized.mp4"
+        MaskTubeMaterializerTests._write_video(reference)
+        MaskTubeMaterializerTests._write_video(normalized)
+        first = np.zeros((1, 8, 8), dtype=np.uint8)
+        first[0, 1:3, 1:3] = 1
+        second = np.zeros((1, 8, 8), dtype=np.uint8)
+        second[0, 5:7, 5:7] = 1
+        np.savez_compressed(
+            masks / "01.npz",
+            masks=first,
+            mask_ids=np.asarray(["01"]),
+            object_ids=np.asarray(["object_1"]),
+            frame_index=np.asarray(0),
+        )
+        np.savez_compressed(
+            masks / "02.npz",
+            masks=second,
+            mask_ids=np.asarray(["02"]),
+            object_ids=np.asarray(["object_2"]),
+            frame_index=np.asarray(0),
+        )
+        manifest = masks / "manifest.json"
+        manifest.write_text(json.dumps({
+            "schema_version": "1.2",
+            "case_id": "case-a",
+            "frame_scope": "first_frame_only",
+            "frame_index": 0,
+            "image_shape_hw": [8, 8],
+            "instances": [
+                {
+                    "mask_id": "01",
+                    "object_id": "object_1",
+                    "npz_asset": "assets/scene/case-a/canonical/masks/01.npz",
+                },
+                {
+                    "mask_id": "02",
+                    "object_id": "object_2",
+                    "npz_asset": "assets/scene/case-a/canonical/masks/02.npz",
+                },
+            ],
+        }), encoding="utf-8")
+        return reference, normalized, manifest
+
+    def test_sibling_manifest_resolution_is_contained_and_case_checked(self) -> None:
+        module = _mask_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            reference, _, manifest = self._fixture(root)
+
+            resolved = module.resolve_training_mask_manifest(
+                reference,
+                dataset_root=root,
+                case_id="case-a",
+            )
+
+            self.assertEqual(manifest.resolve(), resolved)
+            with self.assertRaisesRegex(ValueError, "case_id"):
+                module.resolve_training_mask_manifest(
+                    reference,
+                    dataset_root=root,
+                    case_id="different-case",
+                )
+            outside = root.parent / "outside" / "reference.mp4"
+            with self.assertRaisesRegex(ValueError, "Dataset root"):
+                module.resolve_training_mask_manifest(
+                    outside,
+                    dataset_root=root,
+                    case_id="case-a",
+                )
+
+    def test_contain_transform_uses_nearest_resize_and_zero_padding(self) -> None:
+        module = _mask_module()
+        source = np.zeros((4, 8), dtype=np.uint8)
+        source[1:3, 2:6] = 1
+
+        transformed = module.contain_mask(
+            source,
+            output_width=8,
+            output_height=8,
+        )
+
+        self.assertEqual((8, 8), transformed.shape)
+        self.assertEqual(0, int(transformed[:2].sum()))
+        self.assertEqual(0, int(transformed[6:].sum()))
+        self.assertEqual(8, int(transformed.sum()))
+        self.assertEqual({0, 1}, set(np.unique(transformed).tolist()))
+
+    def test_materializer_unions_instances_and_reuses_valid_cache(self) -> None:
+        module = _mask_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, normalized, manifest = self._fixture(root)
+            output = root / "tube.npz"
+
+            audit = module.materialize_subject_mask_tube(
+                normalized_video=normalized,
+                mask_manifest=manifest,
+                dataset_root=root,
+                output=output,
+                case_id="case-a",
+                segmenter=_DeterministicTubeSegmenter(),
+            )
+            cached = module.materialize_subject_mask_tube(
+                normalized_video=normalized,
+                mask_manifest=manifest,
+                dataset_root=root,
+                output=output,
+                case_id="case-a",
+                segmenter=_FailIfCalledSegmenter(),
+            )
+
+            with np.load(output, allow_pickle=False) as payload:
+                tube = payload["masks"]
+            self.assertEqual((5, 8, 8), tube.shape)
+            self.assertEqual(np.uint8, tube.dtype)
+            self.assertEqual({0, 1}, set(np.unique(tube).tolist()))
+            self.assertTrue(all(int(frame.sum()) == 2 for frame in tube))
+            self.assertEqual("materialized", audit["status"])
+            self.assertEqual("cached", cached["status"])
+            self.assertEqual(2, audit["instance_count"])
+            self.assertEqual(5, audit["frame_count"])
+            self.assertEqual(audit["tube_sha256"], cached["tube_sha256"])
+
+    def test_materializer_rejects_malformed_nonbinary_seed(self) -> None:
+        module = _mask_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, normalized, manifest = self._fixture(root)
+            with np.load(manifest.parent / "01.npz", allow_pickle=False) as payload:
+                values = {key: payload[key] for key in payload.files}
+            values["masks"] = values["masks"].copy()
+            values["masks"][0, 0, 0] = 2
+            np.savez_compressed(manifest.parent / "01.npz", **values)
+
+            with self.assertRaisesRegex(ValueError, "binary"):
+                module.materialize_subject_mask_tube(
+                    normalized_video=normalized,
+                    mask_manifest=manifest,
+                    dataset_root=root,
+                    output=root / "tube.npz",
+                    case_id="case-a",
+                    segmenter=_DeterministicTubeSegmenter(),
+                )
 
 
 if __name__ == "__main__":
