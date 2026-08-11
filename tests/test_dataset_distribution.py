@@ -3,14 +3,17 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 import warnings
 import zipfile
 from dataclasses import FrozenInstanceError
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
@@ -904,7 +907,7 @@ class DatasetDistributionBuilderTests(unittest.TestCase):
         descriptor: Path,
         output_root: Path,
         *,
-        max_shard_bytes: int = 300,
+        max_shard_bytes: int = 800,
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [
@@ -1037,6 +1040,7 @@ class DatasetDistributionBuilderTests(unittest.TestCase):
             for shard, members in zip(manifest.shards, expected_members, strict=True):
                 archive_path = first_output / shard.path
                 archive_bytes = archive_path.read_bytes()
+                self.assertLessEqual(len(archive_bytes), 800)
                 self.assertEqual(len(archive_bytes), shard.size_bytes)
                 self.assertEqual(
                     hashlib.sha256(archive_bytes).hexdigest(),
@@ -1067,6 +1071,20 @@ class DatasetDistributionBuilderTests(unittest.TestCase):
 
             self.assertNotEqual(0, result.returncode)
             self.assertIn("exceeds max shard bytes", result.stderr)
+
+    def test_rejects_when_a_single_stored_member_exceeds_the_zip_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self.make_dataset(root / "source")
+
+            result = self.invoke_builder(
+                descriptor,
+                root / "output",
+                max_shard_bytes=300,
+            )
+
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("ZIP metadata", result.stderr)
 
     def test_rejects_a_referenced_asset_symlink(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1111,7 +1129,7 @@ class DatasetDistributionBuilderTests(unittest.TestCase):
                 manifest_path = distribution_builder.build_distribution(
                     descriptor,
                     output_root=root / "output",
-                    max_shard_bytes=300,
+                    max_shard_bytes=800,
                 )
 
             value = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -1176,7 +1194,92 @@ class DatasetDistributionBuilderTests(unittest.TestCase):
                     distribution_builder.build_distribution(
                         descriptor,
                         output_root=root / "output",
-                        max_shard_bytes=300,
+                        max_shard_bytes=800,
+                    )
+
+    def test_rejects_same_inode_rewrite_with_restored_mtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self.make_dataset(root / "source")
+            frame = root / "source" / "assets" / "01-frame.bin"
+            real_write_shard = distribution_builder._write_shard
+            rewritten = False
+
+            def write_after_rewrite(*args, **kwargs):
+                nonlocal rewritten
+                if not rewritten:
+                    rewritten = True
+                    before = frame.stat()
+                    with frame.open("r+b") as handle:
+                        handle.write(b"EEEEEEEEEE")
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                    os.utime(
+                        frame,
+                        ns=(before.st_atime_ns, before.st_mtime_ns),
+                    )
+                    self.assertEqual(before.st_ino, frame.stat().st_ino)
+                    self.assertEqual(before.st_mtime_ns, frame.stat().st_mtime_ns)
+                    self.assertNotEqual(before.st_ctime_ns, frame.stat().st_ctime_ns)
+                return real_write_shard(*args, **kwargs)
+
+            with patch.object(
+                distribution_builder,
+                "_write_shard",
+                side_effect=write_after_rewrite,
+            ), self.assertRaisesRegex(ValueError, "changed"):
+                distribution_builder.build_distribution(
+                    descriptor,
+                    output_root=root / "output",
+                    max_shard_bytes=800,
+                )
+
+    def test_rejects_symlinked_or_swapped_asset_root_components(self) -> None:
+        for mutation in ("configured-symlink", "parent-swap"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                base = Path(temporary)
+                work = base / "work"
+                descriptor = self.make_dataset(work / "source")
+                if mutation == "configured-symlink":
+                    link = work / "source-link"
+                    link.symlink_to(work / "source", target_is_directory=True)
+                    value = json.loads(descriptor.read_text(encoding="utf-8"))
+                    value["asset_root"] = "../../../source-link"
+                    descriptor.write_text(json.dumps(value), encoding="utf-8")
+                    context = patch.object(
+                        distribution_builder,
+                        "_open_asset_root",
+                        wraps=distribution_builder._open_asset_root,
+                    )
+                else:
+                    real_open_asset_root = distribution_builder._open_asset_root
+                    swapped = False
+
+                    def open_after_parent_swap(*args, **kwargs):
+                        nonlocal swapped
+                        if not swapped:
+                            swapped = True
+                            held = base / "held-work"
+                            external = base / "external"
+                            work.rename(held)
+                            shutil.copytree(held, external)
+                            work.symlink_to(external, target_is_directory=True)
+                        return real_open_asset_root(*args, **kwargs)
+
+                    context = patch.object(
+                        distribution_builder,
+                        "_open_asset_root",
+                        side_effect=open_after_parent_swap,
+                    )
+
+                with context, self.assertRaisesRegex(
+                    ValueError,
+                    "asset_root.*symlink|directory changed",
+                ):
+                    distribution_builder.build_distribution(
+                        descriptor,
+                        output_root=base / "output",
+                        max_shard_bytes=800,
                     )
 
     def test_rejects_rebuilding_over_an_existing_distribution(self) -> None:
@@ -1205,6 +1308,67 @@ class DatasetDistributionBuilderTests(unittest.TestCase):
                 if path.is_file()
             }
             self.assertEqual(before, after)
+
+    def test_failed_builds_do_not_leave_the_final_distribution(self) -> None:
+        for failure in ("source", "self-verification"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                descriptor = self.make_dataset(root / "source")
+                target = (
+                    "_write_shard"
+                    if failure == "source"
+                    else "_verify_output"
+                )
+                with patch.object(
+                    distribution_builder,
+                    target,
+                    side_effect=ValueError(f"forced {failure} failure"),
+                ), self.assertRaisesRegex(ValueError, f"forced {failure}"):
+                    distribution_builder.build_distribution(
+                        descriptor,
+                        output_root=root / "output",
+                        max_shard_bytes=800,
+                    )
+
+                self.assertFalse(
+                    (root / "output" / "distribution" / "v1").exists()
+                )
+
+    def test_concurrent_builders_publish_exclusively(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self.make_dataset(root / "source")
+            output = root / "output"
+            barrier = threading.Barrier(2)
+            real_open_asset_root = distribution_builder._open_asset_root
+
+            def synchronized_open(*args, **kwargs):
+                barrier.wait(timeout=5)
+                return real_open_asset_root(*args, **kwargs)
+
+            def build():
+                try:
+                    return distribution_builder.build_distribution(
+                        descriptor,
+                        output_root=output,
+                        max_shard_bytes=800,
+                    )
+                except BaseException as exc:
+                    return exc
+
+            with patch.object(
+                distribution_builder,
+                "_open_asset_root",
+                side_effect=synchronized_open,
+            ), ThreadPoolExecutor(max_workers=2) as executor:
+                results = list(executor.map(lambda _: build(), range(2)))
+
+            self.assertEqual(1, sum(isinstance(item, Path) for item in results))
+            self.assertEqual(
+                1,
+                sum(isinstance(item, FileExistsError) for item in results),
+                results,
+            )
 
 
 if __name__ == "__main__":

@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
+import errno
 import hashlib
 import json
 import os
+import shutil
 import stat
+import sys
 import tempfile
 import unicodedata
 import zipfile
@@ -23,13 +27,20 @@ from physbench.datasets import load_dataset
 DEFAULT_MAX_SHARD_BYTES = 2_000_000_000
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 ZIP_MODE = stat.S_IFREG | 0o644
+# Worst-case standard-library ZIP overhead. A member may use a 20-byte local
+# ZIP64 extra, a 24-byte signed ZIP64 data descriptor, and a 28-byte central
+# ZIP64 extra. The archive trailer may contain ZIP64 EOCD + locator + EOCD.
+_ZIP_MEMBER_FIXED_OVERHEAD_MAX = 30 + 20 + 24 + 46 + 28
+_ZIP_END_OVERHEAD_MAX = 56 + 20 + 22
+_AT_FDCWD = -100
+_RENAME_NOREPLACE = 1
 
 
 @dataclass(frozen=True)
 class SourceFile:
     path: str
     size_bytes: int
-    identity: tuple[int, int, int, int]
+    identity: tuple[int, int, int, int, int]
 
 
 @dataclass
@@ -59,8 +70,14 @@ class _DirectoryChain:
             os.close(descriptor)
 
 
-def _stat_identity(value: os.stat_result) -> tuple[int, int, int, int]:
-    return (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns)
+def _stat_identity(value: os.stat_result) -> tuple[int, int, int, int, int]:
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
 
 
 def _directory_flags() -> int:
@@ -87,18 +104,42 @@ def _require_secure_source_io() -> None:
         )
 
 
-def _open_asset_root(path: Path) -> int:
+def _open_asset_root(
+    path: Path,
+    *,
+    expected_identity: tuple[int, int],
+) -> _DirectoryChain:
     _require_secure_source_io()
+    if not path.is_absolute():
+        raise ValueError("Dataset asset_root anchor must be absolute")
+    components = path.parts[1:]
+    chain = _DirectoryChain(
+        descriptors=[os.open(path.anchor, _directory_flags())],
+        links=[],
+    )
     try:
-        descriptor = os.open(path, _directory_flags())
+        for component in components:
+            parent = chain.current
+            child = os.open(component, _directory_flags(), dir_fd=parent)
+            chain.descriptors.append(child)
+            chain.links.append((parent, component, child))
+            chain.verify()
     except OSError as exc:
+        chain.close()
         raise ValueError(
             f"Dataset asset_root is missing, a symlink, or not a directory: {path}"
         ) from exc
-    if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
-        os.close(descriptor)
-        raise ValueError(f"Dataset asset_root is not a directory: {path}")
-    return descriptor
+    except BaseException:
+        chain.close()
+        raise
+    actual = os.fstat(chain.current)
+    if not stat.S_ISDIR(actual.st_mode) or (
+        actual.st_dev,
+        actual.st_ino,
+    ) != expected_identity:
+        chain.close()
+        raise ValueError("Dataset asset_root directory changed after validation")
+    return chain
 
 
 def _open_source_descriptor(asset_root_descriptor: int, relative: str) -> int:
@@ -201,18 +242,29 @@ def _partition_files(
 ) -> list[list[SourceFile]]:
     shards: list[list[SourceFile]] = []
     current: list[SourceFile] = []
-    current_bytes = 0
+    current_bytes = _ZIP_END_OVERHEAD_MAX
     for file_record in files:
         if file_record.size_bytes > max_shard_bytes:
             raise ValueError(
                 f"indexed Dataset asset exceeds max shard bytes: {file_record.path}"
             )
-        if current and current_bytes + file_record.size_bytes > max_shard_bytes:
+        name_bytes = len(file_record.path.encode("utf-8"))
+        contribution = (
+            file_record.size_bytes
+            + _ZIP_MEMBER_FIXED_OVERHEAD_MAX
+            + 2 * name_bytes
+        )
+        if _ZIP_END_OVERHEAD_MAX + contribution > max_shard_bytes:
+            raise ValueError(
+                "indexed Dataset asset plus stored ZIP metadata exceeds max shard "
+                f"bytes: {file_record.path}"
+            )
+        if current and current_bytes + contribution > max_shard_bytes:
             shards.append(current)
             current = []
-            current_bytes = 0
+            current_bytes = _ZIP_END_OVERHEAD_MAX
         current.append(file_record)
-        current_bytes += file_record.size_bytes
+        current_bytes += contribution
     if current:
         shards.append(current)
     return shards
@@ -254,18 +306,8 @@ def _write_member(
                 digest.update(block)
                 copied += len(block)
         after = os.fstat(source.fileno())
-    identity_before = (
-        before.st_dev,
-        before.st_ino,
-        before.st_size,
-        before.st_mtime_ns,
-    )
-    identity_after = (
-        after.st_dev,
-        after.st_ino,
-        after.st_size,
-        after.st_mtime_ns,
-    )
+    identity_before = _stat_identity(before)
+    identity_after = _stat_identity(after)
     if copied != file_record.size_bytes or not (
         identity_before == identity_after == file_record.identity
     ):
@@ -279,6 +321,8 @@ def _write_shard(
     path: Path,
     asset_root_descriptor: int,
     files: Sequence[SourceFile],
+    *,
+    max_shard_bytes: int,
 ) -> list[dict[str, object]]:
     path.parent.mkdir(parents=True, exist_ok=True)
     records: list[dict[str, object]] = []
@@ -298,6 +342,8 @@ def _write_shard(
                     file_record,
                 ),
             })
+    if path.stat().st_size > max_shard_bytes:
+        raise ValueError(f"final stored ZIP exceeds max shard bytes: {path.name}")
     return records
 
 
@@ -338,12 +384,73 @@ def _write_canonical_json(path: Path, value: object) -> None:
         raise
 
 
+def _exclusive_publish(source: Path, destination: Path) -> None:
+    if os.name != "posix" or not sys.platform.startswith("linux"):
+        raise RuntimeError(
+            "exclusive Dataset distribution publication requires Linux renameat2"
+        )
+    libc = ctypes.CDLL(None, use_errno=True)
+    try:
+        renameat2 = libc.renameat2
+    except AttributeError as exc:
+        raise RuntimeError(
+            "exclusive Dataset distribution publication requires renameat2"
+        ) from exc
+    renameat2.argtypes = (
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    )
+    renameat2.restype = ctypes.c_int
+    result = renameat2(
+        _AT_FDCWD,
+        os.fsencode(source),
+        _AT_FDCWD,
+        os.fsencode(destination),
+        _RENAME_NOREPLACE,
+    )
+    if result == 0:
+        return
+    error = ctypes.get_errno()
+    if error in {errno.EEXIST, errno.ENOTEMPTY}:
+        raise FileExistsError(
+            error,
+            f"Dataset distribution output already exists: {destination}",
+            destination,
+        )
+    if error in {errno.ENOSYS, errno.EINVAL, errno.ENOTSUP}:
+        raise RuntimeError(
+            "exclusive Dataset distribution publication is unsupported"
+        )
+    raise OSError(error, os.strerror(error), destination)
+
+
+def _cleanup_owned_temporary(
+    path: Path,
+    *,
+    identity: tuple[int, int],
+) -> None:
+    try:
+        metadata = path.stat(follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or stat.S_ISLNK(metadata.st_mode)
+        or (metadata.st_dev, metadata.st_ino) != identity
+    ):
+        raise RuntimeError("owned Dataset distribution temporary changed")
+    shutil.rmtree(path)
+
+
 def _verify_output(
     manifest_path: Path,
     *,
     dataset_id: str,
     release: str,
-    output_root: Path,
+    version_root: Path,
 ) -> None:
     manifest = load_distribution_manifest(
         manifest_path,
@@ -360,7 +467,7 @@ def _verify_output(
             prefix="vphysbench-distribution-verify-"
         ) as temporary:
             verify_and_extract_shard(
-                output_root / shard.path,
+                version_root / "shards" / shard.name,
                 manifest=manifest,
                 shard_name=shard.name,
                 staging_root=Path(temporary) / "staging",
@@ -376,63 +483,105 @@ def build_distribution(
 ) -> Path:
     if isinstance(max_shard_bytes, bool) or max_shard_bytes <= 0:
         raise ValueError("max_shard_bytes must be a positive integer")
-    descriptor = Path(dataset).resolve()
+    descriptor = Path(os.path.abspath(os.fspath(dataset)))
     snapshot = load_dataset(descriptor, check_assets=True)
     release = snapshot.descriptor.get("release")
     if not isinstance(release, str) or not release:
         raise ValueError("Dataset release must be a non-empty string")
     root = Path(output_root).resolve()
+    distribution_root = root / "distribution"
     version_root = root / "distribution" / "v1"
     if version_root.exists():
         raise FileExistsError(
             f"Dataset distribution output already exists: {version_root}"
         )
-    asset_root_descriptor = _open_asset_root(snapshot.asset_root)
+    distribution_root.mkdir(parents=True, exist_ok=True)
+    temporary_root = Path(tempfile.mkdtemp(
+        prefix=".v1-build-",
+        dir=distribution_root,
+    ))
+    temporary_metadata = temporary_root.stat(follow_symlinks=False)
+    temporary_identity = (temporary_metadata.st_dev, temporary_metadata.st_ino)
+    published = False
     try:
-        files = _source_files(snapshot, asset_root_descriptor)
-        partitions = _partition_files(files, max_shard_bytes=max_shard_bytes)
-
-        shard_root = version_root / "shards"
-        shard_root.mkdir(parents=True, exist_ok=True)
-        file_records: list[dict[str, object]] = []
-        shard_records: list[dict[str, object]] = []
-        for index, partition in enumerate(partitions, 1):
-            name = f"shard-{index:05d}.zip"
-            archive_path = shard_root / name
-            records = _write_shard(
-                archive_path,
-                asset_root_descriptor,
-                partition,
+        configured_asset_root = snapshot.descriptor.get("asset_root", ".")
+        if not isinstance(configured_asset_root, str):
+            raise ValueError("Dataset asset_root must be a string")
+        lexical_asset_root = Path(os.path.abspath(
+            os.fspath(descriptor.parent / configured_asset_root)
+        ))
+        expected_asset_root = snapshot.asset_root.stat()
+        asset_root = _open_asset_root(
+            lexical_asset_root,
+            expected_identity=(
+                expected_asset_root.st_dev,
+                expected_asset_root.st_ino,
+            ),
+        )
+        try:
+            asset_root.verify()
+            files = _source_files(snapshot, asset_root.current)
+            asset_root.verify()
+            partitions = _partition_files(
+                files,
+                max_shard_bytes=max_shard_bytes,
             )
-            file_records.extend({**record, "shard": name} for record in records)
-            shard_records.append({
-                "name": name,
-                "path": f"distribution/v1/shards/{name}",
-                "size_bytes": archive_path.stat().st_size,
-                "sha256": _sha256_file(archive_path),
-            })
-    finally:
-        os.close(asset_root_descriptor)
 
-    manifest_value = {
-        "schema_version": "1.0",
-        "dataset_id": snapshot.dataset_id,
-        "release": release,
-        "dataset_digest": snapshot.digest,
-        "total_files": len(file_records),
-        "total_bytes": sum(int(record["size_bytes"]) for record in file_records),
-        "shards": shard_records,
-        "files": file_records,
-    }
-    manifest_path = version_root / "manifest.json"
-    _write_canonical_json(manifest_path, manifest_value)
-    _verify_output(
-        manifest_path,
-        dataset_id=snapshot.dataset_id,
-        release=release,
-        output_root=root,
-    )
-    return manifest_path
+            shard_root = temporary_root / "shards"
+            shard_root.mkdir()
+            file_records: list[dict[str, object]] = []
+            shard_records: list[dict[str, object]] = []
+            for index, partition in enumerate(partitions, 1):
+                name = f"shard-{index:05d}.zip"
+                archive_path = shard_root / name
+                records = _write_shard(
+                    archive_path,
+                    asset_root.current,
+                    partition,
+                    max_shard_bytes=max_shard_bytes,
+                )
+                asset_root.verify()
+                file_records.extend(
+                    {**record, "shard": name} for record in records
+                )
+                shard_records.append({
+                    "name": name,
+                    "path": f"distribution/v1/shards/{name}",
+                    "size_bytes": archive_path.stat().st_size,
+                    "sha256": _sha256_file(archive_path),
+                })
+        finally:
+            asset_root.close()
+
+        manifest_value = {
+            "schema_version": "1.0",
+            "dataset_id": snapshot.dataset_id,
+            "release": release,
+            "dataset_digest": snapshot.digest,
+            "total_files": len(file_records),
+            "total_bytes": sum(
+                int(record["size_bytes"]) for record in file_records
+            ),
+            "shards": shard_records,
+            "files": file_records,
+        }
+        manifest_path = temporary_root / "manifest.json"
+        _write_canonical_json(manifest_path, manifest_value)
+        _verify_output(
+            manifest_path,
+            dataset_id=snapshot.dataset_id,
+            release=release,
+            version_root=temporary_root,
+        )
+        _exclusive_publish(temporary_root, version_root)
+        published = True
+        return version_root / "manifest.json"
+    finally:
+        if not published:
+            _cleanup_owned_temporary(
+                temporary_root,
+                identity=temporary_identity,
+            )
 
 
 def build_parser() -> argparse.ArgumentParser:
