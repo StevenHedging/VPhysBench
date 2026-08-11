@@ -605,6 +605,59 @@ class DatasetHubTests(unittest.TestCase):
                     ).exists()
                 )
 
+    def test_manifest_readme_hash_cannot_be_overridden_by_local_scaffold(self) -> None:
+        root = self.make_project()
+        remote, manifest = self.make_distribution(root)
+        shard = remote / "distribution" / "v1" / "shards" / "assets-00000.zip"
+        remote_readme = b"immutable manifest README\n"
+        with zipfile.ZipFile(
+            shard,
+            "w",
+            compression=zipfile.ZIP_STORED,
+        ) as archive:
+            for name, payload in sorted(self.asset_contents().items()):
+                archive.writestr(name, payload)
+            archive.writestr("assets/README.md", remote_readme)
+        shard_record = manifest["shards"][0]  # type: ignore[index]
+        shard_record["size_bytes"] = shard.stat().st_size
+        shard_record["sha256"] = hashlib.sha256(shard.read_bytes()).hexdigest()
+        manifest_files = manifest["files"]  # type: ignore[assignment]
+        assert isinstance(manifest_files, list)
+        manifest_files.append({
+            "path": "assets/README.md",
+            "shard": "assets-00000.zip",
+            "size_bytes": len(remote_readme),
+            "sha256": hashlib.sha256(remote_readme).hexdigest(),
+        })
+        manifest["total_files"] = len(manifest_files)
+        manifest["total_bytes"] += len(remote_readme)  # type: ignore[operator]
+        (remote / "distribution" / "v1" / "manifest.json").write_text(
+            json.dumps(manifest),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "README|trusted|manifest|collision|differs",
+        ):
+            pull_dataset(
+                root / "datasets" / "huggingface.json",
+                local_dir=root / "datasets",
+                hf_executable="/tools/hf",
+                runner=self.copying_runner(remote, []),
+                check_assets=True,
+            )
+
+        self.assertEqual(
+            "tracked Dataset assets scaffold\n",
+            (root / "datasets" / "assets" / "README.md").read_text(
+                encoding="utf-8"
+            ),
+        )
+        self.assertFalse(
+            (root / "datasets" / "assets" / "example" / "video.bin").exists()
+        )
+
     def test_loader_after_content_or_asset_root_swap_does_not_publish(self) -> None:
         for mutation in ("content", "root"):
             with self.subTest(mutation=mutation):

@@ -281,6 +281,27 @@ def _trusted_asset_scaffold(destination: Path) -> dict[str, tuple[int, str]]:
         os.close(descriptor)
 
 
+def _trusted_manifest_extras(
+    manifest: DistributionManifest,
+    trusted_files: dict[str, tuple[int, str]],
+) -> dict[str, tuple[int, str]]:
+    declared = {
+        record.path: (record.size_bytes, record.sha256)
+        for record in manifest.files
+    }
+    extras: dict[str, tuple[int, str]] = {}
+    for path, trusted in trusted_files.items():
+        if path in declared:
+            if trusted != declared[path]:
+                raise RuntimeError(
+                    "trusted Dataset scaffold differs from manifest: "
+                    f"{path}"
+                )
+            continue
+        extras[path] = trusted
+    return extras
+
+
 def _download_file(
     *,
     executable: str,
@@ -649,7 +670,10 @@ def pull_dataset(
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"invalid Dataset distribution manifest: {exc}") from exc
 
-    trusted_files = _trusted_asset_scaffold(destination)
+    trusted_files = _trusted_manifest_extras(
+        manifest,
+        _trusted_asset_scaffold(destination),
+    )
     if check_assets and _active_tree_is_valid(
         destination,
         descriptor,
