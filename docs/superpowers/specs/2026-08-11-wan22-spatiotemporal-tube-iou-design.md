@@ -85,7 +85,9 @@ because a static mask would change the requested spatio-temporal objective.
 
 ## Auxiliary Model and Loss
 
-`LatentOccupancyHead` maps `[B,16,T,H,W]` to one logit channel using
+The local WAN2.2-TI2V-5B VAE checkpoint has a 96-channel encoder statistics
+head and a 48-channel decoder input, so its sampled clean latent has 48
+channels. `LatentOccupancyHead` therefore maps `[B,48,T,H,W]` to one logit channel using
 `Conv3d(16,32,3,padding=1)`, SiLU, and `Conv3d(32,1,1)`. The sigmoid output is
 `P_pred`. Ground-truth uint8 tubes are converted to float and resized to the
 actual latent `T,H,W` with nearest-neighbor interpolation. No framewise loss,

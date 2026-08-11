@@ -196,7 +196,7 @@ def noise_weight(
 class LatentOccupancyHead(nn.Module):
     """Learned latent-space proxy for physical-subject occupancy."""
 
-    def __init__(self, latent_channels: int = 16, hidden_channels: int = 32):
+    def __init__(self, latent_channels: int = 48, hidden_channels: int = 32):
         super().__init__()
         if latent_channels < 1 or hidden_channels < 1:
             raise ValueError("occupancy-head channel counts must be positive")

@@ -575,7 +575,7 @@ class STTubeIoUBaselineRegistrationTests(unittest.TestCase):
                 "st_loss_weighting": "linear_clean",
                 "st_noise_threshold": 0.5,
                 "st_loss_warmup_steps": 100,
-                "latent_channels": 16,
+                "latent_channels": 48,
                 "hidden_channels": 32,
                 "mask_segmenter_model_id": "facebook/sam2.1-hiera-tiny",
             },
@@ -605,6 +605,13 @@ class STTubeIoUBaselineRegistrationTests(unittest.TestCase):
         })
         self.assertEqual(1, config["micro_batch_size"])
         self.assertEqual(8, config["global_batch_size"])
+        self.assertEqual(48, config["latent_channels"])
+        self.assertEqual(
+            48,
+            bundle.value["model"]["latent_occupancy_head"]["latent_channels"],
+        )
+        default_head = _model_module().LatentOccupancyHead()
+        self.assertEqual(48, default_head.features[0].in_channels)
 
     def test_four_gpu_parallelism_preserves_global_batch(self) -> None:
         adapter = _adapter_module().Wan22STTubeIoULoraAdapter(

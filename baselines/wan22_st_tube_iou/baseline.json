@@ -38,7 +38,7 @@
     },
     "latent_occupancy_head": {
       "representation": "learned_latent_space_subject_occupancy_proxy",
-      "latent_channels": 16,
+      "latent_channels": 48,
       "hidden_channels": 32,
       "architecture": "conv3d_3x3_silu_conv3d_1x1",
       "inference_required": false
@@ -108,7 +108,7 @@
       "st_loss_weighting": "linear_clean",
       "st_noise_threshold": 0.5,
       "st_loss_warmup_steps": 100,
-      "latent_channels": 16,
+      "latent_channels": 48,
       "hidden_channels": 32,
       "mask_segmenter_model_id": "facebook/sam2.1-hiera-tiny",
       "mask_supervision": "sam2_propagated_first_frame_subject_masks"

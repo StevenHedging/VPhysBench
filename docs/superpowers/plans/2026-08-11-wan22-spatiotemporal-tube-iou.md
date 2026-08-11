@@ -53,7 +53,9 @@ Run: `PYTHONPATH=src:tests:. ./.venv/bin/python -m unittest tests.test_wan22_st_
 
 Use float32 reductions, define both-empty score as one, implement exact
 batch-broadcasting for sigma, and use
-`Conv3d(16,32,3,padding=1) -> SiLU -> Conv3d(32,1,1)` for occupancy logits.
+`Conv3d(48,32,3,padding=1) -> SiLU -> Conv3d(32,1,1)` for occupancy logits;
+48 is derived from the actual TI2V-5B VAE checkpoint's 96-channel posterior
+statistics and 48-channel decoder input.
 
 - [ ] **Step 5: Run tests and commit**
 
