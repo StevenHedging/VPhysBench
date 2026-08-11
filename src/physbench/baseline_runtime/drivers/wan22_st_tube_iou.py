@@ -23,6 +23,8 @@ class Wan22STTubeIoUManagedDriver(Wan22ManagedDriver):
             "src/physbench/baselines/wan22_st_tube_iou.py",
             "src/physbench/baselines/wan22_st_tube_iou_model.py",
             "src/physbench/baselines/wan22_st_tube_iou_masks.py",
+            "scripts/train_wan22_st_tube_iou.sh",
+            "scripts/wan22_st_tube_iou_train.py",
         )
         paths.update({name: root / name for name in relative})
         missing = [

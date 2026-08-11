@@ -16,6 +16,7 @@ from physbench.baseline_api import discover_baseline_bundles, load_baseline_bund
 MODULE_NAME = "physbench.baselines.wan22_st_tube_iou_model"
 MASK_MODULE_NAME = "physbench.baselines.wan22_st_tube_iou_masks"
 ADAPTER_MODULE_NAME = "physbench.baselines.wan22_st_tube_iou"
+TRAINER_MODULE_NAME = "scripts.wan22_st_tube_iou_train"
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE_ID = "wan22_ti2v_5b_lora_r32_st_tube_iou_v1"
 BASELINE_PATH = ROOT / "baselines" / "wan22_st_tube_iou" / "baseline.json"
@@ -45,6 +46,15 @@ def _adapter_module():
     except ModuleNotFoundError as exc:
         raise AssertionError(
             f"production module {ADAPTER_MODULE_NAME} has not been implemented"
+        ) from exc
+
+
+def _trainer_module():
+    try:
+        return importlib.import_module(TRAINER_MODULE_NAME)
+    except ModuleNotFoundError as exc:
+        raise AssertionError(
+            f"production module {TRAINER_MODULE_NAME} has not been implemented"
         ) from exc
 
 
@@ -540,6 +550,144 @@ class STTubeIoUBaselineRegistrationTests(unittest.TestCase):
         self.assertEqual("masks/case-a.npz", row["subject_mask"])
         self.assertEqual("a pendulum swings", row["prompt"])
         self.assertEqual(ROOT / "scripts" / "wan22_generate.py", adapter._generation_script())
+
+
+class _FakeScheduler:
+    def __init__(self):
+        self.timesteps = torch.tensor([1000.0, 500.0])
+        self.sigmas = torch.tensor([1.0, 0.5])
+        self.linear_timesteps_weights = torch.tensor([2.0, 3.0])
+
+
+class _FakeDiT(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.lora_A = torch.nn.Parameter(torch.tensor(0.25))
+
+
+class _FakePipe:
+    def __init__(self):
+        self.scheduler = _FakeScheduler()
+        self.dit = _FakeDiT()
+        self.in_iteration_models = ["dit"]
+        self.torch_dtype = torch.float32
+        self.device = torch.device("cpu")
+
+    @staticmethod
+    def model_fn(*, dit, latents, timestep, **kwargs):
+        del timestep, kwargs
+        return latents * dit.lora_A
+
+
+class _FailIfAuxiliaryRuns(torch.nn.Module):
+    def forward(self, value):
+        del value
+        raise AssertionError("disabled ST loss must bypass the occupancy head")
+
+
+def _trainer_config(**overrides) -> dict:
+    config = {
+        "enable_st_iou_loss": True,
+        "lambda_st": 1.0,
+        "st_iou_eps": 1e-6,
+        "st_loss_weighting": "none",
+        "st_noise_threshold": 0.5,
+        "st_loss_warmup_steps": 0,
+        "base_loss_scale": 1.0,
+    }
+    config.update(overrides)
+    return config
+
+
+class STTubeIoUTrainerContractTests(unittest.TestCase):
+    @staticmethod
+    def _head() -> torch.nn.Module:
+        head = torch.nn.Conv3d(1, 1, 1, bias=False)
+        with torch.no_grad():
+            head.weight.fill_(1.0)
+        return head
+
+    def test_effective_lambda_warms_up_by_completed_optimizer_step(self) -> None:
+        module = _trainer_module()
+        self.assertEqual(0.1, module.effective_st_lambda(0.5, 0, 5))
+        self.assertEqual(0.3, module.effective_st_lambda(0.5, 2, 5))
+        self.assertEqual(0.5, module.effective_st_lambda(0.5, 99, 5))
+        self.assertEqual(0.5, module.effective_st_lambda(0.5, 0, 0))
+
+    def test_disabled_auxiliary_is_exact_base_loss_with_per_sample_timesteps(self) -> None:
+        module = _trainer_module()
+        pipe = _FakePipe()
+        clean = torch.tensor([
+            [[[[1.0]], [[2.0]]]],
+            [[[[2.0]], [[4.0]]]],
+        ])
+        mask = torch.ones(2, 5, 1, 1)
+        noise = torch.zeros_like(clean)
+
+        result = module.compute_flowmatch_st_objective(
+            pipe=pipe,
+            inputs={"input_latents": clean},
+            subject_mask=mask,
+            occupancy_head=_FailIfAuxiliaryRuns(),
+            config=_trainer_config(enable_st_iou_loss=False),
+            optimizer_step=0,
+            timestep_ids=torch.tensor([0, 1]),
+            noise=noise,
+        )
+
+        sigma = torch.tensor([1.0, 0.5]).reshape(2, 1, 1, 1, 1)
+        noisy = (1.0 - sigma) * clean
+        prediction = noisy * 0.25
+        target = -clean
+        mse = (prediction - target).square().flatten(1).mean(1)
+        expected_base = (mse * torch.tensor([2.0, 3.0])).mean()
+        torch.testing.assert_close(result["base_loss"], expected_base)
+        torch.testing.assert_close(result["total_loss"], expected_base)
+        torch.testing.assert_close(result["noise_sigma"], torch.tensor([1.0, 0.5]))
+        self.assertEqual(0.0, float(result["lambda_effective"]))
+
+    def test_st_only_loss_reaches_lora_and_occupancy_head_gradients(self) -> None:
+        module = _trainer_module()
+        pipe = _FakePipe()
+        head = self._head()
+        clean = torch.tensor([[[[[1.0]], [[3.0]]]]])
+        mask = torch.zeros(1, 5, 1, 1)
+        mask[:, 4] = 1.0
+
+        result = module.compute_flowmatch_st_objective(
+            pipe=pipe,
+            inputs={"input_latents": clean},
+            subject_mask=mask,
+            occupancy_head=head,
+            config=_trainer_config(base_loss_scale=0.0),
+            optimizer_step=0,
+            timestep_ids=torch.tensor([1]),
+            noise=torch.zeros_like(clean),
+        )
+        result["total_loss"].backward()
+
+        self.assertGreater(abs(float(pipe.dit.lora_A.grad)), 0.0)
+        self.assertGreater(float(head.weight.grad.abs().sum()), 0.0)
+        self.assertEqual((1,), tuple(result["st_iou_per_sample"].shape))
+        self.assertTrue(bool(torch.isfinite(result["total_loss"])))
+
+    def test_lora_export_and_head_path_cannot_pollute_stock_checkpoint(self) -> None:
+        module = _trainer_module()
+        state = {
+            "pipe.dit.block.lora_A.default.weight": torch.ones(2, 2),
+            "pipe.dit.block.lora_B.default.weight": torch.ones(2, 2),
+            "occupancy_head.features.0.weight": torch.ones(1),
+            "occupancy_head.output.weight": torch.ones(1),
+        }
+
+        exported = module.lora_only_state_dict(state, remove_prefix="pipe.dit.")
+        paired = module.st_head_checkpoint_path(Path("step-9.safetensors"))
+
+        self.assertEqual({
+            "block.lora_A.default.weight",
+            "block.lora_B.default.weight",
+        }, set(exported))
+        self.assertEqual(Path("step-9.st-head.safetensors"), paired)
 
 
 if __name__ == "__main__":
