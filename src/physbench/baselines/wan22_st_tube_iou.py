@@ -12,6 +12,7 @@ from typing import Any
 from .wan22_lora import Wan22LoraAdapter
 from .wan22_st_tube_iou_masks import (
     DEFAULT_SAM2_MODEL_ID,
+    materialize_motion_subject_mask_tube,
     materialize_subject_mask_tube,
     release_mask_segmenter,
     resolve_training_mask_manifest,
@@ -297,19 +298,29 @@ class Wan22STTubeIoULoraAdapter(Wan22LoraAdapter):
             media_audits.append(media_record)
             output_mask = dataset_dir / "masks" / f"{case_id}.npz"
             if self.execute:
-                manifest = resolve_training_mask_manifest(
-                    source,
-                    dataset_root=dataset_root,
-                    case_id=case_id,
-                )
-                tube_audits.append(materialize_subject_mask_tube(
-                    normalized_video=output_video,
-                    mask_manifest=manifest,
-                    dataset_root=dataset_root,
-                    output=output_mask,
-                    case_id=case_id,
-                    segmenter=segmenter,
-                ))
+                try:
+                    manifest = resolve_training_mask_manifest(
+                        source,
+                        dataset_root=dataset_root,
+                        case_id=case_id,
+                    )
+                except FileNotFoundError:
+                    tube_audit = materialize_motion_subject_mask_tube(
+                        normalized_video=output_video,
+                        output=output_mask,
+                        case_id=case_id,
+                        segmenter=segmenter,
+                    )
+                else:
+                    tube_audit = materialize_subject_mask_tube(
+                        normalized_video=output_video,
+                        mask_manifest=manifest,
+                        dataset_root=dataset_root,
+                        output=output_mask,
+                        case_id=case_id,
+                        segmenter=segmenter,
+                    )
+                tube_audits.append(tube_audit)
             rows.append(self._training_metadata_row(
                 case=case,
                 adaptation=adaptations[case_id],

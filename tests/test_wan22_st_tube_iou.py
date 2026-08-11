@@ -285,6 +285,22 @@ class _DeviceTrackingPredictor:
         return self
 
 
+class _DeterministicMotionSegmenter:
+    model_id = "fixture/motion-segmenter"
+
+    def segment(self, frames, *, prompt, **kwargs):
+        del kwargs
+        masks = []
+        for frame_index, frame in enumerate(frames):
+            mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+            mask[2, frame_index + 1] = 255
+            masks.append(mask)
+        return masks, {
+            "backend": "fixture-motion",
+            "prompt_frame": prompt.frame_index,
+        }
+
+
 class MaskTubeMaterializerTests(unittest.TestCase):
     @staticmethod
     def _write_video(path: Path, *, frames: int = 5) -> None:
@@ -475,6 +491,43 @@ class MaskTubeMaterializerTests(unittest.TestCase):
         self.assertIsNone(segmenter._predictor)
         self.assertIsNone(segmenter._torch)
         self.assertIsNone(segmenter.device)
+
+    def test_missing_seed_manifest_uses_audited_motion_prompt_fallback(self) -> None:
+        module = _mask_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            video = root / "normalized.mp4"
+            writer = cv2.VideoWriter(
+                str(video),
+                cv2.VideoWriter_fourcc(*"mp4v"),
+                24.0,
+                (16, 16),
+            )
+            for frame_index in range(5):
+                frame = np.zeros((16, 16, 3), dtype=np.uint8)
+                frame[5:8, 3 + frame_index : 6 + frame_index] = 255
+                writer.write(frame)
+            writer.release()
+
+            audit = module.materialize_motion_subject_mask_tube(
+                normalized_video=video,
+                output=root / "motion-tube.npz",
+                case_id="case-without-seed",
+                segmenter=_DeterministicMotionSegmenter(),
+                motion_config={
+                    "threshold": 12,
+                    "minimum_area": 2,
+                    "box_expand": 1.25,
+                    "minimum_box_side": 3,
+                },
+            )
+
+            with np.load(root / "motion-tube.npz", allow_pickle=False) as payload:
+                tube = payload["masks"]
+            self.assertEqual((5, 16, 16), tube.shape)
+            self.assertEqual("sam2_motion_prompt_fallback", audit["source"])
+            self.assertEqual("fixture-motion", audit["propagation"]["backend"])
+            self.assertEqual(1, int(tube[0].sum()))
 
 
 class STTubeIoUBaselineRegistrationTests(unittest.TestCase):

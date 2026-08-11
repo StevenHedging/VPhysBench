@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 
 from ..evaluation.common.masks.sam2 import MaskPrompt, Sam2VideoSegmenter
+from ..evaluation.common.masks.motion import build_motion_prompt
 from ..io import load_json, sha256_file, write_json
 
 
@@ -363,10 +364,115 @@ def materialize_subject_mask_tube(
     return audit
 
 
+def materialize_motion_subject_mask_tube(
+    *,
+    normalized_video: str | Path,
+    output: str | Path,
+    case_id: str,
+    segmenter: Any | None = None,
+    motion_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Fallback pseudo-labeling for training cases without a seed manifest."""
+
+    video = Path(normalized_video).resolve()
+    output_path = Path(output).resolve()
+    audit_path = output_path.with_suffix(".audit.json")
+    if not video.is_file():
+        raise FileNotFoundError(f"normalized training video not found: {video}")
+    config = {
+        "threshold": 12.0,
+        "minimum_area": 18,
+        "box_expand": 1.25,
+        "minimum_box_side": 28,
+        **(motion_config or {}),
+    }
+    frames = _read_video(video)
+    height, width = frames[0].shape[:2]
+    model_id = str(getattr(segmenter, "model_id", DEFAULT_SAM2_MODEL_ID))
+    source_fingerprint = {
+        "case_id": case_id,
+        "normalized_video_sha256": sha256_file(video),
+        "segmenter_model_id": model_id,
+        "motion_config": config,
+        "target_shape_thw": [len(frames), height, width],
+    }
+    cached = _cached_audit(
+        output_path,
+        audit_path,
+        source_fingerprint=source_fingerprint,
+    )
+    if cached is not None:
+        return cached
+    prompt = build_motion_prompt(
+        frames,
+        threshold=float(config["threshold"]),
+        minimum_area=int(config["minimum_area"]),
+        box_expand=float(config["box_expand"]),
+        minimum_box_side=int(config["minimum_box_side"]),
+    )
+    if segmenter is None:
+        segmenter = Sam2VideoSegmenter({
+            "model_id": DEFAULT_SAM2_MODEL_ID,
+            "device": "cuda",
+        })
+    masks, propagation = segmenter.segment(
+        frames,
+        prompt=prompt,
+        temporary_prefix="physbench_wan_st_motion_tube_",
+    )
+    if len(masks) != len(frames):
+        raise ValueError("SAM2 motion tube frame count differs from video")
+    tube = np.zeros((len(frames), height, width), dtype=np.uint8)
+    for index, mask in enumerate(masks):
+        plane = np.asarray(mask)
+        if plane.shape != (height, width):
+            raise ValueError("SAM2 motion mask shape differs from video")
+        tube[index] = (plane > 0).astype(np.uint8)
+    if not bool(tube.any()):
+        raise ValueError("SAM2 motion-prompt fallback produced an empty tube")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        output_path,
+        masks=tube,
+        layout=np.asarray("THW"),
+        case_id=np.asarray(case_id),
+    )
+    audit = {
+        "schema_version": "1.0",
+        "status": "materialized",
+        "case_id": case_id,
+        "source": "sam2_motion_prompt_fallback",
+        "normalized_video": str(video),
+        "mask_manifest": None,
+        "output": str(output_path),
+        "shape_thw": list(tube.shape),
+        "dtype": str(tube.dtype),
+        "values": sorted(np.unique(tube).tolist()),
+        "instance_count": 1,
+        "frame_count": len(frames),
+        "foreground_fraction": float(tube.mean()),
+        "motion_config": config,
+        "motion_prompt": {
+            "frame_index": int(prompt.frame_index),
+            "box_xyxy": prompt.box_xyxy.tolist(),
+            "points_xy": prompt.points_xy.tolist(),
+            "metadata": prompt.metadata,
+        },
+        "propagation": propagation,
+        "spatial_mapping": "motion_prompt_on_exact_wan_normalized_canvas",
+        "temporal_mapping": "bidirectional_propagation_on_normalized_frames",
+        "source_fingerprint": source_fingerprint,
+        "tube_sha256": sha256_file(output_path),
+    }
+    write_json(audit_path, audit)
+    return audit
+
+
 __all__ = [
     "DEFAULT_SAM2_MODEL_ID",
     "contain_mask",
     "materialize_subject_mask_tube",
+    "materialize_motion_subject_mask_tube",
     "release_mask_segmenter",
     "resolve_training_mask_manifest",
 ]
