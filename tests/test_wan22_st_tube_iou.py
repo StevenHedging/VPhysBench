@@ -758,6 +758,23 @@ class STTubeIoUTrainerContractTests(unittest.TestCase):
         self.assertEqual((1,), tuple(result["st_iou_per_sample"].shape))
         self.assertTrue(bool(torch.isfinite(result["total_loss"])))
 
+    def test_gradient_audit_requires_head_only_when_auxiliary_is_enabled(self) -> None:
+        module = _trainer_module()
+        model = torch.nn.Module()
+        model.pipe = torch.nn.Module()
+        model.pipe.dit = torch.nn.Module()
+        model.pipe.dit.lora_A = torch.nn.Parameter(torch.ones(()))
+        model.occupancy_head = torch.nn.Conv3d(1, 1, 1)
+        model.pipe.dit.lora_A.grad = torch.ones(())
+
+        baseline_audit = module._gradient_audit(model, require_head=False)
+
+        self.assertGreater(baseline_audit["lora_gradient_l2"], 0.0)
+        self.assertEqual(0, baseline_audit["occupancy_head_gradient_tensor_count"])
+        self.assertEqual(0.0, baseline_audit["occupancy_head_gradient_l2"])
+        with self.assertRaisesRegex(RuntimeError, "occupancy-head"):
+            module._gradient_audit(model, require_head=True)
+
     def test_lora_export_and_head_path_cannot_pollute_stock_checkpoint(self) -> None:
         module = _trainer_module()
         state = {

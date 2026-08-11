@@ -409,7 +409,11 @@ def seed_process() -> int:
     return worker_seed
 
 
-def _gradient_audit(model: STTubeIoUWanTrainingModule) -> dict[str, Any]:
+def _gradient_audit(
+    model: STTubeIoUWanTrainingModule,
+    *,
+    require_head: bool,
+) -> dict[str, Any]:
     lora_squared = 0.0
     lora_count = 0
     head_squared = 0.0
@@ -427,8 +431,10 @@ def _gradient_audit(model: STTubeIoUWanTrainingModule) -> dict[str, Any]:
         elif name.startswith("occupancy_head."):
             head_squared += squared
             head_count += 1
-    if lora_count == 0 or head_count == 0:
-        raise RuntimeError("missing LoRA or occupancy-head gradients")
+    if lora_count == 0:
+        raise RuntimeError("missing LoRA gradients")
+    if require_head and head_count == 0:
+        raise RuntimeError("missing occupancy-head gradients")
     return {
         "lora_gradient_l2": math.sqrt(lora_squared),
         "lora_gradient_tensor_count": lora_count,
@@ -491,7 +497,10 @@ def launch_training(
                 if not bool(torch.isfinite(loss.detach()).all()):
                     raise FloatingPointError("non-finite total training loss")
                 accelerator.backward(loss)
-                gradient = _gradient_audit(unwrapped)
+                gradient = _gradient_audit(
+                    unwrapped,
+                    require_head=bool(unwrapped.st_config["enable_st_iou_loss"]),
+                )
                 optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad()
