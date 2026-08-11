@@ -16,6 +16,8 @@ Dataset 13.0.0 包含 916 个 case、7 个场景。Task v1 定义两个可复现
 ## 快速开始
 
 需要 Python 3.11、Git、ffmpeg/ffprobe，以及对私有 Hugging Face Dataset 的访问权。
+`.[hub]` 只提供 Hub 下载和轻量接口；真实场景评测和 `atomic-run` 还需要
+`.[scene-evaluation]`。
 
 ```bash
 python3.11 -m venv .venv
@@ -23,11 +25,12 @@ python3.11 -m venv .venv
 python -m pip install --upgrade pip
 python -m pip install -e ".[hub]"
 
+# Hub 下载、元数据检查和接口 smoke 只需要 .[hub]
+physbench doctor --level metadata
+make smoke-interface
+
 hf auth login
 physbench dataset pull
-physbench doctor --level evaluation
-
-make smoke-interface
 physbench baseline list
 ```
 
@@ -41,7 +44,15 @@ physbench baseline validate my_model
 Baseline 可以在自己的目录内实现训练和推理脚本，但不能重写官方 Task 的数据选择、
 种子或评分协议。基准先冻结 canonical plan，随后 Baseline 只负责适配、编译和执行。
 
-先运行一个 case：
+先运行一个 case。`atomic-run` 会执行真实 evaluator，因此在运行前安装 evaluator
+stack，并在下载完整私有 Dataset 后确认 evaluation readiness：
+
+```bash
+python -m pip install -e ".[scene-evaluation]"
+physbench doctor --level evaluation
+```
+
+然后运行：
 
 ```bash
 physbench atomic-run \

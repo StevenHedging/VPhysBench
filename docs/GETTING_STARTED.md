@@ -5,7 +5,7 @@ GPU is not required for metadata checks or the interface smoke test. Full
 scene evaluation needs the optional evaluator stack, compatible CUDA/PyTorch,
 SAM 2, and the complete Dataset assets.
 
-## 1. Install the core environment
+## 1. Install the Hub and interface environment
 
 ```bash
 python3.11 -m venv .venv
@@ -14,11 +14,15 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[hub]"
 ```
 
+`.[hub]` is sufficient for Hugging Face Dataset access, metadata checks, and
+the lightweight interface smoke. It deliberately does not install scene
+evaluator dependencies.
+
 Confirm that the tracked release surface is internally consistent:
 
 ```bash
 physbench doctor --level metadata
-make test
+make test-interface
 make smoke-interface
 ```
 
@@ -40,17 +44,7 @@ The command reads `datasets/huggingface.json`. It always passes the bound
 `main` branch. Credentials remain in the user-level Hugging Face cache and
 must not be placed in repository files.
 
-Verify full readiness:
-
-```bash
-physbench doctor --level evaluation
-physbench validate-dataset \
-  --dataset datasets/releases/13.0.0/dataset.json \
-  --check-assets
-```
-
 `doctor --level metadata` reports missing media as a warning.
-`doctor --level evaluation` treats it as an error.
 
 ## 3. Install the evaluator stack
 
@@ -64,6 +58,16 @@ the machine requires a platform-specific wheel. The official SAM 2 install
 notes are at <https://github.com/facebookresearch/sam2/blob/main/INSTALL.md>.
 
 Run the evaluation-level doctor again after installation.
+
+```bash
+physbench doctor --level evaluation
+physbench validate-dataset \
+  --dataset datasets/releases/13.0.0/dataset.json \
+  --check-assets
+```
+
+`doctor --level evaluation` treats missing media or evaluator requirements as
+an error.
 
 ## 4. Create a custom baseline
 
@@ -80,6 +84,10 @@ See [CUSTOM_BASELINE_QUICKSTART.md](CUSTOM_BASELINE_QUICKSTART.md) for the
 driver contract.
 
 ## 5. Run one real case
+
+`atomic-run` resolves and runs the scene evaluator. Confirm that
+`.[scene-evaluation]` was installed in step 3 and that the complete Dataset
+passes the evaluation-level doctor before running it:
 
 ```bash
 physbench atomic-run \

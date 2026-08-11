@@ -149,14 +149,6 @@ class ReleaseV1ContractTests(unittest.TestCase):
             PUBLIC_EVALUATOR_TYPES,
             set(SceneEvaluatorRegistry.supported_evaluator_types()),
         )
-        registry = SceneEvaluatorRegistry(
-            load_evaluation_protocol("scene_default_v1")
-        )
-        for scene_id in sorted(SCORED_SCENES):
-            with self.subTest(scene_id=scene_id):
-                evaluator = registry.resolve(scene_id)
-                self.assertEqual("1.0", evaluator.evaluator_version)
-                self.assertEqual(scene_id, evaluator.scene_id)
 
 
 if __name__ == "__main__":

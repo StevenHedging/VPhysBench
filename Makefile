@@ -1,4 +1,4 @@
-.PHONY: test test-interface data-test smoke smoke-interface smoke-data release-check release-archive-check
+.PHONY: test test-interface test-evaluation data-test smoke smoke-interface smoke-data release-check release-archive-check
 
 test: test-interface
 
@@ -7,7 +7,6 @@ test-interface:
 		tests.test_lightweight_import_boundaries \
 		tests.test_current_dataset \
 		tests.test_release_v1_contract \
-		tests.test_evaluation_protocol_v1 \
 		tests.test_dataset_contract_v4 \
 		tests.test_huggingface_dataset_binding \
 		tests.test_dataset_hub_cli \
@@ -18,6 +17,12 @@ test-interface:
 		tests.test_repository_portability \
 		tests.test_release_archive \
 		tests.test_validation -v
+
+test-evaluation:
+	PYTHONPATH=src:tests:. python3 -m unittest \
+		tests.test_evaluation_protocol_v1 \
+		tests.test_scene_evaluation \
+		tests.test_csti_case_integration -v
 
 data-test:
 	PYTHONPATH=src:tests:. python3 -m physbench validate-dataset \

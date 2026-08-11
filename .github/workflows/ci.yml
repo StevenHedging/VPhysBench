@@ -11,8 +11,8 @@ jobs:
   interface-and-release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -23,10 +23,27 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --editable ".[hub]"
       - name: Run metadata and interface tests
-        run: make test
+        run: make test-interface
       - name: Run unregistered-baseline smoke test
         run: make smoke-interface
       - name: Audit tracked release contents
         run: make release-check
       - name: Verify exported archive
         run: make release-archive-check
+
+  evaluation-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install evaluator dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ffmpeg
+          python -m pip install --upgrade pip
+          python -m pip install --editable ".[scene-evaluation]"
+      - name: Run CPU evaluator contract fixtures
+        run: make test-evaluation
