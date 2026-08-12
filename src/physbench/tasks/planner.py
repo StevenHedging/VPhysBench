@@ -115,21 +115,32 @@ def _validate_selection(
     selection = _require_object(value, label="task.selection")
     if family == "finetune_eval":
         if schema_version == "4.0":
-            allowed = {"scene_ids", "test_regimes"}
-            _require_fields(
-                selection,
-                required=allowed,
-                label="task.selection",
-            )
-            _reject_unknown_fields(
-                selection,
-                allowed=allowed,
-                label="task.selection",
-            )
-            _validate_id_selector(
-                selection["scene_ids"],
-                label="task.selection.scene_ids",
-            )
+            legacy = {"scene_ids", "test_regimes"}
+            split = {
+                "training_scene_ids",
+                "evaluation_scene_ids",
+                "test_regimes",
+            }
+            actual = set(selection)
+            if actual != legacy and actual != split:
+                raise ValueError(
+                    "task.selection must use exactly one legacy scene_ids "
+                    "selector or split training_scene_ids/evaluation_scene_ids"
+                )
+            if actual == legacy:
+                _validate_id_selector(
+                    selection["scene_ids"],
+                    label="task.selection.scene_ids",
+                )
+            else:
+                _validate_id_selector(
+                    selection["training_scene_ids"],
+                    label="task.selection.training_scene_ids",
+                )
+                _validate_id_selector(
+                    selection["evaluation_scene_ids"],
+                    label="task.selection.evaluation_scene_ids",
+                )
             regimes = selection["test_regimes"]
             if regimes == "all":
                 return
@@ -188,20 +199,21 @@ def _validate_selection(
             )
         return
 
-    allowed = {"scene_ids", "groups", "case_ids"}
+    scene_key = (
+        "evaluation_scene_ids"
+        if "evaluation_scene_ids" in selection
+        else "scene_ids"
+    )
+    allowed = {scene_key, "groups", "case_ids"}
     _require_fields(
         selection,
-        required={"scene_ids", "groups"},
+        required={scene_key, "groups"},
         label="task.selection",
     )
-    _reject_unknown_fields(
-        selection,
-        allowed=allowed,
-        label="task.selection",
-    )
+    _reject_unknown_fields(selection, allowed=allowed, label="task.selection")
     _validate_id_selector(
-        selection["scene_ids"],
-        label="task.selection.scene_ids",
+        selection[scene_key],
+        label=f"task.selection.{scene_key}",
     )
     _validate_id_selector(
         selection["groups"],
@@ -422,6 +434,7 @@ def _view_a_plan_v4(
     list[str],
     list[tuple[str, str]],
     list[str],
+    list[str],
     dict[str, dict[str, Any]],
 ]:
     view = dataset.views["view_a"]
@@ -431,7 +444,20 @@ def _view_a_plan_v4(
         )
     available = set(view["scenes"])
     selection = task.value["selection"]
-    scenes = _selected_scenes(selection.get("scene_ids", "all"), available)
+    training_scenes = _selected_scenes(
+        selection.get(
+            "training_scene_ids",
+            selection.get("scene_ids", "all"),
+        ),
+        available,
+    )
+    evaluation_scenes = _selected_scenes(
+        selection.get(
+            "evaluation_scene_ids",
+            selection.get("scene_ids", "all"),
+        ),
+        available,
+    )
     requested = selection.get("test_regimes", "all")
     regimes = (
         GENERALIZATION_REGIMES
@@ -442,9 +468,11 @@ def _view_a_plan_v4(
     entries: list[tuple[str, str]] = []
     annotations: dict[str, dict[str, Any]] = {}
     view_annotations = view["test_annotations"]
-    for scene_id in scenes:
+    for scene_id in training_scenes:
         groups = view["scenes"][scene_id]
         train_ids.extend(groups["train"])
+    for scene_id in evaluation_scenes:
+        groups = view["scenes"][scene_id]
         for case_id in groups["test"]:
             annotation = view_annotations[case_id]
             if annotation["generalization_regime"] not in regimes:
@@ -454,7 +482,8 @@ def _view_a_plan_v4(
     return (
         sorted(set(train_ids)),
         sorted(set(entries)),
-        scenes,
+        evaluation_scenes,
+        training_scenes,
         annotations,
     )
 
@@ -464,7 +493,13 @@ def _view_b_plan(
 ) -> tuple[list[str], list[tuple[str, str]], list[str]]:
     view = dataset.views["view_b"]
     selection = task.value["selection"]
-    scenes = _selected_scenes(selection.get("scene_ids", "all"), set(view["scenes"]))
+    scenes = _selected_scenes(
+        selection.get(
+            "evaluation_scene_ids",
+            selection.get("scene_ids", "all"),
+        ),
+        set(view["scenes"]),
+    )
     explicit = selection.get("case_ids", [])
     if explicit:
         known = {case["case_id"] for case in dataset.cases}
@@ -526,10 +561,13 @@ def plan_atomic_task(task: TaskSpec, dataset: DatasetSnapshot) -> AtomicPlan:
         task.family == "finetune_eval"
         and task.value["schema_version"] == "4.0"
     ):
-        train_ids, entries, scenes, annotations_by_case = _view_a_plan_v4(
-            task,
-            dataset,
-        )
+        (
+            train_ids,
+            entries,
+            scenes,
+            training_scenes,
+            annotations_by_case,
+        ) = _view_a_plan_v4(task, dataset)
     elif task.family == "finetune_eval":
         train_ids, entries, scenes = _view_a_plan(task, dataset)
     else:
@@ -579,4 +617,6 @@ def plan_atomic_task(task: TaskSpec, dataset: DatasetSnapshot) -> AtomicPlan:
         plan["reporting_policy"] = task.value["evaluation"]["reporting"]
         if task.family == "finetune_eval":
             plan["evaluation_annotations"] = evaluation_annotations
+            if "training_scene_ids" in task.value["selection"]:
+                plan["training_scene_ids"] = training_scenes
     return AtomicPlan(plan)

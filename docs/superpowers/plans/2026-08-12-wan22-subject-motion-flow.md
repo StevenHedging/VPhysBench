@@ -17,7 +17,7 @@
 - Preserve TI2V frame-zero conditioning and exclude that slice from all velocity losses.
 - Warm start requires the exact paired final Tube-IoU LoRA and occupancy head.
 - Use a new run directory for every preflight and canonical experiment.
-- Canonical evaluation must use Dataset 13.0.0 and `seven_scene_entity_vector_finetune_eval_v14` without evaluator modifications.
+- Canonical evaluation must use Dataset 13.0.0 and the synchronized split-scene Task `six_scene_train_five_scene_eval_v14` without evaluator modifications.
 
 ---
 
@@ -183,7 +183,7 @@
 
 - [ ] **Step 2: Add descriptor, driver, plugin, and managed driver**
 
-  Bind `lambda_st=0.05`, `lambda_subject_flow=0.10`, `lambda_motion_delta=0.05`, `aux_warmup_steps=100`, two epochs, save every 273 steps, rank 32, and the existing scene/media profiles. The plugin maps every new config key into the legacy adapter config and injects the validated warm-start deployment path.
+  Bind `lambda_st=0.05`, `lambda_subject_flow=0.10`, `lambda_motion_delta=0.05`, `aux_warmup_steps=100`, two epochs, save every 234 steps, rank 32, and the existing scene/media profiles. The plugin maps every new config key into the legacy adapter config and injects the validated warm-start deployment path.
 
 - [ ] **Step 3: Add the local four-GPU deployment**
 
@@ -224,7 +224,7 @@
 
 - [ ] **Step 1: Stage minimal preflight runs without touching canonical artifacts**
 
-  Freeze a small world-aligned training subset covering all seven scenes. Run one disabled arm with all added coefficients zero and one enabled arm with proposed coefficients, identical initialization/data/order/seed, on GPUs 0--3.
+  Freeze a small world-aligned training subset covering all six selected training scenes. Run one disabled arm with all added coefficients zero and one enabled arm with proposed coefficients, identical initialization/data/order/seed, on GPUs 0--3.
 
 - [ ] **Step 2: Verify numerical and systems contracts**
 
@@ -243,7 +243,7 @@
 
 **Interfaces:**
 - Consumes: frozen Dataset 13.0.0, v14 task, validated Baseline, GPUs 0--3, parent paired checkpoint.
-- Produces: 546-step LoRA/head checkpoints, 110 staged jobs, and 110 run-local videos.
+- Produces: 468-step LoRA/head checkpoints, 76 staged jobs, and 76 run-local videos.
 
 - [ ] **Step 1: Launch the canonical atomic run**
 
@@ -251,24 +251,24 @@
   CUDA_VISIBLE_DEVICES=0,1,2,3 PYTHONPATH=src \
     /root/Steven/.venvs/wan22-pair-text/bin/python -m physbench atomic-run \
     --dataset datasets/releases/13.0.0/dataset.json \
-    --task tasks/experiments/seven_scene_entity_vector_finetune_eval.json \
+    --task tasks/experiments/six_scene_train_five_scene_eval_v14.json \
     --baseline wan22_ti2v_5b_lora_r32_subject_motion_v1 \
     --run-id wan22_subject_motion_v1_v14 --output-root run --execute
   ```
 
 - [ ] **Step 2: Monitor training without mutating the run**
 
-  Check synchronized metric count, expected 273/546 checkpoints, finite
+  Check synchronized metric count, expected 234/468 checkpoints, finite
   gradients, GPU ownership, and progress at least every 60 seconds. Diagnose
   failures with `superpowers:systematic-debugging` before any fix.
 
 - [ ] **Step 3: Validate final training artifacts**
 
-  Require exactly 546 ordered metric rows, final LoRA and paired head, matching SHA-256 manifest, complete optimizer/scheduler/RNG state, final coefficient metrics, and no inference dependency on the head.
+  Require exactly 468 ordered metric rows, final LoRA and paired head, matching SHA-256 manifest, complete optimizer/scheduler/RNG state, final coefficient metrics, and no inference dependency on the head.
 
 - [ ] **Step 4: Complete four-worker stock inference**
 
-  Require 110 unique jobs, four successful persistent workers bound only to GPUs 0--3, 110 complete videos, valid media contracts, and run-local artifact hashes.
+  Require 76 unique jobs, four successful persistent workers bound only to GPUs 0--3, 76 complete videos, valid media contracts, and run-local artifact hashes.
 
 ---
 
@@ -279,12 +279,12 @@
 - Create: `docs/experiments/wan22-subject-motion-v1-results.md`
 
 **Interfaces:**
-- Consumes: 110 predictions, v14 protocol, parent Tube-IoU summary/metrics, new training metrics.
+- Consumes: 76 predictions, v14 protocol, parent Tube-IoU summary/metrics, new training metrics.
 - Produces: canonical case results/summary, direct comparison, failure analysis, and the selected next Baseline hypothesis.
 
 - [ ] **Step 1: Complete canonical evaluation**
 
-  Require 110 case result documents, zero evaluator/protocol integrity errors, explicit unsupported/unavailable counts, and an unmodified evaluation protocol fingerprint.
+  Require 76 case result documents, zero evaluator/protocol integrity errors, explicit unsupported/unavailable counts, and an unmodified evaluation protocol fingerprint.
 
 - [ ] **Step 2: Compare against the Tube-IoU parent**
 

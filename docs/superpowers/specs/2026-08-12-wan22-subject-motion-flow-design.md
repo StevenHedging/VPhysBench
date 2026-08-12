@@ -86,11 +86,14 @@ Training videos are normalized to 24 FPS, 121 frames, and the scene-specific
 SAM2 on those exact normalized frames and unioned into a binary `THW` subject
 tube. No mask, reference video, or evaluator artifact enters an inference job.
 
-The 806 unique training cases are balanced deterministically to 312 rows per
-scene, 2,184 rows per epoch. The first experiment warm-starts from the final
-Tube-IoU checkpoint and runs two epochs: four ranks, micro-batch one per rank,
-two accumulation micro-steps, global batch eight, 273 optimizer steps per
-epoch, and 546 optimizer steps total.
+The synchronized 2026-08-12 Task separates training and evaluation scenes.
+It excludes `push_bottle`, trains on 679 unique cases across the other six
+scenes, and evaluates the five scenes implemented by current v14. Training is
+balanced deterministically to 312 rows per selected scene, or 1,872 rows per
+epoch. The first experiment warm-starts from the final Tube-IoU checkpoint and
+runs two epochs: four ranks, micro-batch one per rank, two accumulation
+micro-steps, global batch eight, 234 optimizer steps per epoch, and 468
+optimizer steps total.
 
 ## Audited Wan Flow Parameterization
 
@@ -229,7 +232,7 @@ or gradient and missing required gradients are fatal.
 Inference deliberately ignores the occupancy head and all masks. It loads only
 the new LoRA into stock WAN2.2-TI2V-5B and uses the sealed task prompt,
 conditioning first frame, seed 42, 50 inference steps, CFG 5.0, and the normal
-media contract. The 110 jobs run on persistent workers restricted to GPUs
+media contract. The 76 jobs run on persistent workers restricted to GPUs
 0--3.
 
 Generated videos undergo the canonical v14 evaluation without loss-specific

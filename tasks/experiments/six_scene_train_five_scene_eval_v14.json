@@ -1,0 +1,37 @@
+{
+  "schema_version": "4.0",
+  "task_id": "six_scene_train_five_scene_eval_v14",
+  "family": "finetune_eval",
+  "dataset_id": "physics_video_seven_scene_v13",
+  "dataset_view": "view_a",
+  "selection": {
+    "training_scene_ids": [
+      "pendulum",
+      "collision_1d",
+      "inclined_plane_slide",
+      "uniform_circular_motion",
+      "parabolic_motion",
+      "vertical_spring_oscillator"
+    ],
+    "evaluation_scene_ids": [
+      "pendulum",
+      "collision_1d",
+      "inclined_plane_slide",
+      "uniform_circular_motion",
+      "parabolic_motion"
+    ],
+    "test_regimes": ["id"]
+  },
+  "seeds": {
+    "training": [42],
+    "inference": [42]
+  },
+  "evaluation": {
+    "protocol": "scene_default_v14",
+    "reporting": {
+      "primary_score": "overall_test",
+      "breakdowns": [],
+      "minimum_subgroup_jobs": 5
+    }
+  }
+}

@@ -81,9 +81,29 @@
           "dataset_view": {"const": "view_a"},
           "selection": {
             "type": "object",
-            "required": ["scene_ids", "test_regimes"],
+            "required": ["test_regimes"],
+            "oneOf": [
+              {
+                "required": ["scene_ids"],
+                "not": {
+                  "anyOf": [
+                    {"required": ["training_scene_ids"]},
+                    {"required": ["evaluation_scene_ids"]}
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "training_scene_ids",
+                  "evaluation_scene_ids"
+                ],
+                "not": {"required": ["scene_ids"]}
+              }
+            ],
             "properties": {
               "scene_ids": {"$ref": "#/$defs/idSelector"},
+              "training_scene_ids": {"$ref": "#/$defs/idSelector"},
+              "evaluation_scene_ids": {"$ref": "#/$defs/idSelector"},
               "test_regimes": {"$ref": "#/$defs/regimeSelector"}
             },
             "additionalProperties": false
@@ -100,9 +120,20 @@
           "dataset_view": {"const": "view_b"},
           "selection": {
             "type": "object",
-            "required": ["scene_ids", "groups"],
+            "required": ["groups"],
+            "oneOf": [
+              {
+                "required": ["scene_ids"],
+                "not": {"required": ["evaluation_scene_ids"]}
+              },
+              {
+                "required": ["evaluation_scene_ids"],
+                "not": {"required": ["scene_ids"]}
+              }
+            ],
             "properties": {
               "scene_ids": {"$ref": "#/$defs/idSelector"},
+              "evaluation_scene_ids": {"$ref": "#/$defs/idSelector"},
               "groups": {"$ref": "#/$defs/idSelector"},
               "case_ids": {
                 "type": "array",
