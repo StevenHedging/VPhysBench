@@ -119,6 +119,27 @@ class ReleaseDocumentationTests(unittest.TestCase):
         self.assertIsNone(re.search(r"\bCosmos\b", content))
         self.assertNotIn("free_fall", content)
 
+    def test_run_layout_explains_official_result_fields(self) -> None:
+        content = (ROOT / "docs" / "RUN_LAYOUT.md").read_text(
+            encoding="utf-8"
+        )
+        for field in (
+            "evaluation/case_results.jsonl",
+            "evaluation/task_result.json",
+            "coverage",
+            "status_counts",
+            "expert score",
+            "CSTI",
+            "degradation",
+            "observed_mean_score",
+        ):
+            self.assertIn(field, content)
+        self.assertRegex(content, r"coverage[^\n]*1")
+        self.assertRegex(
+            content,
+            r"observed_mean_score[^\n]*(?:not official|非正式|不能作为正式)",
+        )
+
     def test_release_manifest_matches_dataset_binding(self) -> None:
         release = json.loads((ROOT / "RELEASE_MANIFEST.json").read_text())
         binding = json.loads((ROOT / "datasets" / "huggingface.json").read_text())
