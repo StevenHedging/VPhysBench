@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -209,6 +211,64 @@ class Wan22SubjectMotionAdapter(Wan22STTubeIoULoraAdapter):
                 "subject-motion training requires CUDA_VISIBLE_DEVICES=0,1,2,3"
             )
         return ",".join(devices)
+
+    def _balance_training_rows(
+        self,
+        rows: list[dict[str, Any]],
+        artifact_root: Path,
+    ) -> list[dict[str, Any]]:
+        """Align equal-scene oversampling to complete global batches."""
+
+        policy = self.config["lora"].get("scene_balancing")
+        if policy != "oversample_each_scene_to_largest_world_aligned":
+            raise ValueError(f"unsupported subject-motion balancing policy: {policy}")
+        by_scene: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row in rows:
+            by_scene[row["scene_id"]].append(row)
+        if not by_scene:
+            raise ValueError("subject-motion balancing requires training rows")
+        global_batch = int(self.config["lora"]["global_batch_size"])
+        scene_count = len(by_scene)
+        alignment = global_batch // math.gcd(global_batch, scene_count)
+        largest = max(len(items) for items in by_scene.values())
+        target = ((largest + alignment - 1) // alignment) * alignment
+        balanced: list[dict[str, Any]] = []
+        for scene_id in sorted(by_scene):
+            items = sorted(by_scene[scene_id], key=lambda row: row["case_id"])
+            balanced.extend(
+                dict(items[index % len(items)]) for index in range(target)
+            )
+        parallelism = self._training_parallelism(
+            metadata_row_count=len(balanced)
+        )
+        lora = self.config["lora"]
+        write_json(artifact_root / "training_sampling_plan.json", {
+            "policy": policy,
+            "unique_case_count": len(rows),
+            "metadata_row_count": len(balanced),
+            "input_scene_counts": dict(sorted(Counter(
+                row["scene_id"] for row in rows
+            ).items())),
+            "balanced_scene_counts": dict(sorted(Counter(
+                row["scene_id"] for row in balanced
+            ).items())),
+            "per_scene_target": target,
+            "global_batch_alignment": alignment,
+            "dataset_repeat": int(lora["dataset_repeat"]),
+            "num_epochs": int(lora["num_epochs"]),
+            **parallelism,
+            "expected_optimizer_steps_per_epoch": parallelism[
+                "optimizer_steps_per_epoch"
+            ],
+            "expected_total_optimizer_steps": parallelism[
+                "total_optimizer_steps"
+            ],
+            "shuffle": True,
+            "sampler_seed": int(lora["seed"]),
+            "sampler_generator": "torch.Generator",
+            "cross_rank_duplicate_policy": "forbidden_after_balancing",
+        })
+        return balanced
 
     def prepare_training(
         self,

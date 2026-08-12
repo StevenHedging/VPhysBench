@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,6 +10,15 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from physbench.baseline_api import (
+    discover_baseline_bundles,
+    load_baseline_bundle,
+    load_baseline_plugin,
+)
+from physbench.data_layout import LATEST_DATASET
+from physbench.datasets import load_dataset
+from physbench.io import load_json
+from physbench.tasks import load_task
 from physbench.baselines.wan22_subject_motion_model import (
     masked_subject_flow_loss,
     subject_temporal_difference_loss,
@@ -17,6 +27,11 @@ from physbench.baselines.wan22_subject_motion_model import (
 
 TRAINER_MODULE_NAME = "scripts.wan22_subject_motion_train"
 ADAPTER_MODULE_NAME = "physbench.baselines.wan22_subject_motion"
+ROOT = Path(__file__).resolve().parents[1]
+BASELINE_ID = "wan22_ti2v_5b_lora_r32_subject_motion_v1"
+BASELINE_ROOT = ROOT / "baselines" / "wan22_subject_motion"
+BASELINE_PATH = BASELINE_ROOT / "baseline.json"
+SPLIT_TASK = ROOT / "tasks/experiments/six_scene_train_five_scene_eval_v14.json"
 
 
 def _trainer_module():
@@ -559,6 +574,121 @@ class SubjectMotionAdapterTests(unittest.TestCase):
                 Path("scripts/train_wan22_subject_motion.sh"),
                 Path(command[1]).relative_to(adapter.project_root),
             )
+
+    def test_six_scene_balancing_aligns_to_the_global_batch(self) -> None:
+        module = _adapter_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            adapter = module.Wan22SubjectMotionAdapter(
+                _adapter_config(root),
+                execute=False,
+            )
+            rows = []
+            for scene_index in range(6):
+                for case_index in range(5 - (scene_index % 3)):
+                    rows.append({
+                        "case_id": f"case-{scene_index}-{case_index}",
+                        "scene_id": f"scene-{scene_index}",
+                    })
+
+            balanced = adapter._balance_training_rows(rows, root)
+            plan = load_json(root / "training_sampling_plan.json")
+
+            self.assertEqual(48, len(balanced))
+            self.assertEqual(8, plan["per_scene_target"])
+            self.assertEqual(6, plan["optimizer_steps_per_epoch"])
+            self.assertEqual(12, plan["total_optimizer_steps"])
+
+
+class SubjectMotionRegistrationTests(unittest.TestCase):
+    def test_bundle_is_discoverable_and_freezes_the_recipe(self) -> None:
+        discovered = discover_baseline_bundles()
+        self.assertEqual(BASELINE_PATH, discovered[BASELINE_ID])
+        bundle = load_baseline_bundle(BASELINE_PATH)
+
+        self.assertEqual("1.0.0", bundle.value["baseline_version"])
+        self.assertEqual(7, len(bundle.value["supported_scenes"]))
+        self.assertEqual(["finetune_eval"], bundle.value["capabilities"]["task_families"])
+        self.assertEqual(["i2v"], bundle.value["capabilities"]["generation_modes"])
+        self.assertEqual("ignored", bundle.value["input_policy"]["physics"]["usage"])
+        trainer = bundle.value["trainer"]["config"]
+        expected = {
+            "lambda_st": 0.05,
+            "lambda_subject_flow": 0.10,
+            "lambda_motion_delta": 0.05,
+            "aux_warmup_steps": 100,
+            "num_epochs": 2,
+            "save_steps": 234,
+            "rank": 32,
+            "micro_batch_size": 1,
+            "global_batch_size": 8,
+            "latent_channels": 48,
+        }
+        self.assertEqual(expected, {key: trainer[key] for key in expected})
+        initialization = bundle.value["model"]["initialization"]
+        self.assertEqual(
+            "wan22_ti2v_5b_lora_r32_st_tube_iou_v1",
+            initialization["parent_baseline_id"],
+        )
+        self.assertEqual(64, len(initialization["dit_lora_sha256"]))
+        self.assertEqual(64, len(initialization["latent_occupancy_head_sha256"]))
+
+    def test_local_deployment_changes_only_deployment_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "bundle"
+            target.mkdir()
+            for name in ("baseline.json", "driver.py", "__init__.py"):
+                shutil.copy2(BASELINE_ROOT / name, target / name)
+            (target / "baseline.local.json").write_text(
+                json.dumps({"runtime": {"python": "/first/python"}}),
+                encoding="utf-8",
+            )
+            first = load_baseline_bundle(target / "baseline.json")
+            (target / "baseline.local.json").write_text(
+                json.dumps({"runtime": {"python": "/second/python"}}),
+                encoding="utf-8",
+            )
+            second = load_baseline_bundle(target / "baseline.json")
+
+        self.assertEqual(first.digest, second.digest)
+        self.assertNotEqual(first.deployment_digest, second.deployment_digest)
+
+    def test_managed_instance_uses_split_task_and_mask_free_stock_inference(self) -> None:
+        bundle = load_baseline_bundle(BASELINE_PATH)
+        plugin = load_baseline_plugin(bundle)
+        dataset = load_dataset(LATEST_DATASET, check_assets=False)
+        task = load_task(SPLIT_TASK)
+
+        instance = plugin.task_builder.build(dataset, task)
+        instance.verify()
+        value = instance.value
+
+        self.assertEqual(679, len(value["canonical_plan"]["train_case_ids"]))
+        self.assertEqual(76, len(value["canonical_plan"]["jobs"]))
+        self.assertEqual(
+            0.10,
+            value["training"]["trainer"]["config"]["lambda_subject_flow"],
+        )
+        self.assertTrue(all(
+            "subject_mask" not in json.dumps(job)
+            and "reference_video" not in json.dumps(job)
+            and ".st-head.safetensors" not in json.dumps(job)
+            for job in value["inference"]["jobs"]
+        ))
+
+    def test_managed_driver_fingerprints_all_subject_motion_dependencies(self) -> None:
+        bundle = load_baseline_bundle(BASELINE_PATH)
+        plugin = load_baseline_plugin(bundle)
+        paths = plugin.driver.dependency_paths()
+
+        expected = {
+            "src/physbench/baselines/wan22_subject_motion.py",
+            "src/physbench/baselines/wan22_subject_motion_model.py",
+            "scripts/wan22_subject_motion_train.py",
+            "scripts/train_wan22_subject_motion.sh",
+        }
+        self.assertTrue(expected.issubset(paths))
+        self.assertTrue(all(path.is_file() for path in paths.values()))
 
 
 if __name__ == "__main__":
