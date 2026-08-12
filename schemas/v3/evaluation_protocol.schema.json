@@ -113,7 +113,6 @@
       "required": [
         "enabled",
         "algorithm",
-        "spatial_tolerance_fraction",
         "temporal_tolerance_s",
         "condition_frame_policy",
         "initial_frames_excluded",
@@ -123,6 +122,24 @@
         "timeline_policy",
         "mask_resolution"
       ],
+      "oneOf": [
+        {
+          "required": ["spatial_tolerance_fraction"],
+          "not": {
+            "anyOf": [
+              {"required": ["spatial_tolerance_policy"]},
+              {"required": ["spatial_tolerance_radius_ratio"]}
+            ]
+          }
+        },
+        {
+          "required": [
+            "spatial_tolerance_policy",
+            "spatial_tolerance_radius_ratio"
+          ],
+          "not": {"required": ["spatial_tolerance_fraction"]}
+        }
+      ],
       "properties": {
         "enabled": {
           "const": true
@@ -131,6 +148,13 @@
           "const": "exact_full_tube_edt"
         },
         "spatial_tolerance_fraction": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "spatial_tolerance_policy": {
+          "const": "reference_tube_equivalent_diameter_v1"
+        },
+        "spatial_tolerance_radius_ratio": {
           "type": "number",
           "exclusiveMinimum": 0
         },

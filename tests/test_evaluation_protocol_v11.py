@@ -146,7 +146,6 @@ class EvaluationProtocolV11Tests(unittest.TestCase):
             {
                 "enabled",
                 "algorithm",
-                "spatial_tolerance_fraction",
                 "temporal_tolerance_s",
                 "condition_frame_policy",
                 "initial_frames_excluded",
@@ -158,6 +157,7 @@ class EvaluationProtocolV11Tests(unittest.TestCase):
             },
             set(csti["required"]),
         )
+        self.assertEqual(2, len(csti["oneOf"]))
         self.assertFalse(csti["additionalProperties"])
         expected_constants = {
             "enabled": True,
@@ -178,7 +178,11 @@ class EvaluationProtocolV11Tests(unittest.TestCase):
                 for item in csti["properties"]["diagnostic_prefix_fractions"]["prefixItems"]
             ],
         )
-        for field in ("spatial_tolerance_fraction", "temporal_tolerance_s"):
+        for field in (
+            "spatial_tolerance_fraction",
+            "spatial_tolerance_radius_ratio",
+            "temporal_tolerance_s",
+        ):
             with self.subTest(field=field):
                 self.assertEqual("number", csti["properties"][field]["type"])
                 self.assertEqual(0, csti["properties"][field]["exclusiveMinimum"])

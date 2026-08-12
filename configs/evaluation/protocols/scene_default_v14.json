@@ -14,10 +14,11 @@
     "csti": {
       "enabled": true,
       "algorithm": "exact_full_tube_edt",
-      "spatial_tolerance_fraction": 0.004204482076268572,
+      "spatial_tolerance_policy": "reference_tube_equivalent_diameter_v1",
+      "spatial_tolerance_radius_ratio": 0.5,
       "temporal_tolerance_s": 0.025,
       "condition_frame_policy": "exclude_initial_samples",
-      "initial_frames_excluded": 3,
+      "initial_frames_excluded": 1,
       "score_aggregation": "full_tube",
       "diagnostic_prefix_fractions": [
         0.25,

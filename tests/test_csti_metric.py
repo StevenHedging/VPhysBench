@@ -35,6 +35,16 @@ FIXED_CONFIG = {
     "mask_resolution": "scene_analysis_native",
 }
 
+ADAPTIVE_CONFIG = {
+    **{
+        key: value
+        for key, value in FIXED_CONFIG.items()
+        if key != "spatial_tolerance_fraction"
+    },
+    "spatial_tolerance_policy": "reference_tube_equivalent_diameter_v1",
+    "spatial_tolerance_radius_ratio": 0.5,
+}
+
 CONFIG = CSTIConfig.from_mapping(FIXED_CONFIG)
 TIMES = (0.0, 0.0625, 0.125, 0.1875)
 
@@ -53,6 +63,86 @@ def config_with(**changes: object) -> CSTIConfig:
 
 
 class CSTIMetricTest(unittest.TestCase):
+    def test_adaptive_spatial_tolerance_uses_reference_tube_area(self) -> None:
+        config = CSTIConfig.from_mapping(ADAPTIVE_CONFIG)
+        reference = []
+        prediction = []
+        for index, _ in enumerate(TIMES):
+            reference_mask = np.zeros((41, 41), dtype=bool)
+            if index == 0:
+                reference_mask[10:31, 10:31] = True
+            else:
+                reference_mask[18:21, 18:21] = True
+                reference_mask[2, 38] = True
+            prediction_mask = np.roll(reference_mask, 1, axis=1)
+            reference.append(reference_mask)
+            prediction.append(prediction_mask)
+        value = CSTIInput(
+            ReferenceCapability.SAME_CASE_GT,
+            TIMES,
+            (41, 41),
+            (
+                CSTIEntityTube(
+                    "a",
+                    "subject",
+                    tuple(reference),
+                    tuple(prediction),
+                    ("track_a",),
+                ),
+            ),
+        )
+
+        result = evaluate_csti(
+            value,
+            expected_entities=(("a", "subject"),),
+            config=config,
+        )
+
+        tolerance = result["objects"][0]["spatial_tolerance"]
+        expected_diameter = 2.0 * math.sqrt(10.0 / math.pi)
+        self.assertEqual(
+            "reference_tube_equivalent_diameter_v1",
+            tolerance["policy"],
+        )
+        self.assertEqual(3, tolerance["reference_nonempty_frame_count"])
+        self.assertAlmostEqual(
+            expected_diameter,
+            tolerance["reference_tube_diameter_px"],
+            places=12,
+        )
+        self.assertAlmostEqual(
+            0.5 * expected_diameter,
+            tolerance["effective_radius_px"],
+            places=12,
+        )
+
+    def test_wider_reference_tube_receives_wider_spatial_support(self) -> None:
+        config = CSTIConfig.from_mapping(ADAPTIVE_CONFIG)
+        small_reference = np.zeros((4, 41, 41), dtype=bool)
+        small_prediction = np.zeros_like(small_reference)
+        small_reference[:, 20, 10] = True
+        small_prediction[:, 20, 12] = True
+        wide_reference = np.zeros((4, 41, 41), dtype=bool)
+        wide_prediction = np.zeros_like(wide_reference)
+        wide_reference[:, 16:25, 5:14] = True
+        wide_prediction[:, 16:25, 17:26] = True
+
+        small, _ = score_postcondition_tube(
+            tuple(small_reference),
+            tuple(small_prediction),
+            times_s=TIMES,
+            config=config,
+        )
+        wide, _ = score_postcondition_tube(
+            tuple(wide_reference),
+            tuple(wide_prediction),
+            times_s=TIMES,
+            config=config,
+        )
+
+        self.assertEqual(0.0, small)
+        self.assertGreater(wide, 0.0)
+
     def test_fixed_config_parses(self) -> None:
         config = CSTIConfig.from_mapping(FIXED_CONFIG)
 

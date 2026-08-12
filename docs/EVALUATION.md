@@ -251,22 +251,28 @@ v6 的 physics-parent profile 将 existence、condition-frozen identity 与当�
 
 ### 3.1 CSTI通用轨迹维度
 
-`scene_default_v11`在每个scene完成既有实体发现、角色匹配和追踪后，复用双方的原生
+`scene_default_v11`及后续CSTI协议在每个scene完成既有实体发现、角色匹配和追踪后，复用双方的原生
 分辨率二值mask，形成每个GT物理主体的时空Tube。它不改变任何scene专家评分，也不把
 CSTI与专家分数加权合成。当前协议只接受same-Case GT；历史physics-parent reference
 结果明确记为`not_applicable`，不进入CSTI聚合。
 
-v11先在双方物理时间重叠区间构造24 FPS规则网格；若媒体层为覆盖精确时长而附加了
+协议先在双方物理时间重叠区间构造24 FPS规则网格；若媒体层为覆盖精确时长而附加了
 一个不足`1/24 s`的末端采样点，CSTI在进入EDT前只剔除这个off-grid端点。随后舍弃
-最前面的3个规则采样点，使I2V共同条件帧及其紧邻启动阶段不参与评分。
+配置指定的初始规则采样点。历史v11/v13舍弃前3个采样点；当前v14只舍弃第0个条件
+首帧，其余共同时间样本均参与评分。
 
 对剩余GT Tube \(G\) 与已匹配的prediction Tube \(P\)，使用原生mask尺寸上的精确三维
-欧氏距离变换。归一化距离与soft occupancy定义为：
+欧氏距离变换。历史v11/v13使用画布比例作为x/y容差；当前v14则对每个GT entity仅从
+排除条件首帧后的reference Tube估计尺度。每个非空reference mask面积为 \(A_t\)，其
+面积等效直径为 \(d_t=2\sqrt{A_t/\pi}\)，取时间中位数 \(d_{ref}\)，并令各空间轴的
+soft-support半径 \(r=0.5d_{ref}\)。prediction Tube不参与容差估计，因而模型不能通过
+放大预测主体来放宽自身容差；孤立远端像素也只增加其实际面积，不会像bounding box
+那样显著放大尺度。当前v14的归一化距离与soft occupancy定义为：
 
 ```text
 d_A(t,y,x)^2 = ((t-t') / 0.025 s)^2
-             + ((y-y') / (0.004204482076268572 * max(H-1,1)))^2
-             + ((x-x') / (0.004204482076268572 * max(W-1,1)))^2
+             + ((y-y') / r)^2
+             + ((x-x') / r)^2
 soft_A(t,y,x) = max(0, 1 - min_{(t',y',x') in A} d_A(t,y,x))
 ```
 
@@ -284,11 +290,17 @@ manifest中全部物理主体分数的算术平均。整个主体未匹配时该
 reference与prediction共同存在的物理时长，不附加独立时长惩罚。
 
 Case级输出位于`case_results.jsonl[*].metrics.csti`，包含主体匹配、正式full-Tube分数、
-诊断prefix曲线以及实际舍弃的初始/末端采样数。Task级输出位于
+诊断prefix曲线以及实际舍弃的初始/末端采样数。当前v14还为每个对象写入
+`spatial_tolerance`审计：reference非空帧数、\(d_{ref}\)和有效半径\(r\)。Task级输出位于
 `task_result.json.dimensions.csti`，沿用完整coverage门禁和
 scene宏平均；顶层`task_result.json.score`仍是专家分数，并同时镜像到
 `dimensions.expert`。若全部Case均不适用，CSTI维度报告
 `status=not_applicable, score=null`。
+
+运行时API仍可显式读取历史canvas-fraction配置，以复现旧协议；当前v14配置使用上述
+reference-Tube自适应策略。既有run继续绑定其冻结的protocol fingerprint，不会因同名
+配置文件更新而被静默重解释。要获得新分数，必须按当前fingerprint创建独立重评估变体
+或重新导入/执行预测；不同fingerprint的结果不得混合比较。
 
 Scene score 是 reference 与 prediction 的相似度，不是 prediction 的绝对质量分。
 所有正常 comparison 必须满足：
@@ -2144,6 +2156,7 @@ configs/evaluation/protocols/scene_default_v6.json  # shadow all-scene open worl
 configs/evaluation/protocols/scene_default_v7.json  # shadow observer hardening
 configs/evaluation/protocols/scene_default_v10.json # frozen expert Tasks
 configs/evaluation/protocols/scene_default_v11.json # expert + independent CSTI
+configs/evaluation/protocols/scene_default_v14.json # current adaptive CSTI tolerance
 configs/evaluation/protocols/scene_default_v5.json  # shadow collision
 configs/evaluation/protocols/scene_default_v4.json  # shadow collision
 configs/evaluation/protocols/scene_default_v3.json

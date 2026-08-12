@@ -33,13 +33,21 @@ def _sha256(path) -> str:
 
 
 class EvaluationProtocolV14Tests(unittest.TestCase):
-    def test_v14_changes_only_collision_identity_contract(self) -> None:
+    def test_v14_has_latest_collision_identity_and_csti_tolerance(self) -> None:
         v13 = load_evaluation_protocol("scene_default_v13")
         v14 = load_evaluation_protocol("scene_default_v14")
 
         self.assertEqual("scene_default_v14", v14["protocol_id"])
         self.assertEqual(v13["robustness"], v14["robustness"])
-        self.assertEqual(v13["general_metrics"], v14["general_metrics"])
+        expected_metrics = copy.deepcopy(v13["general_metrics"])
+        csti = expected_metrics["csti"]
+        csti.pop("spatial_tolerance_fraction")
+        csti["spatial_tolerance_policy"] = (
+            "reference_tube_equivalent_diameter_v1"
+        )
+        csti["spatial_tolerance_radius_ratio"] = 0.5
+        csti["initial_frames_excluded"] = 1
+        self.assertEqual(expected_metrics, v14["general_metrics"])
         self.assertEqual(
             {
                 scene_id: config
@@ -148,6 +156,20 @@ class EvaluationProtocolV14Tests(unittest.TestCase):
             identity_rule["if"]["properties"]["type"]["const"],
         )
         self.assertIn("subject_identity", identity_rule["then"]["required"])
+
+        csti = schema["$defs"]["csti"]
+        self.assertIn("oneOf", csti)
+        self.assertNotIn("spatial_tolerance_fraction", csti["required"])
+        self.assertEqual(
+            "reference_tube_equivalent_diameter_v1",
+            csti["properties"]["spatial_tolerance_policy"]["const"],
+        )
+        self.assertEqual(
+            0,
+            csti["properties"]["spatial_tolerance_radius_ratio"][
+                "exclusiveMinimum"
+            ],
+        )
 
     def test_v13_protocol_and_tasks_remain_byte_frozen(self) -> None:
         self.assertEqual(

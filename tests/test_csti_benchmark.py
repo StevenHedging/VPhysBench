@@ -45,7 +45,8 @@ class CSTIBenchmarkTests(unittest.TestCase):
                 {
                     "algorithm",
                     "sampling_fps",
-                    "spatial_tolerance_fraction",
+                    "spatial_tolerance_policy",
+                    "spatial_tolerance_radius_ratio",
                     "temporal_tolerance_s",
                     "frames",
                     "initial_frames_excluded",
@@ -63,13 +64,14 @@ class CSTIBenchmarkTests(unittest.TestCase):
             self.assertEqual("exact_full_tube_edt", payload["algorithm"])
             self.assertEqual(24.0, payload["sampling_fps"])
             self.assertEqual(
-                0.004204482076268572,
-                payload["spatial_tolerance_fraction"],
+                "reference_tube_equivalent_diameter_v1",
+                payload["spatial_tolerance_policy"],
             )
+            self.assertEqual(0.5, payload["spatial_tolerance_radius_ratio"])
             self.assertEqual(0.025, payload["temporal_tolerance_s"])
             self.assertEqual(5, payload["frames"])
-            self.assertEqual(3, payload["initial_frames_excluded"])
-            self.assertEqual(2, payload["scored_frames"])
+            self.assertEqual(1, payload["initial_frames_excluded"])
+            self.assertEqual(4, payload["scored_frames"])
             self.assertEqual(9, payload["height"])
             self.assertEqual(11, payload["width"])
             self.assertEqual(1, payload["objects"])

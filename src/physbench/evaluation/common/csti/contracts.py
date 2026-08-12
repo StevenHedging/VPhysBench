@@ -23,7 +23,6 @@ class CSTIContractError(ValueError):
 class CSTIConfig:
     enabled: bool
     algorithm: str
-    spatial_tolerance_fraction: float
     temporal_tolerance_s: float
     condition_frame_policy: str
     initial_frames_excluded: int
@@ -32,6 +31,9 @@ class CSTIConfig:
     case_aggregation: str
     timeline_policy: str
     mask_resolution: str
+    spatial_tolerance_fraction: float | None = None
+    spatial_tolerance_policy: str | None = None
+    spatial_tolerance_radius_ratio: float | None = None
 
     def __post_init__(self) -> None:
         if self.enabled is not True:
@@ -54,14 +56,42 @@ class CSTIConfig:
                     "csti_config_value_unsupported",
                     f"Unsupported CSTI {key}: expected {expected!r}, got {actual!r}",
                 )
-        object.__setattr__(
-            self,
-            "spatial_tolerance_fraction",
-            _positive_finite_float(
-                self.spatial_tolerance_fraction,
-                "spatial_tolerance_fraction",
-            ),
+        legacy_spatial = self.spatial_tolerance_fraction is not None
+        adaptive_spatial = (
+            self.spatial_tolerance_policy is not None
+            or self.spatial_tolerance_radius_ratio is not None
         )
+        if legacy_spatial == adaptive_spatial:
+            raise CSTIContractError(
+                "csti_spatial_tolerance_mode_invalid",
+                "CSTI requires exactly one legacy canvas-fraction or "
+                "adaptive reference-Tube spatial tolerance mode",
+            )
+        if legacy_spatial:
+            object.__setattr__(
+                self,
+                "spatial_tolerance_fraction",
+                _positive_finite_float(
+                    self.spatial_tolerance_fraction,
+                    "spatial_tolerance_fraction",
+                ),
+            )
+        else:
+            expected_policy = "reference_tube_equivalent_diameter_v1"
+            if self.spatial_tolerance_policy != expected_policy:
+                raise CSTIContractError(
+                    "csti_config_value_unsupported",
+                    "Unsupported CSTI spatial_tolerance_policy: expected "
+                    f"{expected_policy!r}, got {self.spatial_tolerance_policy!r}",
+                )
+            object.__setattr__(
+                self,
+                "spatial_tolerance_radius_ratio",
+                _positive_finite_float(
+                    self.spatial_tolerance_radius_ratio,
+                    "spatial_tolerance_radius_ratio",
+                ),
+            )
         object.__setattr__(
             self,
             "temporal_tolerance_s",
@@ -93,10 +123,9 @@ class CSTIConfig:
         if not isinstance(value, Mapping):
             raise CSTIContractError("csti_config_not_mapping", "CSTI configuration must be a mapping")
 
-        required = {
+        common = {
             "enabled",
             "algorithm",
-            "spatial_tolerance_fraction",
             "temporal_tolerance_s",
             "condition_frame_policy",
             "initial_frames_excluded",
@@ -107,9 +136,14 @@ class CSTIConfig:
             "mask_resolution",
         }
         actual = set(value)
-        if actual != required:
-            missing = sorted(required - actual)
-            extra = sorted(actual - required)
+        legacy = common | {"spatial_tolerance_fraction"}
+        adaptive = common | {
+            "spatial_tolerance_policy",
+            "spatial_tolerance_radius_ratio",
+        }
+        if actual not in (legacy, adaptive):
+            missing = sorted(adaptive - actual)
+            extra = sorted(actual - adaptive)
             raise CSTIContractError(
                 "csti_config_keys_invalid",
                 f"CSTI configuration keys are invalid: missing={missing}, extra={extra}",
@@ -142,10 +176,6 @@ class CSTIConfig:
         return cls(
             enabled=True,
             algorithm="exact_full_tube_edt",
-            spatial_tolerance_fraction=_positive_finite_float(
-                value["spatial_tolerance_fraction"],
-                "spatial_tolerance_fraction",
-            ),
             temporal_tolerance_s=_positive_finite_float(
                 value["temporal_tolerance_s"],
                 "temporal_tolerance_s",
@@ -157,7 +187,44 @@ class CSTIConfig:
             case_aggregation="mean_gt_entities",
             timeline_policy="physical_overlap",
             mask_resolution="scene_analysis_native",
+            spatial_tolerance_fraction=(
+                _positive_finite_float(
+                    value["spatial_tolerance_fraction"],
+                    "spatial_tolerance_fraction",
+                )
+                if actual == legacy
+                else None
+            ),
+            spatial_tolerance_policy=(
+                value["spatial_tolerance_policy"]
+                if actual == adaptive
+                else None
+            ),
+            spatial_tolerance_radius_ratio=(
+                _positive_finite_float(
+                    value["spatial_tolerance_radius_ratio"],
+                    "spatial_tolerance_radius_ratio",
+                )
+                if actual == adaptive
+                else None
+            ),
         )
+
+    def spatial_parameters(self) -> dict[str, float | str]:
+        if self.spatial_tolerance_fraction is not None:
+            return {"spatial_tolerance_fraction": self.spatial_tolerance_fraction}
+        if (
+            self.spatial_tolerance_policy is None
+            or self.spatial_tolerance_radius_ratio is None
+        ):
+            raise CSTIContractError(
+                "csti_spatial_tolerance_mode_invalid",
+                "adaptive CSTI spatial tolerance is incomplete",
+            )
+        return {
+            "spatial_tolerance_policy": self.spatial_tolerance_policy,
+            "spatial_tolerance_radius_ratio": self.spatial_tolerance_radius_ratio,
+        }
 
 
 def _positive_finite_float(value: Any, field_name: str) -> float:
