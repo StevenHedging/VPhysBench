@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import importlib
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
+import numpy as np
 import torch
 
 from physbench.baselines.wan22_subject_motion_model import (
@@ -12,6 +16,7 @@ from physbench.baselines.wan22_subject_motion_model import (
 
 
 TRAINER_MODULE_NAME = "scripts.wan22_subject_motion_train"
+ADAPTER_MODULE_NAME = "physbench.baselines.wan22_subject_motion"
 
 
 def _trainer_module():
@@ -20,6 +25,15 @@ def _trainer_module():
     except ModuleNotFoundError as exc:
         raise AssertionError(
             f"production module {TRAINER_MODULE_NAME} has not been implemented"
+        ) from exc
+
+
+def _adapter_module():
+    try:
+        return importlib.import_module(ADAPTER_MODULE_NAME)
+    except ModuleNotFoundError as exc:
+        raise AssertionError(
+            f"production module {ADAPTER_MODULE_NAME} has not been implemented"
         ) from exc
 
 
@@ -340,6 +354,211 @@ class SubjectMotionObjectiveTests(unittest.TestCase):
         self.assertGreater(float(result["subject_support_fraction"]), 0.0)
         self.assertGreater(float(result["motion_support_fraction"]), 0.0)
         self.assertTrue(bool(torch.isfinite(result["total_loss"])))
+
+
+def _adapter_config(root: Path) -> dict:
+    return {
+        "schema_version": "1.0",
+        "baseline_id": "wan22_ti2v_5b_lora_r32_subject_motion_v1",
+        "supported_scenes": [
+            "pendulum",
+            "collision_1d",
+            "inclined_plane_slide",
+            "uniform_circular_motion",
+            "parabolic_motion",
+            "push_bottle",
+            "vertical_spring_oscillator",
+        ],
+        "runtime": {
+            "project_root": str(root / "runtime"),
+            "python": str(root / "python"),
+            "model_base": str(root / "models"),
+            "cuda_visible_devices": "0,1,2,3",
+            "accelerate_config": str(root / "accelerate.yaml"),
+            "subject_tube_cache_dir": str(root / "cache"),
+        },
+        "media_adapter": {
+            "width": 480,
+            "height": 832,
+            "fps": 24,
+            "max_frames": 121,
+            "min_frames": 5,
+            "pad_mode": "edge",
+        },
+        "lora": {
+            "micro_batch_size": 1,
+            "global_batch_size": 8,
+            "dataset_repeat": 1,
+            "num_epochs": 2,
+            "scene_balancing": "oversample_each_scene_to_largest_world_aligned",
+            "seed": 42,
+            "save_optimizer_state": True,
+        },
+        "st_tube_iou": {
+            "enable_st_iou_loss": True,
+            "lambda_st": 0.05,
+            "lambda_subject_flow": 0.10,
+            "lambda_motion_delta": 0.05,
+            "st_iou_eps": 1e-6,
+            "subject_flow_eps": 1e-6,
+            "motion_delta_eps": 1e-6,
+            "st_loss_weighting": "linear_clean",
+            "st_noise_threshold": 0.5,
+            "aux_warmup_steps": 100,
+            "latent_channels": 48,
+            "hidden_channels": 32,
+            "mask_segmenter_model_id": "facebook/sam2.1-hiera-tiny",
+        },
+    }
+
+
+def _write_cache_pair(
+    root: Path,
+    *,
+    case_id: str = "case-a",
+    stored_case_id: str | None = None,
+    dtype=np.uint8,
+) -> tuple[Path, Path]:
+    from physbench.io import sha256_file
+
+    root.mkdir(parents=True, exist_ok=True)
+    tube_path = root / f"{case_id}.npz"
+    audit_path = root / f"{case_id}.audit.json"
+    masks = np.ones((5, 4, 4), dtype=dtype)
+    np.savez_compressed(
+        tube_path,
+        masks=masks,
+        layout=np.asarray("THW"),
+        case_id=np.asarray(stored_case_id or case_id),
+    )
+    audit = {
+        "schema_version": "1.0",
+        "status": "materialized",
+        "case_id": stored_case_id or case_id,
+        "shape_thw": [5, 4, 4],
+        "dtype": str(masks.dtype),
+        "values": sorted(np.unique(masks).tolist()),
+        "frame_count": 5,
+        "foreground_fraction": float(masks.mean()),
+        "source_fingerprint": {
+            "case_id": stored_case_id or case_id,
+            "normalized_video_sha256": "a" * 64,
+        },
+        "tube_sha256": sha256_file(tube_path),
+    }
+    audit_path.write_text(json.dumps(audit), encoding="utf-8")
+    return tube_path, audit_path
+
+
+class SubjectMotionAdapterTests(unittest.TestCase):
+    def test_valid_cache_pair_is_seeded_and_missing_case_falls_back(self) -> None:
+        module = _adapter_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = _adapter_config(root)
+            source, source_audit = _write_cache_pair(root / "cache")
+            adapter = module.Wan22SubjectMotionAdapter(config, execute=True)
+
+            result = adapter._seed_subject_tube_cache(
+                ["case-a", "case-missing"],
+                root / "target",
+            )
+
+            target = root / "target" / source.name
+            target_audit = root / "target" / source_audit.name
+            self.assertEqual(source.read_bytes(), target.read_bytes())
+            self.assertEqual(source_audit.read_bytes(), target_audit.read_bytes())
+            self.assertEqual(["case-a"], result["seeded_case_ids"])
+            self.assertEqual(["case-missing"], result["fallback_case_ids"])
+
+    def test_cache_validation_rejects_case_hash_and_binary_contract_errors(self) -> None:
+        module = _adapter_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = _adapter_config(root)
+            adapter = module.Wan22SubjectMotionAdapter(config, execute=True)
+
+            with self.subTest("case"):
+                tube, audit = _write_cache_pair(
+                    root / "case-mismatch",
+                    stored_case_id="other-case",
+                )
+                with self.assertRaisesRegex(ValueError, "case_id"):
+                    adapter._validate_cached_tube("case-a", tube, audit)
+
+            with self.subTest("hash"):
+                tube, audit = _write_cache_pair(root / "hash-mismatch")
+                value = json.loads(audit.read_text())
+                value["tube_sha256"] = "0" * 64
+                audit.write_text(json.dumps(value), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "hash"):
+                    adapter._validate_cached_tube("case-a", tube, audit)
+
+            with self.subTest("dtype"):
+                tube, audit = _write_cache_pair(
+                    root / "dtype-mismatch",
+                    dtype=np.float32,
+                )
+                with self.assertRaisesRegex(ValueError, "uint8"):
+                    adapter._validate_cached_tube("case-a", tube, audit)
+
+    def test_warm_start_requires_standard_lora_and_paired_head(self) -> None:
+        module = _adapter_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = _adapter_config(root)
+            lora = root / "step-2184.safetensors"
+            config["initial_lora_checkpoint"] = str(lora)
+            adapter = module.Wan22SubjectMotionAdapter(config, execute=True)
+
+            with self.assertRaisesRegex(FileNotFoundError, "LoRA"):
+                adapter._resolve_warm_start_checkpoint()
+            lora.write_bytes(b"lora")
+            with self.assertRaisesRegex(FileNotFoundError, "paired"):
+                adapter._resolve_warm_start_checkpoint()
+            head = root / "step-2184.st-head.safetensors"
+            head.write_bytes(b"head")
+            self.assertEqual(lora.resolve(), adapter._resolve_warm_start_checkpoint())
+
+            bad = _adapter_config(root)
+            bad["initial_lora_checkpoint"] = str(head)
+            with self.assertRaisesRegex(ValueError, "ST-head"):
+                module.Wan22SubjectMotionAdapter(
+                    bad, execute=True
+                )._resolve_warm_start_checkpoint()
+
+    def test_launcher_is_bound_to_four_gpus_and_subject_motion_entrypoint(self) -> None:
+        module = _adapter_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = _adapter_config(root)
+            lora = root / "step-2184.safetensors"
+            lora.write_bytes(b"lora")
+            lora.with_name("step-2184.st-head.safetensors").write_bytes(b"head")
+            config["initial_lora_checkpoint"] = str(lora)
+            (root / "accelerate.yaml").write_text("compute_environment: LOCAL_MACHINE\n")
+            adapter = module.Wan22SubjectMotionAdapter(config, execute=True)
+            run_dir = root / "run"
+            dataset_dir = root / "dataset"
+            metadata = dataset_dir / "metadata.jsonl"
+            metadata.parent.mkdir(parents=True)
+            metadata.write_text("", encoding="utf-8")
+
+            environment = adapter._training_environment(
+                run_dir,
+                dataset_dir,
+                metadata,
+            )
+            command = adapter._training_command(root / "runtime")
+
+            self.assertEqual("0,1,2,3", environment["CUDA_VISIBLE_DEVICES"])
+            self.assertEqual(str(lora.resolve()), environment["LORA_CHECKPOINT"])
+            self.assertIn("SUBJECT_MOTION_CONFIG_JSON", environment)
+            self.assertNotIn("ST_TUBE_IOU_CONFIG_JSON", environment)
+            self.assertEqual(
+                Path("scripts/train_wan22_subject_motion.sh"),
+                Path(command[1]).relative_to(adapter.project_root),
+            )
 
 
 if __name__ == "__main__":
