@@ -80,7 +80,9 @@ CSTI 使用 `exact_full_tube_edt`。它的精确输入是：冻结 entity manife
 `(delta_t / 0.025 s, 1 / r, 1 / r)`。该半径不读取 prediction mask 的尺寸，避免模型通过
 放大预测主体来放宽自身容差；面积等效直径也不会被 mask 的孤立远端像素像 bounding box
 那样显著放大。每个对象的 `d_ref`、有效 `r` 与非空 reference 帧数都会写入 CSTI audit。
-旧 run 所冻结的 canvas-fraction 配置仍可由运行时读取，但不属于当前公开 v1 schema。
+运行时 API 仍可读取显式提供的旧 canvas-fraction 配置，但它不属于当前公开 v1 schema。
+既有结果继续绑定其原 protocol fingerprint，不会被当前配置静默重解释；要获得新分数必须
+以当前 fingerprint 重新执行或导入预测。
 
 case 层按全部 GT entities 求均值，Task 层作为独立维度汇总；CSTI 不替代 scene expert
 score。
