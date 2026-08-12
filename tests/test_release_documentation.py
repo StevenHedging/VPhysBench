@@ -106,18 +106,24 @@ class ReleaseDocumentationTests(unittest.TestCase):
             "input_video" in case.get("assets", {})
             for case in cases
         ))
-        content = "\n".join(
-            path.read_text(encoding="utf-8")
-            for path in (
-                ROOT / "README.md",
-                ROOT / "docs" / "CUSTOM_BASELINE_QUICKSTART.md",
-                ROOT / "docs" / "BASELINE_INTEGRATION.md",
-            )
+        v2v_manuals = (
+            ROOT / "docs" / "CUSTOM_BASELINE_QUICKSTART.md",
+            ROOT / "docs" / "BASELINE_INTEGRATION.md",
+            ROOT / "docs" / "DATA_ADAPTER.md",
         )
-        self.assertIn("cropped conditioning-prefix video", content)
-        self.assertIn("not supported", content)
-        self.assertIn("must not", content)
-        self.assertIn("reference video", content)
+        for path in v2v_manuals:
+            content = path.read_text(encoding="utf-8").casefold()
+            self.assertRegex(content, r"(?:not supported|not an official|不能用于)")
+            self.assertRegex(content, r"(?:reference|参考)")
+            self.assertRegex(content, r"(?:must not|do not|禁止|不能|不得)")
+
+    def test_protocol_distinguishes_degraded_zero_from_contract_errors(self) -> None:
+        content = (ROOT / "docs" / "BENCHMARK_PROTOCOL.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("sealed media/record contract", content)
+        self.assertIn("protocol_error", content)
+        self.assertRegex(content, r"protocol_error[\s\S]{0,100}coverage")
 
     def test_data_adapter_manual_has_no_retired_model_or_scene_residue(self) -> None:
         content = (ROOT / "docs" / "DATA_ADAPTER.md").read_text(

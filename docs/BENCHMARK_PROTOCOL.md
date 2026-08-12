@@ -50,12 +50,16 @@ video 都不得替代该输入资产。无法解码、违反媒体契约或越�
 
 ## Scoring, degradation and coverage
 
-官方 Task v1 对六场景运行对象级物理评分，并计算独立 CSTI 时空一致性维度。以下预测侧
-失败按“已评估零分”处理，同时写入 degradation reason：
+官方 Task v1 对六场景运行对象级物理评分，并计算独立 CSTI 时空一致性维度。以下由
+robustness policy 覆盖的预测侧失败按“已评估零分”处理，同时写入 degradation reason：
 
 - 缺失或未完成的 prediction record；
-- prediction media 无效；
+- evaluator 侧的 prediction 解码失败；
 - prediction observation 失败。
+
+违反 **sealed media/record contract** 的输出仍是 `protocol_error`，不会被改写为已评估
+零分，也不计入完整 coverage。典型情形包括画布、FPS、帧数或记录身份不符合编译时封印
+的契约。
 
 参考资产失败仍标记为 unavailable，evaluator 内部错误仍标记为 error；这两类不会伪装成
 有效零分。Task 汇总以 canonical jobs 为分母，记录 coverage、status counts、逐场景结果、
