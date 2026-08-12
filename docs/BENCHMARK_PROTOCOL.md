@@ -57,9 +57,11 @@ robustness policy 覆盖的预测侧失败按“已评估零分”处理，同�
 - evaluator 侧的 prediction 解码失败；
 - prediction observation 失败。
 
-违反 **sealed media/record contract** 的输出仍是 `protocol_error`，不会被改写为已评估
-零分，也不计入完整 coverage。典型情形包括画布、FPS、帧数或记录身份不符合编译时封印
-的契约。
+输出视频违反 **sealed media/record contract**（例如画布、FPS 或帧数不符），或 runtime
+明确产生 `protocol_error` prediction record 时，Task 结果仍记录 `protocol_error`；它不会
+被改写为已评估零分，也不计入完整 coverage。prediction 清单的身份/覆盖不匹配、重复或
+额外记录、以及嵌入 media contract 不匹配则由 **pre-evaluation validation** 直接拒绝；
+这种运行不会产生 publishable Task result。
 
 参考资产失败仍标记为 unavailable，evaluator 内部错误仍标记为 error；这两类不会伪装成
 有效零分。Task 汇总以 canonical jobs 为分母，记录 coverage、status counts、逐场景结果、

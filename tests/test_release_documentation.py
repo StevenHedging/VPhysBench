@@ -124,6 +124,8 @@ class ReleaseDocumentationTests(unittest.TestCase):
         self.assertIn("sealed media/record contract", content)
         self.assertIn("protocol_error", content)
         self.assertRegex(content, r"protocol_error[\s\S]{0,100}coverage")
+        self.assertIn("pre-evaluation validation", content)
+        self.assertIn("不会产生 publishable Task result", content)
 
     def test_data_adapter_manual_has_no_retired_model_or_scene_residue(self) -> None:
         content = (ROOT / "docs" / "DATA_ADAPTER.md").read_text(
