@@ -19,6 +19,7 @@ REQUIRED_DOCS = (
 )
 PUBLIC_DOCS = (
     ROOT / "README.md",
+    ROOT / "datasets" / "HF_DATASET_CARD.md",
     ROOT / "docs" / "ARCHITECTURE.md",
     ROOT / "docs" / "BASELINE_INTEGRATION.md",
     ROOT / "docs" / "EVALUATION.md",
@@ -84,6 +85,13 @@ class ReleaseDocumentationTests(unittest.TestCase):
         )
         self.assertIn("Six scored scenes", content)
         self.assertIn("One Dataset-only unsupported scene", content)
+
+        dataset_card = (ROOT / "datasets" / "HF_DATASET_CARD.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Six scenes are part of the scored benchmark", dataset_card)
+        self.assertIn("push_bottle", dataset_card)
+        self.assertNotIn("vertical_spring_oscillator` are", dataset_card)
 
     def test_v2v_documentation_matches_the_current_dataset_asset_boundary(self) -> None:
         cases = [

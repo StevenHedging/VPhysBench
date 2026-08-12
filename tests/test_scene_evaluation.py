@@ -471,7 +471,7 @@ class SceneEvaluationTests(unittest.TestCase):
             self.assertIsNone(summary["score"])
             self.assertAlmostEqual(0.8, summary["observed_mean_score"])
 
-    def test_default_protocol_resolves_all_five_scene_evaluators(self) -> None:
+    def test_default_protocol_resolves_all_six_scene_evaluators(self) -> None:
         protocol = load_evaluation_protocol("scene_default_v1")
         registry = SceneEvaluatorRegistry(protocol)
         expected = {
@@ -480,6 +480,7 @@ class SceneEvaluationTests(unittest.TestCase):
             "inclined_plane_slide",
             "uniform_circular_motion",
             "parabolic_motion",
+            "vertical_spring_oscillator",
         }
         for scene_id in expected:
             description = registry.resolve(scene_id).describe()
