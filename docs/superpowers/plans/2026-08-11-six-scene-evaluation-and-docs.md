@@ -51,7 +51,6 @@ Change active test constants to the two new filenames and assert literal Task ID
 Run:
 
 ```bash
-PATH=/root/Steven/.venvs/vphysbench-ablation/bin:$PATH \
 PYTHONPATH=src:tests:. python -m unittest \
   tests.test_current_dataset \
   tests.test_release_v1_contract \
@@ -92,7 +91,6 @@ Retain the other manifest fields, move `vertical_spring_oscillator` into the six
 Run the Step 2 command plus:
 
 ```bash
-PATH=/root/Steven/.venvs/vphysbench-ablation/bin:$PATH \
 PYTHONPATH=src:tests:. python -m unittest \
   tests.test_task_runtime_contracts \
   tests.test_managed_baselines \
@@ -147,7 +145,6 @@ Extend `tests/test_release_documentation.py` so real public manuals must:
 Run:
 
 ```bash
-PATH=/root/Steven/.venvs/vphysbench-ablation/bin:$PATH \
 PYTHONPATH=src:tests:. python -m unittest tests.test_release_documentation -v
 ```
 
@@ -198,7 +195,6 @@ Require `RUN_LAYOUT.md` to name `evaluation/case_results.jsonl`, `evaluation/tas
 Run:
 
 ```bash
-PATH=/root/Steven/.venvs/vphysbench-ablation/bin:$PATH \
 PYTHONPATH=src:tests:. python -m unittest \
   tests.test_release_documentation.ReleaseDocumentationTests.test_run_layout_explains_official_result_fields -v
 ```
@@ -214,16 +210,14 @@ Expand `RUN_LAYOUT.md` with the canonical output tree and a concise “read resu
 Run:
 
 ```bash
-PATH=/root/Steven/.venvs/vphysbench-ablation/bin:$PATH \
 PYTEST_ADDOPTS='-p no:cacheprovider' make test-interface
 
-PATH=/root/Steven/.venvs/wan22-pair-text/bin:$PATH \
 PYTEST_ADDOPTS='-p no:cacheprovider' make test-evaluation
 
-PATH=/root/Steven/.venvs/vphysbench-ablation/bin:$PATH make release-check
-PATH=/root/Steven/.venvs/vphysbench-ablation/bin:$PATH make release-archive-check
+make release-check
+make release-archive-check
 
-/root/Steven/.venvs/vphysbench-ablation/bin/python - <<'PY'
+python - <<'PY'
 import json
 from pathlib import Path
 for path in [*Path('tasks/official').glob('*.json'), Path('RELEASE_MANIFEST.json')]:

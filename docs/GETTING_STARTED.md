@@ -107,7 +107,7 @@ passes the evaluation-level doctor before running it:
 ```bash
 physbench atomic-run \
   --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval_v1.json \
+  --task tasks/official/six_scene_direct_eval_v1.json \
   --baseline baselines/my_model \
   --case-id circular_r1_silver02cm_img_0370 \
   --run-id my_model_smoke \

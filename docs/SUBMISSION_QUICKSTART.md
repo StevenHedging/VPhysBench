@@ -10,7 +10,7 @@ physbench baseline init my_submission --backend submission
 
 physbench task-build \
   --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval_v1.json \
+  --task tasks/official/six_scene_direct_eval_v1.json \
   --baseline baselines/my_submission \
   --output submission_task_instance.json
 ```
@@ -46,7 +46,7 @@ physbench baseline validate my_submission
 
 physbench atomic-run \
   --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval_v1.json \
+  --task tasks/official/six_scene_direct_eval_v1.json \
   --baseline baselines/my_submission \
   --run-id imported_submission \
   --output-root run \

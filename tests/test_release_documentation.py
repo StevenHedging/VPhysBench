@@ -69,12 +69,55 @@ class ReleaseDocumentationTests(unittest.TestCase):
         self.assertIn("physbench dataset pull", content)
         self.assertIn("physbench doctor", content)
 
-    def test_protocol_declares_five_scored_and_two_preview_scenes(self) -> None:
+    def test_main_navigation_exposes_baseline_adapter_and_result_guides(self) -> None:
+        content = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("docs/BASELINE_INTEGRATION.md", content)
+        self.assertIn("docs/DATA_ADAPTER.md", content)
+        self.assertRegex(
+            content,
+            r"\[[^\]]*(?:结果|result)[^\]]*\]\(docs/RUN_LAYOUT\.md\)",
+        )
+
+    def test_protocol_declares_six_scored_and_one_unsupported_scene(self) -> None:
         content = (ROOT / "docs" / "BENCHMARK_PROTOCOL.md").read_text(
             encoding="utf-8"
         )
-        self.assertIn("Five scored scenes", content)
-        self.assertIn("Two preview scenes", content)
+        self.assertIn("Six scored scenes", content)
+        self.assertIn("One Dataset-only unsupported scene", content)
+
+    def test_v2v_documentation_matches_the_current_dataset_asset_boundary(self) -> None:
+        cases = [
+            json.loads(line)
+            for line in (
+                ROOT / "datasets" / "releases" / "13.0.0" / "cases.jsonl"
+            ).read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        self.assertEqual(916, len(cases))
+        self.assertFalse(any(
+            "input_video" in case.get("assets", {})
+            for case in cases
+        ))
+        content = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (
+                ROOT / "README.md",
+                ROOT / "docs" / "CUSTOM_BASELINE_QUICKSTART.md",
+                ROOT / "docs" / "BASELINE_INTEGRATION.md",
+            )
+        )
+        self.assertIn("cropped conditioning-prefix video", content)
+        self.assertIn("not supported", content)
+        self.assertIn("must not", content)
+        self.assertIn("reference video", content)
+
+    def test_data_adapter_manual_has_no_retired_model_or_scene_residue(self) -> None:
+        content = (ROOT / "docs" / "DATA_ADAPTER.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIsNone(re.search(r"\bWAN\b", content))
+        self.assertIsNone(re.search(r"\bCosmos\b", content))
+        self.assertNotIn("free_fall", content)
 
     def test_release_manifest_matches_dataset_binding(self) -> None:
         release = json.loads((ROOT / "RELEASE_MANIFEST.json").read_text())

@@ -19,8 +19,8 @@
 所有公开 evaluator 的 `evaluator_version` 都是 `1.0`。源码中保留少量版本化辅助模块，
 因为当前算法复用它们；它们不是可选公共协议，也不能通过 registry 选择。
 
-协议可以解析上述六个 scene evaluator，但官方 Task v1 仍只选择前五个场景。公开 spring
-resolver 不会改变正式 job 集、五场景宏平均或 leaderboard 分数。
+协议和两个官方 Task v1 都选择上述六个 scene evaluator；Task 文件仍是正式 job 集的唯一
+选择权威，registry 不能自行增删评估 case。
 
 ## Shared contract
 
@@ -100,6 +100,6 @@ topology、CSTI 绑定和是否复用完全相同的 sampled frames。
 
 ## Aggregation
 
-Task 汇总按 canonical `scene_ids` 计算五场景宏平均，同时报告逐场景、partition、状态、
+Task 汇总按 canonical `scene_ids` 计算六场景宏平均，同时报告逐场景、partition、状态、
 coverage、observed mean、CSTI 和 robustness 诊断。报告策略来自 Task v1；Evaluator 不得
 扩大或缩小评估集合。

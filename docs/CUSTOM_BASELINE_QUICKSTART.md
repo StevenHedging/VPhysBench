@@ -3,6 +3,11 @@
 VPhysBench ships no integrated generation algorithm. User integrations live
 under `baselines/<baseline_id>` and are discovered from their descriptors.
 
+Current official support covers managed I2V and imported submissions. The
+managed V2V descriptor/driver shape is reserved for future Dataset releases;
+it cannot be used for an official Task v1 result today because the Cases do
+not yet contain a separately authorized conditioning-prefix asset.
+
 ## Create the bundle
 
 For image-to-video:
@@ -11,11 +16,15 @@ For image-to-video:
 physbench baseline init my_model --backend managed-i2v
 ```
 
-For video-to-video:
+For V2V interface development only (not an official benchmark run):
 
 ```bash
 physbench baseline init my_model --backend managed-v2v
 ```
+
+Do not derive that input from reference, source, or evaluator-only media. See
+[BASELINE_INTEGRATION.md](BASELINE_INTEGRATION.md) for the full trust boundary
+and [DATA_ADAPTER.md](DATA_ADAPTER.md) for input materialization rules.
 
 The generated directory contains:
 
@@ -100,7 +109,7 @@ as a reported result.
 ```bash
 physbench atomic-run \
   --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval_v1.json \
+  --task tasks/official/six_scene_direct_eval_v1.json \
   --baseline baselines/my_model \
   --case-id circular_r1_silver02cm_img_0370 \
   --run-id my_model_smoke \

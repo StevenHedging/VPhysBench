@@ -16,4 +16,9 @@ driver, and example configuration when sharing an integration. Keep
 machine-local paths outside Git.
 
 See `docs/CUSTOM_BASELINE_QUICKSTART.md` for the command contract and the
-first one-case run.
+first one-case run, `docs/BASELINE_INTEGRATION.md` for the complete extension
+contract, and `docs/DATA_ADAPTER.md` for input adaptation rules.
+
+Dataset 13.0.0 supports managed I2V and imported submissions. Managed V2V is
+reserved but not an official runnable mode because Cases do not yet include a
+separately authorized conditioning-prefix video asset.

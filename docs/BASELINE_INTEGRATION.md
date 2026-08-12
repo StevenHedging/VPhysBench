@@ -29,9 +29,12 @@ video.
 
 ### Managed V2V
 
-Use `--backend managed-v2v`. The standard command receives the authorized input
-video instead of a first-frame image. The same run-owned output and identity
-rules apply.
+The interface is reserved, but official managed V2V is **not supported** by
+Dataset 13.0.0. Its Cases do not contain an independently authorized **cropped conditioning-prefix video**. A **reference video**, source video,
+physics-reference video, or evaluator asset **must not** be substituted or
+cropped to manufacture that input. A future Dataset release may enable the
+existing `--backend managed-v2v` interface by publishing a distinct input
+asset with its own provenance and access policy.
 
 ### Submission
 

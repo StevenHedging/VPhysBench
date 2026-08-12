@@ -7,9 +7,9 @@ VPhysBench 是面向物理视频生成模型的训练与评测框架。日期分
 
 Dataset 13.0.0 包含 916 个 case、7 个场景。Task v1 定义两个可复现工作负载：
 
-- `five_scene_direct_eval_v1`：直接评估五个计分场景的全部 658 个 case；
-- `six_scene_train_five_scene_eval_v1`：使用六场景 679 个训练 case，随后在五个
-  计分场景的 76 个留出 case 上评估。
+- `six_scene_direct_eval_v1`：直接评估六个计分场景的全部 775 个 case；
+- `six_scene_train_six_scene_eval_v1`：使用六场景 679 个训练 case，随后在六个
+  计分场景的 96 个留出 case 上评估。
 
 Dataset 中仍保留 `push_bottle` 的全部 127 个训练 case 和 14 个 test case，但两个
 官方 Task v1 都不会选择它们。
@@ -66,7 +66,7 @@ physbench doctor --level evaluation
 ```bash
 physbench atomic-run \
   --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval_v1.json \
+  --task tasks/official/six_scene_direct_eval_v1.json \
   --baseline baselines/my_model \
   --case-id circular_r1_silver02cm_img_0370 \
   --run-id my_model_smoke \
@@ -97,9 +97,11 @@ run/               唯一运行输出根；发行版初始只有 README
 - [Benchmark 协议](docs/BENCHMARK_PROTOCOL.md)
 - [Evaluation v1](docs/EVALUATION.md)
 - [安装与首个运行](docs/GETTING_STARTED.md)
-- [接入自定义 I2V/V2V 算法](docs/CUSTOM_BASELINE_QUICKSTART.md)
+- [接入自定义 I2V 算法](docs/CUSTOM_BASELINE_QUICKSTART.md)
+- [Baseline Integration 完整契约](docs/BASELINE_INTEGRATION.md)
+- [DataAdapter 与输入策略](docs/DATA_ADAPTER.md)
 - [导入已有预测视频](docs/SUBMISSION_QUICKSTART.md)
-- [Run 目录契约](docs/RUN_LAYOUT.md)
+- [Run 结果解读](docs/RUN_LAYOUT.md)
 - [复现实验](docs/REPRODUCIBILITY.md)
 
 `examples/dummy_i2v_command.py` 只验证外部命令和视频协议，不是参考算法。

@@ -223,6 +223,10 @@ V2V 模型中的输入角色，不是“是否注入结构化物理信息”的 
 独立资产（默认 `assets.input_video`）或经审计的 derived artifact；禁止绑定
 reference、physics reference 或 source video，也会检查内容 digest 别名。
 
+Dataset 13.0.0 的 916 个 Case 当前都没有 `assets.input_video`，也没有独立裁剪并授权的
+条件前缀视频。因此 managed V2V 只是预留接口，不能用于当前官方 Task；DataAdapter 不会
+从 reference/source/physics-reference video 临时裁剪或推导该输入。
+
 ## 8. Fingerprint 与 cache
 
 完整 adapter fingerprint 覆盖：
@@ -249,30 +253,7 @@ spatial + temporal + paradigm
 Cache key 至少包含 source asset digest、materialization implementation、空间/时间配置
 与输入范式。Cache 是 immutable；相同 key 出现不同字节时必须报错，不能覆盖。
 
-## 9. 当前 WAN 与 Cosmos 配置
-
-WAN I2V：
-
-| scene | target |
-| --- | --- |
-| pendulum, free_fall, parabolic_motion, uniform_circular_motion | 480 × 832 |
-| collision_1d, inclined_plane_slide | 832 × 480 |
-
-WAN时间规格为24 FPS、5–121帧、合法`4n+1`；当前推理recipe固定选择Baseline原生
-最大长度121帧，不读取GT时长决定输出长度。
-
-Cosmos I2V：
-
-| scene | resolution | aspect ratio |
-| --- | ---: | --- |
-| pendulum, free_fall, uniform_circular_motion | 480 | `9,16` |
-| collision_1d, inclined_plane_slide | 480 | `16,9` |
-| parabolic_motion | 480 | `9,16`（完整 `1:2` 内容 contain） |
-
-Cosmos固定24 FPS、121帧。生成与GT不要求相同分辨率、FPS、帧数或物理时长；统一
-timeline与几何对齐属于evaluator。
-
-### 9.1 统一 I2V 媒体契约
+## 9. 统一 I2V 媒体契约
 
 所有 managed I2V Baseline 只声明每个 scene 的 `width`、`height`，以及 `fps` 和
 固定/可变帧数。`StandardDataAdapter` 自动生成一份

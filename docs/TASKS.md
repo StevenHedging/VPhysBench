@@ -5,14 +5,14 @@ Task 是模型无关、可冻结的工作负载声明。发行版只接受 `sche
 
 ## 官方任务
 
-- `tasks/official/five_scene_direct_eval_v1.json`
-  - Task ID：`five_scene_direct_eval_v1`
+- `tasks/official/six_scene_direct_eval_v1.json`
+  - Task ID：`six_scene_direct_eval_v1`
   - 训练：无
-  - 评估：五场景全部 658 个 case
-- `tasks/official/six_scene_train_five_scene_eval_v1.json`
-  - Task ID：`six_scene_train_five_scene_eval_v1`
+  - 评估：六场景全部 775 个 case
+- `tasks/official/six_scene_train_six_scene_eval_v1.json`
+  - Task ID：`six_scene_train_six_scene_eval_v1`
   - 训练：六场景 679 个 View A train case
-  - 评估：五场景 76 个 View A ID test case
+  - 评估：六场景 96 个 View A ID test case
 
 二者都绑定 Dataset `physics_video_seven_scene_v13`、推理种子 42 和协议
 `scene_default_v1`。
@@ -52,7 +52,7 @@ Task 的入口。
 ```bash
 physbench task-build \
   --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval_v1.json \
+  --task tasks/official/six_scene_direct_eval_v1.json \
   --baseline baselines/my_model \
   --output task_instance.json
 ```
@@ -62,7 +62,7 @@ physbench task-build \
 ```bash
 physbench matrix-run \
   --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval_v1.json \
+  --task tasks/official/six_scene_direct_eval_v1.json \
   --baseline baselines/model_a \
   --baseline baselines/model_b \
   --matrix-id comparison \

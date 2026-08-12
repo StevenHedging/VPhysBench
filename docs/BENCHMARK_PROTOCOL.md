@@ -11,46 +11,46 @@
 每个 Case 拥有规范 prompt、结构化物理量、输入资产、参考资产和 split 注释。Baseline
 只能读取其 input policy 授权的投影；参考媒体与 evaluator 注释不会进入推理输入。
 
-## Five scored scenes
+## Six scored scenes
 
 1. `pendulum`
 2. `collision_1d`
 3. `inclined_plane_slide`
 4. `uniform_circular_motion`
 5. `parabolic_motion`
+6. `vertical_spring_oscillator`
 
-## Two preview scenes
+## One Dataset-only unsupported scene
 
 1. `push_bottle`
-2. `vertical_spring_oscillator`
 
-`vertical_spring_oscillator` 已有公开可解析的 `vertical_spring_oscillator_v1` evaluator，
-但官方 Task v1 仍不选择它，因此它不进入正式评估 job、五场景聚合或 leaderboard 分数。
-它的数据继续用于 finetune Task v1 的训练，并为未来 Task 版本保留。`push_bottle` 的数据
-完整保留，但不被任何官方 Task v1 的训练或评估集合选择，也没有公开 scene evaluator。
+`vertical_spring_oscillator` 已由公开的 `vertical_spring_oscillator_v1` evaluator 正式
+评分，并同时进入两个官方 Task 的评估集合。`push_bottle` 数据完整保留，但不被任何官方
+Task v1 的训练或评估集合选择，也没有公开 scene evaluator。
 
 ## Official Tasks
 
-- `five_scene_direct_eval_v1`：五场景 658 个直接评估 job，无训练；
-- `six_scene_train_five_scene_eval_v1`：六场景 679 个训练 case，五场景 76 个 ID
+- `six_scene_direct_eval_v1`：六场景 775 个直接评估 job，无训练；
+- `six_scene_train_six_scene_eval_v1`：六场景 679 个训练 case，六场景 96 个 ID
   评估 job。
 
 两者都使用 `scene_default_v1`。Task 拥有数据选择、种子和报告策略；Baseline 拥有输入
 适配、是否使用物理信息、模型训练和推理实现。
 
-`scene_default_v1` 的 registry 共公开解析六个 scene evaluators：五个正式评分场景加
-`vertical_spring_oscillator`。协议可解析范围与 Task 选择范围彼此独立；增加 resolver 不会
-隐式扩大任何已封印 Task 的 scene IDs 或 canonical jobs。
+`scene_default_v1` 的 registry 公开解析上述六个正式评分场景。协议可解析范围与 Task
+选择范围仍彼此独立；只有发布新的已封印 Task 文件才会改变 scene IDs 或 canonical jobs。
 
 ## Media contract
 
-Managed I2V/V2V job 会封印允许使用的媒体通道、输出画布、FPS、物理时间零点、帧数规则
-和 run 内输出路径。无法解码、违反媒体契约或越权读取 evaluator/source 视频的预测会在
-场景评分前失败。
+Managed I2V job 会封印允许使用的媒体通道、输出画布、FPS、物理时间零点、帧数规则和
+run 内输出路径。V2V 接口是预留扩展点，当前官方 Dataset Case 尚未提供独立裁剪的条件
+前缀视频，因此官方 benchmark 不支持 managed V2V。reference/source/physics-reference
+video 都不得替代该输入资产。无法解码、违反媒体契约或越权读取 evaluator/source 视频
+的预测会在场景评分前失败。
 
 ## Scoring, degradation and coverage
 
-官方 Task v1 对五场景运行对象级物理评分，并计算独立 CSTI 时空一致性维度。以下预测侧
+官方 Task v1 对六场景运行对象级物理评分，并计算独立 CSTI 时空一致性维度。以下预测侧
 失败按“已评估零分”处理，同时写入 degradation reason：
 
 - 缺失或未完成的 prediction record；
