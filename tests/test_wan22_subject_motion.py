@@ -365,6 +365,31 @@ class SubjectMotionObjectiveTests(unittest.TestCase):
             0.2 * result["motion_delta_loss"],
         )
 
+    def test_first_frame_only_subject_uses_endpoint_union_for_tail_flow(self) -> None:
+        module = _trainer_module()
+        pipe = _FakePipe()
+        clean = torch.tensor([[[[[1.0]], [[3.0]]]]])
+        pixel_mask = torch.zeros((1, 5, 1, 1))
+        pixel_mask[:, 0] = 1.0
+
+        result = module.compute_subject_motion_objective(
+            pipe=pipe,
+            inputs={
+                "input_latents": clean,
+                "first_frame_latents": clean[:, :, :1],
+            },
+            subject_mask=pixel_mask,
+            occupancy_head=self._head(),
+            config=_objective_config(aux_warmup_steps=0),
+            optimizer_step=0,
+            timestep_ids=torch.tensor([1]),
+            noise=torch.zeros_like(clean),
+        )
+
+        self.assertGreater(float(result["subject_support_fraction"]), 0.0)
+        self.assertGreater(float(result["subject_flow_loss"].detach()), 0.0)
+        self.assertTrue(bool(torch.isfinite(result["total_loss"])))
+
     def test_auxiliary_only_objective_reaches_lora_and_head_gradients(self) -> None:
         module = _trainer_module()
         pipe = _FakePipe()

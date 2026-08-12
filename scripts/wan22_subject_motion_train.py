@@ -195,7 +195,11 @@ def compute_subject_motion_objective(
             clean_latents.shape[4],
         ),
     )
-    velocity_mask = aligned_mask[:, 1:] if first_frame is not None else aligned_mask
+    velocity_mask = (
+        torch.maximum(aligned_mask[:, 1:], aligned_mask[:, :-1])
+        if first_frame is not None
+        else aligned_mask
+    )
     subject_result = masked_subject_flow_loss(
         base_prediction,
         base_target,

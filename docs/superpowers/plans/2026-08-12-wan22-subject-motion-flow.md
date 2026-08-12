@@ -48,7 +48,7 @@
 
 - [ ] **Step 3: Implement `masked_subject_flow_loss`**
 
-  Compute channel-mean squared velocity error, multiply by the tail mask, divide each sample by its mask volume plus `1e-6`, multiply per-sample scheduler weights, and batch-mean. Validate shapes, ranges, finiteness, positive epsilon, and non-empty support.
+  Compute channel-mean squared velocity error, multiply by the tail endpoint-union mask, divide each sample by its mask volume plus `1e-6`, multiply per-sample scheduler weights, and batch-mean. Validate shapes, ranges, finiteness, positive epsilon, and non-empty support.
 
 - [ ] **Step 4: Run the subject-loss tests and confirm GREEN**
 

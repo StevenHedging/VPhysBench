@@ -115,8 +115,9 @@ slice, is excluded from velocity losses, and is inserted unchanged into
 `x0_hat`. No iterative sampler or RGB decoder appears in the training graph.
 
 WAN2.2-TI2V-5B uses 48-channel latents and the VAE maps 121 pixel frames to 31
-latent frames with 16x spatial compression. Masks are nearest-neighbor aligned
-to the actual `BTHW` latent shape.
+latent frames with 16x spatial compression. Masks are conservatively aligned
+to the actual `BTHW` latent shape with adaptive max pooling so sub-latent-cell
+subjects cannot disappear during alignment.
 
 ## Losses
 
@@ -139,12 +140,21 @@ The inherited `Conv3d(48,32,3) -> SiLU -> Conv3d(32,1,1)` occupancy head maps
 
 ### Area-normalized subject Flow loss
 
-With aligned subject occupancy `m` and excluding latent frame zero,
+With aligned subject occupancy `m`, the TI2V tail support is the union of each
+predicted frame and its preceding endpoint,
+
+\[
+q_t=\max(m_t,m_{t-1}).
+\]
+
+This includes both the origin and destination footprint of moving subjects and
+remains meaningful when a subject leaves the canvas immediately after the
+conditioned first frame. The area-normalized loss is
 
 \[
 L_{subject,b}=
-\frac{\sum_{t,h,w}m_{b,t,h,w}e_{b,t,h,w}}
-{\sum_{t,h,w}m_{b,t,h,w}+\varepsilon}.
+\frac{\sum_{t,h,w}q_{b,t,h,w}e_{b,t,h,w}}
+{\sum_{t,h,w}q_{b,t,h,w}+\varepsilon}.
 \]
 
 Each sample is then multiplied by the same Wan scheduler training weight used
