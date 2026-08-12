@@ -80,10 +80,11 @@ def main() -> int:
     config = CSTIConfig(
         enabled=True,
         algorithm="exact_full_tube_edt",
-        spatial_tolerance_fraction=0.004204482076268572,
+        spatial_tolerance_policy="reference_tube_equivalent_diameter_v1",
+        spatial_tolerance_radius_ratio=0.5,
         temporal_tolerance_s=0.025,
         condition_frame_policy="exclude_initial_samples",
-        initial_frames_excluded=3,
+        initial_frames_excluded=1,
         score_aggregation="full_tube",
         diagnostic_prefix_fractions=(0.25, 0.5, 0.75, 1.0),
         case_aggregation="mean_gt_entities",
@@ -120,7 +121,10 @@ def main() -> int:
         {
             "algorithm": config.algorithm,
             "sampling_fps": sampling_fps,
-            "spatial_tolerance_fraction": config.spatial_tolerance_fraction,
+            "spatial_tolerance_policy": config.spatial_tolerance_policy,
+            "spatial_tolerance_radius_ratio": (
+                config.spatial_tolerance_radius_ratio
+            ),
             "temporal_tolerance_s": config.temporal_tolerance_s,
             "frames": args.frames,
             "initial_frames_excluded": config.initial_frames_excluded,

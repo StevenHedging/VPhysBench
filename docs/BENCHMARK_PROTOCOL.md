@@ -53,6 +53,10 @@ video 都不得替代该输入资产。无法解码、违反媒体契约或越�
 官方 Task v1 对六场景运行对象级物理评分，并计算独立 CSTI 时空一致性维度。以下由
 robustness policy 覆盖的预测侧失败按“已评估零分”处理，同时写入 degradation reason：
 
+当前 CSTI v1 只排除条件首帧；空间 soft-support 半径按每个 GT entity 的 reference Tube
+面积等效直径中位数自适应设置为 `0.5 × diameter`。prediction Tube 不参与容差估计，
+具体公式与逐对象 audit 字段见 [EVALUATION.md](EVALUATION.md)。
+
 - 缺失或未完成的 prediction record；
 - evaluator 侧的 prediction 解码失败；
 - prediction observation 失败。

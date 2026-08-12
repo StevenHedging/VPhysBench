@@ -173,9 +173,7 @@ class ReferenceCaseEvaluator(ABC):
             )
         analysis.provenance["csti"] = {
             "algorithm": self.csti_config.algorithm,
-            "spatial_tolerance_fraction": (
-                self.csti_config.spatial_tolerance_fraction
-            ),
+            **self.csti_config.spatial_parameters(),
             "temporal_tolerance_s": self.csti_config.temporal_tolerance_s,
             "condition_frame_policy": (
                 self.csti_config.condition_frame_policy

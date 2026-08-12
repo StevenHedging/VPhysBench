@@ -43,7 +43,8 @@
           "required": [
             "enabled",
             "algorithm",
-            "spatial_tolerance_fraction",
+            "spatial_tolerance_policy",
+            "spatial_tolerance_radius_ratio",
             "temporal_tolerance_s",
             "condition_frame_policy",
             "initial_frames_excluded",
@@ -56,7 +57,10 @@
           "properties": {
             "enabled": {"const": true},
             "algorithm": {"const": "exact_full_tube_edt"},
-            "spatial_tolerance_fraction": {
+            "spatial_tolerance_policy": {
+              "const": "reference_tube_equivalent_diameter_v1"
+            },
+            "spatial_tolerance_radius_ratio": {
               "type": "number",
               "exclusiveMinimum": 0
             },

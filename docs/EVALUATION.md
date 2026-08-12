@@ -69,9 +69,21 @@ Evaluator 是唯一允许读取 reference video、reference masks 和评分注�
 CSTI 使用 `exact_full_tube_edt`。它的精确输入是：冻结 entity manifest 中的 GT
 `entity_id`、`role_id` 和 `same_case_gt` reference capability；scene evaluator 已验证并对齐
 到同一物理时间轴、同一原生分析画布的 reference/prediction mask tubes；以及只有通过冻结
-身份门后才写入的 matched prediction track IDs。配置指定的初始条件样本会在完整 tube
-评分前排除，prediction unavailable 样本保持空 mask，不会从 reference 补帧。case 层按
-全部 GT entities 求均值，Task 层作为独立维度汇总；CSTI 不替代 scene expert score。
+身份门后才写入的 matched prediction track IDs。当前公开 v1 只在完整 tube 评分前排除
+第 0 个样本（条件首帧）；其余共同时间样本均参与评分。prediction unavailable 样本保持
+空 mask，不会从 reference 补帧。
+
+空间容差不再按画布尺寸取固定比例，而是逐 GT entity 只从 reference Tube 自适应计算：
+对排除条件首帧后的共同规则时间轴上每个非空 reference mask 的面积 `A_t` 计算面积等效直径
+`d_t = 2 * sqrt(A_t / pi)`，取各帧中位数 `d_ref`，再以
+`r = 0.5 * d_ref` 作为 x/y 同尺度的 soft-support 半径。EDT 的三维采样尺度因此为
+`(delta_t / 0.025 s, 1 / r, 1 / r)`。该半径不读取 prediction mask 的尺寸，避免模型通过
+放大预测主体来放宽自身容差；面积等效直径也不会被 mask 的孤立远端像素像 bounding box
+那样显著放大。每个对象的 `d_ref`、有效 `r` 与非空 reference 帧数都会写入 CSTI audit。
+旧 run 所冻结的 canvas-fraction 配置仍可由运行时读取，但不属于当前公开 v1 schema。
+
+case 层按全部 GT entities 求均值，Task 层作为独立维度汇总；CSTI 不替代 scene expert
+score。
 
 ## Failure semantics
 

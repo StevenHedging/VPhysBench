@@ -68,6 +68,14 @@ scene, partition, `status`, expert `score`, `reason_code`, quality diagnostics,
 metrics (including per-case CSTI where applicable), and provenance. Interpret
 the status before the numeric value:
 
+For current-v1 CSTI results, each scored object also records a
+`spatial_tolerance` audit with the reference Tube's median area-equivalent
+diameter, the resulting half-diameter radius in native-analysis pixels, and
+the number of non-empty postcondition reference masks used. This tolerance is
+derived only from the reference Tube after excluding the condition frame at
+sample index zero; that is also the only initial sample excluded from the
+score.
+
 - `evaluated`: the case contributes a finite score; `quality.degraded=true`
   identifies prediction failures deliberately counted as zero.
 - `unavailable`: a required reference asset or reference observation could

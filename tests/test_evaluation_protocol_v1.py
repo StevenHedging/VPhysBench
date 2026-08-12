@@ -2,6 +2,12 @@ from __future__ import annotations
 
 import json
 import unittest
+from copy import deepcopy
+
+try:
+    from jsonschema import Draft202012Validator
+except ModuleNotFoundError:  # pragma: no cover - optional test dependency
+    Draft202012Validator = None  # type: ignore[assignment,misc]
 
 from _paths import ROOT
 from physbench.evaluation import load_evaluation_protocol
@@ -49,10 +55,18 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
                 self.assertEqual("1.0", evaluator.evaluator_version)
 
     def test_v1_keeps_the_latest_fail_closed_scoring_contract(self) -> None:
+        csti = self.protocol["general_metrics"]["csti"]
         self.assertEqual(
             "exact_full_tube_edt",
-            self.protocol["general_metrics"]["csti"]["algorithm"],
+            csti["algorithm"],
         )
+        self.assertEqual(1, csti["initial_frames_excluded"])
+        self.assertEqual(
+            "reference_tube_equivalent_diameter_v1",
+            csti["spatial_tolerance_policy"],
+        )
+        self.assertEqual(0.5, csti["spatial_tolerance_radius_ratio"])
+        self.assertNotIn("spatial_tolerance_fraction", csti)
         self.assertEqual(
             "frozen_dataset_subject_identity",
             self.protocol["scenes"]["pendulum"][
@@ -100,6 +114,50 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
             set(spring["topology"]),
         )
         self.assertAlmostEqual(1.0, sum(spring["content_weights"].values()))
+
+    @unittest.skipIf(
+        Draft202012Validator is None,
+        "jsonschema unavailable: install a Draft 2020-12 consumer",
+    )
+    def test_schema_requires_adaptive_csti_spatial_tolerance(self) -> None:
+        schema = json.loads(
+            (ROOT / "schemas/evaluation_protocol.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        candidate = deepcopy(self.protocol)
+        candidate.pop("path")
+        candidate.pop("fingerprint")
+        csti = candidate["general_metrics"]["csti"]
+        csti.pop("spatial_tolerance_fraction", None)
+        csti["spatial_tolerance_policy"] = (
+            "reference_tube_equivalent_diameter_v1"
+        )
+        csti["spatial_tolerance_radius_ratio"] = 0.5
+        csti["initial_frames_excluded"] = 1
+        assert Draft202012Validator is not None
+        Draft202012Validator.check_schema(schema)
+        validator = Draft202012Validator(schema)
+
+        self.assertEqual([], list(validator.iter_errors(candidate)))
+        for key in (
+            "spatial_tolerance_policy",
+            "spatial_tolerance_radius_ratio",
+        ):
+            with self.subTest(missing=key):
+                missing = deepcopy(candidate)
+                missing["general_metrics"]["csti"].pop(key)
+                self.assertTrue(list(validator.iter_errors(missing)))
+        invalid = deepcopy(candidate)
+        invalid["general_metrics"]["csti"][
+            "spatial_tolerance_radius_ratio"
+        ] = 0
+        self.assertTrue(list(validator.iter_errors(invalid)))
+        legacy = deepcopy(candidate)
+        legacy["general_metrics"]["csti"][
+            "spatial_tolerance_fraction"
+        ] = 0.005
+        self.assertTrue(list(validator.iter_errors(legacy)))
 
     def test_unversioned_schema_declares_only_public_v1_types(self) -> None:
         schema = json.loads(

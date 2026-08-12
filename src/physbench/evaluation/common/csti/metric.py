@@ -77,7 +77,7 @@ def _score_postcondition_tube(
     if terminal_frames_excluded:
         reference = reference[:-terminal_frames_excluded]
         prediction = prediction[:-terminal_frames_excluded]
-    return _score_postcondition_tube_arrays(
+    score, diagnostics, _ = _score_postcondition_tube_arrays(
         reference,
         prediction,
         times_s=normalized_times,
@@ -85,6 +85,7 @@ def _score_postcondition_tube(
         config=config,
         crop_finite_support=crop_finite_support,
     )
+    return score, diagnostics
 
 
 def _score_postcondition_tube_arrays(
@@ -95,7 +96,11 @@ def _score_postcondition_tube_arrays(
     delta_t_s: float,
     config: CSTIConfig,
     crop_finite_support: bool,
-) -> tuple[float, tuple[dict[str, float | int], ...]]:
+) -> tuple[
+    float,
+    tuple[dict[str, float | int], ...],
+    dict[str, Any] | None,
+]:
     start = config.initial_frames_excluded
     if start >= reference.shape[0]:
         raise CSTIContractError(
@@ -105,15 +110,13 @@ def _score_postcondition_tube_arrays(
         )
     reference_score = reference[start:]
     prediction_score = prediction[start:]
-    _, height, width = reference_score.shape
+    spatial_spacing, spatial_tolerance = _resolve_spatial_tolerance(
+        reference_score,
+        config=config,
+    )
     spacing = (
         delta_t_s / config.temporal_tolerance_s,
-        1.0
-        / max(height - 1, 1)
-        / config.spatial_tolerance_fraction,
-        1.0
-        / max(width - 1, 1)
-        / config.spatial_tolerance_fraction,
+        *spatial_spacing,
     )
     formal_score = _soft_tube_iou_arrays(
         reference_score,
@@ -148,7 +151,69 @@ def _score_postcondition_tube_arrays(
                 "score": float(prefix_score),
             }
         )
-    return float(formal_score), tuple(diagnostics)
+    return float(formal_score), tuple(diagnostics), spatial_tolerance
+
+
+def _resolve_spatial_tolerance(
+    reference: np.ndarray,
+    *,
+    config: CSTIConfig,
+) -> tuple[tuple[float, float], dict[str, Any] | None]:
+    """Resolve isotropic adaptive pixels or the frozen legacy canvas scale."""
+
+    if config.spatial_tolerance_fraction is not None:
+        _, height, width = reference.shape
+        return (
+            (
+                1.0
+                / max(height - 1, 1)
+                / config.spatial_tolerance_fraction,
+                1.0
+                / max(width - 1, 1)
+                / config.spatial_tolerance_fraction,
+            ),
+            None,
+        )
+    if (
+        config.spatial_tolerance_policy
+        != "reference_tube_equivalent_diameter_v1"
+        or config.spatial_tolerance_radius_ratio is None
+    ):
+        raise CSTIContractError(
+            "csti_spatial_tolerance_mode_invalid",
+            "adaptive CSTI spatial tolerance is incomplete",
+        )
+    areas = np.count_nonzero(reference, axis=(1, 2))
+    nonempty_areas = areas[areas > 0]
+    if not len(nonempty_areas):
+        return (
+            (1.0, 1.0),
+            {
+                "policy": config.spatial_tolerance_policy,
+                "reference_nonempty_frame_count": 0,
+                "reference_tube_diameter_px": None,
+                "effective_radius_px": None,
+            },
+        )
+    diameters = 2.0 * np.sqrt(
+        nonempty_areas.astype(np.float64) / math.pi
+    )
+    diameter = float(np.median(diameters))
+    radius = diameter * config.spatial_tolerance_radius_ratio
+    if not math.isfinite(radius) or radius <= 0.0:
+        raise CSTIContractError(
+            "csti_spatial_tolerance_invalid",
+            f"adaptive CSTI spatial tolerance is invalid: {radius!r}",
+        )
+    return (
+        (1.0 / radius, 1.0 / radius),
+        {
+            "policy": config.spatial_tolerance_policy,
+            "reference_nonempty_frame_count": int(len(nonempty_areas)),
+            "reference_tube_diameter_px": diameter,
+            "effective_radius_px": radius,
+        },
+    )
 
 
 def _soft_tube_iou_arrays(
@@ -273,6 +338,12 @@ def evaluate_csti(
         if entity.prediction_masks is None:
             score = 0.0
             diagnostic_prefix_curve: list[dict[str, float | int]] | None = None
+            _, spatial_tolerance = _resolve_spatial_tolerance(
+                reference[
+                    config.initial_frames_excluded:regular_frame_count
+                ],
+                config=config,
+            )
             matched = False
         else:
             if not track_ids:
@@ -290,13 +361,15 @@ def evaluate_csti(
                 frame_shape=frame_shape,
                 entity_id=entity_id,
             )
-            score, raw_diagnostics = _score_postcondition_tube_arrays(
-                reference[:regular_frame_count],
-                prediction[:regular_frame_count],
-                times_s=times_s,
-                delta_t_s=delta_t_s,
-                config=config,
-                crop_finite_support=True,
+            score, raw_diagnostics, spatial_tolerance = (
+                _score_postcondition_tube_arrays(
+                    reference[:regular_frame_count],
+                    prediction[:regular_frame_count],
+                    times_s=times_s,
+                    delta_t_s=delta_t_s,
+                    config=config,
+                    crop_finite_support=True,
+                )
             )
             diagnostic_prefix_curve = [
                 dict(point) for point in raw_diagnostics
@@ -309,16 +382,17 @@ def evaluate_csti(
                 f"CSTI object score is invalid: {score!r}",
             )
         object_scores.append(score)
-        objects.append(
-            {
-                "entity_id": entity_id,
-                "role_id": role_id,
-                "matched": matched,
-                "matched_prediction_track_ids": list(track_ids),
-                "score": score,
-                "diagnostic_prefix_curve": diagnostic_prefix_curve,
-            }
-        )
+        object_result = {
+            "entity_id": entity_id,
+            "role_id": role_id,
+            "matched": matched,
+            "matched_prediction_track_ids": list(track_ids),
+            "score": score,
+            "diagnostic_prefix_curve": diagnostic_prefix_curve,
+        }
+        if spatial_tolerance is not None:
+            object_result["spatial_tolerance"] = spatial_tolerance
+        objects.append(object_result)
 
     score = float(np.mean(object_scores, dtype=np.float64))
     return {
@@ -392,7 +466,7 @@ def _metric_metadata(config: CSTIConfig) -> dict[str, Any]:
     return {
         "algorithm": config.algorithm,
         "parameters": {
-            "spatial_tolerance_fraction": config.spatial_tolerance_fraction,
+            **config.spatial_parameters(),
             "temporal_tolerance_s": config.temporal_tolerance_s,
             "condition_frame_policy": config.condition_frame_policy,
             "initial_frames_excluded": config.initial_frames_excluded,
