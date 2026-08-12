@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Sequence
 
 import torch
+from torch.nn import functional as F
+
+from .wan22_st_tube_iou_model import expected_wan_vae_latent_frames
 
 
 @dataclass(frozen=True)
@@ -10,6 +14,56 @@ class MaskedLossResult:
     loss: torch.Tensor
     per_sample_loss: torch.Tensor
     support_fraction: torch.Tensor
+
+
+def align_subject_support_tube(
+    mask: torch.Tensor,
+    *,
+    latent_shape: Sequence[int],
+) -> torch.Tensor:
+    """Conservatively pool a pixel tube onto the WAN latent grid.
+
+    Max pooling preserves every occupied source region, including subjects
+    smaller than one latent cell that nearest-neighbor sampling can miss.
+    """
+
+    if mask.ndim == 3:
+        mask = mask.unsqueeze(0)
+    if mask.ndim != 4:
+        raise ValueError("subject mask must use THW or BTHW layout")
+    if len(latent_shape) != 4:
+        raise ValueError("latent mask shape must use BTHW layout")
+    batch, latent_frames, latent_height, latent_width = map(int, latent_shape)
+    if min(batch, latent_frames, latent_height, latent_width) < 1:
+        raise ValueError("latent mask dimensions must be positive")
+    if mask.shape[0] != batch:
+        raise ValueError(
+            f"mask batch {mask.shape[0]} does not match latent batch {batch}"
+        )
+    expected_frames = expected_wan_vae_latent_frames(int(mask.shape[1]))
+    if expected_frames != latent_frames:
+        raise ValueError(
+            "subject-mask temporal compression does not match Wan VAE: "
+            f"{mask.shape[1]} pixel frames imply {expected_frames} latent "
+            f"frames, got {latent_frames}"
+        )
+    mask_f = mask.float()
+    if not bool(torch.isfinite(mask_f).all()):
+        raise ValueError("subject mask contains non-finite values")
+    if bool((mask_f < 0).any()) or bool((mask_f > 1).any()):
+        raise ValueError("subject mask must be in [0, 1]")
+    source_support = mask_f.flatten(start_dim=1).sum(dim=1)
+    if bool((source_support <= 0).any()):
+        raise ValueError("subject mask contains an empty sample")
+
+    aligned = F.adaptive_max_pool3d(
+        mask_f.unsqueeze(1),
+        output_size=(latent_frames, latent_height, latent_width),
+    ).squeeze(1)
+    aligned_support = aligned.flatten(start_dim=1).sum(dim=1)
+    if bool((aligned_support <= 0).any()):
+        raise AssertionError("area-preserving subject alignment lost support")
+    return aligned
 
 
 def masked_subject_flow_loss(
@@ -131,6 +185,7 @@ def subject_temporal_difference_loss(
 
 
 __all__ = [
+    "align_subject_support_tube",
     "MaskedLossResult",
     "masked_subject_flow_loss",
     "subject_temporal_difference_loss",

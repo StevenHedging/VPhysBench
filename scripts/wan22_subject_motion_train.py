@@ -31,11 +31,11 @@ from safetensors.torch import load_file
 
 from physbench.baselines.wan22_st_tube_iou_model import (
     SpatioTemporalTubeIoULoss,
-    align_mask_tube,
     flowmatch_clean_estimate,
     noise_weight,
 )
 from physbench.baselines.wan22_subject_motion_model import (
+    align_subject_support_tube,
     masked_subject_flow_loss,
     subject_temporal_difference_loss,
 )
@@ -186,7 +186,7 @@ def compute_subject_motion_objective(
             "motion_support_fraction": zero,
         }
 
-    aligned_mask = align_mask_tube(
+    aligned_mask = align_subject_support_tube(
         subject_mask.to(device=clean_latents.device),
         latent_shape=(
             clean_latents.shape[0],

@@ -20,6 +20,7 @@ from physbench.datasets import load_dataset
 from physbench.io import load_json
 from physbench.tasks import load_task
 from physbench.baselines.wan22_subject_motion_model import (
+    align_subject_support_tube,
     masked_subject_flow_loss,
     subject_temporal_difference_loss,
 )
@@ -53,6 +54,27 @@ def _adapter_module():
 
 
 class SubjectFlowLossTests(unittest.TestCase):
+    def test_area_preserving_alignment_keeps_a_subpixel_subject(self) -> None:
+        mask = torch.zeros((1, 9, 32, 16), dtype=torch.float32)
+        mask[0, 4, 1, 1] = 1.0
+
+        aligned = align_subject_support_tube(
+            mask,
+            latent_shape=(1, 3, 2, 1),
+        )
+
+        self.assertEqual((1, 3, 2, 1), tuple(aligned.shape))
+        self.assertEqual(1.0, float(aligned.max()))
+        self.assertGreater(float(aligned.sum()), 0.0)
+        self.assertEqual({0.0, 1.0}, set(aligned.unique().tolist()))
+
+    def test_area_preserving_alignment_checks_wan_temporal_compression(self) -> None:
+        with self.assertRaisesRegex(ValueError, "temporal compression"):
+            align_subject_support_tube(
+                torch.ones((1, 9, 32, 16)),
+                latent_shape=(1, 4, 2, 1),
+            )
+
     def test_background_is_ignored_and_mask_area_is_normalized_per_sample(self) -> None:
         prediction = torch.zeros((2, 1, 2, 2, 2), dtype=torch.float32)
         target = torch.zeros_like(prediction)
