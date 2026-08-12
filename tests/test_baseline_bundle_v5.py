@@ -24,6 +24,7 @@ SCENE_IDS = [
     "uniform_circular_motion",
     "parabolic_motion",
     "push_bottle",
+    "vertical_spring_oscillator",
 ]
 
 
@@ -138,7 +139,7 @@ class BaselineBundleV5Tests(unittest.TestCase):
             ROOT
             / "tasks"
             / "official"
-            / "five_scene_direct_eval_v1.json"
+            / "six_scene_direct_eval_v1.json"
         )
 
     def test_directory_discovery_and_id_resolution_require_no_registry_edit(

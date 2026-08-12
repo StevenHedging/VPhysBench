@@ -10,8 +10,8 @@ from physbench.tasks import load_task, plan_atomic_task
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FINETUNE_TASK = ROOT / "tasks/official/six_scene_train_five_scene_eval_v1.json"
-DIRECT_TASK = ROOT / "tasks/official/five_scene_direct_eval_v1.json"
+FINETUNE_TASK = ROOT / "tasks/official/six_scene_train_six_scene_eval_v1.json"
+DIRECT_TASK = ROOT / "tasks/official/six_scene_direct_eval_v1.json"
 
 
 class CurrentDatasetTests(unittest.TestCase):
@@ -74,22 +74,22 @@ class CurrentDatasetTests(unittest.TestCase):
         self.assertEqual(127, len(self.view["scenes"]["push_bottle"]["train"]))
         self.assertEqual(14, len(self.view["scenes"]["push_bottle"]["test"]))
 
-    def test_official_v1_tasks_exclude_push_bottle(self) -> None:
+    def test_official_v1_tasks_score_six_scenes_and_exclude_push_bottle(self) -> None:
         finetune_task = load_task(FINETUNE_TASK)
         direct_task = load_task(DIRECT_TASK)
         self.assertEqual(
-            "six_scene_train_five_scene_eval_v1",
+            "six_scene_train_six_scene_eval_v1",
             finetune_task.task_id,
         )
-        self.assertEqual("five_scene_direct_eval_v1", direct_task.task_id)
+        self.assertEqual("six_scene_direct_eval_v1", direct_task.task_id)
         finetune = plan_atomic_task(finetune_task, self.dataset).value
         direct = plan_atomic_task(direct_task, self.dataset).value
-        self.assertEqual(5, len(finetune["scene_ids"]))
-        self.assertEqual(5, len(direct["scene_ids"]))
+        self.assertEqual(6, len(finetune["scene_ids"]))
+        self.assertEqual(6, len(direct["scene_ids"]))
         self.assertEqual(6, len(finetune["training_scene_ids"]))
         self.assertEqual(679, len(finetune["train_case_ids"]))
-        self.assertEqual(76, len(finetune["jobs"]))
-        self.assertEqual(658, len(direct["jobs"]))
+        self.assertEqual(96, len(finetune["jobs"]))
+        self.assertEqual(775, len(direct["jobs"]))
         selected_training_scenes = {
             case["scene_id"]
             for case in self.dataset.cases
@@ -103,7 +103,21 @@ class CurrentDatasetTests(unittest.TestCase):
             {job["scene_id"] for job in finetune["jobs"]},
         )
         self.assertNotIn("push_bottle", direct["scene_ids"])
-        self.assertNotIn("vertical_spring_oscillator", direct["scene_ids"])
+        self.assertIn("vertical_spring_oscillator", direct["scene_ids"])
+        self.assertEqual(
+            117,
+            sum(
+                job["scene_id"] == "vertical_spring_oscillator"
+                for job in direct["jobs"]
+            ),
+        )
+        self.assertEqual(
+            20,
+            sum(
+                job["scene_id"] == "vertical_spring_oscillator"
+                for job in finetune["jobs"]
+            ),
+        )
 
 
 if __name__ == "__main__":

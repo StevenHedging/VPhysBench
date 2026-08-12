@@ -17,9 +17,9 @@ from physbench.tasks import load_task, plan_atomic_task
 
 OFFICIAL_TASKS = ROOT / "tasks" / "official"
 PROTOCOLS = ROOT / "configs" / "evaluation" / "protocols"
-DIRECT_TASK = OFFICIAL_TASKS / "five_scene_direct_eval_v1.json"
+DIRECT_TASK = OFFICIAL_TASKS / "six_scene_direct_eval_v1.json"
 FINETUNE_TASK = (
-    OFFICIAL_TASKS / "six_scene_train_five_scene_eval_v1.json"
+    OFFICIAL_TASKS / "six_scene_train_six_scene_eval_v1.json"
 )
 SCORED_SCENES = {
     "pendulum",
@@ -27,8 +27,9 @@ SCORED_SCENES = {
     "inclined_plane_slide",
     "uniform_circular_motion",
     "parabolic_motion",
+    "vertical_spring_oscillator",
 }
-TRAINING_SCENES = SCORED_SCENES | {"vertical_spring_oscillator"}
+TRAINING_SCENES = SCORED_SCENES
 PUBLIC_EVALUATOR_TYPES = {
     "pendulum_v1",
     "collision_1d_v1",
@@ -48,24 +49,24 @@ class ReleaseV1ContractTests(unittest.TestCase):
     def test_release_exposes_exactly_two_v1_tasks(self) -> None:
         self.assertEqual(
             {
-                "five_scene_direct_eval_v1.json",
-                "six_scene_train_five_scene_eval_v1.json",
+                "six_scene_direct_eval_v1.json",
+                "six_scene_train_six_scene_eval_v1.json",
             },
             {path.name for path in OFFICIAL_TASKS.glob("*.json")},
         )
 
-    def test_direct_v1_plans_all_five_scene_cases(self) -> None:
+    def test_direct_v1_plans_all_six_scene_cases(self) -> None:
         self.assertTrue(DIRECT_TASK.is_file(), DIRECT_TASK)
         task = load_task(DIRECT_TASK)
         plan = plan_atomic_task(task, self.dataset).value
 
         self.assertEqual("1.0", task.value["schema_version"])
-        self.assertEqual("five_scene_direct_eval_v1", task.task_id)
+        self.assertEqual("six_scene_direct_eval_v1", task.task_id)
         self.assertEqual("scene_default_v1", task.value["evaluation"]["protocol"])
         self.assertEqual([], plan["training_scene_ids"])
         self.assertEqual(SCORED_SCENES, set(plan["scene_ids"]))
         self.assertEqual([], plan["train_case_ids"])
-        self.assertEqual(658, len(plan["jobs"]))
+        self.assertEqual(775, len(plan["jobs"]))
         self.assertEqual(
             {
                 "collision_1d": 330,
@@ -73,23 +74,35 @@ class ReleaseV1ContractTests(unittest.TestCase):
                 "parabolic_motion": 97,
                 "pendulum": 100,
                 "uniform_circular_motion": 36,
+                "vertical_spring_oscillator": 117,
             },
             dict(Counter(job["scene_id"] for job in plan["jobs"])),
         )
 
-    def test_finetune_v1_excludes_push_bottle(self) -> None:
+    def test_finetune_v1_scores_six_scenes_and_excludes_push_bottle(self) -> None:
         self.assertTrue(FINETUNE_TASK.is_file(), FINETUNE_TASK)
         task = load_task(FINETUNE_TASK)
         plan = plan_atomic_task(task, self.dataset).value
         by_case = {case["case_id"]: case for case in self.dataset.cases}
 
         self.assertEqual("1.0", task.value["schema_version"])
-        self.assertEqual("six_scene_train_five_scene_eval_v1", task.task_id)
+        self.assertEqual("six_scene_train_six_scene_eval_v1", task.task_id)
         self.assertEqual("scene_default_v1", task.value["evaluation"]["protocol"])
         self.assertEqual(TRAINING_SCENES, set(plan["training_scene_ids"]))
         self.assertEqual(SCORED_SCENES, set(plan["scene_ids"]))
         self.assertEqual(679, len(plan["train_case_ids"]))
-        self.assertEqual(76, len(plan["jobs"]))
+        self.assertEqual(96, len(plan["jobs"]))
+        self.assertEqual(
+            {
+                "collision_1d": 20,
+                "inclined_plane_slide": 15,
+                "parabolic_motion": 15,
+                "pendulum": 20,
+                "uniform_circular_motion": 6,
+                "vertical_spring_oscillator": 20,
+            },
+            dict(Counter(job["scene_id"] for job in plan["jobs"])),
+        )
         self.assertEqual(
             TRAINING_SCENES,
             {
@@ -106,7 +119,7 @@ class ReleaseV1ContractTests(unittest.TestCase):
             {job["scene_id"] for job in plan["jobs"]},
         )
         self.assertEqual(
-            {"id": 76},
+            {"id": 96},
             dict(Counter(
                 annotation["generalization_regime"]
                 for annotation in plan["evaluation_annotations"].values()

@@ -20,10 +20,10 @@ from physbench.tasks import load_task
 
 
 DIRECT_TASK = (
-    ROOT / "tasks" / "official" / "five_scene_direct_eval_v1.json"
+    ROOT / "tasks" / "official" / "six_scene_direct_eval_v1.json"
 )
 FINETUNE_TASK = (
-    ROOT / "tasks" / "official" / "six_scene_train_five_scene_eval_v1.json"
+    ROOT / "tasks" / "official" / "six_scene_train_six_scene_eval_v1.json"
 )
 def _contains_key(value: object, target: str) -> bool:
     if isinstance(value, dict):

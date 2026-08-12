@@ -42,7 +42,7 @@ smoke-data:
 		--backend submission --root "$$smoke_root/baselines" >/dev/null; \
 	PYTHONPATH=src python3 -m physbench atomic-run \
 		--dataset datasets/releases/13.0.0/dataset.json \
-		--task tasks/official/five_scene_direct_eval_v1.json \
+		--task tasks/official/six_scene_direct_eval_v1.json \
 		--baseline "$$smoke_root/baselines/smoke_submission" \
 		--case-id circular_r1_silver02cm_img_0370 \
 		--run-id smoke \

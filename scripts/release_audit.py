@@ -28,8 +28,8 @@ FORBIDDEN_MODEL_MARKERS = {
 }
 LOCAL_ONLY_NAMES = {"baseline.local.json"}
 OFFICIAL_TASKS = {
-    "tasks/official/five_scene_direct_eval_v1.json",
-    "tasks/official/six_scene_train_five_scene_eval_v1.json",
+    "tasks/official/six_scene_direct_eval_v1.json",
+    "tasks/official/six_scene_train_six_scene_eval_v1.json",
 }
 PUBLIC_PROTOCOLS = {
     "configs/evaluation/protocols/scene_default_v1.json",

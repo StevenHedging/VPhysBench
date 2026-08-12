@@ -84,28 +84,28 @@ class ReleaseDocumentationTests(unittest.TestCase):
         self.assertEqual("scene_default_v1", release["evaluation_protocol"])
         self.assertEqual(
             [
-                "tasks/official/five_scene_direct_eval_v1.json",
-                "tasks/official/six_scene_train_five_scene_eval_v1.json",
+                "tasks/official/six_scene_direct_eval_v1.json",
+                "tasks/official/six_scene_train_six_scene_eval_v1.json",
             ],
             release["official_tasks"],
         )
         self.assertEqual(
             {
-                "five_scene_direct_eval_v1": {
+                "six_scene_direct_eval_v1": {
                     "training_cases": 0,
-                    "evaluation_jobs": 658,
+                    "evaluation_jobs": 775,
                 },
-                "six_scene_train_five_scene_eval_v1": {
+                "six_scene_train_six_scene_eval_v1": {
                     "training_cases": 679,
-                    "evaluation_jobs": 76,
+                    "evaluation_jobs": 96,
                 },
             },
             release["task_counts"],
         )
         self.assertEqual(binding["repo_id"], release["dataset"]["repo_id"])
         self.assertEqual(binding["revision"], release["dataset"]["revision"])
-        self.assertEqual(5, len(release["scored_scenes"]))
-        self.assertEqual(2, len(release["preview_scenes"]))
+        self.assertEqual(6, len(release["scored_scenes"]))
+        self.assertEqual(["push_bottle"], release["preview_scenes"])
 
     def test_evaluator_extra_pins_the_documented_sam2_revision(self) -> None:
         project = tomllib.loads((ROOT / "pyproject.toml").read_text())

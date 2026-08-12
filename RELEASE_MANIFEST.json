@@ -11,17 +11,17 @@
   "task_schema": "1.0",
   "evaluation_protocol": "scene_default_v1",
   "official_tasks": [
-    "tasks/official/five_scene_direct_eval_v1.json",
-    "tasks/official/six_scene_train_five_scene_eval_v1.json"
+    "tasks/official/six_scene_direct_eval_v1.json",
+    "tasks/official/six_scene_train_six_scene_eval_v1.json"
   ],
   "task_counts": {
-    "five_scene_direct_eval_v1": {
+    "six_scene_direct_eval_v1": {
       "training_cases": 0,
-      "evaluation_jobs": 658
+      "evaluation_jobs": 775
     },
-    "six_scene_train_five_scene_eval_v1": {
+    "six_scene_train_six_scene_eval_v1": {
       "training_cases": 679,
-      "evaluation_jobs": 76
+      "evaluation_jobs": 96
     }
   },
   "scored_scenes": [
@@ -29,11 +29,11 @@
     "collision_1d",
     "inclined_plane_slide",
     "uniform_circular_motion",
-    "parabolic_motion"
+    "parabolic_motion",
+    "vertical_spring_oscillator"
   ],
   "preview_scenes": [
-    "push_bottle",
-    "vertical_spring_oscillator"
+    "push_bottle"
   ],
   "integrated_baselines": 0,
   "baseline_root": "baselines",

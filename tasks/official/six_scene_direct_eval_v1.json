@@ -1,7 +1,7 @@
 {
   "$schema": "../../schemas/task.schema.json",
   "schema_version": "1.0",
-  "task_id": "five_scene_direct_eval_v1",
+  "task_id": "six_scene_direct_eval_v1",
   "family": "direct_eval",
   "dataset_id": "physics_video_seven_scene_v13",
   "selection": {
@@ -10,7 +10,8 @@
       "collision_1d",
       "inclined_plane_slide",
       "uniform_circular_motion",
-      "parabolic_motion"
+      "parabolic_motion",
+      "vertical_spring_oscillator"
     ],
     "groups": "all",
     "case_ids": []

@@ -100,12 +100,12 @@ def _adapter(physics_usage: str = "ignored") -> dict:
                 scene_id: {"width": 832, "height": 480}
                 for scene_id in (
                     "pendulum",
-                    "free_fall",
                     "collision_1d",
                     "inclined_plane_slide",
                     "uniform_circular_motion",
                     "parabolic_motion",
                     "push_bottle",
+                    "vertical_spring_oscillator",
                 )
             }
         },
@@ -181,13 +181,13 @@ class ManagedBaselineTests(unittest.TestCase):
             ROOT
             / "tasks"
             / "official"
-            / "five_scene_direct_eval_v1.json"
+            / "six_scene_direct_eval_v1.json"
         )
         cls.finetune = load_task(
             ROOT
             / "tasks"
             / "official"
-            / "six_scene_train_five_scene_eval_v1.json"
+            / "six_scene_train_six_scene_eval_v1.json"
         )
 
     def _one_case_task(self) -> TaskSpec:
