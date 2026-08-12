@@ -1,0 +1,11 @@
+{
+  "runtime": {
+    "project_root": "../external/wan22_pipeline",
+    "python": "../external/model/environment/bin/python",
+    "model_base": "../external/wan22_pipeline/models",
+    "cuda_visible_devices": "0,1,2,3",
+    "accelerate_config": "accelerate.local.yaml",
+    "warm_start_checkpoint": "../runs/parent/step-2184.safetensors",
+    "subject_tube_cache_dir": "../runs/parent/dataset/masks"
+  }
+}

@@ -25,6 +25,12 @@ from physbench.baselines.wan22_subject_anchor_trust_model import (
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE_ID = "wan22_ti2v_5b_lora_r32_subject_anchor_trust_v1"
 BASELINE_PATH = ROOT / "baselines/wan22_subject_anchor_trust/baseline.json"
+FIXED_TUBE_BASELINE_ID = (
+    "wan22_ti2v_5b_lora_r32_fixed_probe_tube_anchor_trust_v1"
+)
+FIXED_TUBE_BASELINE_PATH = (
+    ROOT / "baselines/wan22_fixed_probe_tube_anchor_trust/baseline.json"
+)
 SPLIT_TASK = ROOT / "tasks/experiments/six_scene_train_five_scene_eval_v14.json"
 
 
@@ -272,6 +278,38 @@ class SubjectAnchorTrustRegistrationTests(unittest.TestCase):
 
         self.assertTrue(expected.issubset(paths))
         self.assertTrue(all(path.is_file() for path in paths.values()))
+
+
+class FixedProbeTubeAnchorTrustRegistrationTests(unittest.TestCase):
+    def test_bundle_restores_absolute_tube_constraint(self) -> None:
+        self.assertEqual(
+            FIXED_TUBE_BASELINE_PATH,
+            discover_baseline_bundles()[FIXED_TUBE_BASELINE_ID],
+        )
+        bundle = load_baseline_bundle(FIXED_TUBE_BASELINE_PATH)
+        trainer = bundle.value["trainer"]["config"]
+
+        self.assertTrue(trainer["freeze_occupancy_head"])
+        self.assertEqual(0.02, trainer["lambda_st"])
+        self.assertEqual(0.03, trainer["lambda_anchored_displacement"])
+        self.assertEqual(0.25, trainer["lambda_lora_trust_region"])
+        self.assertEqual(0.0, trainer["lambda_subject_flow"])
+        self.assertEqual(0.0, trainer["lambda_motion_delta"])
+        self.assertEqual(
+            "wan22_ti2v_5b_lora_r32_st_tube_iou_v1",
+            bundle.value["model"]["initialization"]["parent_baseline_id"],
+        )
+
+    def test_bundle_reuses_audited_fixed_probe_driver(self) -> None:
+        bundle = load_baseline_bundle(FIXED_TUBE_BASELINE_PATH)
+        driver_path = (
+            FIXED_TUBE_BASELINE_PATH.parent
+            / bundle.value["implementation"]["driver"]
+        )
+        driver_source = driver_path.read_text(encoding="utf-8")
+
+        self.assertTrue(driver_path.is_file())
+        self.assertIn("Wan22SubjectAnchorTrustManagedDriver", driver_source)
 
 
 if __name__ == "__main__":
