@@ -122,6 +122,51 @@ class FrozenSubjectAnchorTests(unittest.TestCase):
         self.assertEqual(64, len(anchor.provenance["manifest_sha256"]))
         self.assertEqual(64, len(anchor.provenance["npz_sha256"]))
 
+    def test_dataset_object_v2_accepts_dataset_identity_and_relative_provenance(
+        self,
+    ) -> None:
+        """V15 may bind a logical scene role to a reviewed Dataset object ID."""
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            request, manifest_path, npz_path = self._fixture(temporary_root)
+            with np.load(npz_path, allow_pickle=False) as payload:
+                masks = np.array(payload["masks"], copy=True)
+                mask_ids = np.array(payload["mask_ids"], copy=True)
+                frame_index = np.array(payload["frame_index"], copy=True)
+            np.savez_compressed(
+                npz_path,
+                masks=masks,
+                mask_ids=mask_ids,
+                object_ids=np.asarray(["object_1"]),
+                frame_index=frame_index,
+            )
+            manifest = __import__("json").loads(
+                manifest_path.read_text(encoding="utf-8")
+            )
+            manifest["instances"][0]["bbox_xyxy"] = [3, 2, 4, 3]
+            write_json(manifest_path, manifest)
+
+            anchor = load_frozen_subject_anchor(
+                request,
+                logical_entity_id="projectile_ball",
+                entity_class="ball",
+                spatial_transform=self._transform(),
+                dataset_object_id="object_1",
+                error_namespace="reference_projectile_subject",
+                contract="dataset_object_v2",
+            )
+
+        self.assertEqual("object_1", anchor.provenance["npz_object_id"])
+        self.assertEqual(
+            "xyxy_inclusive_max_legacy",
+            anchor.provenance["bbox_policy"],
+        )
+        self.assertEqual(
+            "dataset_relative_asset_reference_v1",
+            anchor.provenance["path_policy"],
+        )
+        self.assertNotIn(str(temporary_root), repr(anchor.provenance))
+
     def test_rejects_ambiguous_entity_class_without_object_selector(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             request, manifest_path, _ = self._fixture(Path(temporary))

@@ -28,8 +28,9 @@ outside the official task.
 
 Add the release branch's `vertical_spring_oscillator_v1` observation, scoring,
 and evaluator package. Extend the existing main registry rather than replacing
-its historical mappings. Port only shared entity-manifest, frozen-subject, and
-robust failure-contract changes required by the new evaluator.
+its historical mappings. The new scene opts into `robust_subject_v4` and the
+Dataset-object frozen-subject contract; historical V1-V14 evaluators retain
+their exact V3 media-failure and frozen-subject behavior.
 
 The V15 protocol copies the five current V14 scene definitions byte-for-byte,
 then adds the release branch's final vertical-spring configuration. Thus V14
@@ -52,4 +53,3 @@ failures are recorded in provenance rather than changing physics scores.
 Verification covers protocol schema/loading, exact task counts, evaluator
 registration, vertical-spring scoring and end-to-end behavior, legacy V14
 immutability, task planning, CSTI aggregation, and integrated baseline tests.
-

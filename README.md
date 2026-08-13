@@ -12,16 +12,16 @@ Dataset release 是
 - 推水瓶 `push_bottle`
 - 竖直弹簧振子 `vertical_spring_oscillator`
 
-当前13.0.0 Dataset提供两组五场景官方Task：原有的
-`five_scene_finetune_eval.json`/`five_scene_direct_eval.json`冻结
-`scene_default_v10`专家评分；新增的同名`*_csti.json`变体冻结
-`scene_default_v11`，在保留专家评分的同时独立报告CSTI轨迹评分。推水瓶和竖直弹簧
-振子已进入Dataset，但专用评估器尚未完成，因此暂不进入这些正式计分Task。
+当前13.0.0 Dataset的最新官方Task是
+`six_scene_train_six_scene_eval_v15.json`和`six_scene_direct_eval_v15.json`。
+两者冻结`scene_default_v15`，在V14五场景专家评分和独立CSTI之上加入竖直弹簧振子
+的运动周期、轨迹、主体身份与弹簧拓扑评分。推水瓶仍不进入正式计分Task；旧五场景
+Task继续保留，用于复现历史运行。
 
 | Task | 协议 | 输出维度 |
 | --- | --- | --- |
-| `five_scene_finetune_eval.json` / `five_scene_direct_eval.json` | `scene_default_v10` | 专家评分 |
-| `five_scene_finetune_eval_csti.json` / `five_scene_direct_eval_csti.json` | `scene_default_v11` | 专家评分 + 独立CSTI |
+| `six_scene_train_six_scene_eval_v15.json` | `scene_default_v15` | 六场景训练、专家评分 + 独立CSTI |
+| `six_scene_direct_eval_v15.json` | `scene_default_v15` | 六场景直接评测、专家评分 + 独立CSTI |
 
 v11结果中的顶层`score`仍是专家评分；CSTI位于
 `task_result.json.dimensions.csti`，不会与专家分数混合成新的总分。
@@ -127,11 +127,10 @@ python -m pip install -e ../sam2
 
 ## 快速开始
 
-下面三条快速开始命令使用冻结的v10专家评分Task。需要独立CSTI维度时，把Task路径
-替换为对应的`*_csti.json`文件；CSTI使用一次正式full-Tube 3D EDT和四个诊断prefix，
+下面三条快速开始命令使用当前V15六场景Task；CSTI使用一次正式full-Tube 3D EDT和四个诊断prefix，
 批量运行前应先阅读
 [`CSTI_REFERENCE_PERFORMANCE_20260807.md`](docs/experiments/CSTI_REFERENCE_PERFORMANCE_20260807.md)
-并规划CPU与内存。推水瓶和竖直弹簧振子需等专用评估器和协议接入后再加入正式Task。
+并规划CPU与内存。推水瓶仍需专用评估器和协议接入后再加入正式Task。
 
 发现并验证 Baseline：
 
@@ -149,9 +148,9 @@ PYTHONPATH=src python -m physbench \
 PYTHONPATH=src python -m physbench \
   task-build \
   --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval.json \
-  --baseline wan22_ti2v_5b_lora_r32_v3_generic \
-  --output results/wan22_generic_task_instance.json
+  --task tasks/official/six_scene_train_six_scene_eval_v15.json \
+  --baseline wan22_ti2v_5b_lora_r32_st_tube_iou_v1 \
+  --output results/wan22_st_tube_iou_v15_task_instance.json
 ```
 
 创建 AtomicRun；不加 `--execute` 时只冻结并展开计划：
@@ -160,8 +159,8 @@ PYTHONPATH=src python -m physbench \
 PYTHONPATH=src python -m physbench \
   atomic-run \
   --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval.json \
-  --baseline cosmos3_nano_i2v_generic \
+  --task tasks/official/six_scene_train_six_scene_eval_v15.json \
+  --baseline wan22_ti2v_5b_lora_r32_quantity_embedding_v1 \
   --output-root run
 ```
 
@@ -171,10 +170,10 @@ PYTHONPATH=src python -m physbench \
 PYTHONPATH=src python -m physbench \
   matrix-run \
   --dataset datasets/releases/13.0.0/dataset.json \
-  --task tasks/official/five_scene_direct_eval.json \
-  --baseline cosmos3_nano_i2v_generic \
-  --baseline cosmos3_nano_i2v_physics \
-  --matrix-id cosmos3_generic_vs_physics \
+  --task tasks/official/six_scene_train_six_scene_eval_v15.json \
+  --baseline wan22_ti2v_5b_lora_r32_quantity_embedding_v1 \
+  --baseline wan22_ti2v_5b_lora_r32_symbol_value_cross_attention_v1 \
+  --matrix-id wan22_quantity_vs_symbol_value_v15 \
   --output-root run
 ```
 

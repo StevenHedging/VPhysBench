@@ -12,7 +12,7 @@
 
 - Do not delete or rewrite existing baselines, historical protocols, tasks, or provenance.
 - Existing `scene_default_v14` and frozen baseline experiment tasks remain unchanged.
-- Register `vertical_spring_oscillator_v1` in addition to every existing evaluator type.
+- Register `vertical_spring_oscillator_v1` with `robust_subject_v4` in addition to every existing evaluator type; V1-V14 retain `robust_subject_v3` semantics.
 - New official tasks use main's schema version 4.0 and Dataset 13.0.0 views.
 - Follow red-green-refactor for new observable behavior.
 
@@ -105,4 +105,3 @@
 - [ ] Run all relevant unit and integration suites with the complete evaluation environment.
 - [ ] Confirm no files under `baselines/` changed and V14 hashes are unchanged.
 - [ ] Commit only the reviewed benchmark sync.
-

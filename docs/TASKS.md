@@ -22,35 +22,42 @@ adaptation ID 都必须匹配 `^[A-Za-z0-9][A-Za-z0-9_.-]*$`。路径分隔符�
 
 ## 2. 官方 Task
 
-当前Dataset有七个scene，但推水瓶和竖直弹簧振子评估器尚未定义。四份官方Task因此
-继续选择已有评估器的五个scene，并已切换到13.0.0 Dataset：
+当前Dataset有七个scene。最新官方Task选择六个已有专用评估器的scene；推水瓶仍不
+进入正式计分。历史五场景Task保持冻结，用于复现旧运行：
 
 | 文件 | family | View | 协议 | 训练 |
 | --- | --- | --- | --- | --- |
-| `tasks/official/five_scene_finetune_eval.json` | `finetune_eval` | A | `scene_default_v10` | 是 |
-| `tasks/official/five_scene_direct_eval.json` | `direct_eval` | B | `scene_default_v10` | 否 |
-| `tasks/official/five_scene_finetune_eval_csti.json` | `finetune_eval` | A | `scene_default_v11` | 是 |
-| `tasks/official/five_scene_direct_eval_csti.json` | `direct_eval` | B | `scene_default_v11` | 否 |
+| `tasks/official/six_scene_train_six_scene_eval_v15.json` | `finetune_eval` | A | `scene_default_v15` | 是，679 case |
+| `tasks/official/six_scene_direct_eval_v15.json` | `direct_eval` | B | `scene_default_v15` | 否 |
 
-推水瓶和竖直弹簧振子可以进入Dataset训练和基线数据适配，但在专用评估器及协议完成
-前不能计入官方物理分数。不得用其它scene的评估器代替。
+竖直弹簧振子使用`vertical_spring_oscillator_v1`评估器并计入官方物理分数。推水瓶
+可以进入Dataset训练和基线数据适配，但在专用评估器完成前不能计入官方分数。
 
 Fine-tune + eval 示例：
 
 ```json
 {
   "schema_version": "4.0",
-  "task_id": "five_scene_finetune_eval_v13_csti",
+  "task_id": "six_scene_train_six_scene_eval_v15",
   "family": "finetune_eval",
   "dataset_id": "physics_video_seven_scene_v13",
   "dataset_view": "view_a",
   "selection": {
-    "scene_ids": [
+    "training_scene_ids": [
       "pendulum",
       "collision_1d",
       "inclined_plane_slide",
       "uniform_circular_motion",
-      "parabolic_motion"
+      "parabolic_motion",
+      "vertical_spring_oscillator"
+    ],
+    "evaluation_scene_ids": [
+      "pendulum",
+      "collision_1d",
+      "inclined_plane_slide",
+      "uniform_circular_motion",
+      "parabolic_motion",
+      "vertical_spring_oscillator"
     ],
     "test_regimes": ["id"]
   },
@@ -59,7 +66,7 @@ Fine-tune + eval 示例：
     "inference": [42]
   },
   "evaluation": {
-    "protocol": "scene_default_v11",
+    "protocol": "scene_default_v15",
     "reporting": {
       "primary_score": "overall_test",
       "breakdowns": [],
@@ -69,9 +76,8 @@ Fine-tune + eval 示例：
 }
 ```
 
-不带`_csti`的两份历史Task固定`scene_default_v10`；新增变体固定
-`scene_default_v11`。v11保留原scene专家评估器并增加通用CSTI维度，同时把五个scene的
-分析采样统一为24 FPS；顶层`score`仍只表示专家维度，但不同协议的专家结果也不得混用。
+V15保留V14五个scene的配置并增加竖直弹簧评估，同时继续报告通用CSTI维度；
+顶层`score`仍只表示专家维度，但不同协议的专家结果不得混用。
 CSTI写入`task_result.json.dimensions.csti`，专家维度镜像写入
 `task_result.json.dimensions.expert`。不同Dataset digest或protocol identity的分数
 不能混合。
@@ -83,9 +89,8 @@ CSTI采用一次正式full-Tube精确3D EDT；25%/50%/75%/100%四个prefix只提
 [`CSTI_REFERENCE_PERFORMANCE_20260807.md`](experiments/CSTI_REFERENCE_PERFORMANCE_20260807.md)
 预留资源；日常管线smoke优先使用冻结的v10 Task。
 
-这次Dataset升级只改变物理quantity与prompt契约，不改变Task字段形状、选择或评估协议，
-因此Task继续使用schema 4.0；v10与v11 Task具有完全相同的数据选择。当前冻结计划保持
-582条训练Case、76个finetune评测job和658个direct-eval job。
+V15 Task继续使用schema 4.0。当前冻结计划包含679条训练Case、96个finetune评测job
+和775个direct-eval job。
 
 `finetune_eval` 必须使用 View A，且一个 AtomicRun 恰好有一个 training seed；
 `direct_eval` 必须使用 View B，且没有 training seed。多个 seed 应展开成多个独立
@@ -95,7 +100,7 @@ schema 4.0不再选择`test_id/test_ood1` partition。finetune Task只运行`tes
 分是主分；当前View A的test全部为ID，官方Task固定选择`["id"]`，不再报告OOD/mixed或
 OOD factor分组。
 
-Baseline仍必须显式声明支持这五个scene。新增推水瓶支持后，还需等推水瓶评估协议完成
+Baseline仍必须显式声明支持这六个scene。新增推水瓶支持后，还需等推水瓶评估协议完成
 再扩展官方Task；Task不会绕过Baseline能力检查。
 
 ## 3. CanonicalTaskPlan

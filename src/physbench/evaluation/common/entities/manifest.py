@@ -1071,6 +1071,27 @@ def _default_apparatus(
                 },
             ),
         )
+    if scene_id == "vertical_spring_oscillator":
+        return (
+            ApparatusDeclaration(
+                apparatus_id="spring_support",
+                apparatus_class="vertical_spring_and_support",
+                physical_attributes=_attributes_from_case(
+                    physics,
+                    (
+                        ("natural_spring_length", "natural_spring_length"),
+                        ("spring_stiffness", "spring_stiffness"),
+                        ("gravity_acceleration", "gravity_acceleration"),
+                    ),
+                    label="vertical-spring apparatus",
+                    required=True,
+                ),
+                condition_anchor={
+                    "source": "condition_frame",
+                    "selector": "fixed_support_and_vertical_spring_axis",
+                },
+            ),
+        )
     if scene_id == "uniform_circular_motion":
         return (
             ApparatusDeclaration(
@@ -1284,6 +1305,24 @@ def _legacy_scene_entities(
             lifecycle=LifecyclePolicy.PERSISTENT,
             parts=("string",),
             appearance_bindings=(("material", "bob_material"),),
+        )
+    if scene_id == "vertical_spring_oscillator":
+        return _single_entity_defaults(
+            case,
+            entity_id="oscillator_ball",
+            role_id="spring_oscillator",
+            entity_class="steel_ball",
+            bindings=(
+                ("initial_displacement", "initial_displacement"),
+                ("mass", "oscillator_mass"),
+                ("radius", "ball_radius"),
+            ),
+            lifecycle=LifecyclePolicy.PERSISTENT,
+            parts=("spring",),
+            appearance_bindings=(
+                ("spring_id", "spring_id"),
+                ("release_side", "release_side"),
+            ),
         )
     if scene_id == "uniform_circular_motion":
         return _circular_entities(case)
