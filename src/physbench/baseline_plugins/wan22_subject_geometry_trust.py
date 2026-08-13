@@ -13,6 +13,7 @@ from physbench.baselines.wan22_subject_geometry_trust import (
 _GEOMETRY_CONFIG_KEYS = (
     "lambda_subject_mass",
     "lambda_subject_covariance",
+    "lambda_framewise_iou",
     "geometry_eps",
     "geometry_smooth_l1_beta",
 )

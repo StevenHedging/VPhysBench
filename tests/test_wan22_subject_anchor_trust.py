@@ -290,9 +290,11 @@ class FixedProbeTubeAnchorTrustRegistrationTests(unittest.TestCase):
         trainer = bundle.value["trainer"]["config"]
 
         self.assertTrue(trainer["freeze_occupancy_head"])
+        self.assertEqual(0.000025, trainer["learning_rate"])
         self.assertEqual(0.02, trainer["lambda_st"])
+        self.assertEqual(0.0, trainer["lambda_framewise_iou"])
         self.assertEqual(0.03, trainer["lambda_anchored_displacement"])
-        self.assertEqual(0.25, trainer["lambda_lora_trust_region"])
+        self.assertEqual(1.0, trainer["lambda_lora_trust_region"])
         self.assertEqual(0.0, trainer["lambda_subject_flow"])
         self.assertEqual(0.0, trainer["lambda_motion_delta"])
         self.assertEqual(

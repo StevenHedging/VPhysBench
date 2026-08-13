@@ -17,6 +17,63 @@ class SubjectSpatialGeometryLossResult:
     valid_frame_fraction: torch.Tensor
 
 
+@dataclass(frozen=True)
+class SubjectFramewiseIoULossResult:
+    loss: torch.Tensor
+    per_sample_loss: torch.Tensor
+    per_frame_iou: torch.Tensor
+    target_valid_frame_fraction: torch.Tensor
+
+
+def subject_framewise_iou_loss(
+    prediction: torch.Tensor,
+    target: torch.Tensor,
+    sample_weight: torch.Tensor,
+    *,
+    eps: float = 1e-6,
+) -> SubjectFramewiseIoULossResult:
+    """Average soft subject IoU over frames instead of occupied voxels."""
+
+    if prediction.shape != target.shape or prediction.ndim != 4:
+        raise ValueError("framewise IoU tensors must share BTHW shape")
+    if sample_weight.shape != (prediction.shape[0],):
+        raise ValueError("framewise IoU sample weights must have shape [B]")
+    if eps <= 0:
+        raise ValueError("framewise IoU epsilon must be positive")
+    prediction_f = prediction.float()
+    target_f = target.float()
+    weights = sample_weight.to(device=prediction.device, dtype=torch.float32)
+    for name, value in (
+        ("prediction", prediction_f),
+        ("target", target_f),
+        ("weights", weights),
+    ):
+        if not bool(torch.isfinite(value).all()):
+            raise ValueError(f"framewise IoU {name} contains non-finite values")
+    if bool((prediction_f < 0).any()) or bool((prediction_f > 1).any()):
+        raise ValueError("framewise IoU prediction must be in [0, 1]")
+    if bool((target_f < 0).any()) or bool((target_f > 1).any()):
+        raise ValueError("framewise IoU target must be in [0, 1]")
+    if bool((weights < 0).any()):
+        raise ValueError("framewise IoU weights must be non-negative")
+
+    intersection = (prediction_f * target_f).sum(dim=(-2, -1))
+    prediction_mass = prediction_f.sum(dim=(-2, -1))
+    target_mass = target_f.sum(dim=(-2, -1))
+    if bool((target_mass.sum(dim=1) <= 0).any()):
+        raise ValueError("framewise IoU target contains an empty sample")
+    union = prediction_mass + target_mass - intersection
+    raw_iou = (intersection + float(eps)) / (union + float(eps))
+    per_frame_iou = torch.where(union == 0, torch.ones_like(raw_iou), raw_iou)
+    per_sample = (1.0 - per_frame_iou).mean(dim=1)
+    return SubjectFramewiseIoULossResult(
+        loss=(per_sample * weights).mean(),
+        per_sample_loss=per_sample,
+        per_frame_iou=per_frame_iou,
+        target_valid_frame_fraction=(target_mass > float(eps)).float().mean(),
+    )
+
+
 def _soft_spatial_geometry(
     probability: torch.Tensor,
     *,
@@ -109,6 +166,8 @@ def subject_spatial_geometry_loss(
 
 
 __all__ = [
+    "SubjectFramewiseIoULossResult",
     "SubjectSpatialGeometryLossResult",
+    "subject_framewise_iou_loss",
     "subject_spatial_geometry_loss",
 ]

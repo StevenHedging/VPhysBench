@@ -7,7 +7,7 @@
     "driver": "driver.py",
     "fingerprint_paths": []
   },
-  "description": "WAN2.2-TI2V-5B LoRA with a fixed occupancy probe supervising absolute Tube-IoU, anchored displacement, foreground mass, spatial covariance, and a parent-LoRA trust region.",
+  "description": "WAN2.2-TI2V-5B LoRA with a fixed occupancy probe supervising global and frame-balanced IoU, anchored displacement, foreground mass, spatial covariance, and a parent-LoRA trust region.",
   "supported_scenes": [
     "pendulum", "collision_1d", "inclined_plane_slide",
     "uniform_circular_motion", "parabolic_motion", "push_bottle",
@@ -84,10 +84,10 @@
   "trainer": {
     "type": "diffsynth_flowmatch_lora_subject_geometry_trust_v1",
     "config": {
-      "algorithm": "FlowMatch + fixed-probe Tube-IoU + anchor displacement + foreground mass/covariance + LoRA trust region",
+      "algorithm": "FlowMatch + fixed-probe global/framewise IoU + anchor displacement + foreground mass/covariance + LoRA trust region",
       "rank": 32,
       "target_modules": "q,k,v,o,ffn.0,ffn.2",
-      "learning_rate": 0.00005,
+      "learning_rate": 0.000025,
       "dataset_repeat": 1,
       "num_epochs": 1,
       "save_steps": 234,
@@ -110,8 +110,9 @@
       "lambda_motion_delta": 0.0,
       "lambda_anchored_displacement": 0.02,
       "lambda_subject_mass": 0.01,
-      "lambda_subject_covariance": 0.02,
-      "lambda_lora_trust_region": 0.25,
+      "lambda_subject_covariance": 0.10,
+      "lambda_framewise_iou": 0.01,
+      "lambda_lora_trust_region": 1.0,
       "st_iou_eps": 0.000001,
       "subject_flow_eps": 0.000001,
       "motion_delta_eps": 0.000001,

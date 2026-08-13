@@ -18,6 +18,7 @@ from diffsynth.diffusion.runner import (
 )
 
 from physbench.baselines.wan22_subject_geometry_trust_model import (
+    subject_framewise_iou_loss,
     subject_spatial_geometry_loss,
 )
 from physbench.baselines.wan22_subject_motion_model import (
@@ -76,11 +77,20 @@ def compute_subject_geometry_trust_objective(
     lambda_covariance = subject_motion._nonnegative_coefficient(
         config, "lambda_subject_covariance"
     )
+    lambda_framewise_iou = subject_motion._nonnegative_coefficient(
+        config, "lambda_framewise_iou"
+    )
     zero = metrics["base_loss"].new_zeros(())
     mass_loss = zero
     covariance_loss = zero
+    framewise_iou_loss = zero
     valid_fraction = zero
-    if lambda_mass > 0.0 or lambda_covariance > 0.0:
+    framewise_valid_fraction = zero
+    if (
+        lambda_mass > 0.0
+        or lambda_covariance > 0.0
+        or lambda_framewise_iou > 0.0
+    ):
         logits = captured.get("logits")
         if logits is None:
             raise RuntimeError("subject geometry requires the occupancy probe")
@@ -91,35 +101,56 @@ def compute_subject_geometry_trust_objective(
             subject_mask.to(device=probability.device),
             latent_shape=probability.shape,
         )
-        geometry = subject_spatial_geometry_loss(
-            probability,
-            target,
-            sample_weight=metrics["noise_weight"],
-            eps=float(config["geometry_eps"]),
-            smooth_l1_beta=float(config["geometry_smooth_l1_beta"]),
-        )
-        mass_loss = geometry.mass_loss
-        covariance_loss = geometry.covariance_loss
-        valid_fraction = geometry.valid_frame_fraction
+        if lambda_mass > 0.0 or lambda_covariance > 0.0:
+            geometry = subject_spatial_geometry_loss(
+                probability,
+                target,
+                sample_weight=metrics["noise_weight"],
+                eps=float(config["geometry_eps"]),
+                smooth_l1_beta=float(config["geometry_smooth_l1_beta"]),
+            )
+            mass_loss = geometry.mass_loss
+            covariance_loss = geometry.covariance_loss
+            valid_fraction = geometry.valid_frame_fraction
+        if lambda_framewise_iou > 0.0:
+            framewise = subject_framewise_iou_loss(
+                probability,
+                target,
+                sample_weight=metrics["noise_weight"],
+                eps=float(config["geometry_eps"]),
+            )
+            framewise_iou_loss = framewise.loss
+            framewise_valid_fraction = framewise.target_valid_frame_fraction
 
     warmup = metrics["aux_warmup_ratio"]
     effective_mass = warmup * metrics["base_loss"].new_tensor(lambda_mass)
     effective_covariance = warmup * metrics["base_loss"].new_tensor(
         lambda_covariance
     )
+    effective_framewise_iou = warmup * metrics["base_loss"].new_tensor(
+        lambda_framewise_iou
+    )
     mass_contribution = effective_mass * mass_loss
     covariance_contribution = effective_covariance * covariance_loss
+    framewise_iou_contribution = effective_framewise_iou * framewise_iou_loss
     metrics["total_loss"] = (
-        metrics["total_loss"] + mass_contribution + covariance_contribution
+        metrics["total_loss"]
+        + mass_contribution
+        + covariance_contribution
+        + framewise_iou_contribution
     )
     metrics.update({
         "subject_mass_loss": mass_loss,
         "subject_covariance_loss": covariance_loss,
         "subject_mass_contribution": mass_contribution,
         "subject_covariance_contribution": covariance_contribution,
+        "subject_framewise_iou_loss": framewise_iou_loss,
+        "subject_framewise_iou_contribution": framewise_iou_contribution,
         "lambda_subject_mass_effective": effective_mass,
         "lambda_subject_covariance_effective": effective_covariance,
+        "lambda_framewise_iou_effective": effective_framewise_iou,
         "geometry_valid_frame_fraction": valid_fraction,
+        "framewise_iou_valid_frame_fraction": framewise_valid_fraction,
     })
     return metrics
 
@@ -241,9 +272,13 @@ def launch_subject_geometry_trust_training(
                     "subject_covariance_loss",
                     "subject_mass_contribution",
                     "subject_covariance_contribution",
+                    "subject_framewise_iou_loss",
+                    "subject_framewise_iou_contribution",
                     "lambda_subject_mass_effective",
                     "lambda_subject_covariance_effective",
+                    "lambda_framewise_iou_effective",
                     "geometry_valid_frame_fraction",
+                    "framewise_iou_valid_frame_fraction",
                     "aux_warmup_ratio",
                     "total_loss",
                     "gt_foreground_fraction",
@@ -287,6 +322,7 @@ def _validate_geometry_trust_config(config: dict[str, Any]) -> None:
         "lambda_lora_trust_region",
         "lambda_subject_mass",
         "lambda_subject_covariance",
+        "lambda_framewise_iou",
         "trajectory_eps",
         "trajectory_smooth_l1_beta",
         "lora_trust_region_eps",
@@ -305,6 +341,7 @@ def _validate_geometry_trust_config(config: dict[str, Any]) -> None:
         "lambda_lora_trust_region",
         "lambda_subject_mass",
         "lambda_subject_covariance",
+        "lambda_framewise_iou",
     ):
         subject_motion._nonnegative_coefficient(config, key)
     for key in (

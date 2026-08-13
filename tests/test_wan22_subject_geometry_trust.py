@@ -8,6 +8,7 @@ import torch
 
 from physbench.baseline_api import discover_baseline_bundles, load_baseline_bundle
 from physbench.baselines.wan22_subject_geometry_trust_model import (
+    subject_framewise_iou_loss,
     subject_spatial_geometry_loss,
 )
 from physbench.baselines.wan22_st_tube_iou_model import LatentOccupancyHead
@@ -86,6 +87,48 @@ class SubjectSpatialGeometryLossTests(unittest.TestCase):
         self.assertTrue(bool(torch.isfinite(logits.grad).all()))
 
 
+class SubjectFramewiseIoULossTests(unittest.TestCase):
+    def test_identical_tube_has_zero_loss(self) -> None:
+        target = SubjectSpatialGeometryLossTests._two_object_tube(distance=3)
+
+        result = subject_framewise_iou_loss(
+            target,
+            target,
+            sample_weight=torch.ones(1),
+        )
+
+        torch.testing.assert_close(result.loss, torch.tensor(0.0))
+
+    def test_small_and_large_frames_receive_equal_temporal_weight(self) -> None:
+        target = torch.zeros((1, 2, 8, 8))
+        target[:, 0, 0, 0] = 1
+        target[:, 1] = 1
+        prediction = target.clone()
+        prediction[:, 0] = 0
+
+        result = subject_framewise_iou_loss(
+            prediction,
+            target,
+            sample_weight=torch.ones(1),
+        )
+
+        torch.testing.assert_close(result.loss, torch.tensor(0.5))
+
+    def test_framewise_iou_backpropagates_to_soft_prediction(self) -> None:
+        logits = torch.randn((1, 3, 5, 9), requires_grad=True)
+
+        result = subject_framewise_iou_loss(
+            logits.sigmoid(),
+            SubjectSpatialGeometryLossTests._two_object_tube(distance=3),
+            sample_weight=torch.ones(1),
+        )
+        result.loss.backward()
+
+        self.assertIsNotNone(logits.grad)
+        self.assertGreater(float(logits.grad.abs().sum()), 0.0)
+        self.assertTrue(bool(torch.isfinite(logits.grad).all()))
+
+
 class _FakeScheduler:
     def __init__(self) -> None:
         self.timesteps = torch.tensor([1000.0, 500.0])
@@ -130,6 +173,7 @@ class SubjectGeometryTrustObjectiveTests(unittest.TestCase):
             "enable_st_iou_loss": True,
             "freeze_occupancy_head": True,
             "lambda_st": 0.02,
+            "lambda_framewise_iou": 0.01,
             "lambda_subject_flow": 0.0,
             "lambda_motion_delta": 0.0,
             "lambda_anchored_displacement": 0.02,
@@ -165,6 +209,9 @@ class SubjectGeometryTrustObjectiveTests(unittest.TestCase):
 
         self.assertGreater(float(metrics["st_contribution"].detach()), 0.0)
         self.assertGreater(
+            float(metrics["subject_framewise_iou_contribution"].detach()), 0.0
+        )
+        self.assertGreater(
             float(metrics["anchored_displacement_contribution"].detach()), 0.0
         )
         self.assertGreater(
@@ -195,11 +242,13 @@ class SubjectGeometryTrustRegistrationTests(unittest.TestCase):
         bundle = load_baseline_bundle(BASELINE_PATH)
         config = bundle.value["trainer"]["config"]
 
+        self.assertEqual(0.000025, config["learning_rate"])
         self.assertEqual(0.02, config["lambda_st"])
+        self.assertEqual(0.01, config["lambda_framewise_iou"])
         self.assertEqual(0.02, config["lambda_anchored_displacement"])
         self.assertEqual(0.01, config["lambda_subject_mass"])
-        self.assertEqual(0.02, config["lambda_subject_covariance"])
-        self.assertEqual(0.25, config["lambda_lora_trust_region"])
+        self.assertEqual(0.10, config["lambda_subject_covariance"])
+        self.assertEqual(1.0, config["lambda_lora_trust_region"])
         self.assertTrue(config["freeze_occupancy_head"])
 
 
