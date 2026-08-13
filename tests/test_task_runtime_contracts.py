@@ -89,14 +89,22 @@ class TaskRuntimeContractTests(unittest.TestCase):
 
         value = copy.deepcopy(self.direct.value)
         value["ood2"] = {"enabled": 1}
-        invalid_documents.append(("ood2_boolean", value, "must be a boolean"))
+        invalid_documents.append((
+            "ood2_boolean",
+            value,
+            "outside the model-agnostic contract",
+        ))
 
         value = copy.deepcopy(self.direct.value)
         value["ood2"] = {
             "enabled": False,
             "heldout_scenes": ["pendulum"],
         }
-        invalid_documents.append(("ood2_disabled", value, "omitted or empty"))
+        invalid_documents.append((
+            "ood2_disabled",
+            value,
+            "outside the model-agnostic contract",
+        ))
 
         value = copy.deepcopy(self.direct.value)
         value["seeds"]["training"] = [7]
@@ -119,7 +127,7 @@ class TaskRuntimeContractTests(unittest.TestCase):
         value = copy.deepcopy(self.finetune.value)
         value["selection"]["eval_partitions"] = ["test_id", "invented"]
         invalid_documents.append(
-            ("eval_partition", value, "may only contain")
+            ("eval_partition", value, "exactly one legacy scene_ids")
         )
 
         with tempfile.TemporaryDirectory() as temporary:
