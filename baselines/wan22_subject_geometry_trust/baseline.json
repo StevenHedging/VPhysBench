@@ -1,20 +1,16 @@
 {
   "schema_version": "5.0",
-  "baseline_id": "wan22_ti2v_5b_lora_r32_fixed_probe_tube_anchor_trust_v1",
+  "baseline_id": "wan22_ti2v_5b_lora_r32_subject_geometry_trust_v1",
   "baseline_version": "1.0.0",
   "implementation": {
     "kind": "managed",
     "driver": "driver.py",
     "fingerprint_paths": []
   },
-  "description": "WAN2.2-TI2V-5B LoRA with a frozen latent occupancy probe, low-weight absolute Tube-IoU, first-frame-relative subject displacement, and a parent-LoRA trust region.",
+  "description": "WAN2.2-TI2V-5B LoRA with a fixed occupancy probe supervising absolute Tube-IoU, anchored displacement, foreground mass, spatial covariance, and a parent-LoRA trust region.",
   "supported_scenes": [
-    "pendulum",
-    "collision_1d",
-    "inclined_plane_slide",
-    "uniform_circular_motion",
-    "parabolic_motion",
-    "push_bottle",
+    "pendulum", "collision_1d", "inclined_plane_slide",
+    "uniform_circular_motion", "parabolic_motion", "push_bottle",
     "vertical_spring_oscillator"
   ],
   "capabilities": {
@@ -86,9 +82,9 @@
     }
   },
   "trainer": {
-    "type": "diffsynth_flowmatch_lora_subject_anchor_trust_v1",
+    "type": "diffsynth_flowmatch_lora_subject_geometry_trust_v1",
     "config": {
-      "algorithm": "FlowMatch SFT + fixed-probe Tube-IoU + anchored displacement + LoRA trust region",
+      "algorithm": "FlowMatch + fixed-probe Tube-IoU + anchor displacement + foreground mass/covariance + LoRA trust region",
       "rank": 32,
       "target_modules": "q,k,v,o,ffn.0,ffn.2",
       "learning_rate": 0.00005,
@@ -112,18 +108,18 @@
       "lambda_st": 0.02,
       "lambda_subject_flow": 0.0,
       "lambda_motion_delta": 0.0,
-      "lambda_anchored_displacement": 0.03,
+      "lambda_anchored_displacement": 0.02,
+      "lambda_subject_mass": 0.01,
+      "lambda_subject_covariance": 0.02,
       "lambda_lora_trust_region": 0.25,
-      "lambda_subject_mass": 0.0,
-      "lambda_subject_covariance": 0.0,
       "st_iou_eps": 0.000001,
       "subject_flow_eps": 0.000001,
       "motion_delta_eps": 0.000001,
       "trajectory_eps": 0.000001,
       "trajectory_smooth_l1_beta": 0.05,
-      "lora_trust_region_eps": 0.000000000001,
       "geometry_eps": 0.000001,
       "geometry_smooth_l1_beta": 0.05,
+      "lora_trust_region_eps": 0.000000000001,
       "st_loss_weighting": "linear_clean",
       "st_noise_threshold": 0.5,
       "aux_warmup_steps": 50,

@@ -309,7 +309,7 @@ class FixedProbeTubeAnchorTrustRegistrationTests(unittest.TestCase):
         driver_source = driver_path.read_text(encoding="utf-8")
 
         self.assertTrue(driver_path.is_file())
-        self.assertIn("Wan22SubjectAnchorTrustManagedDriver", driver_source)
+        self.assertIn("Wan22SubjectGeometryTrustManagedDriver", driver_source)
 
 
 if __name__ == "__main__":
