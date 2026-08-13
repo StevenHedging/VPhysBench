@@ -246,8 +246,8 @@ class SubjectGeometryTrustRegistrationTests(unittest.TestCase):
         self.assertEqual(0.02, config["lambda_st"])
         self.assertEqual(0.01, config["lambda_framewise_iou"])
         self.assertEqual(0.02, config["lambda_anchored_displacement"])
-        self.assertEqual(0.01, config["lambda_subject_mass"])
-        self.assertEqual(0.10, config["lambda_subject_covariance"])
+        self.assertEqual(0.005, config["lambda_subject_mass"])
+        self.assertEqual(0.05, config["lambda_subject_covariance"])
         self.assertEqual(1.0, config["lambda_lora_trust_region"])
         self.assertTrue(config["freeze_occupancy_head"])
 
