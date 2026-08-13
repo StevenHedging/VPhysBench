@@ -75,3 +75,33 @@ ignored `baseline.local.json` and `accelerate.local.yaml` files. Run planning,
 training, inference, and evaluation through the benchmark's `atomic-run` or
 `matrix-run` entrypoint so the task, protocol, and component fingerprints are
 sealed together.
+
+## Empirical rationale and current status
+
+All values below are observed scene-macro diagnostics under
+`scene_default_v14` (64 evaluated jobs out of 76); strict official scores are
+unset because 12 reference videos fail closed in the evaluator. The first
+three iterations were trained and evaluated, while this geometry recipe is a
+registered next iteration whose GPU run is still pending.
+
+| iteration | physical | CSTI | result |
+| --- | ---: | ---: | --- |
+| learned global Tube-IoU parent | 0.36630 | 0.26758 | strongest completed run |
+| subject-flow + temporal delta | 0.23743 | 0.20172 | over-weighted local velocity |
+| absolute centroid trajectory | 0.34969 | 0.26023 | close overall, weak collision |
+| anchored displacement + trust | 0.27719 | 0.23295 | helps curved motion, loses absolute support |
+
+The anchor iteration improved paired parabolic CSTI by `+0.03098` and circular
+CSTI by `+0.06292`, but reduced incline CSTI by `-0.25107`; green-background
+incline cases were the dominant failure. This is why the next recipe combines
+relative displacement with global/mean-frame support, mass, and covariance
+instead of using a trajectory loss alone. A high-comparability archived
+FlowMatch-only control scored physical `0.29789` and CSTI `0.24974` at the same
+observed coverage. Its paired CSTI difference versus the Tube-IoU parent was
+`-0.01486` with bootstrap 95% interval `[-0.05659, 0.02642]`, while its paired
+physical difference was `-0.07020` with interval `[-0.13120, -0.01307]`.
+That control used the same 806 case IDs, optimizer hyperparameters, global
+batch, prompts, seeds, runner, and byte-identical evaluation conditioning
+images, but differed in process/accumulation layout and had 18 lightly
+re-encoded collision training videos, so it is not claimed as a strict
+single-variable ablation.
