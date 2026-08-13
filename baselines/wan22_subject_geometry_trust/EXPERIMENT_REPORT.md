@@ -150,6 +150,12 @@ subject-loss objectives, fixed-head behavior, CSTI v14, the 2026-08-12 task
 split, TaskBuilder, and runtime contracts. Both final candidates pass
 `physbench baseline validate`; the geometry bundle digest is
 `abf8a39cc02abbae990548769ddc067336621a469e604ee3ce6a64dfa4d59a58`.
+All 679 cached training tubes were also re-read at full resolution: none were
+empty, non-binary, or temporally invalid. Foreground occupied a median
+`0.5041%` of pixels (minimum `0.00954%`), and 36 tubes were below `0.1%`, which
+motivates the mass and frame-balanced terms. Finally, all 380 videos across
+the archived control, parent, and three completed iterations passed their
+sealed media contracts; the same 12 job IDs failed closed in every evaluation.
 
 ## Known limitations
 
