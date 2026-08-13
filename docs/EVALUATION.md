@@ -8,21 +8,14 @@
 CanonicalTaskPlan + frozen cases + predictions.jsonl + evaluation protocol
 ```
 
-当前官方六场景Task固定最新协议；历史五场景协议继续可复现但不得与V15混用：
+当前官方五场景Task提供两条不可混用的协议链：
 
 ```text
-scene_default_v15  V14五场景 + 竖直弹簧专家评分 + 独立CSTI
-scene_default_v14  历史五场景、自适应CSTI容差
-scene_default_v11  历史五场景、专家评分 + 独立CSTI轨迹维度
-scene_default_v10  历史五场景专家评分
+scene_default_v10  原有专家评分Task
+scene_default_v11  专家评分 + 独立CSTI轨迹维度
 ```
 
-V15逐项继承V14的五个scene配置，并增加`vertical_spring_oscillator_v1`。该评估器
-冻结条件帧钢球身份，在reference与prediction的共同物理时间轴和同一无padding画布上
-比较vertical trajectory、period、amplitude envelope、equilibrium/release phase、
-vertical-axis confinement和oscillation evidence，并独立检查弹簧连接拓扑。
-
-历史v11复用v10的五个scene专家评估器、无填边空间对齐和物理时间重叠协议，通过顶层
+v11复用v10的五个scene专家评估器、无填边空间对齐和物理时间重叠协议，通过顶层
 `general_metrics.csti`启用通用轨迹指标，并把五个scene的分析采样统一为24 FPS。旧run
 必须继续读取它自身冻结的协议，
 不得用新协议语义覆盖既有分数。`scene_default_v3`及其它旧协议只用于复现历史结果：
@@ -265,16 +258,16 @@ CSTI与专家分数加权合成。当前协议只接受same-Case GT；历史phys
 
 协议先在双方物理时间重叠区间构造24 FPS规则网格；若媒体层为覆盖精确时长而附加了
 一个不足`1/24 s`的末端采样点，CSTI在进入EDT前只剔除这个off-grid端点。随后舍弃
-配置指定的初始规则采样点。历史v11/v13舍弃前3个采样点；当前v15（继承v14）只舍弃第0个条件
+配置指定的初始规则采样点。历史v11/v13舍弃前3个采样点；当前v14只舍弃第0个条件
 首帧，其余共同时间样本均参与评分。
 
 对剩余GT Tube \(G\) 与已匹配的prediction Tube \(P\)，使用原生mask尺寸上的精确三维
-欧氏距离变换。历史v11/v13使用画布比例作为x/y容差；当前v15（继承v14）则对每个GT entity仅从
+欧氏距离变换。历史v11/v13使用画布比例作为x/y容差；当前v14则对每个GT entity仅从
 排除条件首帧后的reference Tube估计尺度。每个非空reference mask面积为 \(A_t\)，其
 面积等效直径为 \(d_t=2\sqrt{A_t/\pi}\)，取时间中位数 \(d_{ref}\)，并令各空间轴的
 soft-support半径 \(r=0.5d_{ref}\)。prediction Tube不参与容差估计，因而模型不能通过
 放大预测主体来放宽自身容差；孤立远端像素也只增加其实际面积，不会像bounding box
-那样显著放大尺度。当前v15沿用v14的归一化距离与soft occupancy定义：
+那样显著放大尺度。当前v14的归一化距离与soft occupancy定义为：
 
 ```text
 d_A(t,y,x)^2 = ((t-t') / 0.025 s)^2
@@ -297,14 +290,14 @@ manifest中全部物理主体分数的算术平均。整个主体未匹配时该
 reference与prediction共同存在的物理时长，不附加独立时长惩罚。
 
 Case级输出位于`case_results.jsonl[*].metrics.csti`，包含主体匹配、正式full-Tube分数、
-诊断prefix曲线以及实际舍弃的初始/末端采样数。当前v15还为每个对象写入
+诊断prefix曲线以及实际舍弃的初始/末端采样数。当前v14还为每个对象写入
 `spatial_tolerance`审计：reference非空帧数、\(d_{ref}\)和有效半径\(r\)。Task级输出位于
 `task_result.json.dimensions.csti`，沿用完整coverage门禁和
 scene宏平均；顶层`task_result.json.score`仍是专家分数，并同时镜像到
 `dimensions.expert`。若全部Case均不适用，CSTI维度报告
 `status=not_applicable, score=null`。
 
-运行时API仍可显式读取历史canvas-fraction配置，以复现旧协议；当前v15配置使用上述
+运行时API仍可显式读取历史canvas-fraction配置，以复现旧协议；当前v14配置使用上述
 reference-Tube自适应策略。既有run继续绑定其冻结的protocol fingerprint，不会因同名
 配置文件更新而被静默重解释。要获得新分数，必须按当前fingerprint创建独立重评估变体
 或重新导入/执行预测；不同fingerprint的结果不得混合比较。
@@ -477,7 +470,7 @@ same_case_reference
 unavailable，不能回退到 letterbox。
 
 它是动力学 reference，不是同外观视觉 GT。v3 的外貌项使用 OOD Case 自己的条件首帧，
-不使用 parent 像素。协议保留 `physics_model` 和 `reference_free` 模式，但当前六场景
+不使用 parent 像素。协议保留 `physics_model` 和 `reference_free` 模式，但当前五场景
 正式动力学分数都使用可信视频 reference。
 
 因此，没有同外观 GT 的 OOD1 case 仍可评估动力学：只要它与 parent 的 structured
@@ -1892,8 +1885,8 @@ prediction
 visual_judgment
 ```
 
-其默认配置位于 `configs/metrics/default.json`，目前都是 disabled placeholder。
-当前官方 AtomicRun 的正式六场景分数来自 `scene_default_v15` 下的 scene-specific evaluator，
+其默认配置位于 `configs/metrics/default.json`，目前都是 disabled placeholder。当前
+当前官方 AtomicRun 的正式五场景分数来自 `scene_default_v3` 下的 scene-specific evaluator，
 不是这三个旧 placeholder metric。
 
 ### 15.5 论文依据与工程取舍
@@ -2163,8 +2156,7 @@ configs/evaluation/protocols/scene_default_v6.json  # shadow all-scene open worl
 configs/evaluation/protocols/scene_default_v7.json  # shadow observer hardening
 configs/evaluation/protocols/scene_default_v10.json # frozen expert Tasks
 configs/evaluation/protocols/scene_default_v11.json # expert + independent CSTI
-configs/evaluation/protocols/scene_default_v14.json # frozen adaptive CSTI tolerance
-configs/evaluation/protocols/scene_default_v15.json # current six-scene protocol with vertical spring
+configs/evaluation/protocols/scene_default_v14.json # current adaptive CSTI tolerance
 configs/evaluation/protocols/scene_default_v5.json  # shadow collision
 configs/evaluation/protocols/scene_default_v4.json  # shadow collision
 configs/evaluation/protocols/scene_default_v3.json
@@ -2179,15 +2171,14 @@ src/physbench/evaluation/common/artifacts/open_world_v2.py
 src/physbench/orchestration/evaluation_variants.py
 ```
 
-六个当前正式 scene evaluator：
+五个 scene evaluator：
 
 ```text
 src/physbench/evaluation/scenes/pendulum/
+src/physbench/evaluation/scenes/free_fall/
 src/physbench/evaluation/scenes/inclined_plane/
 src/physbench/evaluation/scenes/circular_motion/
 src/physbench/evaluation/scenes/collision/
-src/physbench/evaluation/scenes/parabolic_motion/
-src/physbench/evaluation/scenes/vertical_spring_oscillator/
 ```
 
 v5 碰撞的主要实现与审计入口：

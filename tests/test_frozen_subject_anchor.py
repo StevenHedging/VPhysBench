@@ -98,7 +98,8 @@ class FrozenSubjectAnchorTests(unittest.TestCase):
 
     def test_loads_logical_entity_from_distinct_dataset_object(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            request, manifest_path, npz_path = self._fixture(Path(temporary))
+            temporary_root = Path(temporary)
+            request, manifest_path, npz_path = self._fixture(temporary_root)
 
             anchor = load_frozen_subject_anchor(
                 request,
@@ -117,18 +118,28 @@ class FrozenSubjectAnchorTests(unittest.TestCase):
         np.testing.assert_allclose([3.5, 3.5], anchor.centroid_xy)
         self.assertFalse(anchor.mask.flags.writeable)
         self.assertFalse(anchor.source_mask.flags.writeable)
-        self.assertEqual(str(manifest_path), anchor.provenance["manifest"])
-        self.assertEqual(str(npz_path), anchor.provenance["npz"])
+        self.assertEqual(manifest_path.resolve(), anchor.manifest_path)
+        self.assertEqual(npz_path.resolve(), anchor.npz_path)
+        self.assertEqual(
+            "dataset_relative_asset_reference_v1",
+            anchor.provenance["path_policy"],
+        )
+        self.assertEqual(
+            "case/canonical/masks/manifest.json",
+            anchor.provenance["manifest"],
+        )
+        self.assertEqual(
+            "case/canonical/masks/01.npz",
+            anchor.provenance["npz"],
+        )
+        self.assertNotIn(str(temporary_root), repr(anchor.provenance))
         self.assertEqual(64, len(anchor.provenance["manifest_sha256"]))
         self.assertEqual(64, len(anchor.provenance["npz_sha256"]))
 
-    def test_dataset_object_v2_accepts_dataset_identity_and_relative_provenance(
-        self,
-    ) -> None:
-        """V15 may bind a logical scene role to a reviewed Dataset object ID."""
+    def test_loads_npz_bound_to_selected_dataset_object_identity(self) -> None:
+        """Would fail if a reviewed Dataset object id cannot bind the logical role."""
         with tempfile.TemporaryDirectory() as temporary:
-            temporary_root = Path(temporary)
-            request, manifest_path, npz_path = self._fixture(temporary_root)
+            request, _, npz_path = self._fixture(Path(temporary))
             with np.load(npz_path, allow_pickle=False) as payload:
                 masks = np.array(payload["masks"], copy=True)
                 mask_ids = np.array(payload["mask_ids"], copy=True)
@@ -140,6 +151,24 @@ class FrozenSubjectAnchorTests(unittest.TestCase):
                 object_ids=np.asarray(["object_1"]),
                 frame_index=frame_index,
             )
+
+            anchor = load_frozen_subject_anchor(
+                request,
+                logical_entity_id="projectile_ball",
+                entity_class="ball",
+                spatial_transform=self._transform(),
+                dataset_object_id="object_1",
+                error_namespace="reference_projectile_subject",
+            )
+
+        self.assertEqual("projectile_ball", anchor.logical_entity_id)
+        self.assertEqual("object_1", anchor.dataset_object_id)
+        self.assertEqual("object_1", anchor.provenance["npz_object_id"])
+
+    def test_loads_reviewed_inclusive_maximum_bbox(self) -> None:
+        """Would fail if a mask-exact legacy bbox convention is rejected."""
+        with tempfile.TemporaryDirectory() as temporary:
+            request, manifest_path, _ = self._fixture(Path(temporary))
             manifest = __import__("json").loads(
                 manifest_path.read_text(encoding="utf-8")
             )
@@ -151,21 +180,13 @@ class FrozenSubjectAnchorTests(unittest.TestCase):
                 logical_entity_id="projectile_ball",
                 entity_class="ball",
                 spatial_transform=self._transform(),
-                dataset_object_id="object_1",
                 error_namespace="reference_projectile_subject",
-                contract="dataset_object_v2",
             )
 
-        self.assertEqual("object_1", anchor.provenance["npz_object_id"])
         self.assertEqual(
             "xyxy_inclusive_max_legacy",
             anchor.provenance["bbox_policy"],
         )
-        self.assertEqual(
-            "dataset_relative_asset_reference_v1",
-            anchor.provenance["path_policy"],
-        )
-        self.assertNotIn(str(temporary_root), repr(anchor.provenance))
 
     def test_rejects_ambiguous_entity_class_without_object_selector(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

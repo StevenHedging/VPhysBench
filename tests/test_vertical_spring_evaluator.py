@@ -13,7 +13,6 @@ from unittest.mock import patch
 
 import cv2
 import numpy as np
-from _pytest.mark.structures import Mark
 
 try:
     from jsonschema import Draft202012Validator
@@ -74,7 +73,7 @@ TOPOLOGY = {
 
 EVALUATOR_CONFIG = {
     "type": "vertical_spring_oscillator_v1",
-    "evaluator_contract": "robust_subject_v4",
+    "evaluator_contract": "robust_subject_v3",
     "timeline": {
         "policy": "physical_overlap_common_fps_v1",
         "fps": 24,
@@ -622,8 +621,6 @@ class VerticalSpringProtocolSchemaTests(unittest.TestCase):
 
 
 class VerticalSpringRealAssetTests(unittest.TestCase):
-    pytestmark = Mark("real_assets", (), {}, _ispytest=True)
-
     @classmethod
     def setUpClass(cls) -> None:
         configured_root = os.environ.get("PHYSBENCH_FULL_ASSET_ROOT")

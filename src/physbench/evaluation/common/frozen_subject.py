@@ -149,7 +149,6 @@ def load_frozen_subject_anchor(
     spatial_transform: Mapping[str, object],
     dataset_object_id: str | None = None,
     error_namespace: str = "reference_subject",
-    contract: str = "legacy_v1",
 ) -> FrozenSubjectAnchor:
     """Load exactly one annotated subject or fail closed as reference data."""
 
@@ -159,9 +158,6 @@ def load_frozen_subject_anchor(
         raise ValueError("entity_class must be non-empty")
     if not error_namespace:
         raise ValueError("error_namespace must be non-empty")
-    if contract not in {"legacy_v1", "dataset_object_v2"}:
-        raise ValueError(f"unknown frozen subject contract: {contract!r}")
-    dataset_object_contract = contract == "dataset_object_v2"
     root = request.asset_root.resolve()
     manifest_value = request.case.get("assets", {}).get(
         "first_frame_mask_manifest"
@@ -192,19 +188,16 @@ def load_frozen_subject_anchor(
         )
     except ReferenceAnalysisError:
         raise
-    except Exception as exc:
-        if dataset_object_contract and not isinstance(
-            exc, _FROZEN_DATA_ERRORS
-        ):
-            raise
+    except _FROZEN_DATA_ERRORS as exc:
         raise ReferenceAnalysisError(
             f"{error_namespace}_manifest_invalid",
             "frozen subject mask manifest violates schema 1.2: "
             f"{type(exc).__name__}: {exc}",
         ) from exc
+    npz_value = instance.get("npz_asset")
     npz_path = _resolve_asset(
         root,
-        instance.get("npz_asset"),
+        npz_value,
         code=f"{error_namespace}_mask_path_escape",
         label="frozen subject mask NPZ",
     )
@@ -219,18 +212,9 @@ def load_frozen_subject_anchor(
             instance=instance,
             image_shape=image_shape,
             logical_entity_id=logical_entity_id,
-            allow_dataset_object_id=dataset_object_contract,
         )
-        bbox_policy = _validate_geometry(
-            source_mask,
-            instance=instance,
-            allow_inclusive_maximum=dataset_object_contract,
-        )
-    except Exception as exc:
-        if dataset_object_contract and not isinstance(
-            exc, _FROZEN_DATA_ERRORS
-        ):
-            raise
+        bbox_policy = _validate_geometry(source_mask, instance=instance)
+    except _FROZEN_DATA_ERRORS as exc:
         raise ReferenceAnalysisError(
             f"{error_namespace}_mask_invalid",
             "frozen subject mask NPZ violates the per-object contract: "
@@ -240,11 +224,7 @@ def load_frozen_subject_anchor(
         transformed = transform_frozen_subject_mask(
             source_mask, spatial_transform
         )
-    except Exception as exc:
-        if dataset_object_contract and not isinstance(
-            exc, _FROZEN_DATA_ERRORS
-        ):
-            raise
+    except _FROZEN_DATA_ERRORS as exc:
         raise ReferenceAnalysisError(
             f"{error_namespace}_mask_transform_invalid",
             "frozen subject mask cannot use the evaluator transform: "
@@ -274,38 +254,20 @@ def load_frozen_subject_anchor(
         equivalent_radius_px=float(math.sqrt(area / math.pi)),
         provenance={
             "policy": "frozen_dataset_subject_annotation_v1",
-            "manifest": (
-                manifest_value
-                if dataset_object_contract
-                else str(manifest_path)
-            ),
+            "path_policy": "dataset_relative_asset_reference_v1",
+            "manifest": manifest_value,
             "manifest_sha256": sha256_file(manifest_path),
-            "npz": (
-                str(instance["npz_asset"])
-                if dataset_object_contract
-                else str(npz_path)
-            ),
+            "npz": str(npz_value),
             "npz_sha256": sha256_file(npz_path),
             "mask_id": str(instance["mask_id"]),
             "dataset_object_id": selected_object_id,
             "logical_entity_id": logical_entity_id,
-            "npz_object_id": (
-                npz_object_id
-                if dataset_object_contract
-                else logical_entity_id
-            ),
+            "npz_object_id": npz_object_id,
+            "bbox_policy": bbox_policy,
             "entity_class": entity_class,
             "source_shape_hw": list(source_mask.shape),
             "target_shape_hw": list(transformed.shape),
             "spatial_transform": dict(spatial_transform),
-            **(
-                {
-                    "path_policy": "dataset_relative_asset_reference_v1",
-                    "bbox_policy": bbox_policy,
-                }
-                if dataset_object_contract
-                else {}
-            ),
         },
     )
 
@@ -409,7 +371,6 @@ def _load_npz_mask(
     instance: Mapping[str, Any],
     image_shape: tuple[int, int],
     logical_entity_id: str,
-    allow_dataset_object_id: bool,
 ) -> tuple[np.ndarray, str]:
     with np.load(path, allow_pickle=False) as payload:
         if set(payload.files) != {
@@ -434,15 +395,16 @@ def _load_npz_mask(
         ):
             raise ValueError("mask_ids does not identify this mask")
         npz_object_id = str(object_ids[0]) if object_ids.shape == (1,) else ""
-        expected_object_ids = {logical_entity_id}
-        if allow_dataset_object_id:
-            expected_object_ids.add(str(instance["object_id"]))
         if (
             object_ids.shape != (1,)
             or object_ids.dtype.kind != "U"
-            or npz_object_id not in expected_object_ids
+            or npz_object_id
+            not in {logical_entity_id, str(instance["object_id"])}
         ):
-            raise ValueError("object_ids does not identify the logical entity")
+            raise ValueError(
+                "object_ids identifies neither the logical nor selected "
+                "Dataset entity"
+            )
         if (
             frame_index.shape != ()
             or frame_index.dtype != np.int64
@@ -456,10 +418,7 @@ def _load_npz_mask(
 
 
 def _validate_geometry(
-    mask: np.ndarray,
-    *,
-    instance: Mapping[str, Any],
-    allow_inclusive_maximum: bool,
+    mask: np.ndarray, *, instance: Mapping[str, Any]
 ) -> str:
     ys, xs = np.where(mask > 0)
     area = int(xs.size)
@@ -475,7 +434,7 @@ def _validate_geometry(
     inclusive_bbox = [bbox[0], bbox[1], bbox[2] - 1, bbox[3] - 1]
     if instance["bbox_xyxy"] == bbox:
         bbox_policy = "xyxy_half_open"
-    elif allow_inclusive_maximum and instance["bbox_xyxy"] == inclusive_bbox:
+    elif instance["bbox_xyxy"] == inclusive_bbox:
         bbox_policy = "xyxy_inclusive_max_legacy"
     else:
         raise ValueError("bbox_xyxy differs from the NPZ mask")

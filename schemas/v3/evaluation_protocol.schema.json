@@ -157,7 +157,7 @@
               "const": "vertical_spring_oscillator_v1"
             },
             "evaluator_contract": {
-              "const": "robust_subject_v4"
+              "const": "robust_subject_v3"
             },
             "timeline": {
               "type": "object",

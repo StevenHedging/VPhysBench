@@ -279,7 +279,7 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
             ),
             "dynamics": "shared_timeline_vertical_spring_trace_no_warping",
             "topology": "current_ball_corridor_connected_edge_support",
-            "identity_failure_policy": "robust_subject_v4_evaluated_zero",
+            "identity_failure_policy": "robust_subject_v3_evaluated_zero",
             "future_gt_usage": False,
         }
 
@@ -481,7 +481,6 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
             entity_class=entity.entity_class,
             spatial_transform=reference_video.spatial_transform,
             error_namespace="reference_spring_subject",
-            contract="dataset_object_v2",
         )
         try:
             prompt = prompt_from_anchor(anchor)

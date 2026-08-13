@@ -555,7 +555,7 @@ class ReferenceEvaluatorNoPadTests(unittest.TestCase):
             evaluator_config={},
         )
 
-    def test_missing_contract_with_different_aspect_is_protocol_error(
+    def test_missing_contract_with_different_aspect_is_robust_zero(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -580,14 +580,44 @@ class ReferenceEvaluatorNoPadTests(unittest.TestCase):
             ):
                 result = _SamplingEvaluator(self._config()).evaluate(request)
 
-        self.assertEqual("protocol_error", result.status)
-        self.assertIsNone(result.score)
+        self.assertEqual("evaluated", result.status)
+        self.assertEqual(0.0, result.score)
         self.assertEqual(
             "prediction_media_contract_missing",
             result.reason_code,
         )
 
-    def test_prediction_canvas_mismatch_is_protocol_error(self) -> None:
+    def test_protocol_target_too_small_is_internal_error(self) -> None:
+        """Catch treating reference/protocol geometry as prediction evidence."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = self._request(root, contract=None)
+            config = self._config()
+            config["spatial"].update({"width": 1, "height": 1})
+            infos = [
+                VideoInfo(10, 10.0, 16, 9, 0.9),
+                VideoInfo(10, 10.0, 16, 9, 0.9),
+            ]
+            with (
+                patch.object(
+                    base,
+                    "resolve_physics_reference",
+                    return_value=(
+                        root / "reference.mp4",
+                        "same_case_reference",
+                        None,
+                    ),
+                ),
+                patch.object(base, "reference_timeline", return_value=[0.0]),
+                patch.object(base, "probe_video", side_effect=infos),
+            ):
+                result = _SamplingEvaluator(config).evaluate(request)
+
+        self.assertEqual("error", result.status)
+        self.assertIsNone(result.score)
+        self.assertEqual("spatial_target_too_small", result.reason_code)
+
+    def test_prediction_canvas_mismatch_is_robust_zero(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             request = self._request(root, contract=self._contract())
@@ -615,12 +645,47 @@ class ReferenceEvaluatorNoPadTests(unittest.TestCase):
             ):
                 result = _SamplingEvaluator(self._config()).evaluate(request)
 
-        self.assertEqual("protocol_error", result.status)
-        self.assertIsNone(result.score)
+        self.assertEqual("evaluated", result.status)
+        self.assertEqual(0.0, result.score)
         self.assertEqual(
             "prediction_canvas_mismatch",
             result.reason_code,
         )
+
+    def test_prediction_media_contract_error_is_robust_zero(self) -> None:
+        """Keep prediction-owned contract validation on the robust-zero path."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            contract = self._contract()
+            contract["policy"] = "unsupported-test-policy"
+            request = self._request(root, contract=contract)
+            infos = [
+                VideoInfo(10, 10.0, 1080, 1920, 0.9),
+                VideoInfo(10, 10.0, 480, 832, 0.9),
+            ]
+            with (
+                patch.object(
+                    base,
+                    "resolve_physics_reference",
+                    return_value=(
+                        root / "reference.mp4",
+                        "same_case_reference",
+                        None,
+                    ),
+                ),
+                patch.object(base, "reference_timeline", return_value=[0.0]),
+                patch.object(base, "probe_video", side_effect=infos),
+                patch.object(
+                    base,
+                    "probe_image_size",
+                    return_value=(1080, 1920),
+                ),
+            ):
+                result = _SamplingEvaluator(self._config()).evaluate(request)
+
+        self.assertEqual("evaluated", result.status)
+        self.assertEqual(0.0, result.score)
+        self.assertEqual("media_contract_unsupported", result.reason_code)
 
     def test_unreadable_conditioning_asset_is_reference_unavailable(
         self,

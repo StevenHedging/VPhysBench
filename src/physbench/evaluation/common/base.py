@@ -79,13 +79,8 @@ class ReferenceCaseEvaluator(ABC):
             else None
         )
         self.csti_enabled = self.csti_config is not None
-        evaluator_contract = config.get("evaluator_contract")
-        self.robust_subject = evaluator_contract in {
-            "robust_subject_v3",
-            "robust_subject_v4",
-        }
-        self.evaluated_zero_prediction_media = (
-            evaluator_contract == "robust_subject_v4"
+        self.robust_subject = (
+            config.get("evaluator_contract") == "robust_subject_v3"
         )
         decode_policy = config.get("timeline", {}).get(
             "decode_policy",
@@ -226,7 +221,7 @@ class ReferenceCaseEvaluator(ABC):
         reference_path: Path | None = None,
         prediction_path: Path | None = None,
     ) -> CaseEvaluationResult:
-        if self.evaluated_zero_prediction_media:
+        if self.robust_subject:
             return self._degraded_output(
                 request,
                 evaluator,
@@ -263,7 +258,7 @@ class ReferenceCaseEvaluator(ABC):
         artifacts: dict[str, Any] = {}
         audited_artifact_failures = list(artifact_failures or [])
         if times_s:
-            if not self.evaluated_zero_prediction_media:
+            try:
                 request.artifact_dir.mkdir(parents=True, exist_ok=True)
                 curve_path = (
                     request.artifact_dir / "physical_subject_iou_curve.png"
@@ -276,27 +271,13 @@ class ReferenceCaseEvaluator(ABC):
                     scene_name=self.scene_id,
                 )
                 artifacts["physical_subject_iou_curve"] = str(curve_path)
-            else:
-                try:
-                    request.artifact_dir.mkdir(parents=True, exist_ok=True)
-                    curve_path = (
-                        request.artifact_dir / "physical_subject_iou_curve.png"
-                    )
-                    save_iou_curve(
-                        curve_path,
-                        times_s=times_s,
-                        ious=[0.0] * len(times_s),
-                        case_id=request.case["case_id"],
-                        scene_name=self.scene_id,
-                    )
-                    artifacts["physical_subject_iou_curve"] = str(curve_path)
-                except Exception as exc:
-                    audited_artifact_failures.append(
-                        {
-                            "code": "degraded_artifact_write_failed",
-                            "reason": f"{type(exc).__name__}: {exc}",
-                        }
-                    )
+            except Exception as exc:
+                audited_artifact_failures.append(
+                    {
+                        "code": "degraded_artifact_write_failed",
+                        "reason": f"{type(exc).__name__}: {exc}",
+                    }
+                )
         provenance: dict[str, Any] = {
             "degradation": {
                 "origin": "prediction",
@@ -304,9 +285,8 @@ class ReferenceCaseEvaluator(ABC):
                 "reason": reason,
                 "policy": "conservative_zero_not_evaluator_failure",
             },
+            "artifact_failures": audited_artifact_failures,
         }
-        if self.evaluated_zero_prediction_media:
-            provenance["artifact_failures"] = audited_artifact_failures
         metrics = {
             "scene_subject_state_similarity": degraded_subject_metric(
                 reference_mode=reference_mode,
@@ -348,14 +328,6 @@ class ReferenceCaseEvaluator(ABC):
                     "prediction_video_sha256": sha256_file(prediction_path),
                 }
             )
-        quality: dict[str, Any] = {
-            "degraded": True,
-            "degradation_codes": [code],
-            "temporal_coverage": 0.0,
-            "reference_mode": reference_mode,
-        }
-        if self.evaluated_zero_prediction_media:
-            quality["artifact_failures"] = audited_artifact_failures
         return CaseEvaluationResult(
             job_id=request.job["job_id"],
             case_id=request.case["case_id"],
@@ -366,7 +338,13 @@ class ReferenceCaseEvaluator(ABC):
             reason_code=code,
             reason=reason,
             metrics=metrics,
-            quality=quality,
+            quality={
+                "degraded": True,
+                "degradation_codes": [code],
+                "temporal_coverage": 0.0,
+                "reference_mode": reference_mode,
+                "artifact_failures": audited_artifact_failures,
+            },
             artifacts=artifacts,
             provenance=provenance,
         )
@@ -634,16 +612,13 @@ class ReferenceCaseEvaluator(ABC):
                             "different aspect ratios",
                         )
                 if prediction_info is None:
-                    if not self.evaluated_zero_prediction_media:
+                    try:
                         prediction_info = probe_video(prediction_path)
-                    else:
-                        try:
-                            prediction_info = probe_video(prediction_path)
-                        except VideoProtocolError as exc:
-                            raise VideoProtocolError(
-                                f"prediction_{exc.code}",
-                                f"cannot inspect prediction video: {exc}",
-                            ) from exc
+                    except VideoProtocolError as exc:
+                        raise VideoProtocolError(
+                            f"prediction_{exc.code}",
+                            f"cannot inspect prediction video: {exc}",
+                        ) from exc
                 spatial_plan = resolve_shared_spatial_plan(
                     reference_info=reference_info,
                     prediction_info=prediction_info,
@@ -695,11 +670,7 @@ class ReferenceCaseEvaluator(ABC):
                 return self._outcome(
                     request,
                     evaluator,
-                    status=(
-                        "error"
-                        if self.evaluated_zero_prediction_media
-                        else "protocol_error"
-                    ),
+                    status="error",
                     code=exc.code,
                     reason=str(exc),
                 )
@@ -744,18 +715,15 @@ class ReferenceCaseEvaluator(ABC):
             )
 
         artifact_failures: list[dict[str, str]] = []
-        if not self.evaluated_zero_prediction_media:
+        try:
             request.artifact_dir.mkdir(parents=True, exist_ok=True)
-        else:
-            try:
-                request.artifact_dir.mkdir(parents=True, exist_ok=True)
-            except Exception as exc:
-                artifact_failures.append(
-                    {
-                        "code": "artifact_directory_setup_failed",
-                        "reason": f"{type(exc).__name__}: {exc}",
-                    }
-                )
+        except Exception as exc:
+            artifact_failures.append(
+                {
+                    "code": "artifact_directory_setup_failed",
+                    "reason": f"{type(exc).__name__}: {exc}",
+                }
+            )
         try:
             assert reference_video is not None
             analysis = self.analyze(
@@ -782,11 +750,7 @@ class ReferenceCaseEvaluator(ABC):
                     times_s=times_s,
                     reference_path=reference_path,
                     prediction_path=prediction_path,
-                    artifact_failures=(
-                        artifact_failures
-                        if self.evaluated_zero_prediction_media
-                        else None
-                    ),
+                    artifact_failures=artifact_failures,
                 )
             return self._outcome(
                 request,
@@ -796,7 +760,7 @@ class ReferenceCaseEvaluator(ABC):
                 reason=str(exc),
             )
 
-        if self.evaluated_zero_prediction_media and artifact_failures:
+        if artifact_failures:
             analysis.quality["artifact_failures"] = [
                 *artifact_failures,
                 *list(analysis.quality.get("artifact_failures", [])),
