@@ -7,6 +7,22 @@ the probe.
 
 ## Objective
 
+The vendored WAN scheduler and the training entrypoint use the same rectified
+flow parameterization:
+
+```text
+x_sigma = (1 - sigma) * x0 + sigma * epsilon
+v_target = epsilon - x0
+v_hat = DiT(x_sigma, sigma * 1000, condition)
+x0_hat = x_sigma - sigma * v_hat
+```
+
+Thus larger `sigma` is noisier and `1 - sigma` is the clean-estimate weight.
+For TI2V, the conditioned first latent is inserted into `x_sigma`, excluded
+from the Flow-MSE tail, and restored in `x0_hat`. The 5B checkpoint loaded by
+this recipe has one `dit` model rather than the optional Wan dual-DiT path, so
+there is no expert switch or routing policy to change.
+
 For a noisy latent `x_sigma` and predicted flow `v_theta`, the trainer first
 recovers the clean estimate
 
