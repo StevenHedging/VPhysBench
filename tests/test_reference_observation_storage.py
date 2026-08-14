@@ -117,10 +117,21 @@ class ReferenceObservationPackedMaskTests(unittest.TestCase):
 
 
 class ReferenceObservationManifestLoaderTests(unittest.TestCase):
-    def _bundle(self, root: Path) -> tuple[Path, Path]:
+    def _bundle(
+        self,
+        root: Path,
+        *,
+        staged: bool = False,
+    ) -> tuple[Path, Path, Path]:
         api = observation_api()
         asset_root = root / "assets"
-        bundle = asset_root / "case" / "canonical" / "reference_observation"
+        bundle_root = root / "staging" if staged else asset_root
+        bundle = (
+            bundle_root
+            / "case"
+            / "canonical"
+            / "reference_observation"
+        )
         entity_dir = bundle / "entities" / "object_1"
         bundle.mkdir(parents=True)
         source_video = asset_root / "case" / "canonical" / "reference.mp4"
@@ -163,9 +174,9 @@ class ReferenceObservationManifestLoaderTests(unittest.TestCase):
         )
         api.write_entity_observation(entity_dir, entity)
 
-        def file_record(path: Path) -> dict:
+        def file_record(path: Path, *, base: Path) -> dict:
             return {
-                "path": path.relative_to(asset_root).as_posix(),
+                "path": path.relative_to(base).as_posix(),
                 "size_bytes": path.stat().st_size,
                 "sha256": sha256_file(path),
             }
@@ -175,8 +186,8 @@ class ReferenceObservationManifestLoaderTests(unittest.TestCase):
             "case_id": "case_1",
             "scene_id": "pendulum",
             "source": {
-                "reference_video": file_record(source_video),
-                "first_frame_mask_manifest": file_record(anchor),
+                "reference_video": file_record(source_video, base=asset_root),
+                "first_frame_mask_manifest": file_record(anchor, base=asset_root),
             },
             "generator": {
                 "id": "fixture_generator",
@@ -184,20 +195,26 @@ class ReferenceObservationManifestLoaderTests(unittest.TestCase):
                 "model_id": "fixture_model",
                 "config_fingerprint": "b" * 64,
             },
-            "timeline": file_record(bundle / "timeline.json"),
-            "quality": file_record(bundle / "quality.json"),
+            "timeline": file_record(bundle / "timeline.json", base=bundle),
+            "quality": file_record(bundle / "quality.json", base=bundle),
             "entities": [
                 {
                     "object_id": "object_1",
                     "mask_id": "01",
-                    "mask_tube": file_record(entity_dir / "mask_tube.npz"),
-                    "trajectory": file_record(entity_dir / "trajectory.npz"),
+                    "mask_tube": file_record(
+                        entity_dir / "mask_tube.npz",
+                        base=bundle,
+                    ),
+                    "trajectory": file_record(
+                        entity_dir / "trajectory.npz",
+                        base=bundle,
+                    ),
                 }
             ],
         }
         manifest_path = bundle / "manifest.json"
         write_json(manifest_path, manifest)
-        return asset_root, manifest_path
+        return asset_root, bundle_root, manifest_path
 
     @staticmethod
     def _refresh_record(manifest_path: Path, role: str, path: Path) -> None:
@@ -214,7 +231,7 @@ class ReferenceObservationManifestLoaderTests(unittest.TestCase):
 
     def test_manifest_loader_verifies_and_materializes_all_children(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            asset_root, manifest_path = self._bundle(Path(temporary))
+            asset_root, _, manifest_path = self._bundle(Path(temporary))
             loaded = observation_api().load_reference_observation(
                 asset_root,
                 manifest_path,
@@ -227,7 +244,7 @@ class ReferenceObservationManifestLoaderTests(unittest.TestCase):
 
     def test_manifest_loader_rejects_hash_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            asset_root, manifest_path = self._bundle(Path(temporary))
+            asset_root, _, manifest_path = self._bundle(Path(temporary))
             timeline = manifest_path.parent / "timeline.json"
             original = timeline.read_bytes()
             timeline.write_bytes(original.replace(b"case_1", b"case_2", 1))
@@ -240,7 +257,7 @@ class ReferenceObservationManifestLoaderTests(unittest.TestCase):
     def test_manifest_loader_rejects_symlinked_child(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            asset_root, manifest_path = self._bundle(root)
+            asset_root, _, manifest_path = self._bundle(root)
             timeline = manifest_path.parent / "timeline.json"
             external = root / "external.json"
             external.write_bytes(timeline.read_bytes())
@@ -255,7 +272,7 @@ class ReferenceObservationManifestLoaderTests(unittest.TestCase):
     def test_manifest_loader_rejects_symlinked_container(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            asset_root, manifest_path = self._bundle(root)
+            asset_root, _, manifest_path = self._bundle(root)
             entities = manifest_path.parent / "entities"
             relocated = root / "relocated_entities"
             entities.rename(relocated)
@@ -268,7 +285,7 @@ class ReferenceObservationManifestLoaderTests(unittest.TestCase):
 
     def test_manifest_loader_rejects_anchor_bound_to_another_case(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            asset_root, manifest_path = self._bundle(Path(temporary))
+            asset_root, _, manifest_path = self._bundle(Path(temporary))
             anchor = asset_root / "case" / "canonical" / "masks" / "manifest.json"
             write_json(anchor, {"case_id": "case_2"})
             self._refresh_record(
@@ -284,7 +301,7 @@ class ReferenceObservationManifestLoaderTests(unittest.TestCase):
 
     def test_entity_loader_rejects_non_int64_observation_indices(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            asset_root, manifest_path = self._bundle(Path(temporary))
+            asset_root, _, manifest_path = self._bundle(Path(temporary))
             mask_path = (
                 manifest_path.parent
                 / "entities"
@@ -304,6 +321,22 @@ class ReferenceObservationManifestLoaderTests(unittest.TestCase):
                     asset_root,
                     manifest_path,
                 )
+
+    def test_staged_bundle_uses_portable_manifest_relative_child_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            asset_root, staging_root, manifest_path = self._bundle(
+                root,
+                staged=True,
+            )
+            loaded = observation_api().load_reference_observation(
+                asset_root,
+                manifest_path,
+                bundle_root=staging_root,
+            )
+
+        self.assertEqual("case_1", loaded.case_id)
+        self.assertEqual({"object_1"}, set(loaded.entities))
 
 
 if __name__ == "__main__":

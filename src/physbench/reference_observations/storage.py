@@ -226,14 +226,22 @@ def _verified_record(
 def load_reference_observation(
     asset_root: str | Path,
     manifest_path: str | Path,
+    *,
+    bundle_root: str | Path | None = None,
 ) -> ReferenceObservationBundle:
     root = Path(asset_root).resolve(strict=True)
+    allowed_bundle_root = (
+        root
+        if bundle_root is None
+        else Path(bundle_root).resolve(strict=True)
+    )
     manifest_file = resolve_dataset_file(
-        root,
+        allowed_bundle_root,
         manifest_path,
         label="reference observation manifest",
         allow_absolute=True,
     )
+    child_root = manifest_file.parent
     manifest = load_json(manifest_file)
     required = {
         "schema_version",
@@ -270,8 +278,16 @@ def load_reference_observation(
     anchor_manifest = load_json(anchor_path)
     if anchor_manifest.get("case_id") != case_id:
         raise ValueError("first-frame mask manifest Case mismatch")
-    timeline_path = _verified_record(root, manifest["timeline"], label="timeline")
-    quality_path = _verified_record(root, manifest["quality"], label="quality")
+    timeline_path = _verified_record(
+        child_root,
+        manifest["timeline"],
+        label="timeline",
+    )
+    quality_path = _verified_record(
+        child_root,
+        manifest["quality"],
+        label="quality",
+    )
     timeline_value = load_json(timeline_path)
     if timeline_value.get("case_id") != case_id:
         raise ValueError("reference observation timeline Case mismatch")
@@ -298,12 +314,12 @@ def load_reference_observation(
         if mask_id != f"{index:02d}":
             raise ValueError("reference observation mask IDs must be contiguous")
         mask_path = _verified_record(
-            root,
+            child_root,
             record["mask_tube"],
             label=f"{object_id} mask tube",
         )
         trajectory_path = _verified_record(
-            root,
+            child_root,
             record["trajectory"],
             label=f"{object_id} trajectory",
         )
