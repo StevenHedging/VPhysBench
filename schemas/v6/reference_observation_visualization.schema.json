@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Frozen reference observation visualization manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "case_id",
+    "observation_manifest_sha256",
+    "renderer",
+    "video",
+    "files"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "case_id": {"$ref": "#/$defs/safeId"},
+    "observation_manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "renderer": {
+      "type": "object",
+      "required": ["id", "config_fingerprint"],
+      "properties": {
+        "id": {"$ref": "#/$defs/safeId"},
+        "config_fingerprint": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "video": {
+      "type": "object",
+      "required": ["width", "height", "fps", "frame_count"],
+      "properties": {
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "fps": {"type": "number", "exclusiveMinimum": 0},
+        "frame_count": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "files": {
+      "type": "array",
+      "minItems": 3,
+      "items": {"$ref": "#/$defs/fileRecord"}
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "safeId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "assetPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+"
+    },
+    "fileRecord": {
+      "type": "object",
+      "required": ["path", "size_bytes", "sha256"],
+      "properties": {
+        "path": {"$ref": "#/$defs/assetPath"},
+        "size_bytes": {"type": "integer", "minimum": 0},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

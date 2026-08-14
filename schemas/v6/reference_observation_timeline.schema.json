@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Frozen reference observation timeline",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "case_id",
+    "sampling_rate_hz",
+    "source_video",
+    "temporal",
+    "samples"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "case_id": {"$ref": "#/$defs/safeId"},
+    "sampling_rate_hz": {"type": "number", "exclusiveMinimum": 0},
+    "source_video": {
+      "type": "object",
+      "required": ["frame_count", "width", "height", "fps", "duration_seconds"],
+      "properties": {
+        "frame_count": {"type": "integer", "minimum": 1},
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "fps": {"type": "number", "exclusiveMinimum": 0},
+        "duration_seconds": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "temporal": {
+      "type": "object",
+      "required": ["encoded_to_physical_speed"],
+      "properties": {
+        "encoded_to_physical_speed": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "samples": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "observation_index",
+          "encoded_time_seconds",
+          "physical_time_seconds",
+          "source_frame_index",
+          "source_time_seconds"
+        ],
+        "properties": {
+          "observation_index": {"type": "integer", "minimum": 0},
+          "encoded_time_seconds": {"type": "number", "minimum": 0},
+          "physical_time_seconds": {"type": "number", "minimum": 0},
+          "source_frame_index": {"type": "integer", "minimum": 0},
+          "source_time_seconds": {"type": "number", "minimum": 0}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "safeId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    }
+  }
+}

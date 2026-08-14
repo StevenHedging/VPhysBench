@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Frozen reference observation human review",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "case_id",
+    "decision",
+    "scope",
+    "reviewer",
+    "observation_manifest_sha256",
+    "visualization_manifest_sha256",
+    "checks",
+    "entity_reviews",
+    "issues"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "case_id": {"$ref": "#/$defs/safeId"},
+    "decision": {
+      "enum": ["pending", "approved", "changes_requested", "rejected"]
+    },
+    "scope": {"enum": ["contact_sheet", "full_video"]},
+    "reviewer": {"type": "string", "minLength": 1},
+    "observation_manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "visualization_manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "checks": {
+      "type": "object",
+      "additionalProperties": {"enum": ["pass", "warning", "fail"]}
+    },
+    "entity_reviews": {
+      "type": "object",
+      "patternProperties": {
+        "^object_[1-9][0-9]*$": {
+          "type": "object",
+          "required": ["decision", "notes"],
+          "properties": {
+            "decision": {"enum": ["approved", "changes_requested", "rejected"]},
+            "notes": {"type": "string"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "notes"],
+        "properties": {
+          "code": {"$ref": "#/$defs/safeId"},
+          "object_id": {"$ref": "#/$defs/safeId"},
+          "observation_index": {"type": "integer", "minimum": 0},
+          "notes": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "safeId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

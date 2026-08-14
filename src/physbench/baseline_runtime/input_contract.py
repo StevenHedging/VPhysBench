@@ -26,6 +26,8 @@ EVALUATOR_ONLY_ASSET_KEYS = frozenset({
     "reference_video",
     "source_video",
     "first_frame_mask_manifest",
+    "reference_observation_manifest",
+    "reference_observation_visualization_manifest",
 })
 FORBIDDEN_ASSET_KEYS = EVALUATOR_ONLY_ASSET_KEYS
 LARGE_PHYSICS_REPRESENTATIONS = frozenset({

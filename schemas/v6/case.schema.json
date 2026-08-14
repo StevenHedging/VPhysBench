@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Materialized physical-video Case with frozen reference observations",
+  "type": "object",
+  "required": [
+    "case_id",
+    "scene_id",
+    "text",
+    "assets",
+    "physics",
+    "appearance",
+    "temporal"
+  ],
+  "properties": {
+    "case_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "scene_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "text": {
+      "type": "object",
+      "required": ["prompt"],
+      "properties": {
+        "prompt": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "assets": {
+      "type": "object",
+      "required": [
+        "caption",
+        "first_frame",
+        "physics_annotation",
+        "reference_video",
+        "reference_observation_manifest",
+        "reference_observation_visualization_manifest"
+      ],
+      "properties": {
+        "caption": {"$ref": "#/$defs/assetPath"},
+        "first_frame": {"$ref": "#/$defs/assetPath"},
+        "first_frame_mask_manifest": {"$ref": "#/$defs/assetPath"},
+        "physics_annotation": {"$ref": "#/$defs/assetPath"},
+        "reference_video": {"$ref": "#/$defs/assetPath"},
+        "reference_observation_manifest": {"$ref": "#/$defs/assetPath"},
+        "reference_observation_visualization_manifest": {
+          "$ref": "#/$defs/assetPath"
+        }
+      },
+      "additionalProperties": false
+    },
+    "physics": {"$ref": "#/$defs/groupedPhysics"},
+    "appearance": {
+      "type": "object",
+      "description": "Non-physics appearance, environment and acquisition metadata."
+    },
+    "temporal": {"type": "object"}
+  },
+  "not": {
+    "anyOf": [
+      {"required": ["ood"]},
+      {"required": ["prompt"]},
+      {"required": ["input_views"]},
+      {"required": ["physical_parameters"]},
+      {"required": ["view_a_split"]}
+    ]
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "assetPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+"
+    },
+    "groupedPhysics": {
+      "type": "object",
+      "required": ["objects", "environment"],
+      "properties": {
+        "objects": {
+          "type": "object",
+          "minProperties": 1,
+          "patternProperties": {
+            "^object_[1-9][0-9]*$": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {"$ref": "#/$defs/quantity"}
+            }
+          },
+          "additionalProperties": false
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/quantity"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "quantity": {
+      "oneOf": [
+        {"$ref": "#/$defs/scalarQuantity"},
+        {"$ref": "#/$defs/timeSeriesQuantity"}
+      ]
+    },
+    "scalarQuantity": {
+      "type": "object",
+      "required": ["value", "unit", "symbol"],
+      "properties": {
+        "value": {"type": "number", "minimum": 0},
+        "unit": {"type": "string", "minLength": 1},
+        "symbol": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "timeSeriesQuantity": {
+      "type": "object",
+      "required": ["samples", "time_unit", "unit", "symbol"],
+      "properties": {
+        "samples": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["time", "value"],
+            "properties": {
+              "time": {"type": "number", "minimum": 0},
+              "value": {"type": "number", "minimum": 0}
+            },
+            "additionalProperties": false
+          }
+        },
+        "time_unit": {"const": "s"},
+        "unit": {"type": "string", "minLength": 1},
+        "symbol": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    }
+  }
+}

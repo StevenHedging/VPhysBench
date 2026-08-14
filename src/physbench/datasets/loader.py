@@ -48,6 +48,15 @@ REQUIRED_ASSET_KEYS_V5 = {
 ALLOWED_ASSET_KEYS_V5 = REQUIRED_ASSET_KEYS_V5 | {
     "first_frame_mask_manifest",
 }
+REQUIRED_ASSET_KEYS_V6 = REQUIRED_ASSET_KEYS_V5 | {
+    "reference_observation_manifest",
+    "reference_observation_visualization_manifest",
+}
+ALLOWED_ASSET_KEYS_V6 = REQUIRED_ASSET_KEYS_V6 | {
+    "first_frame_mask_manifest",
+}
+MATERIALIZED_CASE_SCHEMA_VERSIONS = {"5.0", "6.0"}
+GROUPED_CASE_SCHEMA_VERSIONS = {"4.0", *MATERIALIZED_CASE_SCHEMA_VERSIONS}
 GENERALIZATION_REGIMES = {"id", "ood", "mixed"}
 GENERALIZATION_FACTOR_CATEGORIES = {
     "physical_parameter",
@@ -186,9 +195,10 @@ def _validate_case(
     schema_version: str | None = None,
 ) -> None:
     schema_version = schema_version or case.get("schema_version")
-    if schema_version not in {"3.0", "4.0", "5.0"}:
+    if schema_version not in {"3.0", "4.0", "5.0", "6.0"}:
         raise ValueError(
-            f"case {case.get('case_id')} must use schema_version=3.0, 4.0, or 5.0"
+            f"case {case.get('case_id')} must use schema_version="
+            "3.0, 4.0, 5.0, or 6.0"
         )
     if schema_version == "3.0":
         required = REQUIRED_CASE_KEYS_V3
@@ -201,11 +211,11 @@ def _validate_case(
         raise ValueError(
             f"dataset case {case.get('case_id')} missing {missing}"
         )
-    if schema_version in {"4.0", "5.0"} and "ood" in case:
+    if schema_version in GROUPED_CASE_SCHEMA_VERSIONS and "ood" in case:
         raise ValueError(
             f"dataset v4+ case {case.get('case_id')} must not contain view-relative ood"
         )
-    if schema_version in {"4.0", "5.0"}:
+    if schema_version in GROUPED_CASE_SCHEMA_VERSIONS:
         allowed = (
             REQUIRED_CASE_KEYS_V4 | {"alignment"}
             if schema_version == "4.0"
@@ -227,7 +237,7 @@ def _validate_case(
         raise ValueError(f"case {case['case_id']} text must be an object")
     expected_text_fields = (
         {"prompt"}
-        if schema_version == "5.0"
+        if schema_version in MATERIALIZED_CASE_SCHEMA_VERSIONS
         else {"schema_version", "prompt", "language", "annotation_source"}
     )
     if set(text) != expected_text_fields:
@@ -235,7 +245,10 @@ def _validate_case(
             f"case {case['case_id']} text fields must be "
             f"{sorted(expected_text_fields)}"
         )
-    if schema_version != "5.0" and text["schema_version"] != "1.0":
+    if (
+        schema_version not in MATERIALIZED_CASE_SCHEMA_VERSIONS
+        and text["schema_version"] != "1.0"
+    ):
         raise ValueError(
             f"case {case['case_id']} text.schema_version must be 1.0"
         )
@@ -246,7 +259,7 @@ def _validate_case(
             )
     quantity_records = (
         list(iter_physics_quantities(case))
-        if schema_version == "5.0"
+        if schema_version in MATERIALIZED_CASE_SCHEMA_VERSIONS
         else [
             (name, name, quantity)
             for name, quantity in case["physics"].items()
@@ -260,13 +273,16 @@ def _validate_case(
             )
         if not isinstance(quantity, dict):
             raise ValueError(f"case {case['case_id']} physics.{name} must be an object")
-        is_series = schema_version == "5.0" and "samples" in quantity
+        is_series = (
+            schema_version in MATERIALIZED_CASE_SCHEMA_VERSIONS
+            and "samples" in quantity
+        )
         expected_quantity_fields = (
             {"samples", "time_unit", "unit", "symbol"}
             if is_series
             else (
                 {"value", "unit", "symbol"}
-                if schema_version == "5.0"
+                if schema_version in MATERIALIZED_CASE_SCHEMA_VERSIONS
                 else {"value", "unit", "annotated"}
             )
         )
@@ -317,7 +333,11 @@ def _validate_case(
                 f"case {case['case_id']} physics.{name}.value must be a "
                 "finite number"
             )
-        if schema_version == "5.0" and not is_series and value < 0:
+        if (
+            schema_version in MATERIALIZED_CASE_SCHEMA_VERSIONS
+            and not is_series
+            and value < 0
+        ):
             raise ValueError(
                 f"case {case['case_id']} physics.{name}.value must be non-negative"
             )
@@ -328,13 +348,14 @@ def _validate_case(
             raise ValueError(
                 f"case {case['case_id']} physics.{name}.unit must be non-empty"
             )
-        if schema_version != "5.0" and not isinstance(
-            quantity["annotated"], bool
+        if (
+            schema_version not in MATERIALIZED_CASE_SCHEMA_VERSIONS
+            and not isinstance(quantity["annotated"], bool)
         ):
             raise ValueError(
                 f"case {case['case_id']} physics.{name}.annotated must be boolean"
             )
-        if schema_version == "5.0" and (
+        if schema_version in MATERIALIZED_CASE_SCHEMA_VERSIONS and (
             not isinstance(quantity["symbol"], str)
             or not quantity["symbol"].strip()
         ):
@@ -343,9 +364,19 @@ def _validate_case(
             )
     if not isinstance(case["assets"], dict):
         raise ValueError(f"case {case['case_id']} assets must be an object")
-    if schema_version == "5.0":
-        missing_assets = sorted(REQUIRED_ASSET_KEYS_V5 - set(case["assets"]))
-        unknown_assets = sorted(set(case["assets"]) - ALLOWED_ASSET_KEYS_V5)
+    if schema_version in MATERIALIZED_CASE_SCHEMA_VERSIONS:
+        required_assets = (
+            REQUIRED_ASSET_KEYS_V6
+            if schema_version == "6.0"
+            else REQUIRED_ASSET_KEYS_V5
+        )
+        allowed_assets = (
+            ALLOWED_ASSET_KEYS_V6
+            if schema_version == "6.0"
+            else ALLOWED_ASSET_KEYS_V5
+        )
+        missing_assets = sorted(required_assets - set(case["assets"]))
+        unknown_assets = sorted(set(case["assets"]) - allowed_assets)
         if missing_assets or unknown_assets:
             raise ValueError(
                 f"case {case['case_id']} has invalid current assets: "
@@ -370,15 +401,16 @@ def _validate_case(
                     f"case {case['case_id']} assets.{name} must be a "
                     f"relative path inside asset_root: {value}"
                 )
-    if schema_version != "5.0" and not isinstance(
-        case["has_real_reference_video"], bool
+    if (
+        schema_version not in MATERIALIZED_CASE_SCHEMA_VERSIONS
+        and not isinstance(case["has_real_reference_video"], bool)
     ):
         raise ValueError(
             f"case {case['case_id']} has_real_reference_video must be boolean"
         )
     object_fields = (
         ("appearance", "temporal")
-        if schema_version == "5.0"
+        if schema_version in MATERIALIZED_CASE_SCHEMA_VERSIONS
         else ("appearance", "temporal", "provenance")
     )
     for field in object_fields:
@@ -388,7 +420,7 @@ def _validate_case(
             )
     alignment = case.get("alignment")
     if (
-        schema_version != "5.0"
+        schema_version not in MATERIALIZED_CASE_SCHEMA_VERSIONS
         and alignment is not None
         and not isinstance(alignment, dict)
     ):
@@ -823,15 +855,18 @@ def _case_member_path(
     return path
 
 
-def _materialize_v5_case_members(
+def _materialize_current_case_members(
     indexed_case: dict[str, Any],
     asset_root: Path,
+    *,
+    schema_version: str,
 ) -> dict[str, Any]:
     case_id = indexed_case.get("case_id")
     scene_id = indexed_case.get("scene_id")
     if "text" in indexed_case or "physics" in indexed_case:
         raise ValueError(
-            f"schema 5 case index {case_id} must not inline text or physics"
+            f"schema {schema_version} case index {case_id} must not inline "
+            "text or physics"
         )
 
     caption = load_json(_case_member_path(indexed_case, asset_root, "caption"))
@@ -877,9 +912,9 @@ def load_dataset(
     descriptor_path = Path(path).resolve()
     descriptor = load_json(descriptor_path)
     descriptor_schema = descriptor.get("schema_version")
-    if descriptor_schema not in {"3.0", "4.0", "5.0"}:
+    if descriptor_schema not in {"3.0", "4.0", "5.0", "6.0"}:
         raise ValueError(
-            "dataset descriptor must use schema_version=3.0, 4.0, or 5.0"
+            "dataset descriptor must use schema_version=3.0, 4.0, 5.0, or 6.0"
         )
     require_safe_id(
         descriptor.get("dataset_id"),
@@ -890,18 +925,25 @@ def load_dataset(
     asset_root = (root / descriptor.get("asset_root", ".")).resolve()
     cases = (
         tuple(
-            _materialize_v5_case_members(case, asset_root)
+            _materialize_current_case_members(
+                case,
+                asset_root,
+                schema_version=descriptor_schema,
+            )
             for case in indexed_cases
         )
-        if descriptor_schema == "5.0"
+        if descriptor_schema in MATERIALIZED_CASE_SCHEMA_VERSIONS
         else indexed_cases
     )
     scene_configs = _load_directory_json(root / descriptor["scene_catalog"])
     if not scene_configs:
         raise ValueError("dataset scene catalog is empty")
-    if descriptor_schema in {"4.0", "5.0"}:
+    if descriptor_schema in GROUPED_CASE_SCHEMA_VERSIONS:
         for scene in scene_configs.values():
-            _validate_scene_v2(scene, current=descriptor_schema == "5.0")
+            _validate_scene_v2(
+                scene,
+                current=descriptor_schema in MATERIALIZED_CASE_SCHEMA_VERSIONS,
+            )
     seen: set[str] = set()
     for case in cases:
         _validate_case(
@@ -910,7 +952,7 @@ def load_dataset(
             schema_version=descriptor_schema,
         )
         if (
-            descriptor_schema != "5.0"
+            descriptor_schema not in MATERIALIZED_CASE_SCHEMA_VERSIONS
             and case.get("schema_version") != descriptor_schema
         ):
             raise ValueError(
@@ -925,14 +967,14 @@ def load_dataset(
         for view_id, relative_path in descriptor["views"].items()
     }
     _validate_views(cases, views)
-    if descriptor_schema in {"4.0", "5.0"}:
+    if descriptor_schema in GROUPED_CASE_SCHEMA_VERSIONS:
         _validate_v4_scene_case_and_view_contracts(
             cases,
             scene_configs,
             views["view_a"],
-            current=descriptor_schema == "5.0",
+            current=descriptor_schema in MATERIALIZED_CASE_SCHEMA_VERSIONS,
         )
-    if descriptor_schema != "5.0":
+    if descriptor_schema not in MATERIALIZED_CASE_SCHEMA_VERSIONS:
         for case in cases:
             _validate_case_physics_annotation(case, asset_root)
     asset_lock = _load_asset_lock(root, descriptor, cases)
