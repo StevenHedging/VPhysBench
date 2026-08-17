@@ -1,12 +1,12 @@
 {
   "schema_version": "1.0",
-  "branch": "2026-08-11",
-  "source_commit": "1506e045a16a8cd9c8c77e5368e3b51fd09eafd8",
+  "branch": "2026-08-17",
+  "source_commit": "ddb4e4f17b689c55b9b6ec634b708ac6907a27a0",
   "dataset": {
     "repo_id": "StevenHedging/VPhysBench",
-    "revision": "d63142b0d0a086174b12e39284d082a6654b2e65",
-    "dataset_id": "physics_video_seven_scene_v13",
-    "release": "13.0.0"
+    "revision": "1d93d556ce317855df720759ca13507f22b7c744",
+    "dataset_id": "physics_video_seven_scene_v14",
+    "release": "14.0.0"
   },
   "task_schema": "1.0",
   "evaluation_protocol": "scene_default_v1",
@@ -17,10 +17,10 @@
   "task_counts": {
     "six_scene_direct_eval_v1": {
       "training_cases": 0,
-      "evaluation_jobs": 775
+      "evaluation_jobs": 762
     },
     "six_scene_train_six_scene_eval_v1": {
-      "training_cases": 679,
+      "training_cases": 666,
       "evaluation_jobs": 96
     }
   },

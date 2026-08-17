@@ -50482,7 +50482,7 @@
       "size_bytes": 625
     },
     {
-      "path": "assets/parabolic_motion/projectile_steelM-d20mm-m33p13g_h0p77m_v1p8051mps_img0539/canonical/first_frame_realtime.png",
+      "path": "assets/parabolic_motion/projectile_steelM-d20mm-m33p13g_h0p77m_v1p8051mps_img0539/canonical/first_frame.png",
       "sha256": "7ff7cc96d0b9814d5be8f03ada5031b9fd8a05d9500424d569ef2d6f44c2a40c",
       "size_bytes": 30359
     },
@@ -50552,7 +50552,7 @@
       "size_bytes": 41804
     },
     {
-      "path": "assets/parabolic_motion/projectile_steelM-d20mm-m33p13g_h0p77m_v1p8051mps_img0539/canonical/reference_realtime.mp4",
+      "path": "assets/parabolic_motion/projectile_steelM-d20mm-m33p13g_h0p77m_v1p8051mps_img0539/canonical/reference.mp4",
       "sha256": "df6922639b8004054881a1fcc4163109e120c58944665b7ff7472b722e102519",
       "size_bytes": 50619
     },
@@ -84637,7 +84637,7 @@
       "size_bytes": 870
     }
   ],
-  "files_digest": "35cbe706b564fabb5a3725758627c88fad48f648bcba35d56552a4b687e35899",
+  "files_digest": "bfcb48f01afb999897d4b69cac67c07eedfebbf285d2338f954317e82b3ce5ae",
   "release": "14.0.0",
   "schema_version": "1.0"
 }

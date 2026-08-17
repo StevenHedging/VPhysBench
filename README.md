@@ -1,14 +1,14 @@
 # VPhysBench
 
 VPhysBench 是面向物理视频生成模型的训练与评测框架。日期分支
-`2026-08-11` 是干净发行版：它保留冻结的 Dataset、Task v1、Evaluation v1、
+`2026-08-17` 是 V14 干净发行版：它保留冻结的 Dataset、Task v1、Evaluation v1、
 通用 Baseline 接口和运行时，但不集成任何具体生成算法、已注册 Baseline、模型配置、
 权重或运行结果。
 
-Dataset 13.0.0 包含 916 个 case、7 个场景。Task v1 定义两个可复现工作负载：
+Dataset 14.0.0 包含 903 个 case、7 个场景。Task v1 定义两个可复现工作负载：
 
-- `six_scene_direct_eval_v1`：直接评估六个计分场景的全部 775 个 case；
-- `six_scene_train_six_scene_eval_v1`：使用六场景 679 个训练 case，随后在六个
+- `six_scene_direct_eval_v1`：直接评估六个计分场景的全部 762 个 case；
+- `six_scene_train_six_scene_eval_v1`：使用六场景 666 个训练 case，随后在六个
   计分场景的 96 个留出 case 上评估。
 
 Dataset 中仍保留 `push_bottle` 的全部 127 个训练 case 和 14 个 test case，但两个
@@ -65,7 +65,7 @@ physbench doctor --level evaluation
 
 ```bash
 physbench atomic-run \
-  --dataset datasets/releases/13.0.0/dataset.json \
+  --dataset datasets/releases/14.0.0/dataset.json \
   --task tasks/official/six_scene_direct_eval_v1.json \
   --baseline baselines/my_model \
   --case-id circular_r1_silver02cm_img_0370 \
