@@ -15,7 +15,7 @@ REQUIRED_FILES = {
     "README.md",
     "RELEASE_MANIFEST.json",
     "datasets/huggingface.json",
-    "datasets/releases/13.0.0/dataset.json",
+    "datasets/releases/14.0.0/dataset.json",
     "docs/GETTING_STARTED.md",
     "docs/CUSTOM_BASELINE_QUICKSTART.md",
     "run/README.md",
