@@ -29,5 +29,5 @@ manifest, prediction hashes, evaluation manifest, baseline descriptor,
 checkpoint hash and immutable external repository revisions.
 
 `RELEASE_MANIFEST.json` records the repository-wide anchors for this date
-branch. The Git ref `2026-08-11` is the authoritative release commit; embedding
+branch. The Git ref `2026-08-17` is the authoritative release commit; embedding
 a commit's own hash inside that same commit would be self-referential.

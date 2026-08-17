@@ -646,7 +646,7 @@ class VerticalSpringRealAssetTests(unittest.TestCase):
             json.loads(line)
             for line in (
                 repository_root
-                / "datasets/releases/13.0.0/cases.jsonl"
+                / "datasets/releases/14.0.0/cases.jsonl"
             ).read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]

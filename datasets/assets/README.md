@@ -1,40 +1,33 @@
-# Canonical Assets
+# Canonical V14 assets
 
-当前资产按以下结构组织：
+Dataset 14.0.0 的大型资产由 `physbench dataset pull` 从
+`datasets/huggingface.json` 锁定的公开 Hugging Face commit 直接下载。
+此目录是只读 Dataset；模型转换、预测、日志和额外可视化必须写入
+`run/<run_id>/` 或外部缓存。
+
+每个 Case 的 canonical 结构为：
 
 ```text
-assets/<scene_id>/<descriptive_physical_case_directory>/
-├── caption.json             # 唯一的当前文本描述
-├── physics.json             # 唯一的当前符号化结构化物理标注
-├── source/                  # 可选，原始逐字节文件
+assets/<scene_id>/<case_directory>/
+├── caption.json
+├── physics.json
 └── canonical/
-    ├── reference.mp4|mov    # Benchmark物理时间reference
-    ├── first_frame.png      # 与reference frame 0一致
-    └── masks/               # 逐主体manifest、PNG和NPZ
+    ├── first_frame.png
+    ├── reference.mp4
+    ├── masks/
+    │   ├── manifest.json
+    │   ├── 01.npz
+    │   └── 01.png
+    └── reference_observation/
+        ├── manifest.json
+        ├── entities/
+        └── visualization/
 ```
 
-`caption.json`只保存Case/Scene身份和caption；`physics.json`只保存Case/Scene身份及
-`physics`。schema与annotation source不在916个Case中重复。14.0.0的轻量Case索引通过`assets.caption`和
-`assets.physics_annotation`引用二者，Loader读取后物化`case.text`与`case.physics`。
-媒体通常被Git忽略，Case根部的两个JSON属于受版本控制的Dataset元数据。
-正式标量quantity只含`value/unit/symbol`；正式时序quantity只含
-`samples/time_unit/unit/symbol`，其中sample只含`time/value`。七个Scene均按
-`objects.object_N`与`environment`组织，`object_N`与mask manifest中的矩阵编号一致；
-推水瓶完整外力序列位于`objects.object_1.applied_force`，辅助和审计信息只进入
-provenance。
+`masks/` 保存原始、稳定并经复核的首帧主体 mask。
+`reference_observation/` 是从 GT 视频离线派生的版本化轨迹与 mask tube，
+可以重新生成；evaluator 在评分时读取这些冻结观测，不对 GT 重新分割。
 
-Canonical规则：
-
-- 文件路径相对`datasets/`；
-- 目录名简要编码scene的主要结构化物理量，不编码背景、颜色或采集环境；
-- `case_id`是稳定身份，目录名不是身份API；
-- reference容器时间戳表达Case `temporal`声明的物理时间；
-- first frame与reference解码帧0一致；
-- canonical视频只做必要的事件窗口和空间裁剪，不为模型改FPS或抽帧；
-- 当前Release不维护资产锁或文件哈希；
-- 每个Case只能有一个`caption.json`和一个`physics.json`，禁止新增版本后缀副本；
-- 任何模型侧媒体转换不得回写本目录。
-
-批量压缩来源只在`provenance/source_archives/<batch>/`保存一次；
-`assets/source_archives`是冻结Release的兼容链接。来源与审核信息位于
-`../provenance/`，其中逐Case记录位于`../provenance/releases/14.0.0/cases.jsonl`。
+`datasets/releases/14.0.0/assets.lock.json` 是正式资产成员和哈希权威。
+Case 索引中的 `assets.*` 路径均相对于 `datasets/`；Baseline 只能看到
+Task 和 DataAdapter 明确授权的生成输入，不能读取 reference 或 evaluator 资产。

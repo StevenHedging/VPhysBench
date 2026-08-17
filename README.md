@@ -24,8 +24,14 @@ Dataset 中仍保留 `push_bottle` 的全部 127 个训练 case 和 14 个 test 
 首次下载建议预留至少 40 GB 空间。
 
 ```bash
+# 方式 A：系统已提供 python3.11
 python3.11 -m venv .venv
 . .venv/bin/activate
+
+# 方式 B：系统没有 python3.11 命令时
+# conda create -n vphysbench python=3.11 -y
+# conda activate vphysbench
+
 python -m pip install --upgrade pip
 python -m pip install -e ".[hub]"
 
@@ -48,6 +54,10 @@ physbench baseline list
 physbench baseline init my_model --backend managed-i2v
 physbench baseline validate my_model
 ```
+
+干净发行版只提供接口 smoke，不携带生成模型或权重。真实实验前需要将
+`baselines/my_model/baseline.json` 中的 command 改为模型推理入口，并在
+Git 忽略的 `baseline.local.json` 中配置 checkpoint 与工作目录。
 
 Baseline 可以在自己的目录内实现训练和推理脚本，但不能重写官方 Task 的数据选择、
 种子或评分协议。基准先冻结 canonical plan，随后 Baseline 只负责适配、编译和执行。

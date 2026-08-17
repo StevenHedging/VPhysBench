@@ -66,10 +66,10 @@ class ReleaseV1ContractTests(unittest.TestCase):
         self.assertEqual([], plan["training_scene_ids"])
         self.assertEqual(SCORED_SCENES, set(plan["scene_ids"]))
         self.assertEqual([], plan["train_case_ids"])
-        self.assertEqual(762, len(plan["jobs"]))
+        self.assertEqual(775, len(plan["jobs"]))
         self.assertEqual(
             {
-                "collision_1d": 317,
+                "collision_1d": 330,
                 "inclined_plane_slide": 95,
                 "parabolic_motion": 97,
                 "pendulum": 100,
@@ -90,7 +90,7 @@ class ReleaseV1ContractTests(unittest.TestCase):
         self.assertEqual("scene_default_v1", task.value["evaluation"]["protocol"])
         self.assertEqual(TRAINING_SCENES, set(plan["training_scene_ids"]))
         self.assertEqual(SCORED_SCENES, set(plan["scene_ids"]))
-        self.assertEqual(666, len(plan["train_case_ids"]))
+        self.assertEqual(679, len(plan["train_case_ids"]))
         self.assertEqual(96, len(plan["jobs"]))
         self.assertEqual(
             {

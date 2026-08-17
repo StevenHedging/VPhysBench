@@ -97,7 +97,7 @@ class ReleaseDocumentationTests(unittest.TestCase):
         cases = [
             json.loads(line)
             for line in (
-                ROOT / "datasets" / "releases" / "13.0.0" / "cases.jsonl"
+                ROOT / "datasets" / "releases" / "14.0.0" / "cases.jsonl"
             ).read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
@@ -159,7 +159,7 @@ class ReleaseDocumentationTests(unittest.TestCase):
     def test_release_manifest_matches_dataset_binding(self) -> None:
         release = json.loads((ROOT / "RELEASE_MANIFEST.json").read_text())
         binding = json.loads((ROOT / "datasets" / "huggingface.json").read_text())
-        self.assertEqual("2026-08-11", release["branch"])
+        self.assertEqual("2026-08-17", release["branch"])
         self.assertEqual("1.0", release["task_schema"])
         self.assertEqual("scene_default_v1", release["evaluation_protocol"])
         self.assertEqual(

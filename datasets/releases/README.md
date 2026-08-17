@@ -24,5 +24,5 @@ views/
 `datasets/provenance/releases/14.0.0/`，其中`cases.jsonl`保存逐Case来源、采集时序说明与alignment。
 逐Case mask manifest和对象mask资产仍由Case引用。`reference_video`是唯一GT角色。
 
-`1.0.0`至`12.0.0`已经从活动目录移除。若审计历史实验，应从Git历史读取其Dataset
+`1.0.0`至`13.0.0`已经从活动目录移除。若审计历史实验，应从Git历史读取其Dataset
 ID和旧View；运行时不得扫描、自动回退或加载旧Release。

@@ -894,6 +894,21 @@ class DatasetHubTests(unittest.TestCase):
             for item in evaluation
         ))
 
+    def test_evaluation_doctor_rejects_missing_scene_dependency(self) -> None:
+        root = self.make_project()
+        with patch(
+            "importlib.util.find_spec",
+            side_effect=lambda name: None if name == "sam2" else object(),
+        ):
+            diagnostics = diagnose_project(root, level="evaluation")
+
+        self.assertTrue(any(
+            item.name == "scene_evaluation_dependencies"
+            and item.status == "error"
+            and "sam2" in item.detail
+            for item in diagnostics
+        ))
+
     def test_cli_exposes_nested_dataset_pull_and_doctor(self) -> None:
         parser = build_parser()
         pull = parser.parse_args(["dataset", "pull"])

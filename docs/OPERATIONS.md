@@ -16,6 +16,10 @@ physbench doctor --level evaluation
 make data-test
 ```
 
+The evaluation doctor checks Dataset assets and importability of the optional
+scene-evaluation modules. CUDA execution and SAM 2 model retrieval are verified
+by the first real one-case run.
+
 ## Baseline workflow
 
 ```bash

@@ -8,8 +8,14 @@ SAM 2, and the complete Dataset assets.
 ## 1. Install the Hub and interface environment
 
 ```bash
+# Option A: python3.11 is available on PATH.
 python3.11 -m venv .venv
 . .venv/bin/activate
+
+# Option B: use Conda when the host has no python3.11 executable.
+# conda create -n vphysbench python=3.11 -y
+# conda activate vphysbench
+
 python -m pip install --upgrade pip
 python -m pip install -e ".[hub]"
 ```
@@ -64,9 +70,11 @@ python -m pip install -e ".[scene-evaluation]"
 ```
 
 The scene-evaluation extra pins the SAM 2 source revision used by this
-near-release. Install PyTorch for the local CUDA version before the extra when
-the machine requires a platform-specific wheel. The official SAM 2 install
-notes are at <https://github.com/facebookresearch/sam2/blob/main/INSTALL.md>.
+release. Install PyTorch for the local CUDA version before the extra when the
+machine requires a platform-specific wheel. Installing this extra clones SAM 2
+from GitHub; configure working GitHub access or preinstall that exact pinned
+revision in an offline environment. The official SAM 2 install notes are at
+<https://github.com/facebookresearch/sam2/blob/main/INSTALL.md>.
 
 Run the evaluation-level doctor again after installation.
 
@@ -77,9 +85,10 @@ physbench validate-dataset \
   --check-assets
 ```
 
-`doctor --level evaluation` treats missing Dataset media as an error. The
-first real one-case run also verifies evaluator imports, CUDA availability and
-SAM 2 model access for that scene.
+`doctor --level evaluation` treats missing Dataset media as an error and checks
+that the NumPy/OpenCV/SciPy/Torch/SAM2 evaluator modules are importable. The
+first real one-case run additionally verifies CUDA execution and SAM 2 model
+access for that scene.
 
 ## 4. Create a custom baseline
 
@@ -91,6 +100,11 @@ physbench baseline validate my_model
 Edit `baselines/my_model/baseline.json` for portable algorithm settings. Copy
 `baseline.local.example.json` to `baseline.local.json` for checkpoint and
 machine-local paths. The latter file is ignored by Git.
+
+The clean release contains no model implementation or checkpoint. The
+interface smoke below is runnable immediately; a real experiment starts only
+after the generated command and local checkpoint settings point to the user's
+own inference environment.
 
 See [CUSTOM_BASELINE_QUICKSTART.md](CUSTOM_BASELINE_QUICKSTART.md) for the
 driver contract.

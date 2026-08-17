@@ -3,6 +3,7 @@ from __future__ import annotations
 import ctypes
 import errno
 import hashlib
+import importlib.util
 import json
 import os
 import secrets
@@ -38,6 +39,14 @@ _RENAME_EXCHANGE = 2
 _O_CLOEXEC = getattr(os, "O_CLOEXEC", 0)
 _O_DIRECTORY = getattr(os, "O_DIRECTORY", 0)
 _O_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+_SCENE_EVALUATION_DEPENDENCIES = (
+    "cv2",
+    "matplotlib",
+    "numpy",
+    "sam2",
+    "scipy",
+    "torch",
+)
 
 
 @dataclass
@@ -908,6 +917,23 @@ def diagnose_project(
             "dataset_assets",
             "ok",
             "all referenced assets are present",
+        ))
+    if level == "evaluation":
+        missing_dependencies = [
+            name
+            for name in _SCENE_EVALUATION_DEPENDENCIES
+            if importlib.util.find_spec(name) is None
+        ]
+        diagnostics.append(Diagnostic(
+            "scene_evaluation_dependencies",
+            "error" if missing_dependencies else "ok",
+            (
+                "missing optional modules: "
+                + ", ".join(missing_dependencies)
+                + "; install `.[scene-evaluation]`"
+                if missing_dependencies
+                else "all optional scene-evaluation modules are importable"
+            ),
         ))
     return diagnostics
 

@@ -22,12 +22,20 @@ class CurrentDatasetTests(unittest.TestCase):
 
     def test_v14_is_current_and_complete(self) -> None:
         self.assertEqual(
+            {"14.0.0"},
+            {
+                path.name
+                for path in (ROOT / "datasets" / "releases").iterdir()
+                if path.is_dir()
+            },
+        )
+        self.assertEqual(
             ROOT / "datasets/releases/14.0.0/dataset.json",
             LATEST_DATASET,
         )
         self.assertEqual("physics_video_seven_scene_v14", self.dataset.dataset_id)
         self.assertEqual("14.0.0", self.dataset.descriptor["release"])
-        self.assertEqual(903, len(self.dataset.cases))
+        self.assertEqual(916, len(self.dataset.cases))
         self.assertIsNotNone(self.dataset.asset_lock)
         self.assertEqual(
             {
@@ -44,7 +52,7 @@ class CurrentDatasetTests(unittest.TestCase):
 
     def test_view_a_is_train_plus_id_test_only(self) -> None:
         expected = {
-            "collision_1d": (297, 20),
+            "collision_1d": (310, 20),
             "inclined_plane_slide": (80, 15),
             "parabolic_motion": (82, 15),
             "pendulum": (80, 20),
@@ -61,8 +69,8 @@ class CurrentDatasetTests(unittest.TestCase):
             all_ids.extend(groups["train"])
             all_ids.extend(groups["test"])
             test_ids.extend(groups["test"])
-        self.assertEqual(903, len(all_ids))
-        self.assertEqual(903, len(set(all_ids)))
+        self.assertEqual(916, len(all_ids))
+        self.assertEqual(916, len(set(all_ids)))
         self.assertEqual(set(test_ids), set(self.view["test_annotations"]))
         self.assertEqual(
             {"id": 110},
@@ -87,9 +95,9 @@ class CurrentDatasetTests(unittest.TestCase):
         self.assertEqual(6, len(finetune["scene_ids"]))
         self.assertEqual(6, len(direct["scene_ids"]))
         self.assertEqual(6, len(finetune["training_scene_ids"]))
-        self.assertEqual(666, len(finetune["train_case_ids"]))
+        self.assertEqual(679, len(finetune["train_case_ids"]))
         self.assertEqual(96, len(finetune["jobs"]))
-        self.assertEqual(762, len(direct["jobs"]))
+        self.assertEqual(775, len(direct["jobs"]))
         selected_training_scenes = {
             case["scene_id"]
             for case in self.dataset.cases
