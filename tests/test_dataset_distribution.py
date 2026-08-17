@@ -1058,6 +1058,50 @@ class DatasetDistributionBuilderTests(unittest.TestCase):
                             info.external_attr >> 16,
                         )
 
+    def test_asset_lock_defines_complete_distribution_membership(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self.make_dataset(root / "source")
+            release = descriptor.parent
+            descriptor_value = json.loads(descriptor.read_text(encoding="utf-8"))
+            paths = [
+                "assets/00-caption.json",
+                "assets/01-frame.bin",
+                "assets/02-mask.bin",
+                "assets/03-physics.json",
+                "assets/unreferenced.bin",
+            ]
+            files = []
+            for relative in paths:
+                payload = (root / "source" / relative).read_bytes()
+                files.append({
+                    "path": relative,
+                    "size_bytes": len(payload),
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                })
+            self.write_json(
+                release / "assets.lock.json",
+                {
+                    "schema_version": "1.0",
+                    "dataset_id": "fixture_distribution",
+                    "release": "1.0.0",
+                    "files": files,
+                    "files_digest": canonical_sha256(files),
+                },
+            )
+            descriptor_value["asset_lock"] = "assets.lock.json"
+            self.write_json(descriptor, descriptor_value)
+
+            output = root / "output"
+            self.run_builder(descriptor, output)
+
+            manifest = json.loads(
+                (output / "distribution/v1/manifest.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(paths, [record["path"] for record in manifest["files"]])
+
     def test_rejects_a_single_asset_larger_than_the_shard_bound(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

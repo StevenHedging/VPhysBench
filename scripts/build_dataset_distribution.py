@@ -247,7 +247,12 @@ def _require_asset_path(value: str) -> str:
     return value
 
 
-def _indexed_asset_paths(snapshot) -> list[str]:
+def _distribution_asset_paths(snapshot) -> list[str]:
+    if snapshot.asset_lock is not None:
+        return sorted(
+            _require_asset_path(record["path"])
+            for record in snapshot.asset_lock["files"]
+        )
     paths: set[str] = set()
     for case in snapshot.cases:
         assets = case.get("assets")
@@ -265,7 +270,7 @@ def _indexed_asset_paths(snapshot) -> list[str]:
 
 def _source_files(snapshot, asset_root_descriptor: int) -> list[SourceFile]:
     files: list[SourceFile] = []
-    for relative in _indexed_asset_paths(snapshot):
+    for relative in _distribution_asset_paths(snapshot):
         descriptor = _open_source_descriptor(asset_root_descriptor, relative)
         with os.fdopen(descriptor, "rb") as source:
             metadata = os.fstat(source.fileno())
