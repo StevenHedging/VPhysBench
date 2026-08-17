@@ -27,7 +27,10 @@ def resolve_dataset_file(
     """Resolve one existing non-symlink file within a Dataset asset root."""
 
     root = Path(asset_root).resolve(strict=True)
-    supplied = Path(value)
+    try:
+        supplied = Path(value)
+    except TypeError as exc:
+        raise ValueError(f"{label} must be a Dataset asset path") from exc
     if supplied.is_absolute():
         if not allow_absolute:
             raise ValueError(f"{label} must be a relative Dataset asset path")

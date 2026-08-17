@@ -139,7 +139,25 @@ class ReferenceObservationManifestLoaderTests(unittest.TestCase):
         source_video.write_bytes(b"fixture-video")
         anchor = asset_root / "case" / "canonical" / "masks" / "manifest.json"
         anchor.parent.mkdir()
-        write_json(anchor, {"case_id": "case_1"})
+        anchor_npz = anchor.parent / "01.npz"
+        with anchor_npz.open("wb") as handle:
+            np.savez_compressed(
+                handle,
+                masks=np.ones((1, 4, 9), dtype=np.uint8),
+            )
+        write_json(
+            anchor,
+            {
+                "case_id": "case_1",
+                "instances": [
+                    {
+                        "object_id": "object_1",
+                        "mask_id": "01",
+                        "npz_asset": "case/canonical/masks/01.npz",
+                    }
+                ],
+            },
+        )
 
         timeline = api.build_timeline(
             frame_count=2,
@@ -188,6 +206,13 @@ class ReferenceObservationManifestLoaderTests(unittest.TestCase):
             "source": {
                 "reference_video": file_record(source_video, base=asset_root),
                 "first_frame_mask_manifest": file_record(anchor, base=asset_root),
+                "anchor_masks": [
+                    {
+                        "object_id": "object_1",
+                        "mask_id": "01",
+                        "asset": file_record(anchor_npz, base=asset_root),
+                    }
+                ],
             },
             "generator": {
                 "id": "fixture_generator",
@@ -294,6 +319,22 @@ class ReferenceObservationManifestLoaderTests(unittest.TestCase):
                 anchor,
             )
             with self.assertRaisesRegex(ValueError, "mask manifest Case mismatch"):
+                observation_api().load_reference_observation(
+                    asset_root,
+                    manifest_path,
+                )
+
+    def test_manifest_loader_rejects_mutated_anchor_mask_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            asset_root, _, manifest_path = self._bundle(Path(temporary))
+            anchor_npz = (
+                asset_root / "case" / "canonical" / "masks" / "01.npz"
+            )
+            anchor_npz.write_bytes(anchor_npz.read_bytes() + b"mutation")
+            with self.assertRaisesRegex(
+                ValueError,
+                "anchor mask.*size mismatch",
+            ):
                 observation_api().load_reference_observation(
                     asset_root,
                     manifest_path,

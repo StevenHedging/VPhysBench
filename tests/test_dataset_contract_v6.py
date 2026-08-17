@@ -330,6 +330,13 @@ class DatasetContractV6Tests(unittest.TestCase):
                 "source": {
                     "reference_video": file_record,
                     "first_frame_mask_manifest": file_record,
+                    "anchor_masks": [
+                        {
+                            "object_id": "object_1",
+                            "mask_id": "01",
+                            "asset": file_record,
+                        }
+                    ],
                 },
                 "generator": {
                     "id": "reference_observation_generator_v1",

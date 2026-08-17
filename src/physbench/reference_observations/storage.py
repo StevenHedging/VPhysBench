@@ -267,6 +267,7 @@ def load_reference_observation(
     if not isinstance(source, dict) or set(source) != {
         "reference_video",
         "first_frame_mask_manifest",
+        "anchor_masks",
     }:
         raise ValueError("reference observation source has invalid fields")
     _verified_record(root, source["reference_video"], label="reference video")
@@ -278,6 +279,47 @@ def load_reference_observation(
     anchor_manifest = load_json(anchor_path)
     if anchor_manifest.get("case_id") != case_id:
         raise ValueError("first-frame mask manifest Case mismatch")
+    anchor_instances = anchor_manifest.get("instances")
+    anchor_records = source["anchor_masks"]
+    if (
+        not isinstance(anchor_instances, list)
+        or not isinstance(anchor_records, list)
+        or not anchor_records
+        or len(anchor_instances) != len(anchor_records)
+    ):
+        raise ValueError("reference observation anchor masks are invalid")
+    for index, (record, instance) in enumerate(
+        zip(anchor_records, anchor_instances, strict=True),
+        1,
+    ):
+        object_id = f"object_{index}"
+        mask_id = f"{index:02d}"
+        if (
+            not isinstance(record, dict)
+            or set(record) != {"object_id", "mask_id", "asset"}
+            or record.get("object_id") != object_id
+            or record.get("mask_id") != mask_id
+            or not isinstance(instance, dict)
+            or instance.get("object_id") != object_id
+            or instance.get("mask_id") != mask_id
+        ):
+            raise ValueError(
+                "reference observation anchor mask identity mismatch"
+            )
+        frozen_anchor_path = _verified_record(
+            root,
+            record["asset"],
+            label=f"{object_id} anchor mask",
+        )
+        declared_anchor_path = resolve_dataset_file(
+            root,
+            instance.get("npz_asset"),
+            label=f"{object_id} first-frame mask",
+        )
+        if frozen_anchor_path != declared_anchor_path:
+            raise ValueError(
+                "reference observation anchor mask path mismatch"
+            )
     timeline_path = _verified_record(
         child_root,
         manifest["timeline"],
@@ -298,6 +340,10 @@ def load_reference_observation(
     raw_entities = manifest["entities"]
     if not isinstance(raw_entities, list) or not raw_entities:
         raise ValueError("reference observation entities must be non-empty")
+    if len(raw_entities) != len(anchor_records):
+        raise ValueError(
+            "reference observation entities differ from anchor masks"
+        )
     entities: dict[str, EntityObservation] = {}
     for index, record in enumerate(raw_entities, 1):
         if not isinstance(record, dict) or set(record) != {
@@ -338,6 +384,7 @@ def load_reference_observation(
         manifest=manifest,
         manifest_path=manifest_file,
         manifest_sha256=sha256_file(manifest_file),
+        quality=quality,
     )
 
 

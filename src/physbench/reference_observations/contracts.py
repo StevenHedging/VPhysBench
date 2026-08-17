@@ -63,6 +63,7 @@ class ReferenceObservationBundle:
     manifest: dict[str, Any]
     manifest_path: Path
     manifest_sha256: str
+    quality: dict[str, Any] | None = None
 
 
 __all__ = [

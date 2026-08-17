@@ -18,10 +18,24 @@
     "scene_id": {"$ref": "#/$defs/safeId"},
     "source": {
       "type": "object",
-      "required": ["reference_video", "first_frame_mask_manifest"],
+      "required": ["reference_video", "first_frame_mask_manifest", "anchor_masks"],
       "properties": {
         "reference_video": {"$ref": "#/$defs/fileRecord"},
-        "first_frame_mask_manifest": {"$ref": "#/$defs/fileRecord"}
+        "first_frame_mask_manifest": {"$ref": "#/$defs/fileRecord"},
+        "anchor_masks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["object_id", "mask_id", "asset"],
+            "properties": {
+              "object_id": {"pattern": "^object_[1-9][0-9]*$", "type": "string"},
+              "mask_id": {"pattern": "^[0-9]{2,}$", "type": "string"},
+              "asset": {"$ref": "#/$defs/fileRecord"}
+            },
+            "additionalProperties": false
+          }
+        }
       },
       "additionalProperties": false
     },
@@ -32,7 +46,8 @@
         "id": {"$ref": "#/$defs/safeId"},
         "code_revision": {"type": "string", "minLength": 1},
         "model_id": {"type": "string", "minLength": 1},
-        "config_fingerprint": {"$ref": "#/$defs/sha256"}
+        "config_fingerprint": {"$ref": "#/$defs/sha256"},
+        "propagation": {"type": "object"}
       },
       "additionalProperties": false
     },
