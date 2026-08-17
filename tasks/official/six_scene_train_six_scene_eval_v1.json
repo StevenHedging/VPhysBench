@@ -3,7 +3,7 @@
   "schema_version": "1.0",
   "task_id": "six_scene_train_six_scene_eval_v1",
   "family": "finetune_eval",
-  "dataset_id": "physics_video_seven_scene_v13",
+  "dataset_id": "physics_video_seven_scene_v14",
   "selection": {
     "training_scene_ids": [
       "pendulum",
