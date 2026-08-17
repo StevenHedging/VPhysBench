@@ -70,4 +70,3 @@ derive non-subject apparatus/topology evidence from decoded GT frames.
 3. Run the full test suite and repository diff checks.
 4. Commit and push `2026-08-17` to `origin` only after all required checks
    pass.
-

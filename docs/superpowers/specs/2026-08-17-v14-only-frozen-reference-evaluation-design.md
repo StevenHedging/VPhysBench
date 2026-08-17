@@ -49,4 +49,3 @@ adapter; its condition/apparatus and prediction branches remain intact.
 - One regression per supported Scene proving the online reference subject
   extractor is not called for a V14 Case.
 - Existing prediction/evaluator and task compilation suites remain green.
-
