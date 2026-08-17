@@ -213,7 +213,11 @@ class CollisionV5EvaluatorTests(unittest.TestCase):
                 / "configs/evaluation/protocols/scene_default_v1.json"
             ).read_text(encoding="utf-8")
         )
-        cls.config = protocol["scenes"]["collision_1d"]
+        cls.config = copy.deepcopy(protocol["scenes"]["collision_1d"])
+        # These unit tests exercise the retained legacy online-observation
+        # implementation in isolation.  The public V14 protocol is covered by
+        # frozen-reference routing tests instead.
+        cls.config.pop("reference_observation_policy", None)
 
     def _evaluator(
         self,

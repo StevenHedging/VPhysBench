@@ -42,9 +42,10 @@ class CircularMotionOpenWorldCaseEvaluatorV7(
             for key, expected in required_observation.items()
             if observation.get(key) != expected
         }
-        if config.get("reference_observation_policy") != (
-            "apparatus_geometry_symmetric"
-        ):
+        if config.get("reference_observation_policy") not in {
+            "frozen_dataset_reference_observation_v1",
+            "apparatus_geometry_symmetric",
+        }:
             mismatches["reference_observation_policy"] = config.get(
                 "reference_observation_policy"
             )

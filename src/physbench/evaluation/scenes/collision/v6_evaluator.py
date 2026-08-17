@@ -13,6 +13,7 @@ from ...contracts import CaseEvaluationRequest
 from .v5_evaluator import CollisionOpenWorldCaseEvaluator
 from .v6_identity import (
     CollisionIdentityAnchor,
+    _mask_histogram,
     build_motion_validated_collision_reference_anchors,
     build_prediction_collision_identity_prompts,
     latch_collision_identity_masks,
@@ -35,7 +36,7 @@ class CollisionFailClosedCaseEvaluator(CollisionOpenWorldCaseEvaluator):
     robust_evaluator_version = "1.0"
     fail_closed_on_directed_identity = True
     identity_policy = (
-        "motion_validated_reference_frame_zero_plus_unique_prediction_"
+        "frozen_dataset_reference_frame_zero_plus_unique_prediction_"
         "frame_zero_binding_terminal_latch_v1"
     )
 
@@ -57,7 +58,7 @@ class CollisionFailClosedCaseEvaluator(CollisionOpenWorldCaseEvaluator):
         value.update(
             {
                 "expected_channel": (
-                    "motion_validated_reference_frame_zero_and_unique_"
+                    "frozen_dataset_reference_tube_and_unique_"
                     "prediction_frame_zero_binding_plus_forward_sam2"
                 ),
                 "identity": self.identity_policy,
@@ -97,6 +98,53 @@ class CollisionFailClosedCaseEvaluator(CollisionOpenWorldCaseEvaluator):
         return CollisionIdentityContext(
             anchors=anchors,
             reference_localization=metadata,
+        )
+
+    def _identity_context_from_frozen_reference(
+        self,
+        frozen,
+        *,
+        reference_frame: np.ndarray,
+        entity_ids: Sequence[str],
+    ) -> CollisionIdentityContext:
+        anchors = []
+        for entity_id in entity_ids:
+            value = frozen.entities[entity_id]
+            if not bool(value.visible[0]):
+                raise SceneAnalysisError(
+                    "reference_collision_frame_zero_entity_missing",
+                    f"frozen collision entity {entity_id} is not visible at "
+                    "frame zero",
+                )
+            mask = np.asarray(value.masks[0], dtype=np.uint8)
+            histogram = _mask_histogram(reference_frame, mask)
+            histogram.setflags(write=False)
+            area = float(value.area_pixels[0])
+            anchors.append(
+                CollisionIdentityAnchor(
+                    logical_entity_id=str(entity_id),
+                    dataset_object_id=str(value.dataset_object_id),
+                    mask=mask,
+                    centroid_xy=np.asarray(
+                        value.centroid_xy[0],
+                        dtype=np.float64,
+                    ),
+                    equivalent_radius_px=float(np.sqrt(area / np.pi)),
+                    histogram=histogram,
+                    provenance={
+                        **dict(frozen.provenance),
+                        "object_id": str(entity_id),
+                        "observation_index": 0,
+                    },
+                )
+            )
+        return CollisionIdentityContext(
+            anchors=tuple(anchors),
+            reference_localization={
+                "backend": "frozen_dataset_reference_observation_v1",
+                "manifest_sha256": frozen.manifest_sha256,
+                "selected_entity_ids": list(entity_ids),
+            },
         )
 
     def _observe_expected_role(

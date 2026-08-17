@@ -1077,11 +1077,12 @@ class ParabolicMotionCaseEvaluator(ReferenceCaseEvaluator):
         *,
         entity_id: str,
         frames: list[np.ndarray],
+        times_s: list[float] | None = None,
         available: np.ndarray,
         spatial_transform: Mapping[str, object],
         reference: bool,
     ) -> ParabolicObservation:
-        del request, entity_id, spatial_transform, reference
+        del request, entity_id, times_s, spatial_transform, reference
         return observe_projectile(
             frames,
             available=available,
@@ -1164,6 +1165,7 @@ class ParabolicMotionCaseEvaluator(ReferenceCaseEvaluator):
                 request,
                 entity_id=entity.entity_id,
                 frames=list(reference_video.frames),
+                times_s=times_s,
                 available=np.ones(len(times_s), dtype=bool),
                 spatial_transform=getattr(
                     reference_video, "spatial_transform", {}
@@ -1215,6 +1217,7 @@ class ParabolicMotionCaseEvaluator(ReferenceCaseEvaluator):
                     request,
                     entity_id=entity.entity_id,
                     frames=prediction_frames,
+                    times_s=times_s,
                     available=available,
                     spatial_transform=getattr(
                         prediction_video, "spatial_transform", {}

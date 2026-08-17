@@ -36,7 +36,7 @@
       "type": "pendulum_v1",
       "observer_protocol": "open_world_v2",
       "evaluator_contract": "robust_subject_v3",
-      "reference_observation_policy": "frozen_dataset_subject_identity",
+      "reference_observation_policy": "frozen_dataset_reference_observation_v1",
       "timeline": {
         "policy": "physical_overlap_common_fps_v1",
         "fps": 24,
@@ -263,6 +263,7 @@
     "collision_1d": {
       "type": "collision_1d_v1",
       "evaluator_contract": "robust_subject_v3",
+      "reference_observation_policy": "frozen_dataset_reference_observation_v1",
       "timeline": {
         "policy": "physical_overlap_common_fps_v1",
         "fps": 24,
@@ -449,7 +450,7 @@
       "type": "inclined_plane_slide_v1",
       "observer_protocol": "open_world_v2",
       "evaluator_contract": "robust_subject_v3",
-      "reference_observation_policy": "condition_causal_symmetric",
+      "reference_observation_policy": "frozen_dataset_reference_observation_v1",
       "timeline": {
         "policy": "physical_overlap_common_fps_v1",
         "fps": 24,
@@ -662,7 +663,7 @@
       "type": "uniform_circular_motion_v1",
       "observer_protocol": "open_world_v2",
       "evaluator_contract": "robust_subject_v3",
-      "reference_observation_policy": "apparatus_geometry_symmetric",
+      "reference_observation_policy": "frozen_dataset_reference_observation_v1",
       "timeline": {
         "policy": "physical_overlap_common_fps_v1",
         "fps": 24,
@@ -788,7 +789,7 @@
       "type": "parabolic_motion_v1",
       "observer_protocol": "open_world_v2",
       "evaluator_contract": "robust_subject_v3",
-      "reference_observation_policy": "frozen_dataset_subject_identity",
+      "reference_observation_policy": "frozen_dataset_reference_observation_v1",
       "timeline": {
         "policy": "physical_overlap_common_fps_v1",
         "fps": 24,
@@ -926,6 +927,7 @@
     "vertical_spring_oscillator": {
       "type": "vertical_spring_oscillator_v1",
       "evaluator_contract": "robust_subject_v3",
+      "reference_observation_policy": "frozen_dataset_reference_observation_v1",
       "timeline": {
         "policy": "physical_overlap_common_fps_v1",
         "fps": 24,

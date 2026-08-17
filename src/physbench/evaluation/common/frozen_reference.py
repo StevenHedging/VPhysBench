@@ -36,6 +36,7 @@ _DATA_ERRORS = (
 @dataclass(frozen=True)
 class FrozenReferenceEntity:
     entity_id: str
+    dataset_object_id: str
     mask_id: str
     masks: np.ndarray
     centroid_xy: np.ndarray
@@ -114,12 +115,12 @@ def _source_indices(
         <= np.abs(requested_times - source_times[right])
     )
     indices = np.where(choose_left, left, right).astype(np.int64)
-    tolerance = max(1e-6, 1e-4 / float(sampling_rate_hz))
+    tolerance = 0.5 / float(sampling_rate_hz)
     errors = np.abs(source_times[indices] - requested_times)
-    if np.any(errors > tolerance):
+    if np.any(errors >= tolerance - 1e-9):
         raise ValueError(
-            "evaluator physical-time grid is not represented exactly by the "
-            "frozen reference observation"
+            "evaluator physical-time grid is not represented unambiguously "
+            "by the frozen reference observation"
         )
     if len(set(indices.tolist())) != len(indices):
         raise ValueError(
@@ -149,6 +150,7 @@ def _geometry(mask: np.ndarray) -> tuple[np.ndarray, np.ndarray, int]:
 def _align_entity(
     entity,
     *,
+    logical_entity_id: str,
     indices: np.ndarray,
     spatial_transform: Mapping[str, object],
 ) -> FrozenReferenceEntity:
@@ -191,7 +193,8 @@ def _align_entity(
     ):
         value.setflags(write=False)
     return FrozenReferenceEntity(
-        entity_id=entity.object_id,
+        entity_id=logical_entity_id,
+        dataset_object_id=entity.object_id,
         mask_id=entity.mask_id,
         masks=mask_array,
         centroid_xy=centroid_array,
@@ -227,14 +230,25 @@ def load_frozen_reference_observation(
             )
         expected = tuple(str(value) for value in expected_entity_ids)
         actual = tuple(bundle.entities)
-        if not expected or actual != expected:
+        if (
+            not expected
+            or len(set(expected)) != len(expected)
+            or len(actual) != len(expected)
+        ):
             raise ValueError(
                 "frozen reference entity identities differ from evaluator "
                 f"manifest: expected={expected}, actual={actual}"
             )
         quality = bundle.quality
-        if not isinstance(quality, dict) or quality.get("status") != "pass":
-            raise ValueError("frozen reference quality status is not pass")
+        if (
+            not isinstance(quality, dict)
+            or quality.get("status") not in {"pass", "warning"}
+            or quality.get("failures") != []
+        ):
+            raise ValueError(
+                "frozen reference quality has hard failures or an invalid "
+                "status"
+            )
         requested_times = np.asarray(times_s, dtype=np.float64)
         source_times = np.asarray(
             [
@@ -249,12 +263,17 @@ def load_frozen_reference_observation(
             sampling_rate_hz=bundle.timeline.sampling_rate_hz,
         )
         entities = {
-            entity_id: _align_entity(
-                bundle.entities[entity_id],
+            logical_entity_id: _align_entity(
+                bundle.entities[dataset_object_id],
+                logical_entity_id=logical_entity_id,
                 indices=indices,
                 spatial_transform=spatial_transform,
             )
-            for entity_id in expected
+            for logical_entity_id, dataset_object_id in zip(
+                expected,
+                actual,
+                strict=True,
+            )
         }
     except ReferenceAnalysisError:
         raise
@@ -280,6 +299,14 @@ def load_frozen_reference_observation(
             "manifest": declared_path,
             "manifest_sha256": bundle.manifest_sha256,
             "source_observation_indices": indices.tolist(),
+            "entity_binding": {
+                logical_entity_id: dataset_object_id
+                for logical_entity_id, dataset_object_id in zip(
+                    expected,
+                    actual,
+                    strict=True,
+                )
+            },
             "spatial_transform": dict(spatial_transform),
         },
     )

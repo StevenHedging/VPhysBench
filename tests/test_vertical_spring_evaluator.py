@@ -905,6 +905,11 @@ class VerticalSpringEvaluatorTests(unittest.TestCase):
 
     def evaluate_single_spring_task(self) -> dict[str, object]:
         protocol = load_evaluation_protocol("scene_default_v1")
+        # This helper drives tests for failures inside the retained online
+        # segmentation implementation, not the official frozen V14 route.
+        protocol["scenes"]["vertical_spring_oscillator"].pop(
+            "reference_observation_policy", None
+        )
         plan = {
             "task_id": "spring_internal_error_task",
             "family": "direct_eval",
@@ -953,9 +958,7 @@ class VerticalSpringEvaluatorTests(unittest.TestCase):
             mask=portrait_masks[0],
         )
         self.request.prediction["video_path"] = str(prediction_path)  # type: ignore[index]
-        config = load_evaluation_protocol("scene_default_v1")["scenes"][
-            "vertical_spring_oscillator"
-        ]
+        config = deepcopy(EVALUATOR_CONFIG)
         with patch.object(
             Sam2VideoSegmenter,
             "segment",

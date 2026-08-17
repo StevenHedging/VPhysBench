@@ -15,7 +15,10 @@ from ...common.csti import (
     build_csti_input_from_frame_matches,
 )
 from ...common.entities import (
+    EvidenceTier,
     ExpectedPositionSample,
+    FrozenAssignment,
+    ObjectDetection,
     ReferenceCapability,
     build_common_time_grid,
     compare_open_world_v2,
@@ -26,6 +29,7 @@ from ...common.entities import (
 )
 from ...common.entities.observer import OpenWorldObservation, OpenWorldTrack
 from ...common.errors import ReferenceAnalysisError
+from ...common.frozen_reference import load_frozen_reference_observation
 from ...common.masks.quality import observed_mask_iou, summarize_mask_ious
 from ...common.subject import compare_subjects, infer_reference_mode
 from ...contracts import CaseEvaluationRequest
@@ -109,7 +113,7 @@ class PendulumOpenWorldCaseEvaluatorV8(ReferenceCaseEvaluator):
                 "geometry"
             ),
             "reference_prediction_symmetry": (
-                "reference_and_prediction_are_independently_identity_gated"
+                "frozen_dataset_reference_and_independent_prediction_identity"
             ),
             "proposal_fusion": (
                 "directed_and_residual_sources_are_fused_before_tracking"
@@ -248,7 +252,112 @@ class PendulumOpenWorldCaseEvaluatorV8(ReferenceCaseEvaluator):
         reference_track = None
         reference_topology: Mapping[str, object] | None = None
         try:
-            if reference_mode == "same_case_reference":
+            if self.config.get("reference_observation_policy") == (
+                "frozen_dataset_reference_observation_v1"
+            ):
+                if reference_mode != "same_case_reference":
+                    raise ReferenceAnalysisError(
+                        "reference_observation_mode_invalid",
+                        "V14 pendulum evaluation requires a same-Case frozen "
+                        "reference observation",
+                    )
+                frozen_reference = load_frozen_reference_observation(
+                    request,
+                    times_s=times_s,
+                    spatial_transform=reference_video.spatial_transform,
+                    expected_entity_ids=[entity.entity_id],
+                )
+                frozen_entity = frozen_reference.entities[entity.entity_id]
+                reference_bobs = list(frozen_entity.masks)
+                reference_bob_xy = np.asarray(
+                    frozen_entity.centroid_xy,
+                    dtype=np.float64,
+                )
+                reference_bob_observed = np.asarray(
+                    frozen_entity.visible,
+                    dtype=bool,
+                )
+                detections = tuple(
+                    ObjectDetection(
+                        frame_index=index,
+                        detection_id=f"frozen_{entity.entity_id}_{index:05d}",
+                        xy=reference_bob_xy[index],
+                        area_px2=float(frozen_entity.area_pixels[index]),
+                        entity_class=entity.entity_class,
+                        mask=reference_bobs[index],
+                        confidence=1.0,
+                        evidence_tier=EvidenceTier.PARTICIPANT,
+                        sources=(
+                            "frozen_dataset_reference_observation_v1",
+                        ),
+                    )
+                    for index in range(len(times_s))
+                    if reference_bob_observed[index]
+                )
+                if not detections:
+                    raise ReferenceAnalysisError(
+                        "reference_pendulum_entity_unobserved",
+                        "frozen pendulum bob has no visible samples",
+                    )
+                reference_open_track = OpenWorldTrack(
+                    track_id=f"frozen:{entity.entity_id}",
+                    detections=detections,
+                    confirmed=True,
+                    evidence_tier=EvidenceTier.PARTICIPANT,
+                )
+                reference_observation = OpenWorldObservation(
+                    tracks=(reference_open_track,),
+                    overflow_counts=np.zeros(len(times_s), dtype=np.float64),
+                    diagnostics=dict(frozen_reference.provenance),
+                )
+                reference_frozen_identity = FrozenAssignment(
+                    entity_to_track={
+                        entity.entity_id: reference_open_track.track_id
+                    },
+                    residual_track_ids=(),
+                    unmatched_entity_ids=(),
+                    total_cost=0.0,
+                )
+                reference_track = reference_open_track.to_object_track(
+                    frame_count=len(times_s),
+                    time_weights_s=time_grid.cell_weights_s,
+                    matched_entity_id=entity.entity_id,
+                )
+                reference_trace = extract_bob_trace_v7(
+                    reference_bob_xy,
+                    reference_bob_observed,
+                    times_s,
+                    pivot_xy=condition_structure.pivot_xy,
+                    period_config=self.config["period"],
+                )
+                reference_assembly = []
+                pivot = tuple(
+                    int(round(value))
+                    for value in condition_structure.pivot_xy
+                )
+                for mask, xy, observed in zip(
+                    reference_bobs,
+                    reference_bob_xy,
+                    reference_bob_observed,
+                    strict=True,
+                ):
+                    assembly = np.asarray(mask, dtype=np.uint8).copy()
+                    if observed:
+                        bob = tuple(int(round(value)) for value in xy)
+                        cv2.line(assembly, pivot, bob, 255, 3, cv2.LINE_AA)
+                    reference_assembly.append(assembly)
+                reference_topology = observe_pendulum_topology_v7(
+                    reference_video.frames,
+                    reference_assembly,
+                    pivot_xy=condition_structure.pivot_xy,
+                    bob_xy=reference_bob_xy,
+                    bob_observed=reference_bob_observed,
+                    bob_masks=reference_bobs,
+                    frame_weights=time_grid.cell_weights_s,
+                    config=self.config["topology"],
+                )
+                reference_segmentation = dict(frozen_reference.provenance)
+            elif reference_mode == "same_case_reference":
                 (
                     reference_assembly,
                     reference_segmentation,

@@ -67,12 +67,21 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
         )
         self.assertEqual(0.5, csti["spatial_tolerance_radius_ratio"])
         self.assertNotIn("spatial_tolerance_fraction", csti)
-        self.assertEqual(
-            "frozen_dataset_subject_identity",
-            self.protocol["scenes"]["pendulum"][
-                "reference_observation_policy"
-            ],
-        )
+        for scene_id in (
+            "pendulum",
+            "collision_1d",
+            "inclined_plane_slide",
+            "uniform_circular_motion",
+            "parabolic_motion",
+            "vertical_spring_oscillator",
+        ):
+            with self.subTest(scene_id=scene_id):
+                self.assertEqual(
+                    "frozen_dataset_reference_observation_v1",
+                    self.protocol["scenes"][scene_id][
+                        "reference_observation_policy"
+                    ],
+                )
         self.assertEqual(
             "fail_closed_v1",
             self.protocol["scenes"]["collision_1d"]["subject_identity"][
@@ -206,6 +215,7 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
             {
                 "type",
                 "evaluator_contract",
+                "reference_observation_policy",
                 "timeline",
                 "spatial",
                 "sam2",

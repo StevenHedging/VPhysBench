@@ -165,6 +165,40 @@ class FrozenReferenceObservationTests(unittest.TestCase):
                     expected_entity_ids=["object_1", "object_2"],
                 )
 
+    def test_binds_evaluator_identity_to_dataset_object_by_order(self) -> None:
+        from physbench.evaluation.common.frozen_reference import (
+            load_frozen_reference_observation,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            asset_root, _, manifest_path = (
+                ReferenceObservationManifestLoaderTests()._bundle(
+                    Path(temporary)
+                )
+            )
+            result = load_frozen_reference_observation(
+                self._request(asset_root, manifest_path),
+                times_s=[0.0],
+                spatial_transform={
+                    "policy": "preserve_aspect_ratio_letterbox",
+                    "source_size": [9, 4],
+                    "target_size": [9, 4],
+                    "scale": 1.0,
+                    "offset_xy": [0, 0],
+                },
+                expected_entity_ids=["logical_ball"],
+            )
+
+        self.assertEqual({"logical_ball"}, set(result.entities))
+        self.assertEqual(
+            "object_1",
+            result.entities["logical_ball"].dataset_object_id,
+        )
+        self.assertEqual(
+            {"logical_ball": "object_1"},
+            result.provenance["entity_binding"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

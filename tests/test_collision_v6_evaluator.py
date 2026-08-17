@@ -223,6 +223,9 @@ class CollisionV6EvaluatorTests(unittest.TestCase):
             ).read_text(encoding="utf-8")
         )
         cls.config = copy.deepcopy(protocol["scenes"]["collision_1d"])
+        # This suite isolates the legacy motion-validated identity binder.
+        # Official V14 evaluation uses the frozen reference-observation route.
+        cls.config.pop("reference_observation_policy", None)
         cls.config["type"] = "collision_1d_v1"
         cls.config["subject_identity"] = {
             "anchor_policy": "reference_motion_validated_frame_zero_v1",
@@ -313,6 +316,39 @@ class CollisionV6EvaluatorTests(unittest.TestCase):
         self.assertEqual(
             "causal_terminal_identity_latch_v1",
             prediction[5]["identity_latch"]["policy"],
+        )
+
+    def test_frozen_identity_anchor_preserves_dataset_object_binding(self) -> None:
+        masks = _masks()
+        entities = {}
+        for order, entity_id in enumerate(("ball_1", "ball_2"), start=7):
+            mask_array = np.stack(masks[order - 7], axis=0)
+            entities[entity_id] = SimpleNamespace(
+                dataset_object_id=f"object_{order}",
+                masks=mask_array,
+                centroid_xy=np.asarray(
+                    [[30.0 if entity_id == "ball_1" else 120.0, 48.0]]
+                    * _FRAME_COUNT,
+                    dtype=np.float64,
+                ),
+                area_pixels=np.count_nonzero(mask_array, axis=(1, 2)),
+                visible=np.ones(_FRAME_COUNT, dtype=bool),
+            )
+        frozen = SimpleNamespace(
+            entities=entities,
+            provenance={"entity_binding": {"ball_1": "object_7", "ball_2": "object_8"}},
+            manifest_sha256="frozen-manifest",
+        )
+
+        context = self._evaluator()._identity_context_from_frozen_reference(
+            frozen,
+            reference_frame=_frames()[0],
+            entity_ids=("ball_1", "ball_2"),
+        )
+
+        self.assertEqual(
+            ["object_7", "object_8"],
+            [anchor.dataset_object_id for anchor in context.anchors],
         )
 
     def test_identity_dropout_is_terminal_and_cannot_reappear(self) -> None:

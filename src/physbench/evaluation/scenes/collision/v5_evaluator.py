@@ -27,6 +27,10 @@ from ...common.entities.observer import (
     compare_open_world_tracks,
 )
 from ...common.errors import ReferenceAnalysisError, SceneAnalysisError
+from ...common.frozen_reference import (
+    FrozenReferenceObservation,
+    load_frozen_reference_observation,
+)
 from ...common.geometry import AxisModel, fit_axis
 from ...common.masks.quality import observed_mask_iou, summarize_mask_ious
 from ...common.masks.sam2 import MaskPrompt, Sam2VideoSegmenter
@@ -114,6 +118,16 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
         entity_ids: Sequence[str],
     ) -> object | None:
         del request, reference_frames, entity_ids
+        return None
+
+    def _identity_context_from_frozen_reference(
+        self,
+        frozen: FrozenReferenceObservation,
+        *,
+        reference_frame: np.ndarray,
+        entity_ids: Sequence[str],
+    ) -> object | None:
+        del frozen, reference_frame, entity_ids
         return None
 
     def _observe_expected_role(
@@ -365,25 +379,102 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
             **self.config.get("nbody_scoring", {})
         )
         try:
-            identity_context = self._prepare_identity_context(
-                request,
-                reference_frames=reference_video.frames,
-                entity_ids=entity_ids,
-            )
-            (
-                reference_xy,
-                reference_valid,
-                reference_radii,
-                reference_masks,
-                reference_union,
-                reference_observation,
-            ) = self._observe_expected_role(
-                reference_video.frames,
-                expected_count=len(entities),
-                entity_ids=entity_ids,
-                observation_role="reference",
-                identity_context=identity_context,
-            )
+            if self.config.get("reference_observation_policy") == (
+                "frozen_dataset_reference_observation_v1"
+            ):
+                frozen_reference = load_frozen_reference_observation(
+                    request,
+                    times_s=times_s,
+                    spatial_transform=reference_video.spatial_transform,
+                    expected_entity_ids=entity_ids,
+                )
+                identity_context = (
+                    self._identity_context_from_frozen_reference(
+                        frozen_reference,
+                        reference_frame=reference_video.frames[0],
+                        entity_ids=entity_ids,
+                    )
+                )
+                reference_masks = [
+                    list(frozen_reference.entities[entity_id].masks)
+                    for entity_id in entity_ids
+                ]
+                reference_xy = np.stack(
+                    [
+                        frozen_reference.entities[entity_id].centroid_xy
+                        for entity_id in entity_ids
+                    ],
+                    axis=1,
+                )
+                reference_valid = np.stack(
+                    [
+                        frozen_reference.entities[entity_id].visible
+                        for entity_id in entity_ids
+                    ],
+                    axis=1,
+                )
+                reference_radii = np.stack(
+                    [
+                        np.sqrt(
+                            np.asarray(
+                                frozen_reference.entities[
+                                    entity_id
+                                ].area_pixels,
+                                dtype=np.float64,
+                            )
+                            / math.pi
+                        )
+                        for entity_id in entity_ids
+                    ],
+                    axis=1,
+                )
+                reference_radii[~reference_valid] = np.nan
+                reference_radii = _fill_positive_radii(
+                    reference_radii,
+                    reference_valid,
+                    fallback=np.asarray(
+                        [
+                            np.nanmedian(reference_radii[:, index])
+                            for index in range(len(entity_ids))
+                        ],
+                        dtype=np.float64,
+                    ),
+                )
+                reference_union = []
+                for frame_index in range(len(times_s)):
+                    union = np.zeros(
+                        reference_video.frames[0].shape[:2],
+                        dtype=np.uint8,
+                    )
+                    for object_masks in reference_masks:
+                        union = cv2.bitwise_or(
+                            union,
+                            np.asarray(object_masks[frame_index]),
+                        )
+                    reference_union.append(union)
+                reference_observation = dict(
+                    frozen_reference.provenance
+                )
+            else:
+                identity_context = self._prepare_identity_context(
+                    request,
+                    reference_frames=reference_video.frames,
+                    entity_ids=entity_ids,
+                )
+                (
+                    reference_xy,
+                    reference_valid,
+                    reference_radii,
+                    reference_masks,
+                    reference_union,
+                    reference_observation,
+                ) = self._observe_expected_role(
+                    reference_video.frames,
+                    expected_count=len(entities),
+                    entity_ids=entity_ids,
+                    observation_role="reference",
+                    identity_context=identity_context,
+                )
             minimum_reference_ratio = float(
                 quality.get("minimum_reference_valid_frame_ratio", 0.2)
             )

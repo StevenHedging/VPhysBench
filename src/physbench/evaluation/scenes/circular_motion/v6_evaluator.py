@@ -21,9 +21,11 @@ from ...common.base import ReferenceCaseEvaluator, SceneAnalysis
 from ...common.csti import build_csti_input_from_aligned_masks
 from ...common.entities import (
     ExpectedPositionSample,
+    ObjectTrack,
     ObjectCentricComparisonV2,
     PositionEvidence,
     ReferenceCapability,
+    VisibilityState,
     build_common_time_grid,
     compose_object_centric_v2,
     materialize_entity_manifest,
@@ -31,6 +33,7 @@ from ...common.entities import (
     safe_compare_open_world_v2,
 )
 from ...common.errors import ReferenceAnalysisError
+from ...common.frozen_reference import load_frozen_reference_observation
 from ...common.masks.quality import observed_mask_iou, summarize_mask_ious
 from ...common.subject import (
     SubjectComparison,
@@ -42,6 +45,7 @@ from ...common.subject import (
 from ...contracts import CaseEvaluationRequest
 from .open_world import (
     CircularOpenWorldObservation,
+    FrozenCircularReference,
     empty_open_world_observation,
     freeze_circular_apparatus,
     freeze_reference_identities,
@@ -53,6 +57,98 @@ from .open_world import (
     reference_instance_tracks,
     score_open_world_orbits,
 )
+
+
+def _reference_from_frozen_observation(
+    frozen,
+    *,
+    entities,
+    apparatus,
+    reference_frames: Sequence[np.ndarray],
+    time_grid,
+) -> FrozenCircularReference:
+    if apparatus is None:
+        raise ValueError("frozen circular reference requires apparatus geometry")
+    ordered = list(entities)
+    tracks = []
+    instance_masks = []
+    anchors = []
+    source_ids = []
+    center = np.asarray(apparatus.center_xy, dtype=np.float64)
+    radius = max(float(apparatus.radius_px), 1e-6)
+    for entity in ordered:
+        value = frozen.entities[entity.entity_id]
+        if not bool(np.all(value.visible)):
+            raise ValueError(
+                f"frozen circular entity {entity.entity_id} is not visible "
+                "throughout the evaluation timeline"
+            )
+        actual_xy = np.asarray(value.centroid_xy, dtype=np.float64)
+        normalized_xy = (actual_xy - center) / radius
+        canonical_xy = normalized_xy * 100.0
+        normalized_area = (
+            np.asarray(value.area_pixels, dtype=np.float64)
+            * (100.0 / radius) ** 2
+        )
+        observed = np.ones(len(reference_frames), dtype=bool)
+        track_id = f"reference:{entity.entity_id}"
+        tracks.append(
+            ObjectTrack(
+                track_id=track_id,
+                matched_entity_id=entity.entity_id,
+                xy=canonical_xy,
+                observed=observed,
+                visibility=tuple(
+                    VisibilityState.VISIBLE for _ in reference_frames
+                ),
+                areas_px2=normalized_area,
+                confidence=np.ones(len(reference_frames), dtype=np.float64),
+                existence_observed=observed,
+                localization_eligible=observed,
+                association_eligible=observed,
+                time_weights_s=time_grid.cell_weights_s,
+                metadata={
+                    "entity_class": "orbiter",
+                    "source_track_id": track_id,
+                    "lifecycle": entity.lifecycle.value,
+                    "frozen_reference_policy": frozen.policy,
+                },
+            )
+        )
+        mask_zero = np.asarray(value.masks[0]) > 0
+        lab_zero = cv2.cvtColor(reference_frames[0], cv2.COLOR_BGR2LAB)
+        mean_lab = (
+            np.mean(lab_zero[mask_zero], axis=0).astype(float).tolist()
+        )
+        initial_xy = normalized_xy[0]
+        anchors.append(
+            {
+                "entity_id": entity.entity_id,
+                "appearance_label": entity.condition_anchor.get(
+                    "appearance_label"
+                ),
+                "track_id": track_id,
+                "normalized_orbit_radius": float(
+                    np.linalg.norm(initial_xy)
+                ),
+                "initial_phase_rad": float(
+                    math.atan2(initial_xy[1], initial_xy[0])
+                ),
+                "mean_lab": mean_lab,
+                "first_frame": 0,
+                "observed_frames": len(reference_frames),
+                "evidence_tier": "participant",
+            }
+        )
+        instance_masks.append(tuple(value.masks))
+        source_ids.append(track_id)
+    return FrozenCircularReference(
+        tracks=tuple(tracks),
+        entity_ids=tuple(entity.entity_id for entity in ordered),
+        source_track_ids=tuple(source_ids),
+        instance_masks=tuple(instance_masks),
+        anchors=tuple(anchors),
+    )
 
 
 class CircularMotionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
@@ -155,40 +251,95 @@ class CircularMotionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                     is ReferenceCapability.SAME_CASE_GT
                 ):
                     prediction_apparatus = reference_apparatus
-            reference_observation = observe_circular_objects(
-                reference_video.frames,
-                time_grid=time_grid,
-                config=observation_config,
-                apparatus_anchor=reference_apparatus,
-            )
-            minimum_disk_ratio = float(
-                observation_config.get(
-                    "open_world_minimum_reference_disk_valid_ratio", 0.8
+            if self.config.get("reference_observation_policy") == (
+                "frozen_dataset_reference_observation_v1"
+            ):
+                frozen_observation = load_frozen_reference_observation(
+                    request,
+                    times_s=times_s,
+                    spatial_transform=reference_video.spatial_transform,
+                    expected_entity_ids=[
+                        entity.entity_id for entity in entities
+                    ],
                 )
-            )
-            if (
-                float(
+                frozen_reference = _reference_from_frozen_observation(
+                    frozen_observation,
+                    entities=entities,
+                    apparatus=reference_apparatus,
+                    reference_frames=reference_video.frames,
+                    time_grid=time_grid,
+                )
+                reference_tracks = reference_instance_tracks(
+                    frozen_reference
+                )
+                reference_union = tuple(reference_tracks.union_masks)
+                reference_observation = CircularOpenWorldObservation(
+                    objects=empty_open_world_observation(
+                        len(times_s),
+                        code="frozen_reference_not_prediction_observation",
+                        reason="reference identities come from Dataset V14",
+                    ),
+                    disk_centers_xy=np.repeat(
+                        np.asarray(reference_apparatus.center_xy)[None, :],
+                        len(times_s),
+                        axis=0,
+                    ),
+                    disk_radii_px=np.full(
+                        len(times_s),
+                        float(reference_apparatus.radius_px),
+                        dtype=np.float64,
+                    ),
+                    union_masks=reference_union,
+                    disk_masks=tuple(
+                        np.asarray(reference_apparatus.disk_mask)
+                        for _ in times_s
+                    ),
+                    candidate_counts=np.full(
+                        len(times_s),
+                        len(entities),
+                        dtype=np.int64,
+                    ),
+                    diagnostics={
+                        **dict(frozen_observation.provenance),
+                        "disk_valid_frame_ratio": 1.0,
+                    },
+                )
+            else:
+                reference_observation = observe_circular_objects(
+                    reference_video.frames,
+                    time_grid=time_grid,
+                    config=observation_config,
+                    apparatus_anchor=reference_apparatus,
+                )
+                minimum_disk_ratio = float(
+                    observation_config.get(
+                        "open_world_minimum_reference_disk_valid_ratio",
+                        0.8,
+                    )
+                )
+                if float(
                     reference_observation.diagnostics[
                         "disk_valid_frame_ratio"
                     ]
-                )
-                < minimum_disk_ratio
-            ):
-                raise ValueError(
-                    "reference rotating-platform coverage is below "
-                    f"{minimum_disk_ratio:g}"
-                )
-            frozen_reference = freeze_reference_identities(
-                reference_observation,
-                entities=entities,
-                time_grid=time_grid,
-                minimum_valid_ratio=float(
-                    observation_config.get(
-                        "open_world_minimum_reference_track_ratio", 0.5
+                ) < minimum_disk_ratio:
+                    raise ValueError(
+                        "reference rotating-platform coverage is below "
+                        f"{minimum_disk_ratio:g}"
                     )
-                ),
-            )
-            reference_tracks = reference_instance_tracks(frozen_reference)
+                frozen_reference = freeze_reference_identities(
+                    reference_observation,
+                    entities=entities,
+                    time_grid=time_grid,
+                    minimum_valid_ratio=float(
+                        observation_config.get(
+                            "open_world_minimum_reference_track_ratio",
+                            0.5,
+                        )
+                    ),
+                )
+                reference_tracks = reference_instance_tracks(
+                    frozen_reference
+                )
         except Exception as exc:
             raise ReferenceAnalysisError(
                 "reference_circular_open_world_observation_failed",

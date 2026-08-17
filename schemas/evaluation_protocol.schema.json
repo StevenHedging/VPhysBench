@@ -120,7 +120,18 @@
   "$defs": {
     "sceneBase": {
       "type": "object",
-      "required": ["type", "timeline", "spatial", "scoring"]
+      "required": [
+        "type",
+        "reference_observation_policy",
+        "timeline",
+        "spatial",
+        "scoring"
+      ],
+      "properties": {
+        "reference_observation_policy": {
+          "const": "frozen_dataset_reference_observation_v1"
+        }
+      }
     },
     "pendulum": {
       "allOf": [
@@ -174,6 +185,7 @@
           "required": [
             "type",
             "evaluator_contract",
+            "reference_observation_policy",
             "timeline",
             "spatial",
             "sam2",
@@ -188,6 +200,9 @@
           "properties": {
             "type": {"const": "vertical_spring_oscillator_v1"},
             "evaluator_contract": {"const": "robust_subject_v3"},
+            "reference_observation_policy": {
+              "const": "frozen_dataset_reference_observation_v1"
+            },
             "timeline": {
               "type": "object",
               "required": [

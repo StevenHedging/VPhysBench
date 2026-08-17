@@ -42,6 +42,7 @@ from ..common.base import ReferenceCaseEvaluator, SceneAnalysis
 from ..common.csti import CSTIInput, build_csti_input_from_aligned_masks
 from ..common.entities.timeline import CommonTimeGrid
 from ..common.errors import ReferenceAnalysisError, SceneAnalysisError
+from ..common.frozen_reference import load_frozen_reference_observation
 from ..common.geometry import AxisModel, fit_axis
 from ..common.masks.motion import build_motion_prompt, motion_masks
 from ..common.masks.quality import (
@@ -7793,10 +7794,27 @@ class RigidBodyOpenWorldCaseEvaluatorBase(ReferenceCaseEvaluator):
         time_grid = build_common_time_grid(times_s)
         quality = self.config["quality"]
         prediction_failures: list[dict[str, str]] = []
+        frozen_reference_policy = self.config.get(
+            "reference_observation_policy"
+        ) == "frozen_dataset_reference_observation_v1"
         try:
-            raw_reference_masks, reference_observation = (
-                self._reference_masks(reference_video.frames)
-            )
+            if frozen_reference_policy:
+                frozen_reference = load_frozen_reference_observation(
+                    request,
+                    times_s=times_s,
+                    spatial_transform=reference_video.spatial_transform,
+                    expected_entity_ids=[entity.entity_id],
+                )
+                raw_reference_masks = list(
+                    frozen_reference.entities[entity.entity_id].masks
+                )
+                reference_observation = dict(
+                    frozen_reference.provenance
+                )
+            else:
+                raw_reference_masks, reference_observation = (
+                    self._reference_masks(reference_video.frames)
+                )
             reference = build_rigid_body_reference(
                 raw_reference_masks,
                 entity_id=entity.entity_id,
@@ -7841,15 +7859,33 @@ class RigidBodyOpenWorldCaseEvaluatorBase(ReferenceCaseEvaluator):
                 request,
                 target_shape=reference_video.frames[0].shape,
             )
-        condition_mask, condition_prompt, condition_observation = (
-            self._condition_mask(
-                condition_frame,
-                reference_anchor_mask=reference.masks[0],
-                same_case_reference=(
-                    reference_mode == "same_case_reference"
+        if frozen_reference_policy:
+            condition_mask = np.asarray(reference.masks[0], dtype=np.uint8)
+            condition_prompt = _prompt_from_mask(
+                condition_mask,
+                frame_index=0,
+                box_expand=float(
+                    self.config["motion_proposal"]["box_expand"]
                 ),
+                minimum_box_side=int(
+                    self.config["motion_proposal"]["minimum_box_side"]
+                ),
+                source="frozen_dataset_reference_observation_v1",
             )
-        )
+            condition_observation = {
+                "policy": "frozen_dataset_reference_observation_v1",
+                "manifest_sha256": frozen_reference.manifest_sha256,
+            }
+        else:
+            condition_mask, condition_prompt, condition_observation = (
+                self._condition_mask(
+                    condition_frame,
+                    reference_anchor_mask=reference.masks[0],
+                    same_case_reference=(
+                        reference_mode == "same_case_reference"
+                    ),
+                )
+            )
         if (
             reference_mode == "same_case_reference"
             and str(

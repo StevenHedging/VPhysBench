@@ -17,6 +17,7 @@ from ...common.entities import (
     materialize_entity_manifest,
 )
 from ...common.errors import ReferenceAnalysisError, SceneAnalysisError
+from ...common.frozen_reference import load_frozen_reference_observation
 from ...common.frozen_subject import load_frozen_subject_anchor
 from ...common.masks.sam2 import Sam2VideoSegmenter
 from ...common.subject import (
@@ -273,9 +274,11 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
     def describe_observation(self) -> dict[str, Any]:
         return {
             "subject": "frozen_dataset_steel_ball_identity",
-            "segmentation": "condition_causal_sam2_video_tube",
+            "segmentation": (
+                "frozen_dataset_reference_tube_and_prediction_sam2_tube"
+            ),
             "reference_prediction_symmetry": (
-                "independent_segmentation_with_exact_sample_reuse"
+                "frozen_reference_with_independent_prediction_segmentation"
             ),
             "dynamics": "shared_timeline_vertical_spring_trace_no_warping",
             "topology": "current_ball_corridor_connected_edge_support",
@@ -491,10 +494,26 @@ class VerticalSpringOscillatorCaseEvaluator(ReferenceCaseEvaluator):
                 f"{type(exc).__name__}: {exc}",
             ) from exc
 
-        raw_reference_masks, reference_segmentation = self._segment_reference(
-            reference_video.frames,
-            prompt=prompt,
-        )
+        if self.config.get("reference_observation_policy") == (
+            "frozen_dataset_reference_observation_v1"
+        ):
+            frozen_reference = load_frozen_reference_observation(
+                request,
+                times_s=times_s,
+                spatial_transform=reference_video.spatial_transform,
+                expected_entity_ids=[entity.entity_id],
+            )
+            raw_reference_masks = list(
+                frozen_reference.entities[entity.entity_id].masks
+            )
+            reference_segmentation = dict(frozen_reference.provenance)
+        else:
+            raw_reference_masks, reference_segmentation = (
+                self._segment_reference(
+                    reference_video.frames,
+                    prompt=prompt,
+                )
+            )
         exact_reuse = _exact_sampled_frames(
             reference_video.frames,
             prediction_video.frames,
