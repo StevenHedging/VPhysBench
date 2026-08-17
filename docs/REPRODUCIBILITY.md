@@ -5,7 +5,7 @@ A reproducible VPhysBench result needs all of the following identities:
 1. `git rev-parse HEAD` from the benchmark checkout.
 2. Dataset repository and exact 40-character revision from
    `datasets/huggingface.json`.
-3. Dataset ID and release from `datasets/releases/13.0.0/dataset.json`.
+3. Dataset ID and release from `datasets/releases/14.0.0/dataset.json`.
 4. Official Task file and digest.
 5. Evaluation protocol ID and component fingerprints.
 6. Baseline bundle and deployment digests from `baseline validate`.

@@ -27,7 +27,7 @@ test-evaluation:
 
 data-test:
 	PYTHONPATH=src:tests:. python3 -m physbench validate-dataset \
-		--dataset datasets/releases/13.0.0/dataset.json --check-assets
+		--dataset datasets/releases/14.0.0/dataset.json --check-assets
 
 smoke: smoke-interface
 
@@ -41,7 +41,7 @@ smoke-data:
 	PYTHONPATH=src python3 -m physbench baseline init smoke_submission \
 		--backend submission --root "$$smoke_root/baselines" >/dev/null; \
 	PYTHONPATH=src python3 -m physbench atomic-run \
-		--dataset datasets/releases/13.0.0/dataset.json \
+		--dataset datasets/releases/14.0.0/dataset.json \
 		--task tasks/official/six_scene_direct_eval_v1.json \
 		--baseline "$$smoke_root/baselines/smoke_submission" \
 		--case-id circular_r1_silver02cm_img_0370 \

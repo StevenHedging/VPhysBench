@@ -93,6 +93,8 @@ physbench baseline validate my_model
 
 Validation freezes the bundle and deployment digests. Changing a descriptor,
 driver, local deployment, or fingerprinted dependency changes the identity.
+It validates the bundle contract; the one-case run below is the executable and
+checkpoint readiness check.
 
 ## Test the protocol before loading a real model
 
@@ -108,7 +110,7 @@ as a reported result.
 
 ```bash
 physbench atomic-run \
-  --dataset datasets/releases/13.0.0/dataset.json \
+  --dataset datasets/releases/14.0.0/dataset.json \
   --task tasks/official/six_scene_direct_eval_v1.json \
   --baseline baselines/my_model \
   --case-id circular_r1_silver02cm_img_0370 \

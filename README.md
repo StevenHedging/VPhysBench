@@ -5,10 +5,10 @@ VPhysBench 是面向物理视频生成模型的训练与评测框架。日期分
 通用 Baseline 接口和运行时，但不集成任何具体生成算法、已注册 Baseline、模型配置、
 权重或运行结果。
 
-Dataset 14.0.0 包含 903 个 case、7 个场景。Task v1 定义两个可复现工作负载：
+Dataset 14.0.0 包含 916 个 case、7 个场景。Task v1 定义两个可复现工作负载：
 
-- `six_scene_direct_eval_v1`：直接评估六个计分场景的全部 762 个 case；
-- `six_scene_train_six_scene_eval_v1`：使用六场景 666 个训练 case，随后在六个
+- `six_scene_direct_eval_v1`：直接评估六个计分场景的全部 775 个 case；
+- `six_scene_train_six_scene_eval_v1`：使用六场景 679 个训练 case，随后在六个
   计分场景的 96 个留出 case 上评估。
 
 Dataset 中仍保留 `push_bottle` 的全部 127 个训练 case 和 14 个 test case，但两个
@@ -18,9 +18,10 @@ Dataset 中仍保留 `push_bottle` 的全部 127 个训练 case 和 14 个 test 
 
 ## 快速开始
 
-需要 Python 3.11、Git、ffmpeg/ffprobe，以及对私有 Hugging Face Dataset 的访问权。
+需要 Python 3.11、Git 和 ffmpeg/ffprobe。Dataset 在 Hugging Face 公开发布。
 `.[hub]` 只提供 Hub 下载和轻量接口；真实场景评测和 `atomic-run` 还需要
 `.[scene-evaluation]`。
+首次下载建议预留至少 40 GB 空间。
 
 ```bash
 python3.11 -m venv .venv
@@ -32,16 +33,14 @@ python -m pip install -e ".[hub]"
 physbench doctor --level metadata
 make smoke-interface
 
-hf auth login
 physbench dataset pull
 physbench baseline list
 ```
 
-`dataset pull` 只请求冻结 revision 中的 distribution v1 manifest 和 13 个
-校验分片，不再逐个解析数千个媒体文件。分片缓存在
-`datasets/.vphysbench/cache/<revision>/`；下载中断或遇到 Hub 限流后直接重跑即可，
-已通过 SHA-256 的分片会复用。全部分片、文件和 Dataset digest 验证完成前，
-正式 `datasets/assets/` 不会切换。
+`dataset pull` 只从 binding 锁定的 40 位 Hub commit 直接下载
+`assets/**`，并恢复到本地 `datasets/assets/`。下载中断或遇到 Hub
+限流后直接重跑即可，Hugging Face 会复用已完成的文件。命令结束前
+还会执行一次 Dataset 资产就绪检查。
 
 干净 checkout 中 `baseline list` 应输出空数组。创建自己的 I2V 接入：
 
@@ -54,7 +53,7 @@ Baseline 可以在自己的目录内实现训练和推理脚本，但不能重�
 种子或评分协议。基准先冻结 canonical plan，随后 Baseline 只负责适配、编译和执行。
 
 先运行一个 case。`atomic-run` 会执行真实 evaluator，因此在运行前安装 evaluator
-stack，并在下载完整私有 Dataset 后确认 evaluation readiness：
+stack，并在下载完整 Dataset 后确认 evaluation readiness：
 
 ```bash
 python -m pip install -e ".[scene-evaluation]"

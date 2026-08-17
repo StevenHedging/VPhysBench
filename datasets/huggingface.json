@@ -3,7 +3,8 @@
   "provider": "huggingface",
   "repo_type": "dataset",
   "repo_id": "StevenHedging/VPhysData",
-  "revision": "8070661e8ec148d8d710d1ce2522ff49998a67d0",
+  "revision": "ab08b334905d90495e3f9f218740dc28d406dad5",
   "dataset_id": "physics_video_seven_scene_v14",
-  "release": "14.0.0"
+  "release": "14.0.0",
+  "delivery": "direct_assets_v1"
 }

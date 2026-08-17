@@ -12,15 +12,16 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class HuggingFaceDatasetBindingTests(unittest.TestCase):
-    def test_current_binding_targets_v13_with_an_immutable_revision(self) -> None:
+    def test_current_binding_targets_v14_direct_assets_at_immutable_revision(self) -> None:
         binding = load_huggingface_dataset_binding(
             ROOT / "datasets" / "huggingface.json",
-            dataset_path=ROOT / "datasets" / "releases" / "13.0.0" / "dataset.json",
+            dataset_path=ROOT / "datasets" / "releases" / "14.0.0" / "dataset.json",
         )
 
-        self.assertEqual("StevenHedging/VPhysBench", binding.repo_id)
-        self.assertEqual("physics_video_seven_scene_v13", binding.dataset_id)
-        self.assertEqual("13.0.0", binding.release)
+        self.assertEqual("StevenHedging/VPhysData", binding.repo_id)
+        self.assertEqual("physics_video_seven_scene_v14", binding.dataset_id)
+        self.assertEqual("14.0.0", binding.release)
+        self.assertEqual("direct_assets_v1", binding.delivery)
         self.assertRegex(binding.revision, r"^[0-9a-f]{40}$")
 
     def test_binding_rejects_embedded_credentials(self) -> None:

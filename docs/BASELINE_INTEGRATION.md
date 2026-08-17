@@ -30,7 +30,7 @@ video.
 ### Managed V2V
 
 The interface is reserved, but official managed V2V is **not supported** by
-Dataset 13.0.0. Its Cases do not contain an independently authorized **cropped conditioning-prefix video**. A **reference video**, source video,
+Dataset 14.0.0. Its Cases do not contain an independently authorized **cropped conditioning-prefix video**. A **reference video**, source video,
 physics-reference video, or evaluator asset **must not** be substituted or
 cropped to manufacture that input. A future Dataset release may enable the
 existing `--backend managed-v2v` interface by publishing a distinct input

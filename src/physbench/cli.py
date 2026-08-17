@@ -357,10 +357,7 @@ def build_parser() -> argparse.ArgumentParser:
     dataset_pull.add_argument(
         "--skip-asset-check",
         action="store_true",
-        help=(
-            "prefetch and fully validate assets in staging without publishing "
-            "them as active"
-        ),
+        help="download without the final Dataset asset readiness check",
     )
     dataset_pull.set_defaults(func=_dataset_pull)
 

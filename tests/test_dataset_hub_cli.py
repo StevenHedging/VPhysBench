@@ -288,6 +288,56 @@ class DatasetHubTests(unittest.TestCase):
             descriptor,
         )
 
+    def test_pull_direct_assets_downloads_expanded_tree_at_bound_revision(self) -> None:
+        root = self.make_project()
+        binding_path = root / "datasets" / "huggingface.json"
+        binding = json.loads(binding_path.read_text(encoding="utf-8"))
+        binding["delivery"] = "direct_assets_v1"
+        binding_path.write_text(json.dumps(binding), encoding="utf-8")
+        remote = root / "remote"
+        for name, payload in self.asset_contents().items():
+            target = remote / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(payload)
+        commands: list[list[str]] = []
+
+        def direct_runner(command: list[str], **_: object) -> SimpleNamespace:
+            commands.append(command)
+            local_dir = Path(command[command.index("--local-dir") + 1])
+            shutil.copytree(remote / "assets", local_dir / "assets", dirs_exist_ok=True)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        descriptor = pull_dataset(
+            binding_path,
+            local_dir=root / "datasets",
+            hf_executable="/tools/hf",
+            runner=direct_runner,
+            check_assets=True,
+        )
+
+        self.assertEqual([
+            "/tools/hf",
+            "download",
+            "StevenHedging/VPhysBench",
+            "--repo-type",
+            "dataset",
+            "--revision",
+            REVISION,
+            "--include",
+            "assets/**",
+            "--local-dir",
+            str((root / "datasets").resolve()),
+        ], commands[0])
+        self.assertEqual(1, len(commands))
+        self.assertEqual(
+            b"verified Dataset media",
+            (root / "datasets" / "assets" / "example" / "video.bin").read_bytes(),
+        )
+        self.assertEqual(
+            root / "datasets" / "releases" / "13.0.0" / "dataset.json",
+            descriptor,
+        )
+
     def test_pull_reuses_a_valid_revision_specific_cached_shard(self) -> None:
         root = self.make_project()
         remote, _ = self.make_distribution(root)

@@ -9,7 +9,7 @@ make smoke-interface
 make release-check
 ```
 
-After downloading the complete private Dataset:
+After downloading the complete Dataset:
 
 ```bash
 physbench doctor --level evaluation

@@ -30,34 +30,30 @@ The interface smoke creates a baseline bundle and a video in a temporary
 directory. It does not register a baseline in the repository and does not
 produce a meaningful benchmark score.
 
-## 2. Authenticate and download Dataset 13.0.0
+## 2. Download Dataset 14.0.0
 
-Ask the Dataset owner to grant your Hugging Face account access, then run:
+The Dataset repository is public. Download its immutable bound revision:
 
 ```bash
-hf auth login
 physbench dataset pull
 ```
 
 The command reads `datasets/huggingface.json`. It always passes the bound
 40-character Hub commit to `hf download`; it never resolves the floating
-`main` branch. Credentials remain in the user-level Hugging Face cache and
-must not be placed in repository files.
+`main` branch. Authentication is optional for public downloads. If used for
+higher rate limits, credentials remain in the user-level Hugging Face cache
+and must not be placed in repository files.
 
-The bound revision exposes distribution v1: one manifest and a bounded set of
-stored ZIP shards. The downloader requests those filenames explicitly,
-validates the manifest identity, verifies every archive and file SHA-256, and
-extracts only declared regular files beneath `assets/`. It validates the
-complete staged Dataset and its digest before replacing the active asset tree.
+The bound revision exposes the complete expanded `assets/` tree. The downloader
+requests `assets/**` from that exact commit and writes it beneath the local
+`datasets/assets/` directory. Reserve at least 40 GB of free disk space for the
+first pull.
 
-Downloads are resumable. Revision-specific archives and staging data remain
-under `datasets/.vphysbench/` after a recoverable interruption. Rerun the same
-command to reuse every shard whose size and SHA-256 already match. The
-directory is ignored by Git; do not copy it into a release archive.
+Downloads are resumable. After a recoverable interruption, rerun the same
+command and Hugging Face will reuse completed files.
 
-`--skip-asset-check` is intentionally prefetch-only: it still verifies the
-staged distribution and Dataset digest, but it does not publish staged files
-as the active `datasets/assets/` tree.
+`--skip-asset-check` downloads the same assets but skips the final Dataset
+readiness check.
 
 `doctor --level metadata` reports missing media as a warning.
 
@@ -77,12 +73,13 @@ Run the evaluation-level doctor again after installation.
 ```bash
 physbench doctor --level evaluation
 physbench validate-dataset \
-  --dataset datasets/releases/13.0.0/dataset.json \
+  --dataset datasets/releases/14.0.0/dataset.json \
   --check-assets
 ```
 
-`doctor --level evaluation` treats missing media or evaluator requirements as
-an error.
+`doctor --level evaluation` treats missing Dataset media as an error. The
+first real one-case run also verifies evaluator imports, CUDA availability and
+SAM 2 model access for that scene.
 
 ## 4. Create a custom baseline
 
@@ -106,7 +103,7 @@ passes the evaluation-level doctor before running it:
 
 ```bash
 physbench atomic-run \
-  --dataset datasets/releases/13.0.0/dataset.json \
+  --dataset datasets/releases/14.0.0/dataset.json \
   --task tasks/official/six_scene_direct_eval_v1.json \
   --baseline baselines/my_model \
   --case-id circular_r1_silver02cm_img_0370 \
@@ -129,13 +126,10 @@ the full official Task.
 ## Failure checklist
 
 - `hf` unavailable: install `.[hub]` and reopen the environment.
-- Dataset denied: confirm `hf auth login` and private-repository membership.
+- Dataset denied: confirm that the frozen public Hub revision is reachable.
 - Hub rate limit or interrupted transport: wait if necessary, then rerun the
-  same pull; verified revision-specific shards are retained.
-- Disk-space error: free space for both downloaded archives and staged
-  extraction before retrying.
-- Checksum or unsafe-archive error: do not bypass validation; preserve the
-  diagnostic and contact the Dataset owner.
+  same pull; completed files are reused.
+- Disk-space error: free space for the expanded assets before retrying.
 - Missing assets: rerun `physbench dataset pull`; do not change the revision.
 - Baseline schema error: run `physbench baseline validate <id>`.
 - Video rejection: inspect the sealed media contract and baseline log.

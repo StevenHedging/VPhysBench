@@ -9,7 +9,7 @@ does not need to run inside VPhysBench.
 physbench baseline init my_submission --backend submission
 
 physbench task-build \
-  --dataset datasets/releases/13.0.0/dataset.json \
+  --dataset datasets/releases/14.0.0/dataset.json \
   --task tasks/official/six_scene_direct_eval_v1.json \
   --baseline baselines/my_submission \
   --output submission_task_instance.json
@@ -45,7 +45,7 @@ Save it as `baselines/my_submission/baseline.local.json`, then run:
 physbench baseline validate my_submission
 
 physbench atomic-run \
-  --dataset datasets/releases/13.0.0/dataset.json \
+  --dataset datasets/releases/14.0.0/dataset.json \
   --task tasks/official/six_scene_direct_eval_v1.json \
   --baseline baselines/my_submission \
   --run-id imported_submission \

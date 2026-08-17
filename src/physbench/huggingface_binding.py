@@ -14,7 +14,9 @@ _FIELDS = {
     "revision",
     "dataset_id",
     "release",
+    "delivery",
 }
+_REQUIRED_FIELDS = _FIELDS - {"delivery"}
 _COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 
@@ -24,6 +26,7 @@ class HuggingFaceDatasetBinding:
     revision: str
     dataset_id: str
     release: str
+    delivery: str = "distribution_v1"
 
 
 def load_huggingface_dataset_binding(
@@ -39,7 +42,7 @@ def load_huggingface_dataset_binding(
     unknown = sorted(set(value) - _FIELDS)
     if unknown:
         raise ValueError(f"Hugging Face Dataset binding has unknown fields: {unknown}")
-    missing = sorted(_FIELDS - set(value))
+    missing = sorted(_REQUIRED_FIELDS - set(value))
     if missing:
         raise ValueError(f"Hugging Face Dataset binding is missing fields: {missing}")
 
@@ -66,6 +69,9 @@ def load_huggingface_dataset_binding(
         raise ValueError("Hugging Face Dataset binding requires a dataset_id")
     if not isinstance(release, str) or not release:
         raise ValueError("Hugging Face Dataset binding requires a release")
+    delivery = value.get("delivery", "distribution_v1")
+    if delivery not in {"distribution_v1", "direct_assets_v1"}:
+        raise ValueError("Hugging Face Dataset binding has an invalid delivery")
 
     if dataset_path is not None:
         dataset = json.loads(Path(dataset_path).read_text(encoding="utf-8"))
@@ -79,4 +85,5 @@ def load_huggingface_dataset_binding(
         revision=revision,
         dataset_id=dataset_id,
         release=release,
+        delivery=delivery,
     )

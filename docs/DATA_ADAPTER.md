@@ -223,7 +223,7 @@ V2V 模型中的输入角色，不是“是否注入结构化物理信息”的 
 独立资产（默认 `assets.input_video`）或经审计的 derived artifact；禁止绑定
 reference、physics reference 或 source video，也会检查内容 digest 别名。
 
-Dataset 13.0.0 的 916 个 Case 当前都没有 `assets.input_video`，也没有独立裁剪并授权的
+Dataset 14.0.0 的 916 个 Case 当前都没有 `assets.input_video`，也没有独立裁剪并授权的
 条件前缀视频。因此 managed V2V 只是预留接口，不能用于当前官方 Task；DataAdapter 不会
 从 reference/source/physics-reference video 临时裁剪或推导该输入。
 

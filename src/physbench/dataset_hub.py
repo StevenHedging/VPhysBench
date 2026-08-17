@@ -390,6 +390,48 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _download_direct_assets(
+    *,
+    executable: str,
+    repo_id: str,
+    revision: str,
+    destination: Path,
+    runner: Runner,
+) -> None:
+    command = [
+        executable,
+        "download",
+        repo_id,
+        "--repo-type",
+        "dataset",
+        "--revision",
+        revision,
+        "--include",
+        "assets/**",
+        "--local-dir",
+        str(destination),
+    ]
+    try:
+        completed = runner(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        raise RuntimeError(
+            f"could not start Hugging Face Dataset asset download: {exc}"
+        ) from exc
+    return_code = int(getattr(completed, "returncode", 1))
+    if return_code != 0:
+        stderr = str(getattr(completed, "stderr", "") or "").strip()
+        detail = f": {stderr}" if stderr else ""
+        raise RuntimeError(
+            "Hugging Face Dataset asset download failed "
+            f"(exit code {return_code}){detail}"
+        )
+
+
 def _cached_shard_is_valid(path: Path, shard: DistributionShard) -> bool:
     try:
         return (
@@ -647,6 +689,22 @@ def pull_dataset(
             "and run `hf auth login`"
         )
     destination.mkdir(parents=True, exist_ok=True)
+    if binding.delivery == "direct_assets_v1":
+        _download_direct_assets(
+            executable=executable,
+            repo_id=binding.repo_id,
+            revision=binding.revision,
+            destination=destination,
+            runner=runner,
+        )
+        if check_assets:
+            try:
+                load_dataset(descriptor, check_assets=True)
+            except (FileNotFoundError, ValueError) as exc:
+                raise RuntimeError(
+                    f"downloaded Dataset assets are incomplete: {exc}"
+                ) from exc
+        return descriptor
     cache_root = destination / ".vphysbench" / "cache" / binding.revision
     staging_parent = (
         destination / ".vphysbench" / "staging" / binding.revision

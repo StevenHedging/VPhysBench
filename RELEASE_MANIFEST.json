@@ -4,7 +4,7 @@
   "source_commit": "ddb4e4f17b689c55b9b6ec634b708ac6907a27a0",
   "dataset": {
     "repo_id": "StevenHedging/VPhysData",
-    "revision": "8070661e8ec148d8d710d1ce2522ff49998a67d0",
+    "revision": "ab08b334905d90495e3f9f218740dc28d406dad5",
     "dataset_id": "physics_video_seven_scene_v14",
     "release": "14.0.0"
   },
@@ -17,10 +17,10 @@
   "task_counts": {
     "six_scene_direct_eval_v1": {
       "training_cases": 0,
-      "evaluation_jobs": 762
+      "evaluation_jobs": 775
     },
     "six_scene_train_six_scene_eval_v1": {
-      "training_cases": 666,
+      "training_cases": 679,
       "evaluation_jobs": 96
     }
   },
