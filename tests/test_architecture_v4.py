@@ -77,9 +77,9 @@ class ArchitectureV4Tests(unittest.TestCase):
             self.assertTrue(flat_physics_quantities(case))
             self.assertFalse(_contains_key(case, "conditioning"))
 
-    def test_dataset_release_does_not_use_an_asset_lock(self) -> None:
-        self.assertIsNone(self.dataset.asset_lock)
-        self.assertEqual("13.0.0", self.dataset.descriptor["release"])
+    def test_v14_dataset_release_seals_its_assets(self) -> None:
+        self.assertIsNotNone(self.dataset.asset_lock)
+        self.assertEqual("14.0.0", self.dataset.descriptor["release"])
 
     def test_tasks_and_canonical_plans_are_model_agnostic(self) -> None:
         for path in (DIRECT_TASK, FINETUNE_TASK):

@@ -407,7 +407,7 @@ def plan_atomic_task(task: TaskSpec, dataset: DatasetSnapshot) -> AtomicPlan:
     _validate_task_document(task.value)
     task_schema = task.value["schema_version"]
     dataset_schema = dataset.descriptor["schema_version"]
-    if dataset_schema not in {"3.0", "4.0", "5.0"}:
+    if dataset_schema not in {"3.0", "4.0", "5.0", "6.0"}:
         raise ValueError(
             f"task schema {task_schema} is incompatible with dataset schema "
             f"{dataset_schema}"

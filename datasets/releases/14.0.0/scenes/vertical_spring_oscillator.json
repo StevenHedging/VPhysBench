@@ -1,0 +1,56 @@
+{
+  "constraints": [
+    "Canonical frame zero is the first post-cycle return to the release-side turning point",
+    "The source tail is retained without spatial or temporal cropping"
+  ],
+  "display_name": "竖直弹簧振子",
+  "generalization_factors": [
+    {
+      "category": "physical_parameter",
+      "name": "initial_displacement",
+      "source": "physics.objects.object_1.initial_displacement"
+    },
+    {
+      "category": "interaction_structure",
+      "name": "release_side",
+      "source": "appearance.release_side"
+    },
+    {
+      "category": "acquisition",
+      "name": "capture_session",
+      "source": "appearance.capture_session"
+    }
+  ],
+  "metric_spec": {
+    "common_sense_checks": [
+      "continuous vertical oscillation",
+      "fixed upper support",
+      "periodic return through the equilibrium region",
+      "no spontaneous topology change"
+    ],
+    "prediction_quantities": [
+      "vertical trajectory",
+      "oscillation period",
+      "amplitude decay"
+    ],
+    "prediction_subjects": [
+      "steel_ball",
+      "spring"
+    ],
+    "visual_attributes": [
+      "ball integrity",
+      "spring attachment",
+      "support stability"
+    ]
+  },
+  "scene_id": "vertical_spring_oscillator",
+  "schema_version": "2.0",
+  "structured_physics_parameters": [
+    "environment.gravity_acceleration",
+    "environment.natural_spring_length",
+    "environment.spring_stiffness",
+    "objects.object_1.initial_displacement",
+    "objects.object_1.mass",
+    "objects.object_1.radius"
+  ]
+}

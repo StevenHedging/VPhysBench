@@ -1,0 +1,54 @@
+{
+  "constraints": [
+    "The ball must leave the launcher horizontally",
+    "The camera and launch frame remain stationary",
+    "The visible trajectory must curve downward under gravity"
+  ],
+  "display_name": "平抛运动",
+  "generalization_factors": [
+    {
+      "category": "environment",
+      "name": "background",
+      "source": "appearance.background"
+    },
+    {
+      "category": "physical_parameter",
+      "name": "ball_size",
+      "source": "physics.objects.object_1.radius"
+    },
+    {
+      "category": "object_composition",
+      "name": "ball_material",
+      "source": "appearance.ball_material"
+    }
+  ],
+  "metric_spec": {
+    "common_sense_checks": [
+      "horizontal launch precedes downward acceleration",
+      "trajectory is continuous and approximately parabolic",
+      "ball size and identity remain stable"
+    ],
+    "prediction_quantities": [
+      "horizontal displacement",
+      "vertical displacement",
+      "horizontal velocity consistency",
+      "gravity trajectory residual"
+    ],
+    "prediction_subjects": [
+      "projectile_ball"
+    ],
+    "visual_attributes": [
+      "ball material",
+      "background consistency",
+      "camera stability"
+    ]
+  },
+  "scene_id": "parabolic_motion",
+  "schema_version": "2.0",
+  "structured_physics_parameters": [
+    "objects.object_1.initial_horizontal_velocity",
+    "objects.object_1.launch_height",
+    "objects.object_1.mass",
+    "objects.object_1.radius"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "asset_lock": "assets.lock.json",
+  "asset_root": "../..",
+  "cases": "cases.jsonl",
+  "dataset_id": "physics_video_seven_scene_v14",
+  "exclusions": {
+    "path": "exclusions.json",
+    "sha256": "f8e95594c4b98c18ac6bd971120268a3f3d75a6dc4cae4109e703d899cdaa554",
+    "size_bytes": 4740
+  },
+  "release": "14.0.0",
+  "scene_catalog": "scenes",
+  "schema_version": "6.0",
+  "views": {
+    "view_a": "views/view_a.json",
+    "view_b": "views/view_b.json"
+  }
+}

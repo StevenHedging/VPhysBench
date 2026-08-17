@@ -1,0 +1,123 @@
+{
+  "cases": [
+    {
+      "case_id": "collision_r2_small_steel_small_steel_small_steel_v07845",
+      "notes": "Manual contact-sheet review confirmed an unstable sparse first-object trajectory that does not share the physical rail.",
+      "reason_codes": [
+        "collision_rail_residual"
+      ],
+      "scene_id": "collision_1d"
+    },
+    {
+      "case_id": "collision_supp_20260729_img_0937_two_ball_single_incident",
+      "notes": "The first body is visible only at the start and lacks an independently corroborated trajectory.",
+      "reason_codes": [
+        "collision_forward_backward_disagreement"
+      ],
+      "scene_id": "collision_1d"
+    },
+    {
+      "case_id": "collision_supp_20260729_img_1027_two_ball_single_incident",
+      "notes": "Anchor recovery selected the launcher fixture instead of the two collision bodies.",
+      "reason_codes": [
+        "collision_area_anchor_ratio",
+        "wrong_anchor_identity"
+      ],
+      "scene_id": "collision_1d"
+    },
+    {
+      "case_id": "collision_supp_20260729_img_1101_two_ball_single_incident",
+      "notes": "Only one body is tracked reliably; the second anchor and mask tube are not physically credible.",
+      "reason_codes": [
+        "collision_area_anchor_ratio",
+        "incomplete_multi_object_track"
+      ],
+      "scene_id": "collision_1d"
+    },
+    {
+      "case_id": "collision_supp_20260729_img_1108_two_ball_single_incident",
+      "notes": "The second body has only a short sparse track and fails the shared-rail consistency check.",
+      "reason_codes": [
+        "collision_rail_residual",
+        "incomplete_multi_object_track"
+      ],
+      "scene_id": "collision_1d"
+    },
+    {
+      "case_id": "collision_supp_20260729_img_1145_two_ball_opposed_incident",
+      "notes": "One body is missing after the first frame, so the opposed collision cannot be evaluated reliably.",
+      "reason_codes": [
+        "collision_forward_backward_coverage",
+        "incomplete_multi_object_track"
+      ],
+      "scene_id": "collision_1d"
+    },
+    {
+      "case_id": "collision_supp_20260729_img_1167_two_ball_opposed_incident",
+      "notes": "Both reviewed anchors land on non-body image structures and no reliable trajectories remain.",
+      "reason_codes": [
+        "collision_forward_backward_disagreement",
+        "wrong_anchor_identity"
+      ],
+      "scene_id": "collision_1d"
+    },
+    {
+      "case_id": "collision_supp_20260729_img_1178_two_ball_single_incident",
+      "notes": "The recovered masks attach to rail fixtures and produce sparse, non-physical trajectories.",
+      "reason_codes": [
+        "collision_rail_residual",
+        "wrong_anchor_identity"
+      ],
+      "scene_id": "collision_1d"
+    },
+    {
+      "case_id": "collision_supp_20260729_img_1185_two_ball_single_incident",
+      "notes": "Only the small body remains tracked; the large-body observation is absent and not independently corroborated.",
+      "reason_codes": [
+        "collision_rail_residual",
+        "collision_forward_backward_disagreement",
+        "incomplete_multi_object_track"
+      ],
+      "scene_id": "collision_1d"
+    },
+    {
+      "case_id": "collision_supp_20260729_img_1192_two_ball_single_incident",
+      "notes": "The large body is not tracked, leaving an incomplete two-body collision observation.",
+      "reason_codes": [
+        "collision_forward_backward_disagreement",
+        "incomplete_multi_object_track"
+      ],
+      "scene_id": "collision_1d"
+    },
+    {
+      "case_id": "collision_supp_20260729_img_1196_two_ball_single_incident",
+      "notes": "Both body tracks disappear after the anchor frame and a late false reacquisition is visible.",
+      "reason_codes": [
+        "collision_rail_residual",
+        "incomplete_multi_object_track"
+      ],
+      "scene_id": "collision_1d"
+    },
+    {
+      "case_id": "collision_supp_20260729_img_1199_two_ball_single_incident",
+      "notes": "The large body is absent from the propagated observation, so the collision pair is incomplete.",
+      "reason_codes": [
+        "collision_forward_backward_coverage",
+        "incomplete_multi_object_track"
+      ],
+      "scene_id": "collision_1d"
+    },
+    {
+      "case_id": "collision_supp_20260729_img_1207_two_ball_single_incident",
+      "notes": "Both identities are visible, but the large-body center oscillates vertically by nearly one radius and is not stable enough for frozen ground truth.",
+      "reason_codes": [
+        "collision_rail_residual",
+        "unstable_centroid_trajectory"
+      ],
+      "scene_id": "collision_1d"
+    }
+  ],
+  "exclusion_id": "collision_reference_observation_quality_v1",
+  "schema_version": "1.0",
+  "source_dataset_id": "physics_video_seven_scene_v13"
+}
