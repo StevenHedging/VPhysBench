@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import cv2
 import numpy as np
@@ -113,6 +114,36 @@ class ReferenceObservationCurationCliTests(unittest.TestCase):
             self.assertEqual(3, len(frames))
             self.assertLess(float(frames[0].mean()), float(frames[1].mean()))
             self.assertLess(float(frames[1].mean()), float(frames[2].mean()))
+
+    def test_audit_evidence_decode_does_not_depend_on_random_seek(self) -> None:
+        audit = _load_script("audit_v14.py")
+
+        class SequentialCapture:
+            def __init__(self, _path: str):
+                self.index = 0
+
+            def isOpened(self):
+                return True
+
+            def get(self, _property):
+                return 5
+
+            def set(self, _property, _value):
+                raise AssertionError("random seeking is not reliable")
+
+            def read(self):
+                if self.index == 5:
+                    return False, None
+                frame = np.full((8, 8, 3), self.index, np.uint8)
+                self.index += 1
+                return True, frame
+
+            def release(self):
+                return None
+
+        with patch.object(audit.cv2, "VideoCapture", SequentialCapture):
+            frames = audit._spaced_video_frames(Path("fixture.mp4"), count=3)
+        self.assertEqual([0, 2, 4], [int(frame[0, 0, 0]) for frame in frames])
 
 
 if __name__ == "__main__":

@@ -90,15 +90,20 @@ def _spaced_video_frames(path: Path, count: int = 5) -> list[np.ndarray]:
     if not capture.isOpened():
         raise ValueError(f"cannot decode video: {path}")
     frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
-    indices = np.linspace(0, max(0, frame_count - 1), count, dtype=int)
+    indices = tuple(
+        int(value) for value in np.linspace(0, max(0, frame_count - 1), count, dtype=int)
+    )
+    requested = set(indices)
     frames: list[np.ndarray] = []
     try:
-        for index in indices:
-            capture.set(cv2.CAP_PROP_POS_FRAMES, int(index))
+        index = 0
+        while index <= indices[-1]:
             okay, frame = capture.read()
             if not okay:
                 raise ValueError(f"cannot decode frame {index}: {path}")
-            frames.append(frame)
+            if index in requested:
+                frames.append(frame)
+            index += 1
     finally:
         capture.release()
     return frames
