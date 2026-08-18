@@ -1,5 +1,7 @@
 """Dataset-owned reference-observation audit and repair helpers."""
 
+from . import anchors, overrides, tracking
+
 from .catalog import (
     CurationCase,
     CurationEntity,
@@ -30,6 +32,7 @@ from .visualization import (
 )
 
 __all__ = [
+    "anchors",
     "CurationCase",
     "CurationEntity",
     "DiagnosticIssue",
@@ -52,4 +55,6 @@ __all__ = [
     "render_contact_sheet",
     "render_dense_event_sheet",
     "write_review_ledger",
+    "overrides",
+    "tracking",
 ]

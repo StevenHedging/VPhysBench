@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "model_id": "facebook/sam2.1-hiera-large",
+  "device": "cuda",
+  "exclusive_masks": true,
+  "gpu_shards": 8,
+  "anchor": {
+    "pixel_difference_threshold": 20,
+    "minimum_temporal_persistence": 0.6,
+    "minimum_component_pixels": 9
+  },
+  "review": {
+    "require_anchor_decision": true,
+    "require_full_tube_decision": true,
+    "accept_existing_approval": false
+  }
+}
