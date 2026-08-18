@@ -1,6 +1,6 @@
 """Dataset-owned reference-observation audit and repair helpers."""
 
-from . import anchors, overrides, tracking
+from . import anchors, bundle, install, overrides, tracking
 
 from .catalog import (
     CurationCase,
@@ -33,6 +33,7 @@ from .visualization import (
 
 __all__ = [
     "anchors",
+    "bundle",
     "CurationCase",
     "CurationEntity",
     "DiagnosticIssue",
@@ -49,6 +50,7 @@ __all__ = [
     "audit_visual_order",
     "fast_entity_diagnostics",
     "load_curation_cases",
+    "install",
     "pixel_entity_diagnostics",
     "read_review_ledger",
     "render_anchor_sheet",
