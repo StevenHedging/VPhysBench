@@ -1,4 +1,4 @@
-.PHONY: test test-interface test-evaluation data-test smoke smoke-interface smoke-data release-check release-archive-check
+.PHONY: test test-interface test-evaluation data-test smoke smoke-interface smoke-data release-check release-archive-check reference-observation-audit
 
 test: test-interface
 
@@ -53,3 +53,10 @@ release-check:
 
 release-archive-check:
 	PYTHONPATH=src:tests:. python3 scripts/verify_release_archive.py
+
+reference-observation-audit:
+	PYTHONPATH=src:tests:. python3 scripts/reference_observations/audit_v14.py \
+		--dataset datasets/releases/14.0.0/dataset.json \
+		--output .local/reference_observation_curation/full/diagnostics.jsonl \
+		--render-root .local/reference_observation_curation/full/review \
+		--no-install
