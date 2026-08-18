@@ -83,6 +83,9 @@ class ReferenceObservationCurationCliTests(unittest.TestCase):
 
     def test_audit_records_are_written_in_release_order(self) -> None:
         audit = _load_script("audit_v14.py")
+        self.assertEqual((0, 3, 6, 9), audit.shard_release_indices(10, 0, 3))
+        self.assertEqual((1, 4, 7), audit.shard_release_indices(10, 1, 3))
+        self.assertEqual((2, 5, 8), audit.shard_release_indices(10, 2, 3))
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "diagnostics.jsonl"
             audit.write_diagnostic_records(

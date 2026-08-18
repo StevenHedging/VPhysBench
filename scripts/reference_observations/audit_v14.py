@@ -14,6 +14,7 @@ from typing import Any, Iterable
 import cv2
 import numpy as np
 
+from physbench.datasets import load_dataset
 from physbench.reference_observations import load_reference_observation
 from physbench.reference_observations.curation import (
     audit_anchor_tube_zero,
@@ -62,6 +63,16 @@ def write_diagnostic_records(path: str | Path, records: Iterable[dict[str, Any]]
     except BaseException:
         temporary.unlink(missing_ok=True)
         raise
+
+
+def shard_release_indices(
+    case_count: int,
+    shard_index: int,
+    shard_count: int,
+) -> tuple[int, ...]:
+    if shard_count <= 0 or not 0 <= shard_index < shard_count:
+        raise ValueError("audit shard index/count are invalid")
+    return tuple(range(shard_index, case_count, shard_count))
 
 
 def _load_anchor(path: Path) -> np.ndarray:
@@ -197,19 +208,37 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--render-root", type=Path)
     parser.add_argument("--case-id", action="append", default=[])
+    parser.add_argument("--shard-index", type=int, default=0)
+    parser.add_argument("--shard-count", type=int, default=1)
     parser.add_argument("--no-install", action="store_true")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
+    snapshot = load_dataset(arguments.dataset)
+    indexed_ids = [(index, str(case["case_id"])) for index, case in enumerate(snapshot.cases)]
+    requested = set(arguments.case_id)
+    if requested:
+        known = {case_id for _, case_id in indexed_ids}
+        unknown = requested - known
+        if unknown:
+            raise ValueError(f"unknown requested Case IDs: {sorted(unknown)}")
+        indexed_ids = [item for item in indexed_ids if item[1] in requested]
+    selected_release_indices = set(
+        shard_release_indices(
+            len(snapshot.cases), arguments.shard_index, arguments.shard_count
+        )
+    )
+    indexed_ids = [item for item in indexed_ids if item[0] in selected_release_indices]
     cases = load_curation_cases(
         arguments.dataset,
-        case_ids=arguments.case_id or None,
+        case_ids={case_id for _, case_id in indexed_ids},
     )
+    release_index_by_id = {case_id: index for index, case_id in indexed_ids}
     records = [
-        audit_case(case, index, arguments.render_root)
-        for index, case in enumerate(cases)
+        audit_case(case, release_index_by_id[case.case_id], arguments.render_root)
+        for case in cases
     ]
     write_diagnostic_records(arguments.output, records)
     print(json.dumps({"cases": len(records), "output": str(arguments.output)}))
