@@ -65,6 +65,33 @@ def write_diagnostic_records(path: str | Path, records: Iterable[dict[str, Any]]
         raise
 
 
+def merge_diagnostic_records(
+    output_path: str | Path,
+    input_paths: Iterable[str | Path],
+) -> int:
+    records: list[dict[str, Any]] = []
+    seen_indices: set[int] = set()
+    seen_cases: set[str] = set()
+    for input_path in input_paths:
+        for line in Path(input_path).read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            release_index = int(record["release_index"])
+            case_id = str(record["case_id"])
+            if release_index in seen_indices:
+                raise ValueError(f"duplicate release index {release_index}")
+            if case_id in seen_cases:
+                raise ValueError(f"duplicate Case {case_id}")
+            seen_indices.add(release_index)
+            seen_cases.add(case_id)
+            records.append(record)
+    if seen_indices != set(range(len(records))):
+        raise ValueError("merged diagnostics do not have contiguous release indices")
+    write_diagnostic_records(output_path, records)
+    return len(records)
+
+
 def shard_release_indices(
     case_count: int,
     shard_index: int,
@@ -209,8 +236,9 @@ def audit_case(case: Any, release_index: int, render_root: Path | None) -> dict[
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dataset", required=True, type=Path)
+    parser.add_argument("--dataset", type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--merge-input", action="append", type=Path, default=[])
     parser.add_argument("--render-root", type=Path)
     parser.add_argument("--case-id", action="append", default=[])
     parser.add_argument("--shard-index", type=int, default=0)
@@ -221,6 +249,12 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
+    if arguments.merge_input:
+        count = merge_diagnostic_records(arguments.output, arguments.merge_input)
+        print(json.dumps({"cases": count, "output": str(arguments.output)}))
+        return 0
+    if arguments.dataset is None:
+        raise ValueError("--dataset is required unless --merge-input is used")
     snapshot = load_dataset(arguments.dataset)
     indexed_ids = [(index, str(case["case_id"])) for index, case in enumerate(snapshot.cases)]
     requested = set(arguments.case_id)

@@ -32,6 +32,11 @@ class ReferenceObservationCurationCliTests(unittest.TestCase):
         flattened = [item for shard in shards for item in shard]
         self.assertEqual(["a", "b", "c", "d"], sorted(flattened))
         self.assertEqual(4, len(set(flattened)))
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "cases.txt"
+            path.write_text("case_b\ncase_a\ncase_b\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "duplicate Case"):
+                rebuild.read_case_id_list(path)
 
     def test_install_authorization_requires_accepted_matching_candidate(self) -> None:
         rebuild = _load_script("rebuild_cases.py")
@@ -98,6 +103,8 @@ class ReferenceObservationCurationCliTests(unittest.TestCase):
             )
             rows = [json.loads(line) for line in output.read_text().splitlines()]
             self.assertEqual(["case_a", "case_b"], [row["case_id"] for row in rows])
+            with self.assertRaisesRegex(ValueError, "duplicate release index"):
+                audit.merge_diagnostic_records(output, [output, output])
 
     def test_rebuild_decodes_only_timeline_source_frames(self) -> None:
         rebuild = _load_script("rebuild_cases.py")
