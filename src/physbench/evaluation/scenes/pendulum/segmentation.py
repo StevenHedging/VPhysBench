@@ -206,6 +206,10 @@ class Sam2PendulumSegmenter:
         except SceneAnalysisError as exc:
             raise SegmentationError(exc.code, str(exc)) from exc
 
+        # SAM2 may expose masks backed by a read-only decoded buffer.  The
+        # pendulum crop below is intentionally in-place, so first detach every
+        # mask from backend-owned storage.
+        masks = [np.array(mask, copy=True) for mask in masks]
         motion_top = max(0, int(round(prompt.motion_box_xyxy[1])))
         if motion_top:
             for mask in masks:

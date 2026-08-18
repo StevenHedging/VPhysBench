@@ -47,6 +47,10 @@ from physbench.evaluation.scenes.pendulum.v8_open_world import (
 from physbench.evaluation.scenes.pendulum.open_world import (
     PendulumStructureSpec,
 )
+from physbench.evaluation.scenes.pendulum.segmentation import (
+    MotionPrompt,
+    Sam2PendulumSegmenter,
+)
 from physbench.evaluation.scenes.pendulum.v7_open_world import (
     ConditionStructureDecision,
     _residual_detections,
@@ -55,6 +59,36 @@ from physbench.io import write_json
 
 
 class PendulumIdentityV8APITests(unittest.TestCase):
+    def test_segmenter_detaches_read_only_backend_masks_before_cropping(self) -> None:
+        source = np.ones((6, 5), dtype=np.uint8)
+        source.setflags(write=False)
+
+        class Backend:
+            def segment(self, frames, *, prompt, temporary_prefix):
+                return [source], {"backend": "fake"}
+
+        segmenter = object.__new__(Sam2PendulumSegmenter)
+        segmenter._backend = Backend()
+        prompt = MotionPrompt(
+            frame_index=0,
+            box_xyxy=np.asarray([0, 0, 4, 5], dtype=np.float32),
+            motion_box_xyxy=np.asarray([0, 2, 4, 5], dtype=np.float32),
+            points_xy=np.asarray([[2, 3]], dtype=np.float32),
+            point_labels=np.asarray([1], dtype=np.int32),
+            proposal_score=1.0,
+        )
+
+        masks, _, _ = segmenter.segment(
+            [np.zeros((6, 5, 3), dtype=np.uint8)],
+            proposal_config={},
+            prompt=prompt,
+        )
+
+        self.assertTrue(masks[0].flags.writeable)
+        self.assertEqual(0, int(masks[0][:2].sum()))
+        self.assertEqual(20, int(masks[0][2:].sum()))
+        self.assertEqual(30, int(source.sum()))
+
     def test_identity_module_exposes_anchor_api(self) -> None:
         try:
             module = importlib.import_module(
