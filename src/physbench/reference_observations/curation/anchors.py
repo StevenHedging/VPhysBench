@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import ceil
+from statistics import median
 from typing import Mapping, Sequence
 
 import cv2
@@ -103,11 +104,109 @@ def _motion_components(frames: Sequence[np.ndarray]) -> list[tuple[np.ndarray, f
     return components
 
 
-def _visual_sort_key(candidate: AnchorCandidate, scene_id: str) -> tuple[float, ...]:
-    x, y = candidate.centroid_xy
-    if scene_id.startswith("circular"):
-        return (y, x)
-    return (x, y)
+def _circular_geometry_components(frame: np.ndarray) -> list[tuple[np.ndarray, float]]:
+    height, width = frame.shape[:2]
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    saturated = (
+        (hsv[:, :, 0] >= 80)
+        & (hsv[:, :, 0] <= 115)
+        & (hsv[:, :, 1] >= 55)
+    ).astype(np.uint8)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(saturated, 8)
+    if count <= 1:
+        return []
+    disk_label = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    disk = (labels == disk_label).astype(np.uint8)
+    disk_contours, _ = cv2.findContours(
+        disk, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+    if not disk_contours:
+        return []
+    disk = np.zeros_like(disk)
+    disk_hull = cv2.convexHull(max(disk_contours, key=cv2.contourArea))
+    cv2.drawContours(
+        disk,
+        [disk_hull],
+        -1,
+        1,
+        thickness=cv2.FILLED,
+    )
+    scale = max(3, int(round(min(height, width) * 0.015)))
+    kernel = np.ones((scale | 1, scale | 1), np.uint8)
+    disk = cv2.morphologyEx(disk, cv2.MORPH_CLOSE, kernel)
+    interior = cv2.erode(disk, kernel)
+    channel_edges = [cv2.Canny(frame[:, :, channel], 20, 70) for channel in range(3)]
+    edges = cv2.dilate(
+        np.maximum.reduce(channel_edges), np.ones((3, 3), np.uint8)
+    )
+    contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    image_area = height * width
+    proposals: list[tuple[tuple[int, int, int, int], float]] = []
+    for contour in contours:
+        x, y, box_width, box_height = cv2.boundingRect(contour)
+        box_area = box_width * box_height
+        contour_area = float(cv2.contourArea(contour))
+        center_x = min(width - 1, x + box_width // 2)
+        center_y = min(height - 1, y + box_height // 2)
+        aspect = box_width / max(1, box_height)
+        rectangularity = contour_area / max(1, box_area)
+        if not (
+            0.0015 * image_area <= box_area <= 0.08 * image_area
+            and 0.2 <= aspect <= 5.0
+            and rectangularity >= 0.02
+            and interior[center_y, center_x]
+        ):
+            continue
+        score = float(box_area * (0.2 + rectangularity))
+        proposals.append(((x, y, box_width, box_height), score))
+    proposals.sort(key=lambda item: item[1], reverse=True)
+    selected: list[tuple[tuple[int, int, int, int], float]] = []
+    for box, score in proposals:
+        x, y, box_width, box_height = box
+        box_area = box_width * box_height
+        box_mask = np.zeros((height, width), np.uint8)
+        box_mask[y : y + box_height, x : x + box_width] = 1
+        duplicate = False
+        for selected_box, _ in selected:
+            sx, sy, sw, sh = selected_box
+            intersection = max(0, min(x + box_width, sx + sw) - max(x, sx)) * max(
+                0, min(y + box_height, sy + sh) - max(y, sy)
+            )
+            union = box_area + sw * sh - intersection
+            if union and intersection / union >= 0.45:
+                duplicate = True
+                break
+        if not duplicate:
+            selected.append((box, score))
+    result = []
+    for (x, y, box_width, box_height), score in selected:
+        mask = np.zeros((height, width), np.uint8)
+        mask[y : y + box_height, x : x + box_width] = 1
+        result.append((mask, score / image_area))
+    return result
+
+
+def _visual_order(
+    candidates: list[AnchorCandidate], scene_id: str
+) -> list[AnchorCandidate]:
+    if scene_id != "uniform_circular_motion":
+        return sorted(candidates, key=lambda item: item.centroid_xy)
+    tolerance = max(
+        1.0,
+        0.5
+        * median(item.bbox_xyxy[3] - item.bbox_xyxy[1] for item in candidates),
+    )
+    rows: list[list[AnchorCandidate]] = []
+    centers: list[float] = []
+    for candidate in sorted(candidates, key=lambda item: item.centroid_xy[1]):
+        y = candidate.centroid_xy[1]
+        if not rows or abs(y - centers[-1]) > tolerance:
+            rows.append([candidate])
+            centers.append(y)
+        else:
+            rows[-1].append(candidate)
+            centers[-1] = sum(item.centroid_xy[1] for item in rows[-1]) / len(rows[-1])
+    return [item for row in rows for item in sorted(row, key=lambda value: value.centroid_xy[0])]
 
 
 def build_independent_anchor_candidates(
@@ -124,7 +223,11 @@ def build_independent_anchor_candidates(
     """
     if expected_count <= 0:
         raise ValueError("independent anchor candidates require a positive count")
-    components = _motion_components(frames)
+    if scene_id == "uniform_circular_motion":
+        _validate_frames(frames)
+        components = _circular_geometry_components(np.asarray(frames[0]))
+    else:
+        components = _motion_components(frames)
     if len(components) < expected_count:
         raise ValueError(
             "independent anchor candidates could not explain the expected "
@@ -139,7 +242,7 @@ def build_independent_anchor_candidates(
         AnchorCandidate.from_mask("unassigned", mask, persistence_score=score)
         for mask, score in selected
     ]
-    provisional.sort(key=lambda item: _visual_sort_key(item, scene_id))
+    provisional = _visual_order(provisional, scene_id)
     result = []
     comparisons = comparison_masks or {}
     for index, candidate in enumerate(provisional, start=1):

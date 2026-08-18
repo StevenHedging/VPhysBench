@@ -102,6 +102,23 @@ class ReferenceObservationCurationTrackingTests(unittest.TestCase):
                 comparison_masks={"object_1": np.ones((32, 32), np.uint8)},
             )
 
+    def test_circular_anchor_candidates_use_disk_internal_block_geometry(self) -> None:
+        anchors = self._anchors_api()
+        frame = np.full((160, 200, 3), (30, 60, 100), np.uint8)
+        cv2 = __import__("cv2")
+        cv2.circle(frame, (100, 80), 72, (210, 155, 65), -1)
+        cv2.rectangle(frame, (45, 58), (72, 91), (225, 225, 225), -1)
+        cv2.rectangle(frame, (125, 35), (157, 100), (80, 135, 190), -1)
+        candidates = anchors.build_independent_anchor_candidates(
+            [frame.copy() for _ in range(3)],
+            scene_id="uniform_circular_motion",
+            expected_count=2,
+            comparison_masks=None,
+        )
+        self.assertLess(candidates[0].centroid_xy[0], candidates[1].centroid_xy[0])
+        self.assertGreater(candidates[0].area_pixels, 500)
+        self.assertGreater(candidates[1].area_pixels, 500)
+
     def test_override_rejects_duplicate_object_prompt_on_same_frame(self) -> None:
         overrides = self._overrides_api()
         value = {
