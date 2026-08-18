@@ -2155,7 +2155,9 @@ def extract_bob_trace_v7(
     """Extract pendulum state from the matched bob, not SAM string extrema."""
 
     centers = np.asarray(bob_xy, dtype=np.float64)
-    valid = np.asarray(observed, dtype=bool)
+    # Sequence inputs can be views into read-only decoded/reference storage;
+    # validity is refined in-place below, so always own a writable copy.
+    valid = np.array(observed, dtype=bool, copy=True)
     times = np.asarray(times_s, dtype=np.float64)
     pivot = np.asarray(pivot_xy, dtype=np.float64)
     if centers.shape != (len(times), 2) or valid.shape != (len(times),):

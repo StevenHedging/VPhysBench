@@ -1221,6 +1221,30 @@ class PendulumOpenWorldV7Tests(unittest.TestCase):
         )
         self.assertAlmostEqual(1.0, result["score"], places=12)
 
+    def test_bob_trace_accepts_read_only_observation_mask(self) -> None:
+        times = np.arange(9, dtype=np.float64) / 20.0
+        pivot = np.asarray([70.0, 15.0])
+        angle = 0.2 * np.cos(2.0 * math.pi * times / 1.2)
+        xy = np.column_stack(
+            (
+                pivot[0] + 75.0 * np.sin(angle),
+                pivot[1] + 75.0 * np.cos(angle),
+            )
+        )
+        observed = np.ones(len(times), dtype=bool)
+        observed.setflags(write=False)
+
+        trace = extract_bob_trace_v7(
+            xy,
+            observed,
+            times,
+            pivot_xy=pivot,
+            period_config={"minimum_s": 0.1, "maximum_s": 2.5},
+        )
+
+        self.assertEqual(1.0, trace.valid_ratio)
+        self.assertTrue(np.all(observed))
+
     def test_topology_is_symmetric_and_single_frame_break_is_not_formal(
         self,
     ) -> None:
