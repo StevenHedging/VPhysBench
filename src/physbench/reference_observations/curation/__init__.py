@@ -22,6 +22,12 @@ from .quality import (
     fast_entity_diagnostics,
     pixel_entity_diagnostics,
 )
+from .review import ReviewDecision, read_review_ledger, write_review_ledger
+from .visualization import (
+    render_anchor_sheet,
+    render_contact_sheet,
+    render_dense_event_sheet,
+)
 
 __all__ = [
     "CurationCase",
@@ -31,6 +37,7 @@ __all__ = [
     "EntityDiagnostics",
     "EventRange",
     "IdentityIssue",
+    "ReviewDecision",
     "audit_case_bindings",
     "audit_anchor_tube_zero",
     "audit_entity_order",
@@ -40,4 +47,9 @@ __all__ = [
     "fast_entity_diagnostics",
     "load_curation_cases",
     "pixel_entity_diagnostics",
+    "read_review_ledger",
+    "render_anchor_sheet",
+    "render_contact_sheet",
+    "render_dense_event_sheet",
+    "write_review_ledger",
 ]
