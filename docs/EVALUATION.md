@@ -101,6 +101,17 @@ Spring evaluator 还保持明确的失败来源：reference mask/identity/trace 
 `unavailable`，prediction identity/observation 缺陷按 robust contract 为已评估零分，
 依赖、模型、配置或实现内部故障不能伪装成任一视频的评分结果。
 
+### Reference evaluability preflight
+
+正式评测前必须运行 `make evaluation-preflight`。该命令按官方 Task 物化完整 job 集，
+将每个 Case 的 canonical reference video 作为已知合法 prediction 交给同一公开 evaluator，
+并要求每个 job 均返回 `evaluated`、有限的主分数，以及有限或明确
+`not_applicable` 的 CSTI。任一 `unavailable`、`error`、重复/缺失结果或非有限分数都会让
+命令非零退出，并记录在 `reference_preflight.json`。
+
+该预检是 Dataset/evaluator 的发布门，不是 Baseline 分数。它用于保证 reference 侧缺陷在
+昂贵推理开始前暴露；绝不能通过把 reference 异常改记为 prediction 零分来通过预检。
+
 ## Artifacts and audit
 
 成功的 scene evaluator 可以写入逐帧 CSV、诊断曲线和 JSON audit；artifact 写入失败只进入

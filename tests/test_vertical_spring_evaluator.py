@@ -42,6 +42,9 @@ from physbench.evaluation.scenes.vertical_spring_oscillator.observation import (
     validate_mask_tube,
     validate_prediction_identity,
 )
+from physbench.evaluation.scenes.vertical_spring_oscillator.scoring import (
+    extract_spring_trace,
+)
 from physbench.io import write_json
 
 
@@ -892,6 +895,30 @@ class VerticalSpringEvaluatorTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    def test_period_selection_ignores_out_of_bounds_harmonics(self) -> None:
+        """A later low-residual recurrence must not replace the physical period."""
+        times = np.arange(243, dtype=float) / 24.0
+        noise = np.random.default_rng(210).normal(size=len(times))
+        centers_y = np.clip(
+            48.0 + 30.0 * np.cos(2.0 * math.pi * times / 0.85) + noise,
+            7.0,
+            88.0,
+        )
+        masks = [
+            circle_mask(48, int(round(center_y)), radius=4)
+            for center_y in centers_y
+        ]
+        quality = {
+            **EVALUATOR_CONFIG["quality"],
+            **EVALUATOR_CONFIG["period"],
+            "maximum_s": 2.5,
+        }
+
+        trace = extract_spring_trace(masks, times, quality_config=quality)
+
+        self.assertIsNotNone(trace.period_s)
+        self.assertAlmostEqual(0.85, float(trace.period_s), delta=0.05)
 
     @staticmethod
     def evaluator(config: dict[str, object] | None = None):

@@ -109,6 +109,7 @@ def select_annotated_condition_structure_v8(
             condition_frame,
             anchor=anchor,
             expected_initial_angle_deg=expected_initial_angle_deg,
+            expected_radius_length_ratio=expected_ratio,
             config=config,
         )
         if anchor_line_evidence is not None:
@@ -281,15 +282,17 @@ def infer_anchor_guided_pivot_v8(
     *,
     anchor: PendulumSubjectAnchor,
     expected_initial_angle_deg: float,
+    expected_radius_length_ratio: float | None = None,
     config: Mapping[str, Any],
 ) -> dict[str, object] | None:
     """Fuse collinear string fragments terminating at the annotated bob.
 
     Pale strings can be split by Canny into two or more segments.  Each
     accepted segment must independently point through the frozen bob and agree
-    with the annotated initial-angle magnitude.  The upper endpoint of the
-    longest supported span supplies the pivot; the bob remains annotation
-    owned.
+    with the annotated initial-angle magnitude.  Segments are clustered by
+    signed orientation and transverse line offset before they are fused, so
+    unrelated support or background edges cannot donate an endpoint to the
+    bob's string.  The bob remains annotation owned.
     """
 
     frame = np.asarray(condition_frame)
@@ -306,6 +309,14 @@ def infer_anchor_guided_pivot_v8(
     )
     if angle > 90.0:
         raise ValueError("expected_initial_angle_deg must not exceed 90")
+    expected_ratio = (
+        None
+        if expected_radius_length_ratio is None
+        else _finite_positive(
+            expected_radius_length_ratio,
+            name="expected_radius_length_ratio",
+        )
+    )
     tolerance = _finite_positive(
         config.get("v8_anchor_string_angle_tolerance_deg", 26.0),
         name="v8_anchor_string_angle_tolerance_deg",
@@ -341,13 +352,25 @@ def infer_anchor_guided_pivot_v8(
         if line_distance > line_distance_ratio * radius:
             continue
         direction_sign = int(np.sign(vector[0]))
+        unit = vector / length
+        signed_angle = math.degrees(
+            math.atan2(float(unit[0]), float(unit[1]))
+        )
+        center_delta = center - upper
+        signed_line_offset = float(
+            unit[0] * center_delta[1] - unit[1] * center_delta[0]
+        )
         angle_score = math.exp(-angle_error / max(tolerance, 1.0))
         distance_score = math.exp(-line_distance / radius)
         supported.append(
             {
                 "upper": upper,
                 "lower": lower,
+                "unit": unit,
                 "direction_sign": direction_sign,
+                "signed_angle_deg": signed_angle,
+                "signed_line_offset_px": signed_line_offset,
+                "length_px": length,
                 "angle_error_deg": angle_error,
                 "line_distance_px": line_distance,
                 "score": 0.55 * angle_score + 0.45 * distance_score,
@@ -356,34 +379,184 @@ def infer_anchor_guided_pivot_v8(
     if not supported:
         return None
 
-    groups: dict[int, list[dict[str, object]]] = {}
-    for segment in supported:
-        groups.setdefault(int(segment["direction_sign"]), []).append(segment)
-    ranked: list[tuple[float, np.ndarray, list[dict[str, object]]]] = []
-    for group in groups.values():
-        pivot = min(group, key=lambda value: float(value["upper"][1]))[
-            "upper"
-        ]
+    cluster_angle_tolerance = _finite_positive(
+        config.get("v8_anchor_string_cluster_angle_tolerance_deg", 6.0),
+        name="v8_anchor_string_cluster_angle_tolerance_deg",
+    )
+    cluster_offset_tolerance = radius * _finite_positive(
+        config.get(
+            "v8_anchor_string_cluster_offset_tolerance_radii",
+            0.75,
+        ),
+        name="v8_anchor_string_cluster_offset_tolerance_radii",
+    )
+    unassigned = sorted(
+        supported,
+        key=lambda value: (
+            -float(value["score"]),
+            -float(value["length_px"]),
+            float(value["signed_angle_deg"]),
+            float(value["signed_line_offset_px"]),
+        ),
+    )
+    groups: list[list[dict[str, object]]] = []
+    while unassigned:
+        seed = unassigned.pop(0)
+        group = [seed]
+        remaining: list[dict[str, object]] = []
+        for segment in unassigned:
+            same_orientation = (
+                abs(
+                    float(segment["signed_angle_deg"])
+                    - float(seed["signed_angle_deg"])
+                )
+                <= cluster_angle_tolerance
+            )
+            same_line = (
+                abs(
+                    float(segment["signed_line_offset_px"])
+                    - float(seed["signed_line_offset_px"])
+                )
+                <= cluster_offset_tolerance
+            )
+            if same_orientation and same_line:
+                group.append(segment)
+            else:
+                remaining.append(segment)
+        groups.append(group)
+        unassigned = remaining
+
+    ranked: list[dict[str, object]] = []
+    for group_index, group in enumerate(groups):
+        weights = np.asarray(
+            [float(value["length_px"]) for value in group],
+            dtype=np.float64,
+        )
+        units = np.stack(
+            [np.asarray(value["unit"], dtype=np.float64) for value in group]
+        )
+        mean_unit = np.average(units, axis=0, weights=weights)
+        mean_unit /= max(float(np.linalg.norm(mean_unit)), 1e-12)
+        pivot_segment = max(
+            group,
+            key=lambda value: float(
+                np.dot(
+                    center - np.asarray(value["upper"], dtype=np.float64),
+                    mean_unit,
+                )
+            ),
+        )
+        pivot = np.asarray(pivot_segment["upper"], dtype=np.float64)
         span = float(np.linalg.norm(center - pivot))
         if span < 2.0 * radius:
             continue
-        mean_score = float(np.mean([value["score"] for value in group]))
-        coverage = min(sum(
-            float(np.linalg.norm(value["lower"] - value["upper"]))
-            for value in group
-        ) / span, 1.0)
-        ranked.append((0.75 * mean_score + 0.25 * coverage, pivot, group))
+        mean_score = float(
+            np.average(
+                [float(value["score"]) for value in group],
+                weights=weights,
+            )
+        )
+        intervals: list[tuple[float, float]] = []
+        for value in group:
+            projections = sorted(
+                float(np.dot(point - pivot, mean_unit))
+                for point in (
+                    np.asarray(value["upper"], dtype=np.float64),
+                    np.asarray(value["lower"], dtype=np.float64),
+                )
+            )
+            start = float(np.clip(projections[0], 0.0, span))
+            stop = float(np.clip(projections[1], 0.0, span))
+            if stop > start:
+                intervals.append((start, stop))
+        merged: list[list[float]] = []
+        for start, stop in sorted(intervals):
+            if not merged or start > merged[-1][1]:
+                merged.append([start, stop])
+            else:
+                merged[-1][1] = max(merged[-1][1], stop)
+        covered_span = sum(stop - start for start, stop in merged)
+        coverage = float(np.clip(covered_span / span, 0.0, 1.0))
+        observed_ratio = radius / max(span, 1.0)
+        geometry_score = (
+            None
+            if expected_ratio is None
+            else float(
+                math.exp(-abs(math.log(observed_ratio / expected_ratio)))
+            )
+        )
+        score = (
+            0.75 * mean_score + 0.25 * coverage
+            if geometry_score is None
+            else 0.55 * geometry_score + 0.30 * mean_score + 0.15 * coverage
+        )
+        ranked.append(
+            {
+                "cluster_index": group_index,
+                "pivot_xy": pivot,
+                "score": float(score),
+                "line_score": mean_score,
+                "coverage": coverage,
+                "geometry_ratio_score": geometry_score,
+                "observed_radius_length_ratio": observed_ratio,
+                "supporting_segments": len(group),
+                "signed_angle_deg": float(
+                    math.degrees(
+                        math.atan2(float(mean_unit[0]), float(mean_unit[1]))
+                    )
+                ),
+                "signed_line_offset_px": float(
+                    np.average(
+                        [
+                            float(value["signed_line_offset_px"])
+                            for value in group
+                        ],
+                        weights=weights,
+                    )
+                ),
+            }
+        )
     if not ranked:
         return None
-    score, pivot, group = max(
+    winner = max(
         ranked,
-        key=lambda value: (value[0], len(value[2]), -float(value[1][1])),
+        key=lambda value: (
+            float(value["score"]),
+            int(value["supporting_segments"]),
+            -float(np.asarray(value["pivot_xy"])[1]),
+            -int(value["cluster_index"]),
+        ),
     )
     return {
-        "pivot_xy": np.asarray(pivot, dtype=np.float64).tolist(),
-        "score": float(np.clip(score, 0.0, 1.0)),
-        "supporting_segments": len(group),
-        "policy": "anchor_collinear_fragment_fusion_v1",
+        "pivot_xy": np.asarray(
+            winner["pivot_xy"], dtype=np.float64
+        ).tolist(),
+        "score": float(np.clip(float(winner["score"]), 0.0, 1.0)),
+        "supporting_segments": int(winner["supporting_segments"]),
+        "coverage": float(winner["coverage"]),
+        "line_score": float(winner["line_score"]),
+        "geometry_ratio_score": winner["geometry_ratio_score"],
+        "observed_radius_length_ratio": float(
+            winner["observed_radius_length_ratio"]
+        ),
+        "signed_angle_deg": float(winner["signed_angle_deg"]),
+        "signed_line_offset_px": float(winner["signed_line_offset_px"]),
+        "selected_cluster_index": int(winner["cluster_index"]),
+        "cluster_count": len(ranked),
+        "clusters": [
+            {
+                **{
+                    key: value
+                    for key, value in cluster.items()
+                    if key != "pivot_xy"
+                },
+                "pivot_xy": np.asarray(
+                    cluster["pivot_xy"], dtype=np.float64
+                ).tolist(),
+            }
+            for cluster in ranked
+        ],
+        "policy": "anchor_collinear_fragment_clustering_v2",
     }
 
 

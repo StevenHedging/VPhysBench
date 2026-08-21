@@ -40,6 +40,9 @@ from physbench.evaluation.scenes.pendulum.v8_evaluator import (
     PendulumOpenWorldCaseEvaluatorV8,
     _write_subject_identity_artifacts,
 )
+from physbench.evaluation.scenes.pendulum.v6_evaluator import (
+    _pendulum_radius_length_ratio,
+)
 from physbench.evaluation.scenes.pendulum.v8_open_world import (
     AnnotatedConditionDecision,
     infer_anchor_guided_pivot_v8,
@@ -711,6 +714,22 @@ class PendulumFalseHighAnchorRegressionTests(unittest.TestCase):
 
 
 class PendulumAnnotatedStructureSelectionTests(unittest.TestCase):
+    def test_production_geometry_uses_total_pivot_to_bob_center_length(
+        self,
+    ) -> None:
+        with patch(
+            "physbench.evaluation.scenes.pendulum.v6_evaluator."
+            "flat_physics_quantities",
+            return_value={
+                "bob_radius": {"value": 0.01},
+                "string_length": {"value": 0.05},
+            },
+        ):
+            self.assertAlmostEqual(
+                0.01 / 0.06,
+                _pendulum_radius_length_ratio({}),
+            )
+
     CONFIG = {
         "v8_anchor_dilation_radius_ratio": 0.75,
         "v8_minimum_circle_anchor_containment": 0.45,
@@ -909,6 +928,82 @@ class PendulumAnnotatedStructureSelectionTests(unittest.TestCase):
                     float(selected.structure.bob_xy[1]),
                 )
 
+    def test_v8_resolves_real_condition_only_tie_with_frozen_anchor(
+        self,
+    ) -> None:
+        dataset = load_dataset(LATEST_DATASET, check_assets=False)
+        cases = {case["case_id"]: case for case in dataset.cases}
+        case_id = (
+            "pendulum_s3_ltot0060mm_lrope0050mm_m031p5g_"
+            "r010mm_a065deg_img1392"
+        )
+        case = cases[case_id]
+        protocol = json.loads(
+            (
+                Path(__file__).parents[1]
+                / "configs/evaluation/protocols/scene_default_v1.json"
+            ).read_text(encoding="utf-8")
+        )
+        config = protocol["scenes"]["pendulum"]["open_world_observation"]
+        ambiguity_stressing_config = {
+            **config,
+            "v7_condition_ambiguity_margin": 0.06,
+        }
+        frame, transform = letterbox_condition_image(
+            dataset.asset_root / case["assets"]["first_frame"],
+            width=480,
+            height=832,
+        )
+        request = CaseEvaluationRequest(
+            job={"job_id": case_id},
+            case=case,
+            case_catalog=cases,
+            prediction=None,
+            asset_root=dataset.asset_root,
+            artifact_dir=Path("/tmp") / case_id,
+            evaluator_config={},
+        )
+        anchor = load_pendulum_subject_anchor(
+            request,
+            entity_id="bob",
+            spatial_transform=transform,
+        )
+
+        with self.assertRaises(ReferenceAnalysisError) as raised:
+            detect_condition_structure_v7(
+                frame,
+                config=ambiguity_stressing_config,
+                expected_radius_length_ratio=0.01 / 0.06,
+                expected_initial_angle_deg=65.0,
+            )
+        self.assertEqual(
+            "reference_condition_pendulum_structure_ambiguous_v7",
+            raised.exception.code,
+        )
+
+        proposals = detect_condition_structure_v7(
+            frame,
+            config=ambiguity_stressing_config,
+            expected_radius_length_ratio=0.01 / 0.06,
+            expected_initial_angle_deg=65.0,
+            defer_ambiguity=True,
+        )
+        self.assertTrue(proposals.ambiguity_deferred)
+        selected = select_annotated_condition_structure_v8(
+            proposals,
+            anchor=anchor,
+            expected_radius_length_ratio=0.01 / 0.06,
+            condition_frame=frame,
+            expected_initial_angle_deg=65.0,
+            config=ambiguity_stressing_config,
+        )
+
+        np.testing.assert_allclose(
+            selected.structure.pivot_xy,
+            np.asarray([236.0, 344.0]),
+            atol=16.0,
+        )
+
     def test_anchor_guided_pivot_fuses_fragmented_collinear_string(self) -> None:
         frame = np.full((128, 128, 3), 220, dtype=np.uint8)
         cv2.line(frame, (70, 18), (78, 49), (20, 20, 20), 2)
@@ -933,6 +1028,65 @@ class PendulumAnnotatedStructureSelectionTests(unittest.TestCase):
         assert evidence is not None
         self.assertLess(float(evidence["pivot_xy"][1]), 25.0)
         self.assertGreaterEqual(int(evidence["supporting_segments"]), 2)
+
+    def test_real_long_pendulum_does_not_fuse_unrelated_same_sign_lines(
+        self,
+    ) -> None:
+        dataset = load_dataset(LATEST_DATASET, check_assets=False)
+        cases = {case["case_id"]: case for case in dataset.cases}
+        case_id = (
+            "pendulum_s3_ltot0175mm_lrope0165mm_m031p5g_"
+            "r010mm_a045deg_img1511"
+        )
+        case = cases[case_id]
+        protocol = json.loads(
+            (
+                Path(__file__).parents[1]
+                / "configs/evaluation/protocols/scene_default_v1.json"
+            ).read_text(encoding="utf-8")
+        )
+        config = protocol["scenes"]["pendulum"]["open_world_observation"]
+        frame, transform = letterbox_condition_image(
+            dataset.asset_root / case["assets"]["first_frame"],
+            width=480,
+            height=832,
+        )
+        request = CaseEvaluationRequest(
+            job={"job_id": case_id},
+            case=case,
+            case_catalog=cases,
+            prediction=None,
+            asset_root=dataset.asset_root,
+            artifact_dir=Path("/tmp") / case_id,
+            evaluator_config={},
+        )
+        anchor = load_pendulum_subject_anchor(
+            request,
+            entity_id="bob",
+            spatial_transform=transform,
+        )
+
+        evidence = infer_anchor_guided_pivot_v8(
+            frame,
+            anchor=anchor,
+            expected_initial_angle_deg=45.0,
+            expected_radius_length_ratio=0.01 / 0.175,
+            config=config,
+        )
+
+        self.assertIsNotNone(evidence)
+        assert evidence is not None
+        np.testing.assert_allclose(
+            evidence["pivot_xy"],
+            np.asarray([306.0, 322.0]),
+            atol=30.0,
+        )
+        self.assertGreaterEqual(int(evidence["supporting_segments"]), 2)
+        self.assertGreater(
+            float(evidence["geometry_ratio_score"]),
+            0.80,
+        )
+        self.assertGreaterEqual(int(evidence["cluster_count"]), 3)
 
     def test_no_anchor_containment_fails_closed(self) -> None:
         decision = self._decision(

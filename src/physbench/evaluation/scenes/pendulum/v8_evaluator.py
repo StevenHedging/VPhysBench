@@ -223,6 +223,7 @@ class PendulumOpenWorldCaseEvaluatorV8(ReferenceCaseEvaluator):
                     _pendulum_radius_length_ratio(request.case)
                 ),
                 expected_initial_angle_deg=initial_angle_deg,
+                defer_ambiguity=True,
             )
             condition_decision = select_annotated_condition_structure_v8(
                 v7_geometry,

@@ -54,6 +54,7 @@ class ConditionStructureDecision:
     confidence_margin: float
     source_agreement: float
     rejection_counts: Mapping[str, int]
+    ambiguity_deferred: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -61,6 +62,7 @@ class ConditionStructureDecision:
             "structure": self.structure.to_dict(),
             "confidence_margin": self.confidence_margin,
             "source_agreement": self.source_agreement,
+            "ambiguity_deferred": self.ambiguity_deferred,
             "rejection_counts": {
                 str(key): int(value)
                 for key, value in self.rejection_counts.items()
@@ -287,14 +289,20 @@ def detect_condition_structure_v7(
     config: Mapping[str, Any],
     expected_radius_length_ratio: float,
     expected_initial_angle_deg: float | None = None,
+    defer_ambiguity: bool = False,
 ) -> ConditionStructureDecision:
     """Select a bob from condition pixels using independent evidence.
 
     Hough is only a proposal source.  A proposal must also agree with an
     upward string/pivot, the declared physical radius-to-length ratio, and
     raw-image body evidence.  No Case identifier, fixed image coordinate, or
-    future frame contributes to this decision.
+    future frame contributes to this decision.  ``defer_ambiguity`` retains
+    tied proposals for an anchor-aware downstream observer; the V7 default
+    remains fail-closed.
     """
+
+    if not isinstance(defer_ambiguity, bool):
+        raise TypeError("defer_ambiguity must be boolean")
 
     expected_ratio = float(expected_radius_length_ratio)
     if not math.isfinite(expected_ratio) or expected_ratio <= 0.0:
@@ -581,7 +589,10 @@ def detect_condition_structure_v7(
     runner_up = float(distinct[0]["score"]) if distinct else 0.0
     margin = float(best["score"]) - runner_up
     ambiguity_margin = float(config.get("v7_condition_ambiguity_margin", 0.005))
-    if distinct and margin < ambiguity_margin:
+    ambiguity_deferred = bool(
+        defer_ambiguity and distinct and margin < ambiguity_margin
+    )
+    if distinct and margin < ambiguity_margin and not defer_ambiguity:
         raise ReferenceAnalysisError(
             "reference_condition_pendulum_structure_ambiguous_v7",
             "spatially distinct condition-only bob hypotheses are tied "
@@ -614,6 +625,7 @@ def detect_condition_structure_v7(
             / (5.0 if expected_angle is not None else 4.0)
         ),
         rejection_counts=rejection_counts,
+        ambiguity_deferred=ambiguity_deferred,
     )
 
 

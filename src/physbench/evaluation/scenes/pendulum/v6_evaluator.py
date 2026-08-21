@@ -765,7 +765,10 @@ def _pendulum_radius_length_ratio(case: Mapping[str, Any]) -> float:
             "reference_pendulum_physics_invalid",
             "pendulum radius and length must be finite and positive",
         )
-    return radius / length
+    # The visual geometry measures from the pivot to the bob centre.  The
+    # declared string terminates at the bob surface, so the corresponding
+    # centre distance is the string length plus one bob radius.
+    return radius / (length + radius)
 
 
 def _object_track_from_bob_masks(

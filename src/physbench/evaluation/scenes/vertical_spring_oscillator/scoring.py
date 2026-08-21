@@ -237,8 +237,17 @@ def _qualified_autocorrelation_period(
     minimum_prominence: float,
     minimum_complete_cycles: float,
     minimum_subharmonic_residual_px: float,
+    minimum_period_s: float,
+    maximum_period_s: float,
 ) -> float | None:
     """Return a repeat-supported fundamental candidate, never an ACF fallback."""
+    if (
+        not math.isfinite(minimum_period_s)
+        or minimum_period_s <= 0.0
+        or not math.isfinite(maximum_period_s)
+        or maximum_period_s < minimum_period_s
+    ):
+        raise ValueError("period bounds must be finite, positive, and ordered")
     if len(displacement) < 5:
         return None
     centered = displacement - float(np.mean(displacement))
@@ -287,6 +296,10 @@ def _qualified_autocorrelation_period(
     ]
     candidate_periods = sorted({period for period, _ in refined})
     shortest = candidate_periods[0]
+    # The shortest repeat-supported peak is the fundamental.  If it is not a
+    # physically admissible period, none of its harmonics may stand in for it.
+    if not minimum_period_s <= shortest <= maximum_period_s:
+        return None
     candidate_chain = [
         (
             shortest,
@@ -307,11 +320,18 @@ def _qualified_autocorrelation_period(
                 ),
             )
         )
-    minimum_residual = min(residual for _, residual in candidate_chain)
+    bounded_chain = [
+        (period, residual)
+        for period, residual in candidate_chain
+        if minimum_period_s <= period <= maximum_period_s
+    ]
+    if not bounded_chain:
+        return None
+    minimum_residual = min(residual for _, residual in bounded_chain)
     return float(
         next(
             period
-            for period, residual in candidate_chain
+            for period, residual in bounded_chain
             if residual <= minimum_residual + minimum_subharmonic_residual_px
         )
     )
@@ -478,6 +498,8 @@ def extract_spring_trace(
         minimum_prominence=minimum_prominence,
         minimum_complete_cycles=minimum_complete_cycles,
         minimum_subharmonic_residual_px=minimum_subharmonic_residual_px,
+        minimum_period_s=minimum_s,
+        maximum_period_s=maximum_s,
     )
     if period is not None and not minimum_s <= period <= maximum_s:
         raise SpringTraceError(
@@ -551,6 +573,7 @@ def _periodicity_evidence(
     period = trace_data["period_s"]
     if period is None:
         return 0.0
+    resolution = _require_uniform_cadence(trace_data["times_s"])
     qualified = _qualified_autocorrelation_period(
         trace_data["xy"][:, 1] - trace_data["equilibrium_y_px"],
         trace_data["times_s"],
@@ -568,10 +591,11 @@ def _periodicity_evidence(
             "minimum_subharmonic_residual_px",
             _MINIMUM_SUBHARMONIC_RESIDUAL_PX,
         ),
+        minimum_period_s=max(1e-12, float(period) - 0.5 * resolution),
+        maximum_period_s=float(period) + 0.5 * resolution,
     )
     if qualified is None:
         return 0.0
-    resolution = _require_uniform_cadence(trace_data["times_s"])
     return 1.0 if abs(qualified - period) <= 0.5 * resolution else 0.0
 
 

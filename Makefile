@@ -1,4 +1,4 @@
-.PHONY: test test-interface test-evaluation data-test smoke smoke-interface smoke-data release-check release-archive-check reference-observation-audit
+.PHONY: test test-interface test-evaluation data-test smoke smoke-interface smoke-data release-check release-archive-check reference-observation-audit evaluation-preflight
 
 test: test-interface
 
@@ -23,6 +23,7 @@ test-evaluation:
 	PYTHONPATH=src:tests:. python3 -m unittest \
 		tests.test_evaluation_protocol_v1 \
 		tests.test_scene_evaluation \
+		tests.test_evaluation_preflight \
 		tests.test_csti_case_integration -v
 
 data-test:
@@ -60,3 +61,9 @@ reference-observation-audit:
 		--output .local/reference_observation_curation/full/diagnostics.jsonl \
 		--render-root .local/reference_observation_curation/full/review \
 		--no-install
+
+evaluation-preflight:
+	PYTHONPATH=src:tests:. python3 scripts/evaluation_preflight.py \
+		--dataset datasets/releases/14.0.0/dataset.json \
+		--task tasks/official/six_scene_train_six_scene_eval_v1.json \
+		--output .local/evaluation_preflight/six_scene_train_six_scene_eval_v1
