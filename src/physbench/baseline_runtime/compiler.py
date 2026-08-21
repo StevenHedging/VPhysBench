@@ -667,6 +667,7 @@ class ManagedTaskBuilder(TaskBuilder):
                     for case_id in train_ids
                 ],
                 "seed": canonical_plan.value["training_seed"],
+                "sampling": canonical_plan.value["training_sampling"],
                 "trainer": self.bundle.value["trainer"],
                 "outputs": {"model": "artifact://train/model"},
             }

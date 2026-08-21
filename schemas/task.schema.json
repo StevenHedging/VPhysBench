@@ -20,6 +20,14 @@
     "family": {"enum": ["finetune_eval", "direct_eval"]},
     "dataset_id": {"$ref": "#/$defs/safeIdentifier"},
     "selection": {"type": "object"},
+    "training": {
+      "type": "object",
+      "required": ["sampling"],
+      "properties": {
+        "sampling": {"$ref": "#/$defs/trainingSampling"}
+      },
+      "additionalProperties": false
+    },
     "seeds": {
       "type": "object",
       "required": ["training", "inference"],
@@ -78,6 +86,7 @@
         "required": ["family"]
       },
       "then": {
+        "required": ["training"],
         "properties": {
           "selection": {
             "type": "object",
@@ -101,6 +110,7 @@
         }
       },
       "else": {
+        "not": {"required": ["training"]},
         "properties": {
           "selection": {
             "type": "object",
@@ -151,6 +161,22 @@
           "uniqueItems": true
         }
       ]
+    },
+    "trainingSampling": {
+      "type": "object",
+      "required": [
+        "strategy",
+        "epoch_size",
+        "seed_source",
+        "audit_required"
+      ],
+      "properties": {
+        "strategy": {"const": "scene_balanced_resampling_v1"},
+        "epoch_size": {"const": "selected_training_case_count"},
+        "seed_source": {"const": "training_seed"},
+        "audit_required": {"const": true}
+      },
+      "additionalProperties": false
     }
   }
 }

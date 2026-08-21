@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Iterable
 
+from ...io import canonical_sha256
 from .bundle import CandidateBundle, validate_candidate_bundle
 
 
@@ -136,6 +137,8 @@ def refresh_locked_files(
         record = indexed[relative]
         record["size_bytes"] = target.stat().st_size
         record["sha256"] = _sha256(target)
+    if "files_digest" in value:
+        value["files_digest"] = canonical_sha256(records)
     descriptor, temporary_value = tempfile.mkstemp(
         prefix=f".{manifest_path.name}.", dir=manifest_path.parent
     )

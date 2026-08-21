@@ -1,0 +1,50 @@
+{
+  "collision_r2_large_steel_medium_steel_small_steel_v01165": {
+    "detector": {
+      "y_range": [920, 980],
+      "minimum_radius": 18,
+      "maximum_radius": 30,
+      "threshold": 26,
+      "minimum_distance": 28
+    },
+    "entities": {
+      "object_3": {
+        "start_index": 0,
+        "end_index": 169,
+        "selection": "temporal",
+        "seed_center_xy": [843.0, 957.8],
+        "initial_velocity_xy": [0.0, 0.0],
+        "maximum_distance": 30,
+        "maximum_speed": 22,
+        "maximum_backward_jitter": 8,
+        "fixed_y": 955,
+        "direction": 1,
+        "radius": 25
+      }
+    }
+  },
+  "collision_r2_small_steel_medium_steel_large_steel_v04097": {
+    "detector": {
+      "y_range": [875, 975],
+      "minimum_radius": 40,
+      "maximum_radius": 55,
+      "threshold": 28,
+      "minimum_distance": 60
+    },
+    "entities": {
+      "object_3": {
+        "start_index": 0,
+        "end_index": 78,
+        "selection": "temporal",
+        "seed_center_xy": [1015.8, 915.2],
+        "initial_velocity_xy": [0.0, 0.0],
+        "maximum_distance": 45,
+        "maximum_speed": 35,
+        "maximum_backward_jitter": 10,
+        "fixed_y": 918,
+        "direction": 1,
+        "radius": 50
+      }
+    }
+  }
+}

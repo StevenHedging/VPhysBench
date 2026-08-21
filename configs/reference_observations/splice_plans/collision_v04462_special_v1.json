@@ -1,0 +1,19 @@
+{
+  "collision_r2_large_steel_large_steel_large_steel_v04462": {
+    "full_candidate_entities": ["object_3"],
+    "lifecycle": [
+      {
+        "end_index": 35,
+        "object_id": "object_3",
+        "start_index": 0,
+        "state": 0
+      },
+      {
+        "end_index": 114,
+        "object_id": "object_3",
+        "start_index": 36,
+        "state": 2
+      }
+    ]
+  }
+}

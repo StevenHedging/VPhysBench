@@ -37,6 +37,20 @@ Task v1 的训练或评估集合选择，也没有公开 scene evaluator。
 两者都使用 `scene_default_v1`。Task 拥有数据选择、种子和报告策略；Baseline 拥有输入
 适配、是否使用物理信息、模型训练和推理实现。
 
+### Training resampling contract
+
+`six_scene_train_six_scene_eval_v1` 使用
+`scene_balanced_resampling_v1`，缓解训练集场景分布不均衡。原始 679 个训练 case 的场景数
+分别为 310、97、82、80、80 和 30；每个 epoch 的逻辑样本数仍为 679。分布式运行时只做
+使样本数可被 data-parallel world size 整除所需的最小 padding，并在全局样本流上为六个
+场景分配相差不超过 1 的 quota。场景内部按 case 均匀抽样：小场景允许有放回重采样，
+大场景无放回下采样；随后进行确定性全局 shuffle，再按 DP rank 分片。
+
+采样只由 Task 的 training seed 和 epoch 决定。同一 seed、epoch、训练 case 集与 DP size
+必须得到相同的 rank 分配。训练运行必须保存逐 epoch 的场景计数、唯一 case 数、重复样本
+数和 rank assignment SHA-256。重采样不适用于评估集，也不改变 canonical evaluation jobs、
+coverage 或 CSTI 汇总规则。
+
 `scene_default_v1` 的 registry 公开解析上述六个正式评分场景。协议可解析范围与 Task
 选择范围仍彼此独立；只有发布新的已封印 Task 文件才会改变 scene IDs 或 canonical jobs。
 
@@ -56,6 +70,16 @@ robustness policy 覆盖的预测侧失败按“已评估零分”处理，同�
 当前 CSTI v1 只排除条件首帧；空间 soft-support 半径按每个 GT entity 的 reference Tube
 面积等效直径中位数自适应设置为 `0.5 × diameter`。prediction Tube 不参与容差估计，
 具体公式与逐对象 audit 字段见 [EVALUATION.md](EVALUATION.md)。
+
+### Collision reference-evidence lifecycle
+
+`collision_1d` 的 frozen reference observation 以逐对象生命周期为准，而不是用整段视频的
+可见帧比例判定 GT 是否有效。每个对象必须在条件首帧可见，并至少提供 3 个 `VISIBLE`
+样本；碰撞造成的真实 `OCCLUDED` 和离开画布后的 `OUT_OF_FRAME` 不会让一个已解析轨迹
+失效。`UNRESOLVED` 只表示人工与视觉证据都无法判定的样本，不能替代可恢复的分割，也
+不能把边界出画误写成长遮挡。官方碰撞测试集的当前 frozen observation 已完成逐帧人工
+复核，20 个 case 均无 `UNRESOLVED` 样本；详细审计见
+[collision_v14_official_test_audit_20260818.md](audits/collision_v14_official_test_audit_20260818.md)。
 
 - 缺失或未完成的 prediction record；
 - evaluator 侧的 prediction 解码失败；

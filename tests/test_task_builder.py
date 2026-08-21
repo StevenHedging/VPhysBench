@@ -248,8 +248,11 @@ class TaskBuilderContractTests(unittest.TestCase):
             self.assertTrue(
                 (run_dir / "task_builder.json").is_file()
             )
-            self.assertFalse(
-                (run_dir / "frozen" / "assets.lock.json").exists()
+            frozen_asset_lock = run_dir / "frozen" / "assets.lock.json"
+            self.assertTrue(frozen_asset_lock.is_file())
+            self.assertEqual(
+                self.dataset.asset_lock,
+                load_json(frozen_asset_lock),
             )
             artifact_policy = load_json(
                 run_dir / "artifact_policy.json"

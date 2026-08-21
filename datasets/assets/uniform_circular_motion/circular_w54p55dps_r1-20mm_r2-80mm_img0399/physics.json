@@ -3,7 +3,7 @@
   "physics": {
     "environment": {
       "angular_velocity": {
-        "symbol": "ω",
+        "symbol": "\u03c9",
         "unit": "deg/s",
         "value": 54.55
       }
@@ -11,16 +11,16 @@
     "objects": {
       "object_1": {
         "orbit_radius": {
-          "symbol": "r_2",
+          "symbol": "r_1",
           "unit": "m",
-          "value": 0.08
+          "value": 0.02
         }
       },
       "object_2": {
         "orbit_radius": {
-          "symbol": "r_1",
+          "symbol": "r_2",
           "unit": "m",
-          "value": 0.02
+          "value": 0.08
         }
       }
     }

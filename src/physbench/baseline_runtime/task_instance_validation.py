@@ -361,6 +361,7 @@ def _validate_plan_identity(
             "scene_ids",
             "train_case_ids",
             "training_seed",
+            "training_sampling",
             "jobs",
         },
         "canonical_plan",
@@ -514,6 +515,11 @@ def _validate_training(
                 "canonical_plan.training_seed",
                 "must be null for direct_eval",
             )
+        if canonical_plan.get("training_sampling") is not None:
+            raise _invalid(
+                "canonical_plan.training_sampling",
+                "must be null for direct_eval",
+            )
         if training_value is not None:
             raise _invalid("training", "must be null for direct_eval")
         return
@@ -526,13 +532,22 @@ def _validate_training(
         canonical_plan.get("training_seed"),
         "canonical_plan.training_seed",
     )
+    sampling = _require_object(
+        canonical_plan.get("training_sampling"),
+        "canonical_plan.training_sampling",
+    )
 
     training = _require_object(training_value, "training")
     _require_fields(
         training,
-        {"case_ids", "adaptation_ids", "seed"},
+        {"case_ids", "adaptation_ids", "seed", "sampling"},
         "training",
     )
+    if training.get("sampling") != sampling:
+        raise _invalid(
+            "training.sampling",
+            "must match canonical_plan.training_sampling",
+        )
     training_case_ids = _require_list(
         training["case_ids"], "training.case_ids"
     )

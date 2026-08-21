@@ -19,7 +19,15 @@ TASK_FIELDS = {
     "dataset_id",
     "selection",
     "seeds",
+    "training",
     "evaluation",
+}
+
+TRAINING_SAMPLING_V1 = {
+    "strategy": "scene_balanced_resampling_v1",
+    "epoch_size": "selected_training_case_count",
+    "seed_source": "training_seed",
+    "audit_required": True,
 }
 
 
@@ -209,6 +217,39 @@ def _validate_seeds(value: Any, *, family: str) -> None:
     )
 
 
+def _validate_training(value: Any, *, family: str) -> None:
+    if family == "direct_eval":
+        if value is not None:
+            raise ValueError("direct_eval Task must not declare task.training")
+        return
+    training = _require_object(value, label="task.training")
+    _require_fields(training, required={"sampling"}, label="task.training")
+    _reject_unknown_fields(
+        training,
+        allowed={"sampling"},
+        label="task.training",
+    )
+    sampling = _require_object(
+        training["sampling"],
+        label="task.training.sampling",
+    )
+    _require_fields(
+        sampling,
+        required=set(TRAINING_SAMPLING_V1),
+        label="task.training.sampling",
+    )
+    _reject_unknown_fields(
+        sampling,
+        allowed=set(TRAINING_SAMPLING_V1),
+        label="task.training.sampling",
+    )
+    if sampling != TRAINING_SAMPLING_V1:
+        raise ValueError(
+            "task.training.sampling must equal the sealed "
+            "scene_balanced_resampling_v1 policy"
+        )
+
+
 def _validate_reporting(value: Any) -> None:
     reporting = _require_object(value, label="task.evaluation.reporting")
     allowed = {
@@ -256,6 +297,8 @@ def _validate_task_document(value: Any) -> dict[str, Any]:
             f"task must use schema_version={TASK_SCHEMA_VERSION}"
         )
     required = TASK_FIELDS - {"$schema"}
+    if task.get("family") == "direct_eval":
+        required.remove("training")
     _require_fields(task, required=required, label="task")
     unknown_fields = sorted(set(task) - TASK_FIELDS)
     if unknown_fields:
@@ -273,6 +316,7 @@ def _validate_task_document(value: Any) -> dict[str, Any]:
         family=family,
     )
     _validate_seeds(task["seeds"], family=family)
+    _validate_training(task.get("training"), family=family)
     evaluation = _require_object(
         task["evaluation"],
         label="task.evaluation",
@@ -484,6 +528,11 @@ def plan_atomic_task(task: TaskSpec, dataset: DatasetSnapshot) -> AtomicPlan:
         "scene_ids": scenes,
         "train_case_ids": train_ids,
         "training_seed": train_seed,
+        "training_sampling": (
+            task.value["training"]["sampling"]
+            if task.family == "finetune_eval"
+            else None
+        ),
         "jobs": jobs,
     }
     plan["reporting_policy"] = task.value["evaluation"]["reporting"]

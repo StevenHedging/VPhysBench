@@ -1,0 +1,8 @@
+{
+  "collision_supp_20260729_img_1211_three_ball_single_incident": {
+    "full_candidate_entities": ["object_1", "object_2", "object_3"],
+    "lifecycle": [
+      {"object_id":"object_3","start_index":52,"end_index":56,"state":2}
+    ]
+  }
+}

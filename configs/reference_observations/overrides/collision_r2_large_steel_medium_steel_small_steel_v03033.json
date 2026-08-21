@@ -1,0 +1,12 @@
+{
+  "anchor_prompts": [
+    {"box_xyxy": [15, 875, 125, 995], "frame_index": 0, "object_id": "object_1", "point_labels": [1], "points_xy": [[68, 936]]},
+    {"box_xyxy": [915, 895, 1000, 985], "frame_index": 0, "object_id": "object_2", "point_labels": [1], "points_xy": [[957, 942]]},
+    {"box_xyxy": [995, 920, 1055, 990], "frame_index": 0, "object_id": "object_3", "point_labels": [1], "points_xy": [[1025, 954]]}
+  ],
+  "case_id": "collision_r2_large_steel_medium_steel_small_steel_v03033",
+  "corrections": [],
+  "lifecycle": [],
+  "scene_refinement": "reviewed_size_aware_first_frame_ball_prompts",
+  "schema_version": "1.0"
+}

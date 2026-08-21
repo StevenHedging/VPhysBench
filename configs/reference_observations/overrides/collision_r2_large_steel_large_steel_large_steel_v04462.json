@@ -1,0 +1,15 @@
+{
+  "anchor_prompts": [],
+  "case_id": "collision_r2_large_steel_large_steel_large_steel_v04462",
+  "corrections": [],
+  "lifecycle": [
+    {
+      "end_index": 114,
+      "object_id": "object_3",
+      "start_index": 38,
+      "state": 2
+    }
+  ],
+  "scene_refinement": "reviewed_three_ball_anchors_and_right_boundary_exit_at_observation_38",
+  "schema_version": "1.0"
+}

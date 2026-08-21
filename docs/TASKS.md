@@ -12,6 +12,7 @@ Task 是模型无关、可冻结的工作负载声明。发行版只接受 `sche
 - `tasks/official/six_scene_train_six_scene_eval_v1.json`
   - Task ID：`six_scene_train_six_scene_eval_v1`
   - 训练：六场景 679 个 View A train case
+  - 采样：逐 epoch 的 `scene_balanced_resampling_v1`
   - 评估：六场景 96 个 View A ID test case
 
 二者都绑定 Dataset `physics_video_seven_scene_v14`、推理种子 42 和协议
@@ -29,6 +30,11 @@ Task 是模型无关、可冻结的工作负载声明。发行版只接受 `sche
 - `seeds.training` 与 `seeds.inference`；
 - `evaluation.protocol` 与 `evaluation.reporting`。
 
+`finetune_eval` 还必须包含 `training.sampling`。当前 v1 策略固定为
+`scene_balanced_resampling_v1`：epoch 逻辑长度等于选中的训练 case 数，以 training seed
+确定性地在全局 DP 样本流中均衡六个场景，并要求运行时输出采样审计。
+`direct_eval` 禁止包含 `training` 字段。
+
 `direct_eval` 的 selection 使用 `evaluation_scene_ids`、`groups` 和可选 `case_ids`。
 `finetune_eval` 使用彼此独立的 `training_scene_ids`、`evaluation_scene_ids` 与
 `test_regimes`。Dataset view 由 family 唯一推导，因此 v1 不再重复保存
@@ -39,8 +45,8 @@ Task 禁止模型名称、checkpoint、prompt 改写、物理量注入方式、r
 
 ## 编译与覆盖
 
-planner 先将 Task 展开为 canonical plan。计划中的 `training_scene_ids` 和
-`train_case_ids` 描述训练侧；`scene_ids` 和 `jobs` 描述评估侧。每个 job 固定
+planner 先将 Task 展开为 canonical plan。计划中的 `training_scene_ids`、
+`train_case_ids` 和 `training_sampling` 描述训练侧；`scene_ids` 和 `jobs` 描述评估侧。每个 job 固定
 `case_id`、`scene_id`、partition 和 inference seed。
 
 Baseline 内可以编写并注册它自己的训练/推理脚本，但只能消费 canonical plan。通用编排

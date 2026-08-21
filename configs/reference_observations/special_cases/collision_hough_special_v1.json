@@ -1,0 +1,79 @@
+{
+  "collision_r2_large_steel_large_steel_large_steel_v01249": {
+    "detector": {
+      "y_range": [870, 1025],
+      "minimum_radius": 35,
+      "maximum_radius": 58,
+      "threshold": 28,
+      "minimum_distance": 65
+    },
+    "entities": {
+      "object_3": {
+        "start_index": 60,
+        "end_index": 182,
+        "selection": "temporal",
+        "seed_center_xy": [1150.2, 942.6],
+        "initial_velocity_xy": [9.0, 0.0],
+        "maximum_distance": 50,
+        "maximum_speed": 9.5,
+        "maximum_backward_jitter": 12,
+        "fixed_y": 947,
+        "direction": 1,
+        "radius": 47
+      }
+    }
+  },
+  "collision_r2_medium_steel_medium_steel_medium_steel_v03205": {
+    "detector": {
+      "y_range": [900, 1000],
+      "minimum_radius": 25,
+      "maximum_radius": 42,
+      "threshold": 24,
+      "minimum_distance": 50
+    },
+    "entities": {
+      "object_1": {
+        "start_index": 0,
+        "end_index": 105,
+        "selection": "temporal",
+        "seed_center_xy": [36.6, 941.8],
+        "initial_velocity_xy": [40, 0],
+        "maximum_distance": 60,
+        "maximum_speed": 55,
+        "maximum_backward_jitter": 15,
+        "fixed_y": 939,
+        "direction": 1,
+        "x_range": [0, 1000],
+        "radius": 34
+      },
+      "object_2": {
+        "start_index": 0,
+        "end_index": 105,
+        "selection": "temporal",
+        "seed_center_xy": [636.6, 938.2],
+        "initial_velocity_xy": [0, 0],
+        "maximum_distance": 50,
+        "maximum_speed": 15,
+        "maximum_backward_jitter": 12,
+        "fixed_y": 939,
+        "direction": 1,
+        "x_range": [0, 1000],
+        "radius": 33
+      },
+      "object_3": {
+        "start_index": 0,
+        "end_index": 54,
+        "out_start_index": 55,
+        "selection": "temporal",
+        "seed_center_xy": [707.4, 937.0],
+        "initial_velocity_xy": [0, 0],
+        "maximum_distance": 70,
+        "maximum_speed": 45,
+        "maximum_backward_jitter": 15,
+        "fixed_y": 942,
+        "direction": 1,
+        "radius": 33
+      }
+    }
+  }
+}

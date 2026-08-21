@@ -1,0 +1,14 @@
+{
+  "collision_r2_large_steel_large_steel_large_steel_v01249": {
+    "full_candidate_entities": ["object_1", "object_2", "object_3"],
+    "frame_overrides": [
+      {"object_id":"object_2","target_index":0,"circle_xy_radius":[846.0,941.0,46.0]}
+    ],
+    "circle_motion_overrides": [
+      {"object_id":"object_2","start_index":99,"end_index":182,"center_start_xy":[936.6,940.5],"velocity_xy":[0,0],"radius":45.5}
+    ]
+  },
+  "collision_r2_medium_steel_medium_steel_medium_steel_v03205": {
+    "full_candidate_entities": ["object_1", "object_2", "object_3"]
+  }
+}

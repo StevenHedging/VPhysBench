@@ -1,0 +1,58 @@
+{
+  "collision_r2_large_steel_large_steel_large_steel_v02696": {
+    "observation_zero_entities": ["object_1", "object_2", "object_3"],
+    "lifecycle": [
+      {"end_index": 68, "object_id": "object_3", "start_index": 60, "state": 2}
+    ]
+  },
+  "collision_r2_large_steel_medium_steel_small_steel_v01313": {
+    "observation_zero_entities": ["object_1", "object_2", "object_3"],
+    "full_candidate_entities": ["object_2", "object_3"],
+    "frame_overrides": [
+      {"object_id":"object_2","target_index":125,"circle_xy_radius":[1310.3,971.2,36.5]}
+    ],
+    "source_overrides": [
+      {"end_index": 195, "object_id": "object_2", "source_object_id": "object_3", "start_index": 126}
+    ],
+    "lifecycle": [
+      {"end_index": 195, "object_id": "object_3", "start_index": 114, "state": 2}
+    ]
+  },
+  "collision_r2_medium_steel_medium_steel_medium_steel_v02818": {
+    "observation_zero_entities": ["object_1", "object_2", "object_3"],
+    "lifecycle": [
+      {"end_index": 106, "object_id": "object_3", "start_index": 63, "state": 2}
+    ]
+  },
+  "collision_r2_medium_steel_medium_steel_medium_steel_v07184": {
+    "observation_zero_entities": ["object_1", "object_2", "object_3"],
+    "frame_overrides": [
+      {"object_id":"object_2","target_index":59,"circle_xy_radius":[1278.5,903.0,32.0]},
+      {"object_id":"object_2","target_index":104,"circle_xy_radius":[1669.0,907.0,32.0]},
+      {"object_id":"object_2","target_index":109,"circle_xy_radius":[1707.5,910.5,32.0]},
+      {"object_id":"object_2","target_index":110,"circle_xy_radius":[1716.0,911.0,32.0]}
+    ],
+    "lifecycle": [
+      {"end_index": 110, "object_id": "object_3", "start_index": 27, "state": 2}
+    ]
+  },
+  "collision_r2_large_steel_medium_steel_small_steel_v03033": {
+    "observation_zero_entities": ["object_1", "object_2", "object_3"],
+    "circle_source_overrides": [
+      {"object_id":"object_1","start_index":84,"end_index":84,"radius":46.5},
+      {"object_id":"object_2","start_index":58,"end_index":74,"radius":36.4}
+    ],
+    "lifecycle": [
+      {"end_index": 90, "object_id": "object_1", "start_index": 85, "state": 2},
+      {"end_index": 90, "object_id": "object_2", "start_index": 75, "state": 2},
+      {"end_index": 90, "object_id": "object_3", "start_index": 37, "state": 2}
+    ]
+  },
+  "collision_supp_20260729_img_0958_two_ball_single_incident": {
+    "observation_zero_entities": ["object_1", "object_2"],
+    "full_candidate_entities": ["object_1"],
+    "lifecycle": [
+      {"object_id":"object_1","start_index":67,"end_index":71,"state":2}
+    ]
+  }
+}

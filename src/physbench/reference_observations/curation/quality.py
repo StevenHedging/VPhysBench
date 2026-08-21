@@ -23,6 +23,7 @@ _AREA_LOG_JUMP_FLOOR = {
     "uniform_circular_motion": 0.40,
     "vertical_spring_oscillator": 0.40,
 }
+_CENTROID_JUMP_RADII_FLOOR = 8.0
 
 
 @dataclass(frozen=True)
@@ -137,6 +138,7 @@ def fast_entity_diagnostics(
 
     area_floor = _AREA_LOG_JUMP_FLOOR.get(scene_id, 0.45)
     log_changes: list[float] = []
+    centroid_steps_radii: list[tuple[int, float]] = []
     for index in range(len(areas) - 1):
         if (
             states[index] != _VISIBLE
@@ -159,6 +161,42 @@ def fast_entity_diagnostics(
                 )
             )
             reasons.append("area_instability")
+        if not (
+            np.all(np.isfinite(centroids[index]))
+            and np.all(np.isfinite(centroids[index + 1]))
+        ):
+            continue
+        equivalent_radius = math.sqrt(
+            min(float(areas[index]), float(areas[index + 1])) / math.pi
+        )
+        if equivalent_radius <= 0.0:
+            continue
+        step_radii = float(
+            np.linalg.norm(centroids[index + 1] - centroids[index])
+            / equivalent_radius
+        )
+        centroid_steps_radii.append((index, step_radii))
+
+    typical_centroid_step = float(
+        np.median([value for _, value in centroid_steps_radii])
+    ) if centroid_steps_radii else 0.0
+    centroid_jump_threshold = max(
+        _CENTROID_JUMP_RADII_FLOOR, 3.0 * typical_centroid_step
+    )
+    for index, step_radii in centroid_steps_radii:
+        if step_radii > centroid_jump_threshold:
+            events.append(
+                EventRange(
+                    code="centroid_jump",
+                    index_range=(index, index + 1),
+                    statistics={
+                        "equivalent_radii": step_radii,
+                        "threshold": centroid_jump_threshold,
+                        "typical_equivalent_radii": typical_centroid_step,
+                    },
+                )
+            )
+            reasons.append("centroid_instability")
 
     visible = (states == _VISIBLE) & (areas > 0)
     visible_centroids = centroids[visible]
@@ -191,6 +229,10 @@ def fast_entity_diagnostics(
         "visible_area_min": int(visible_areas.min()) if len(visible_areas) else 0,
         "visible_area_max": int(visible_areas.max()) if len(visible_areas) else 0,
         "maximum_absolute_log_area_ratio": max(log_changes, default=0.0),
+        "maximum_centroid_step_equivalent_radii": max(
+            (value for _, value in centroid_steps_radii), default=0.0
+        ),
+        "typical_centroid_step_equivalent_radii": typical_centroid_step,
         "physical_duration_seconds": float(times[-1] - times[0]),
     }
     return EntityDiagnostics(
@@ -317,6 +359,62 @@ def audit_anchor_tube_zero(
     )
 
 
+def audit_entity_mask_overlaps(
+    *,
+    masks_by_object: Mapping[str, np.ndarray],
+    states_by_object: Mapping[str, np.ndarray],
+    maximum_smaller_mask_fraction: float = 0.25,
+) -> tuple[DiagnosticIssue, ...]:
+    """Report frames where two visible entity masks substantially duplicate."""
+    object_ids = tuple(sorted(masks_by_object))
+    if set(object_ids) != set(states_by_object):
+        raise ValueError("entity overlap masks and states must cover equal objects")
+    if not 0.0 <= maximum_smaller_mask_fraction < 1.0:
+        raise ValueError("entity overlap fraction must be in [0, 1)")
+    masks = {object_id: _binary_masks(masks_by_object[object_id]) for object_id in object_ids}
+    sample_counts = {value.shape[0] for value in masks.values()}
+    spatial_shapes = {value.shape[1:] for value in masks.values()}
+    if len(sample_counts) != 1 or len(spatial_shapes) != 1:
+        raise ValueError("entity overlap masks must have equal THW shapes")
+    sample_count = next(iter(sample_counts), 0)
+    states = {object_id: np.asarray(states_by_object[object_id]) for object_id in object_ids}
+    if any(value.shape != (sample_count,) for value in states.values()):
+        raise ValueError("entity overlap states must align with mask samples")
+
+    issues: list[DiagnosticIssue] = []
+    for left_index, left_id in enumerate(object_ids):
+        for right_id in object_ids[left_index + 1 :]:
+            bad: list[int] = []
+            maximum_fraction = 0.0
+            for index in range(sample_count):
+                if states[left_id][index] != _VISIBLE or states[right_id][index] != _VISIBLE:
+                    continue
+                left = masks[left_id][index]
+                right = masks[right_id][index]
+                smaller_area = min(int(left.sum()), int(right.sum()))
+                if smaller_area <= 0:
+                    continue
+                fraction = float(np.logical_and(left, right).sum() / smaller_area)
+                maximum_fraction = max(maximum_fraction, fraction)
+                if fraction > maximum_smaller_mask_fraction:
+                    bad.append(index)
+            if bad:
+                issues.append(
+                    DiagnosticIssue(
+                        code="entity_mask_overlap",
+                        severity="error",
+                        message="visible entity masks substantially overlap",
+                        observation_indices=tuple(bad),
+                        statistics={
+                            "objects": (left_id, right_id),
+                            "maximum_smaller_mask_fraction": maximum_fraction,
+                            "threshold": maximum_smaller_mask_fraction,
+                        },
+                    )
+                )
+    return tuple(issues)
+
+
 def _mask_reductions(
     masks: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -392,6 +490,7 @@ __all__ = [
     "EntityDiagnostics",
     "EventRange",
     "audit_anchor_tube_zero",
+    "audit_entity_mask_overlaps",
     "audit_mask_trajectory_reductions",
     "fast_entity_diagnostics",
     "pixel_entity_diagnostics",

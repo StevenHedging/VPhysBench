@@ -1,0 +1,15 @@
+{
+  "anchor_prompts": [],
+  "case_id": "collision_supp_20260729_img_0961_two_ball_single_incident",
+  "corrections": [],
+  "lifecycle": [
+    {
+      "end_index": 70,
+      "object_id": "object_1",
+      "start_index": 64,
+      "state": 2
+    }
+  ],
+  "scene_refinement": "reviewed_left_boundary_exit",
+  "schema_version": "1.0"
+}

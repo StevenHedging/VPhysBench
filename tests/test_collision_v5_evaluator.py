@@ -27,9 +27,11 @@ from physbench.evaluation.common.errors import (
 )
 from physbench.evaluation.common.masks.sam2 import MaskPrompt
 from physbench.evaluation.contracts import CaseEvaluationRequest
+from physbench.reference_observations import ObservationState
 from physbench.evaluation.scenes.collision import open_world
 from physbench.evaluation.scenes.collision.v5_evaluator import (
     CollisionOpenWorldCaseEvaluator,
+    validate_frozen_collision_evidence,
 )
 import physbench.evaluation.scenes.collision.v5_evaluator as v5_module
 
@@ -230,6 +232,46 @@ class CollisionV5EvaluatorTests(unittest.TestCase):
         evaluator.csti_enabled = csti_enabled
         evaluator._segmenter = _ScriptedSegmenter(outcomes)
         return evaluator
+
+    def test_resolved_occlusion_does_not_fail_reference_sufficiency(self) -> None:
+        states = np.asarray(
+            [
+                [ObservationState.VISIBLE] * 12
+                + [ObservationState.OCCLUDED] * 60,
+                [ObservationState.VISIBLE] * 44
+                + [ObservationState.OCCLUDED] * 28,
+                [ObservationState.VISIBLE] * 20
+                + [ObservationState.OCCLUDED] * 51
+                + [ObservationState.UNRESOLVED],
+            ],
+            dtype=np.uint8,
+        ).T
+
+        audit = validate_frozen_collision_evidence(
+            states,
+            entity_ids=("object_1", "object_2", "object_3"),
+            minimum_visible_samples=3,
+        )
+
+        self.assertEqual(12, audit["object_1"]["visible_samples"])
+        self.assertEqual(60, audit["object_1"]["occluded_samples"])
+        self.assertEqual(0, audit["object_1"]["unresolved_samples"])
+
+    def test_unresolved_track_with_one_visible_sample_remains_unavailable(self) -> None:
+        states = np.asarray(
+            [[ObservationState.VISIBLE] + [ObservationState.UNRESOLVED] * 94],
+            dtype=np.uint8,
+        ).T
+
+        with self.assertRaisesRegex(
+            SceneAnalysisError,
+            "object_1 has 1 visible samples; at least 3 are required",
+        ):
+            validate_frozen_collision_evidence(
+                states,
+                entity_ids=("object_1",),
+                minimum_visible_samples=3,
+            )
 
     def test_current_search_band_seeds_real_supplement_balls(self) -> None:
         root = Path(__file__).parents[1]

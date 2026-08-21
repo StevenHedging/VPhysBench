@@ -5,8 +5,9 @@ from pathlib import Path
 
 from _paths import ROOT
 from physbench.data_layout import LATEST_DATASET, V14_DATASET
+from physbench.datasets import load_dataset
 from physbench.io import load_json
-from physbench.tasks import load_task
+from physbench.tasks import load_task, plan_atomic_task
 
 
 DATASET_ID = "physics_video_seven_scene_v14"
@@ -30,6 +31,27 @@ class TaskProtocol20260817Tests(unittest.TestCase):
                     "scene_default_v1",
                     task.value["evaluation"]["protocol"],
                 )
+
+    def test_finetune_task_seals_scene_balanced_resampling(self) -> None:
+        direct = load_task(TASKS[0])
+        finetune = load_task(TASKS[1])
+        expected = {
+            "strategy": "scene_balanced_resampling_v1",
+            "epoch_size": "selected_training_case_count",
+            "seed_source": "training_seed",
+            "audit_required": True,
+        }
+        self.assertNotIn("training", direct.value)
+        self.assertEqual(expected, finetune.value["training"]["sampling"])
+
+        dataset = load_dataset(V14_DATASET, check_assets=False)
+        self.assertIsNone(
+            plan_atomic_task(direct, dataset).value["training_sampling"]
+        )
+        self.assertEqual(
+            expected,
+            plan_atomic_task(finetune, dataset).value["training_sampling"],
+        )
 
     def test_v14_case_schema_requires_frozen_reference_roles(self) -> None:
         schema = load_json(ROOT / "schemas/v6/case.schema.json")

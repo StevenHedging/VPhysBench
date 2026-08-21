@@ -1,0 +1,15 @@
+{
+  "anchor_prompts": [],
+  "case_id": "parabolic_img_0639",
+  "corrections": [],
+  "lifecycle": [
+    {
+      "end_index": 8,
+      "object_id": "object_1",
+      "start_index": 8,
+      "state": 1
+    }
+  ],
+  "scene_refinement": "reviewed_floor_occlusion",
+  "schema_version": "1.0"
+}

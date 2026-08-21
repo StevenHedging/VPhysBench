@@ -1,0 +1,30 @@
+{
+  "anchor_prompts": [
+    {
+      "box_xyxy": [18, 962, 77, 1007],
+      "frame_index": 0,
+      "object_id": "object_1",
+      "point_labels": [1],
+      "points_xy": [[47, 985]]
+    },
+    {
+      "box_xyxy": [686, 968, 735, 1012],
+      "frame_index": 0,
+      "object_id": "object_2",
+      "point_labels": [1],
+      "points_xy": [[710, 990]]
+    },
+    {
+      "box_xyxy": [741, 968, 790, 1012],
+      "frame_index": 0,
+      "object_id": "object_3",
+      "point_labels": [1],
+      "points_xy": [[765, 990]]
+    }
+  ],
+  "case_id": "collision_r2_small_steel_glass_marble_glass_marble_v01509",
+  "corrections": [],
+  "lifecycle": [],
+  "scene_refinement": "reviewed_transparent_marble_anchors",
+  "schema_version": "1.0"
+}

@@ -11,6 +11,8 @@ from unittest.mock import patch
 import cv2
 import numpy as np
 
+from physbench.data_layout import LATEST_DATASET
+from physbench.datasets import load_dataset
 from physbench.evaluation.common.csti import CSTIConfig, evaluate_csti
 from physbench.evaluation.common.entities import (
     PositionEvidence,
@@ -101,6 +103,7 @@ _V7_COLOR_CONFIG = {
     "adaptive_disk_minimum_value": 25,
     "adaptive_disk_hue_smoothing_radius": 4,
     "adaptive_disk_hue_tolerance": 8,
+    "adaptive_disk_maximum_radius_ratio": 0.54,
     "adaptive_disk_erosion_kernel": 11,
     "open_world_component_shape_filter": "compact_participant_v1",
     "open_world_minimum_component_disk_area_ratio": 0.003,
@@ -423,6 +426,39 @@ def _formal_v7_score(
 
 
 class CircularOpenWorldObservationTests(unittest.TestCase):
+    def test_real_large_platform_is_not_rejected_at_half_frame_radius(
+        self,
+    ) -> None:
+        dataset = load_dataset(LATEST_DATASET, check_assets=False)
+        case = next(
+            case
+            for case in dataset.cases
+            if case["case_id"] == "circular_r1_wood04cm_img_0390"
+        )
+        frame = cv2.imread(
+            str(dataset.asset_root / case["assets"]["first_frame"]),
+            cv2.IMREAD_COLOR,
+        )
+        self.assertIsNotNone(frame)
+        normalized = cv2.resize(
+            frame,
+            (270, 480),
+            interpolation=cv2.INTER_AREA,
+        )
+
+        apparatus = freeze_circular_apparatus(
+            normalized,
+            config=_V7_COLOR_CONFIG,
+            source="real_large_platform_regression",
+        )
+
+        np.testing.assert_allclose(
+            [136.2, 246.0],
+            apparatus.center_xy,
+            atol=3.0,
+        )
+        self.assertAlmostEqual(138.4, apparatus.radius_px, delta=4.0)
+
     def test_adaptive_disk_colour_policy_is_hue_invariant(self) -> None:
         config = {
             **_COLOR_CONFIG,

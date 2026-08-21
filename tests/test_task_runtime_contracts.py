@@ -130,6 +130,24 @@ class TaskRuntimeContractTests(unittest.TestCase):
         invalid_documents.append(("one_train_seed", value, "exactly 1"))
 
         value = copy.deepcopy(self.finetune.value)
+        value["training"]["sampling"]["strategy"] = "ordinary_shuffle"
+        invalid_documents.append((
+            "sealed_training_sampling",
+            value,
+            "scene_balanced_resampling_v1 policy",
+        ))
+
+        value = copy.deepcopy(self.direct.value)
+        value["training"] = copy.deepcopy(
+            self.finetune.value["training"]
+        )
+        invalid_documents.append((
+            "direct_training_sampling",
+            value,
+            "must not declare task.training",
+        ))
+
+        value = copy.deepcopy(self.finetune.value)
         value["selection"]["eval_partitions"] = ["test_id", "invented"]
         invalid_documents.append(
             ("eval_partition", value, "unknown fields")

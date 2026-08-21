@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0", "case_id": "collision_supp_20260729_img_1155_two_ball_opposed_incident",
+  "anchor_prompts": [
+    {"object_id":"object_1","frame_index":0,"box_xyxy":[6,303,51,339],"points_xy":[[29,322]],"point_labels":[1]},
+    {"object_id":"object_2","frame_index":0,"box_xyxy":[691,304,734,341],"points_xy":[[712,323]],"point_labels":[1]}
+  ], "corrections": [], "lifecycle": [], "scene_refinement": "reviewed_ball_prompts_after_ruler_line_selection"
+}

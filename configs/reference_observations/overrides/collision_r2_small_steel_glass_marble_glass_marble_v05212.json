@@ -1,0 +1,27 @@
+{
+  "anchor_prompts": [],
+  "case_id": "collision_r2_small_steel_glass_marble_glass_marble_v05212",
+  "corrections": [],
+  "lifecycle": [
+    {
+      "end_index": 73,
+      "object_id": "object_1",
+      "start_index": 61,
+      "state": 2
+    },
+    {
+      "end_index": 73,
+      "object_id": "object_2",
+      "start_index": 58,
+      "state": 2
+    },
+    {
+      "end_index": 73,
+      "object_id": "object_3",
+      "start_index": 30,
+      "state": 2
+    }
+  ],
+  "scene_refinement": "reviewed_right_boundary_exit",
+  "schema_version": "1.0"
+}

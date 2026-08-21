@@ -186,6 +186,68 @@ def _circular_geometry_components(frame: np.ndarray) -> list[tuple[np.ndarray, f
     return result
 
 
+def _collision_circle_components(
+    frames: Sequence[np.ndarray],
+) -> list[tuple[np.ndarray, float]]:
+    _validate_frames(frames)
+    frame = np.asarray(frames[0])
+    height, width = frame.shape[:2]
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    gray = cv2.GaussianBlur(gray, (5, 5), 1.2)
+    circles = cv2.HoughCircles(
+        gray,
+        cv2.HOUGH_GRADIENT,
+        dp=1.1,
+        minDist=max(12.0, width / 10.0),
+        param1=80.0,
+        param2=16.0,
+        minRadius=max(4, int(round(min(height, width) * 0.006))),
+        maxRadius=max(20, min(36, int(round(height * 0.10)))),
+    )
+    if circles is None:
+        return []
+    result: list[tuple[np.ndarray, float]] = []
+    for raw_x, raw_y, raw_radius in circles[0]:
+        x, y, radius = float(raw_x), float(raw_y), float(raw_radius)
+        if not (0.42 * height <= y <= 0.88 * height):
+            continue
+        mask = np.zeros((height, width), np.uint8)
+        cv2.circle(mask, (int(round(x)), int(round(y))), int(round(radius)), 1, -1)
+        circumference = np.zeros_like(mask)
+        cv2.circle(
+            circumference,
+            (int(round(x)), int(round(y))),
+            int(round(radius)),
+            1,
+            2,
+        )
+        contrast = float(cv2.Laplacian(gray, cv2.CV_32F)[circumference > 0].std())
+        expanded = np.zeros_like(mask)
+        cv2.circle(
+            expanded,
+            (int(round(x)), int(round(y))),
+            max(1, int(round(1.35 * radius))),
+            1,
+            -1,
+        )
+        motion = max(
+            float(
+                cv2.absdiff(
+                    gray,
+                    cv2.GaussianBlur(
+                        cv2.cvtColor(np.asarray(later), cv2.COLOR_BGR2GRAY),
+                        (5, 5),
+                        1.2,
+                    ),
+                )[expanded > 0].mean()
+            )
+            for later in frames[1:]
+        )
+        score = 2.0 * motion + contrast + 0.2 * radius
+        result.append((mask, score))
+    return result
+
+
 def _visual_order(
     candidates: list[AnchorCandidate], scene_id: str
 ) -> list[AnchorCandidate]:
@@ -226,6 +288,10 @@ def build_independent_anchor_candidates(
     if scene_id == "uniform_circular_motion":
         _validate_frames(frames)
         components = _circular_geometry_components(np.asarray(frames[0]))
+    elif scene_id == "collision_1d":
+        components = _collision_circle_components(frames)
+        if len(components) < expected_count:
+            components = _motion_components(frames)
     else:
         components = _motion_components(frames)
     if len(components) < expected_count:

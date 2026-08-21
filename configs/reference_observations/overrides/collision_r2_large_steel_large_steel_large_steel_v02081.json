@@ -1,0 +1,16 @@
+{
+  "anchor_prompts": [],
+  "case_id": "collision_r2_large_steel_large_steel_large_steel_v02081",
+  "corrections": [
+    {
+      "box_xyxy": [710, 835, 815, 940],
+      "frame_index": 84,
+      "object_id": "object_1",
+      "point_labels": [1],
+      "points_xy": [[765, 885]]
+    }
+  ],
+  "lifecycle": [],
+  "scene_refinement": "reviewed_three_ball_anchors_and_post_collision_reseed",
+  "schema_version": "1.0"
+}

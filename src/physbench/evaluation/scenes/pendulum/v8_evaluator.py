@@ -230,6 +230,8 @@ class PendulumOpenWorldCaseEvaluatorV8(ReferenceCaseEvaluator):
                 expected_radius_length_ratio=(
                     _pendulum_radius_length_ratio(request.case)
                 ),
+                condition_frame=condition_frame,
+                expected_initial_angle_deg=initial_angle_deg,
                 config=observation_config,
             )
             condition_structure = condition_decision.structure

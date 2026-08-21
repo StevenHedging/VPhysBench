@@ -1,0 +1,23 @@
+{
+  "anchor_prompts": [
+    {
+      "box_xyxy": [754, 288, 790, 321],
+      "frame_index": 0,
+      "object_id": "object_1",
+      "point_labels": [1],
+      "points_xy": [[772, 303]]
+    },
+    {
+      "box_xyxy": [784, 282, 829, 325],
+      "frame_index": 0,
+      "object_id": "object_2",
+      "point_labels": [1],
+      "points_xy": [[806, 303]]
+    }
+  ],
+  "case_id": "collision_supp_20260729_img_1071_two_ball_single_incident",
+  "corrections": [],
+  "lifecycle": [],
+  "scene_refinement": "reviewed_size_aware_collision_anchors",
+  "schema_version": "1.0"
+}

@@ -1512,6 +1512,14 @@ class CompilerAndDriverIsolationTests(unittest.TestCase):
                     "test_regimes": ["id"],
                 },
                 "seeds": {"training": [11], "inference": [7]},
+                "training": {
+                    "sampling": {
+                        "strategy": "scene_balanced_resampling_v1",
+                        "epoch_size": "selected_training_case_count",
+                        "seed_source": "training_seed",
+                        "audit_required": True,
+                    },
+                },
                 "evaluation": {
                     "protocol": "scene_default_v1",
                     "reporting": {

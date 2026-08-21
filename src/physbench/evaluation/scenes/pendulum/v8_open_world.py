@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 
 from ...common.errors import ReferenceAnalysisError
-from .open_world import PendulumStructureSpec, _structure_masks
+from .open_world import PendulumStructureSpec, _line_segments, _structure_masks
 from .v7_open_world import ConditionStructureDecision
 from .v8_identity import PendulumSubjectAnchor
 
@@ -43,6 +43,8 @@ def select_annotated_condition_structure_v8(
     anchor: PendulumSubjectAnchor,
     expected_radius_length_ratio: float,
     config: Mapping[str, Any],
+    condition_frame: np.ndarray | None = None,
+    expected_initial_angle_deg: float | None = None,
 ) -> AnnotatedConditionDecision:
     """Select the only v7 proposal independently supported by the bob mask.
 
@@ -100,8 +102,45 @@ def select_annotated_condition_structure_v8(
     else:
         supported_mask = anchor_mask
 
+    hypotheses = list(decision.hypotheses)
+    anchor_line_evidence = None
+    if condition_frame is not None and expected_initial_angle_deg is not None:
+        anchor_line_evidence = infer_anchor_guided_pivot_v8(
+            condition_frame,
+            anchor=anchor,
+            expected_initial_angle_deg=expected_initial_angle_deg,
+            config=config,
+        )
+        if anchor_line_evidence is not None:
+            hypotheses.append(
+                {
+                    "center_xy": anchor.centroid_xy.tolist(),
+                    "pivot_xy": anchor_line_evidence["pivot_xy"],
+                    "radius_px": float(anchor.equivalent_radius_px),
+                    "length_px": float(
+                        np.linalg.norm(
+                            anchor.centroid_xy
+                            - np.asarray(
+                                anchor_line_evidence["pivot_xy"],
+                                dtype=np.float64,
+                            )
+                        )
+                    ),
+                    "score": float(anchor_line_evidence["score"]),
+                    "source_agreement_count": max(minimum_sources, 3),
+                    "edge_closure_score": float(
+                        anchor_line_evidence["score"]
+                    ),
+                    "body_contrast_score": 1.0,
+                    "source": "v8_anchor_guided_fragmented_string",
+                    "supporting_segments": int(
+                        anchor_line_evidence["supporting_segments"]
+                    ),
+                }
+            )
+
     audited: list[dict[str, object]] = []
-    for index, hypothesis in enumerate(decision.hypotheses):
+    for index, hypothesis in enumerate(hypotheses):
         audited.append(
             _audit_candidate(
                 hypothesis,
@@ -221,6 +260,7 @@ def select_annotated_condition_structure_v8(
             "observer_version": PENDULUM_V8_OBSERVER_VERSION,
             "selection_policy": "absolute_gates_then_unique_identity_rank_v1",
             "selected_hypothesis_index": int(winner["hypothesis_index"]),
+            "anchor_guided_string_evidence": anchor_line_evidence,
             "anchor_dilation_px": dilation_px,
             "thresholds": {
                 "minimum_circle_anchor_containment": minimum_containment,
@@ -234,6 +274,117 @@ def select_annotated_condition_structure_v8(
             },
         },
     )
+
+
+def infer_anchor_guided_pivot_v8(
+    condition_frame: np.ndarray,
+    *,
+    anchor: PendulumSubjectAnchor,
+    expected_initial_angle_deg: float,
+    config: Mapping[str, Any],
+) -> dict[str, object] | None:
+    """Fuse collinear string fragments terminating at the annotated bob.
+
+    Pale strings can be split by Canny into two or more segments.  Each
+    accepted segment must independently point through the frozen bob and agree
+    with the annotated initial-angle magnitude.  The upper endpoint of the
+    longest supported span supplies the pivot; the bob remains annotation
+    owned.
+    """
+
+    frame = np.asarray(condition_frame)
+    if (
+        frame.ndim != 3
+        or frame.shape[:2] != anchor.mask.shape
+        or frame.shape[2] != 3
+        or frame.dtype != np.uint8
+    ):
+        raise ValueError("condition frame and pendulum anchor must align")
+    angle = _finite_nonnegative(
+        expected_initial_angle_deg,
+        name="expected_initial_angle_deg",
+    )
+    if angle > 90.0:
+        raise ValueError("expected_initial_angle_deg must not exceed 90")
+    tolerance = _finite_positive(
+        config.get("v8_anchor_string_angle_tolerance_deg", 26.0),
+        name="v8_anchor_string_angle_tolerance_deg",
+    )
+    line_distance_ratio = _finite_positive(
+        config.get("v8_anchor_string_maximum_line_distance_radii", 1.25),
+        name="v8_anchor_string_maximum_line_distance_radii",
+    )
+    center = np.asarray(anchor.centroid_xy, dtype=np.float64)
+    radius = max(float(anchor.equivalent_radius_px), 1.0)
+    supported: list[dict[str, object]] = []
+    for first, second in _line_segments(frame, config=config):
+        upper, lower = (
+            (first, second) if first[1] <= second[1] else (second, first)
+        )
+        vector = lower - upper
+        length = float(np.linalg.norm(vector))
+        if length < max(0.65 * radius, 6.0) or vector[1] <= 0.0:
+            continue
+        segment_angle = math.degrees(
+            math.atan2(abs(float(vector[0])), float(vector[1]))
+        )
+        angle_error = abs(segment_angle - angle)
+        if angle_error > tolerance:
+            continue
+        projection = float(
+            np.dot(center - upper, vector) / max(length * length, 1.0)
+        )
+        if projection < 0.65:
+            continue
+        closest = upper + projection * vector
+        line_distance = float(np.linalg.norm(center - closest))
+        if line_distance > line_distance_ratio * radius:
+            continue
+        direction_sign = int(np.sign(vector[0]))
+        angle_score = math.exp(-angle_error / max(tolerance, 1.0))
+        distance_score = math.exp(-line_distance / radius)
+        supported.append(
+            {
+                "upper": upper,
+                "lower": lower,
+                "direction_sign": direction_sign,
+                "angle_error_deg": angle_error,
+                "line_distance_px": line_distance,
+                "score": 0.55 * angle_score + 0.45 * distance_score,
+            }
+        )
+    if not supported:
+        return None
+
+    groups: dict[int, list[dict[str, object]]] = {}
+    for segment in supported:
+        groups.setdefault(int(segment["direction_sign"]), []).append(segment)
+    ranked: list[tuple[float, np.ndarray, list[dict[str, object]]]] = []
+    for group in groups.values():
+        pivot = min(group, key=lambda value: float(value["upper"][1]))[
+            "upper"
+        ]
+        span = float(np.linalg.norm(center - pivot))
+        if span < 2.0 * radius:
+            continue
+        mean_score = float(np.mean([value["score"] for value in group]))
+        coverage = min(sum(
+            float(np.linalg.norm(value["lower"] - value["upper"]))
+            for value in group
+        ) / span, 1.0)
+        ranked.append((0.75 * mean_score + 0.25 * coverage, pivot, group))
+    if not ranked:
+        return None
+    score, pivot, group = max(
+        ranked,
+        key=lambda value: (value[0], len(value[2]), -float(value[1][1])),
+    )
+    return {
+        "pivot_xy": np.asarray(pivot, dtype=np.float64).tolist(),
+        "score": float(np.clip(score, 0.0, 1.0)),
+        "supporting_segments": len(group),
+        "policy": "anchor_collinear_fragment_fusion_v1",
+    }
 
 
 def _audit_candidate(

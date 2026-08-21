@@ -1,0 +1,29 @@
+{
+  "anchor_file_count": 478,
+  "asset_lock_files_digest": "94c691c5f7848631ae9bcde452f9f51b01ee2df7a30e3c18e3feeea47021e072",
+  "content_contract": {
+    "anchor_geometry": "exact_binary_mask_reduction_v1",
+    "anchor_identity": "frozen_scene_anchor_ids_v1",
+    "hash_closure": "anchor_to_observation_to_visualization_manifest_v1"
+  },
+  "curated_case_count": 265,
+  "dataset_id": "physics_video_seven_scene_v14",
+  "generator_case_counts": {
+    "human_reviewed_sam2_1_hiera_large_collision_anchor_v1": {
+      "collision_1d": 7
+    },
+    "v14_full_reference_observation_audit": {
+      "collision_1d": 142,
+      "inclined_plane_slide": 5,
+      "parabolic_motion": 69,
+      "pendulum": 20,
+      "push_bottle": 16,
+      "uniform_circular_motion": 1,
+      "vertical_spring_oscillator": 5
+    }
+  },
+  "hash_closed_file_count": 1273,
+  "release": "14.0.0",
+  "repair_tool": "scripts/reference_observations/repair_curated_anchor_ids.py",
+  "schema_version": "1.0"
+}

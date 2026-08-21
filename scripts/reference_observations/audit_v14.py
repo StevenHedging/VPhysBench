@@ -19,6 +19,7 @@ from physbench.reference_observations import load_reference_observation
 from physbench.reference_observations.curation import (
     audit_anchor_tube_zero,
     audit_case_bindings,
+    audit_entity_mask_overlaps,
     audit_mask_trajectory_reductions,
     audit_visual_order,
     fast_entity_diagnostics,
@@ -28,6 +29,9 @@ from physbench.reference_observations.curation import (
 )
 from physbench.reference_observations.curation.anchors import (
     build_independent_anchor_candidates,
+)
+from physbench.reference_observations.curation.finalize import (
+    visual_size_order_matches_physics,
 )
 
 
@@ -112,6 +116,65 @@ def _load_anchor(path: Path) -> np.ndarray:
     return (masks > 0).astype(np.uint8)
 
 
+def audit_visual_physics_size_binding(
+    *,
+    scene_id: str,
+    physics: dict[str, Any],
+    anchor_areas: dict[str, int],
+    anchor_bbox_areas: dict[str, int] | None = None,
+) -> dict[str, Any] | None:
+    """Check collision identities using independently visible object size.
+
+    This is intentionally collision-only: in other scenes a quantity such as
+    orbit radius is not the rendered object's radius and cannot establish an
+    object identity binding.
+    """
+    if scene_id != "collision_1d" or len(anchor_areas) < 2:
+        return None
+    try:
+        matches = visual_size_order_matches_physics(physics, anchor_areas)
+    except ValueError as exc:
+        objects = physics.get("objects", {})
+        has_comparable_radius = isinstance(objects, dict) and all(
+            isinstance(value, dict) and "radius" in value
+            for value in objects.values()
+        )
+        if not has_comparable_radius:
+            return None
+        if anchor_bbox_areas is not None:
+            try:
+                bbox_matches = visual_size_order_matches_physics(
+                    physics, anchor_bbox_areas
+                )
+            except ValueError:
+                bbox_matches = None
+            if bbox_matches is True:
+                return None
+            if bbox_matches is False:
+                return {
+                    "code": "visual_physics_size_order_mismatch",
+                    "message": (
+                        "first-frame mask area is tied but bbox size rank disagrees "
+                        "with collision physics radius rank"
+                    ),
+                    "anchor_areas": anchor_areas,
+                    "anchor_bbox_areas": anchor_bbox_areas,
+                }
+        return {
+            "code": "visual_physics_size_order_indeterminate",
+            "message": str(exc),
+            "anchor_areas": anchor_areas,
+            "anchor_bbox_areas": anchor_bbox_areas,
+        }
+    if matches:
+        return None
+    return {
+        "code": "visual_physics_size_order_mismatch",
+        "message": "first-frame mask size rank disagrees with collision physics radius rank",
+        "anchor_areas": anchor_areas,
+    }
+
+
 def _spaced_video_frames(path: Path, count: int = 5) -> list[np.ndarray]:
     capture = cv2.VideoCapture(str(path))
     if not capture.isOpened():
@@ -180,6 +243,31 @@ def audit_case(case: Any, release_index: int, render_root: Path | None) -> dict[
             "anchor_tube_zero_issue": anchor_issue,
         }
 
+    size_binding_issue = audit_visual_physics_size_binding(
+        scene_id=case.scene_id,
+        physics=case.physics,
+        anchor_areas={object_id: int(mask.sum()) for object_id, mask in anchors.items()},
+        anchor_bbox_areas={
+            entity.identity.object_id: int(
+                (entity.identity.bbox_xyxy[2] - entity.identity.bbox_xyxy[0])
+                * (entity.identity.bbox_xyxy[3] - entity.identity.bbox_xyxy[1])
+            )
+            for entity in case.entities
+        },
+    )
+    if size_binding_issue is not None:
+        binding.append(size_binding_issue)
+    cross_entity_issues = audit_entity_mask_overlaps(
+        masks_by_object={
+            object_id: observation.entities[object_id].masks
+            for object_id in observation.entities
+        },
+        states_by_object={
+            object_id: observation.entities[object_id].state
+            for object_id in observation.entities
+        },
+    )
+
     independent: dict[str, np.ndarray] = {}
     independent_status: dict[str, Any] = {"status": "not_rendered"}
     evidence: dict[str, str] = {}
@@ -227,6 +315,7 @@ def audit_case(case: Any, release_index: int, render_root: Path | None) -> dict[
         "case_id": case.case_id,
         "scene_id": case.scene_id,
         "binding_issues": binding,
+        "cross_entity_issues": cross_entity_issues,
         "entities": entity_records,
         "independent_anchor": independent_status,
         "evidence": evidence,

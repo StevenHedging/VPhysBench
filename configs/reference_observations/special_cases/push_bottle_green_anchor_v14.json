@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "template_case_id": "push_bottle_m229p3g_h200mm_fmax2p647795n_fmean1p465114n_img0165",
+  "template_grabcut": {
+    "rect_xywh": [80, 880, 250, 670],
+    "keep_point_xy": [200, 1400],
+    "clear_above_y": 900,
+    "iterations": 10,
+    "opening_kernel": 3
+  },
+  "tracking_scale": 0.5,
+  "late_pose_axis_delta_degrees": 45.0,
+  "liquid_hsv": {
+    "hue": [10, 20],
+    "saturation_minimum": 60,
+    "value": [50, 220]
+  },
+  "cases": {
+    "push_bottle_m229p3g_h200mm_fmax2p647795n_fmean1p465114n_img0165": {
+      "rough_initial_center_xy": [200, 1237]
+    },
+    "push_bottle_m229p3g_h200mm_fmax3p92266n_fmean1p658305n_img0166": {
+      "rough_initial_center_xy": [218, 1240]
+    },
+    "push_bottle_m229p3g_h200mm_fmax4p118793n_fmean1p573967n_img0167": {
+      "rough_initial_center_xy": [205, 1240]
+    },
+    "push_bottle_m229p3g_h200mm_fmax5p982056n_fmean3p74614n_img0168": {
+      "rough_initial_center_xy": [205, 1240],
+      "manual_pose_keyframes": {
+        "72": {
+          "axis_degrees": 160.0,
+          "center_xy": [470.0, 1360.0],
+          "scale": 1.0
+        },
+        "73": {
+          "axis_degrees": 176.0,
+          "center_xy": [496.0, 1360.0],
+          "scale": 1.0
+        },
+        "74": {
+          "axis_degrees": 177.0,
+          "center_xy": [500.0, 1360.0],
+          "scale": 1.0
+        },
+        "90": {
+          "axis_degrees": 177.0,
+          "center_xy": [500.0, 1360.0],
+          "scale": 1.0
+        }
+      }
+    }
+  }
+}

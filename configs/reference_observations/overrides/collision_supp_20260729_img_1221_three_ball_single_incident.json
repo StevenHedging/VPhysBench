@@ -1,0 +1,8 @@
+{
+  "schema_version":"1.0","case_id":"collision_supp_20260729_img_1221_three_ball_single_incident",
+  "anchor_prompts":[
+    {"object_id":"object_1","frame_index":0,"box_xyxy":[3,314,57,360],"points_xy":[[30,337]],"point_labels":[1]},
+    {"object_id":"object_2","frame_index":0,"box_xyxy":[151,315,200,362],"points_xy":[[176,338],[220,338]],"point_labels":[1,0]},
+    {"object_id":"object_3","frame_index":0,"box_xyxy":[196,315,245,361],"points_xy":[[220,338],[176,338]],"point_labels":[1,0]}
+  ],"corrections":[],"lifecycle":[],"scene_refinement":"reviewed_separate_touching_ball_prompts"
+}

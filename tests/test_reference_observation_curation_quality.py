@@ -62,6 +62,40 @@ class ReferenceObservationCurationQualityTests(unittest.TestCase):
         area_events = [event for event in result.events if event.code == "area_jump"]
         self.assertEqual([(2, 3), (3, 4)], [event.index_range for event in area_events])
 
+    def test_sudden_centroid_teleport_is_localized_for_review(self) -> None:
+        quality = self._quality_api()
+        result = quality.fast_entity_diagnostics(
+            area=np.full(6, 100, dtype=np.int64),
+            centroid_xy=np.asarray(
+                [[0, 0], [2, 0], [4, 0], [100, 0], [102, 0], [104, 0]],
+                dtype=np.float32,
+            ),
+            state=np.zeros(6, dtype=np.uint8),
+            physical_time=np.arange(6, dtype=np.float64) / 24.0,
+            scene_id="collision_1d",
+        )
+
+        self.assertIn("centroid_instability", result.review_reasons)
+        jump_events = [event for event in result.events if event.code == "centroid_jump"]
+        self.assertEqual([(2, 3)], [event.index_range for event in jump_events])
+        self.assertGreater(jump_events[0].statistics["equivalent_radii"], 16.0)
+
+    def test_consistent_high_speed_translation_is_not_centroid_instability(self) -> None:
+        quality = self._quality_api()
+        result = quality.fast_entity_diagnostics(
+            area=np.full(6, 100, dtype=np.int64),
+            centroid_xy=np.asarray(
+                [[0, 0], [60, 0], [120, 0], [180, 0], [240, 0], [300, 0]],
+                dtype=np.float32,
+            ),
+            state=np.zeros(6, dtype=np.uint8),
+            physical_time=np.arange(6, dtype=np.float64) / 24.0,
+            scene_id="parabolic_motion",
+        )
+
+        self.assertNotIn("centroid_instability", result.review_reasons)
+        self.assertEqual([], [event.code for event in result.events])
+
     def test_pixel_diagnostics_flags_fragmented_visible_mask(self) -> None:
         quality = self._quality_api()
         masks = np.zeros((2, 12, 12), dtype=np.uint8)
@@ -90,6 +124,26 @@ class ReferenceObservationCurationQualityTests(unittest.TestCase):
 
         self.assertEqual("anchor_tube_zero_mismatch", result.code)
         self.assertEqual(1, result.statistics["xor_pixels"])
+
+    def test_entity_overlap_audit_flags_duplicate_tracks(self) -> None:
+        quality = self._quality_api()
+        left = np.zeros((2, 12, 12), dtype=np.uint8)
+        right = np.zeros_like(left)
+        left[:, 2:8, 2:8] = 1
+        right[0, 2:8, 2:8] = 1
+        right[1, 2:8, 7:11] = 1
+
+        issues = quality.audit_entity_mask_overlaps(
+            masks_by_object={"object_1": left, "object_2": right},
+            states_by_object={
+                "object_1": np.zeros(2, dtype=np.uint8),
+                "object_2": np.zeros(2, dtype=np.uint8),
+            },
+        )
+
+        self.assertEqual(["entity_mask_overlap"], [issue.code for issue in issues])
+        self.assertEqual((0,), issues[0].observation_indices)
+        self.assertEqual(("object_1", "object_2"), issues[0].statistics["objects"])
 
     def test_mask_reductions_must_equal_stored_trajectory(self) -> None:
         quality = self._quality_api()

@@ -7,34 +7,34 @@
         "initial_velocity": {
           "symbol": "v_1",
           "unit": "m/s",
-          "value": 0.0
+          "value": 0.186799501867995
         },
         "mass": {
           "symbol": "m_1",
           "unit": "kg",
-          "value": 0.06477
+          "value": 0.014
         },
         "radius": {
           "symbol": "r_1",
           "unit": "m",
-          "value": 0.0125
+          "value": 0.0075
         }
       },
       "object_2": {
         "initial_velocity": {
           "symbol": "v_2",
           "unit": "m/s",
-          "value": 0.186799501867995
+          "value": 0.0
         },
         "mass": {
           "symbol": "m_2",
           "unit": "kg",
-          "value": 0.014
+          "value": 0.06477
         },
         "radius": {
           "symbol": "r_2",
           "unit": "m",
-          "value": 0.0075
+          "value": 0.0125
         }
       }
     }

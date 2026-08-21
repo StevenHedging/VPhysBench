@@ -1,6 +1,6 @@
 """Dataset-owned reference-observation audit and repair helpers."""
 
-from . import anchors, bundle, install, overrides, tracking
+from . import anchors, bundle, finalize, install, overrides, tracking
 
 from .catalog import (
     CurationCase,
@@ -20,6 +20,7 @@ from .quality import (
     EntityDiagnostics,
     EventRange,
     audit_anchor_tube_zero,
+    audit_entity_mask_overlaps,
     audit_mask_trajectory_reductions,
     fast_entity_diagnostics,
     pixel_entity_diagnostics,
@@ -44,11 +45,13 @@ __all__ = [
     "ReviewDecision",
     "audit_case_bindings",
     "audit_anchor_tube_zero",
+    "audit_entity_mask_overlaps",
     "audit_entity_order",
     "audit_physics_key_binding",
     "audit_mask_trajectory_reductions",
     "audit_visual_order",
     "fast_entity_diagnostics",
+    "finalize",
     "load_curation_cases",
     "install",
     "pixel_entity_diagnostics",

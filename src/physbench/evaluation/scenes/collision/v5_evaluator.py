@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 
 from ....io import canonical_sha256, sha256_file
+from ....reference_observations import ObservationState
 from ...common.artifacts import (
     save_iou_curve,
     save_series_comparison,
@@ -53,6 +54,63 @@ from .open_world import (
     reference_tracks_from_instance_masks,
 )
 from .v5_visualization import write_collision_v5_visualization
+
+
+def validate_frozen_collision_evidence(
+    states: np.ndarray,
+    *,
+    entity_ids: Sequence[str],
+    minimum_visible_samples: int,
+) -> dict[str, dict[str, int]]:
+    """Validate measured collision evidence without rejecting occlusion."""
+    values = np.asarray(states)
+    ids = tuple(str(entity_id) for entity_id in entity_ids)
+    if values.ndim != 2 or values.shape[1] != len(ids) or not ids:
+        raise ValueError(
+            "collision states must have shape [samples, entities]"
+        )
+    if (
+        isinstance(minimum_visible_samples, bool)
+        or not isinstance(minimum_visible_samples, int)
+        or minimum_visible_samples < 3
+    ):
+        raise ValueError(
+            "minimum_visible_samples must be an integer of at least 3"
+        )
+    allowed = {int(state) for state in ObservationState}
+    if not set(np.unique(values).tolist()) <= allowed:
+        raise ValueError("collision states contain an unknown lifecycle value")
+
+    audit: dict[str, dict[str, int]] = {}
+    for entity_index, entity_id in enumerate(ids):
+        entity_states = values[:, entity_index]
+        counts = {
+            "visible_samples": int(np.count_nonzero(
+                entity_states == int(ObservationState.VISIBLE)
+            )),
+            "occluded_samples": int(np.count_nonzero(
+                entity_states == int(ObservationState.OCCLUDED)
+            )),
+            "out_of_frame_samples": int(np.count_nonzero(
+                entity_states == int(ObservationState.OUT_OF_FRAME)
+            )),
+            "unresolved_samples": int(np.count_nonzero(
+                entity_states == int(ObservationState.UNRESOLVED)
+            )),
+        }
+        if entity_states[0] != int(ObservationState.VISIBLE):
+            raise SceneAnalysisError(
+                "reference_collision_frame_zero_entity_missing",
+                f"{entity_id} is not visible in frozen frame zero",
+            )
+        if counts["visible_samples"] < minimum_visible_samples:
+            raise SceneAnalysisError(
+                "insufficient_reference_entity_samples",
+                f"{entity_id} has {counts['visible_samples']} visible samples; "
+                f"at least {minimum_visible_samples} are required",
+            )
+        audit[entity_id] = counts
+    return audit
 
 
 class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
@@ -379,6 +437,7 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
             **self.config.get("nbody_scoring", {})
         )
         try:
+            frozen_evidence_audit = None
             if self.config.get("reference_observation_policy") == (
                 "frozen_dataset_reference_observation_v1"
             ):
@@ -399,6 +458,22 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                     list(frozen_reference.entities[entity_id].masks)
                     for entity_id in entity_ids
                 ]
+                frozen_evidence_audit = validate_frozen_collision_evidence(
+                    np.stack(
+                        [
+                            frozen_reference.entities[entity_id].state
+                            for entity_id in entity_ids
+                        ],
+                        axis=1,
+                    ),
+                    entity_ids=entity_ids,
+                    minimum_visible_samples=int(
+                        quality.get(
+                            "minimum_reference_visible_samples",
+                            3,
+                        )
+                    ),
+                )
                 reference_xy = np.stack(
                     [
                         frozen_reference.entities[entity_id].centroid_xy
@@ -455,6 +530,9 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                 reference_observation = dict(
                     frozen_reference.provenance
                 )
+                reference_observation["evidence_sufficiency"] = (
+                    frozen_evidence_audit
+                )
             else:
                 identity_context = self._prepare_identity_context(
                     request,
@@ -475,17 +553,18 @@ class CollisionOpenWorldCaseEvaluator(ReferenceCaseEvaluator):
                     observation_role="reference",
                     identity_context=identity_context,
                 )
-            minimum_reference_ratio = float(
-                quality.get("minimum_reference_valid_frame_ratio", 0.2)
-            )
-            reference_ratios = np.mean(reference_valid, axis=0)
-            if np.any(reference_ratios < minimum_reference_ratio):
-                raise SceneAnalysisError(
-                    "insufficient_reference_entity_tracks",
-                    "reference per-entity coverage "
-                    f"{reference_ratios.tolist()} is below "
-                    f"{minimum_reference_ratio:g}",
+            if frozen_evidence_audit is None:
+                minimum_reference_ratio = float(
+                    quality.get("minimum_reference_valid_frame_ratio", 0.2)
                 )
+                reference_ratios = np.mean(reference_valid, axis=0)
+                if np.any(reference_ratios < minimum_reference_ratio):
+                    raise SceneAnalysisError(
+                        "insufficient_reference_entity_tracks",
+                        "reference per-entity coverage "
+                        f"{reference_ratios.tolist()} is below "
+                        f"{minimum_reference_ratio:g}",
+                    )
             reference_tracks = reference_tracks_from_instance_masks(
                 reference_masks,
                 entity_ids=entity_ids,

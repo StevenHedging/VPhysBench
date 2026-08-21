@@ -119,6 +119,46 @@ class ReferenceObservationCurationTrackingTests(unittest.TestCase):
         self.assertGreater(candidates[0].area_pixels, 500)
         self.assertGreater(candidates[1].area_pixels, 500)
 
+    def test_collision_anchor_candidates_fall_back_to_static_circle_geometry(self) -> None:
+        anchors = self._anchors_api()
+        cv2 = __import__("cv2")
+        frame = np.full((120, 240, 3), 210, np.uint8)
+        cv2.line(frame, (0, 88), (239, 88), (80, 80, 80), 3)
+        cv2.circle(frame, (55, 72), 13, (30, 30, 30), -1)
+        cv2.circle(frame, (170, 70), 18, (45, 45, 45), -1)
+        candidates = anchors.build_independent_anchor_candidates(
+            [frame.copy() for _ in range(3)],
+            scene_id="collision_1d",
+            expected_count=2,
+            comparison_masks=None,
+        )
+        self.assertLess(candidates[0].centroid_xy[0], candidates[1].centroid_xy[0])
+        self.assertAlmostEqual(55.0, candidates[0].centroid_xy[0], delta=8.0)
+        self.assertAlmostEqual(170.0, candidates[1].centroid_xy[0], delta=8.0)
+
+    def test_collision_anchor_candidates_ignore_oversized_static_ring(self) -> None:
+        anchors = self._anchors_api()
+        cv2 = __import__("cv2")
+        frames = []
+        for offset in (0, 8, 16):
+            frame = np.full((160, 320, 3), 210, np.uint8)
+            cv2.line(frame, (0, 118), (319, 118), (80, 80, 80), 3)
+            cv2.circle(frame, (70, 102), 10, (25, 25, 25), -1)
+            cv2.circle(frame, (220, 101), 14, (40, 40, 40), -1)
+            cv2.circle(frame, (150 + offset, 82), 38, (30, 30, 30), 4)
+            frames.append(frame)
+
+        candidates = anchors.build_independent_anchor_candidates(
+            frames,
+            scene_id="collision_1d",
+            expected_count=2,
+            comparison_masks=None,
+        )
+
+        self.assertAlmostEqual(70.0, candidates[0].centroid_xy[0], delta=8.0)
+        self.assertAlmostEqual(220.0, candidates[1].centroid_xy[0], delta=8.0)
+        self.assertTrue(all(candidate.area_pixels < 1500 for candidate in candidates))
+
     def test_override_rejects_duplicate_object_prompt_on_same_frame(self) -> None:
         overrides = self._overrides_api()
         value = {
@@ -204,6 +244,99 @@ class ReferenceObservationCurationTrackingTests(unittest.TestCase):
 
         self.assertEqual([0, 0, 0, 2, 2], result.states_by_object["object_1"].tolist())
         self.assertEqual(0, int(result.masks_by_object["object_1"][3:].sum()))
+
+    def test_trailing_empty_masks_after_boundary_contact_are_out_of_frame(self) -> None:
+        tracking = self._tracking_api()
+        masks = np.zeros((5, 12, 16), np.uint8)
+        masks[0, 4:8, 8:12] = 1
+        masks[1, 4:8, 11:15] = 1
+        masks[2, 4:8, 14:16] = 1
+        states = np.where(masks.reshape(5, -1).any(axis=1), 0, 3).astype(np.uint8)
+
+        resolved = tracking.resolve_trailing_boundary_exit(masks, states)
+
+        self.assertEqual([0, 0, 0, 2, 2], resolved.tolist())
+
+    def test_interior_tracking_loss_remains_unresolved(self) -> None:
+        tracking = self._tracking_api()
+        masks = np.zeros((5, 12, 16), np.uint8)
+        masks[:3, 4:8, 4:8] = 1
+        states = np.where(masks.reshape(5, -1).any(axis=1), 0, 3).astype(np.uint8)
+
+        resolved = tracking.resolve_trailing_boundary_exit(masks, states)
+
+        self.assertEqual([0, 0, 0, 3, 3], resolved.tolist())
+
+    def test_accelerating_object_predicted_beyond_boundary_is_out_of_frame(self) -> None:
+        tracking = self._tracking_api()
+        masks = np.zeros((6, 96, 128), np.uint8)
+        masks[0, 8:16, 72:80] = 1
+        masks[1, 28:36, 62:70] = 1
+        masks[2, 62:70, 52:60] = 1
+        states = np.where(masks.reshape(6, -1).any(axis=1), 0, 3).astype(np.uint8)
+
+        resolved = tracking.resolve_trailing_predicted_exit(masks, states)
+
+        self.assertEqual([0, 0, 0, 2, 2, 2], resolved.tolist())
+
+    def test_motion_extrapolation_does_not_hide_an_interior_tracking_loss(self) -> None:
+        tracking = self._tracking_api()
+        masks = np.zeros((6, 96, 128), np.uint8)
+        masks[0, 36:44, 20:28] = 1
+        masks[1, 36:44, 30:38] = 1
+        masks[2, 36:44, 40:48] = 1
+        states = np.where(masks.reshape(6, -1).any(axis=1), 0, 3).astype(np.uint8)
+
+        resolved = tracking.resolve_trailing_predicted_exit(masks, states)
+
+        self.assertEqual([0, 0, 0, 3, 3, 3], resolved.tolist())
+
+    def test_motion_extrapolation_requires_three_contiguous_visible_samples(self) -> None:
+        tracking = self._tracking_api()
+        masks = np.zeros((6, 96, 128), np.uint8)
+        masks[0, 8:16, 72:80] = 1
+        masks[2, 62:70, 52:60] = 1
+        states = np.where(masks.reshape(6, -1).any(axis=1), 0, 3).astype(np.uint8)
+
+        resolved = tracking.resolve_trailing_predicted_exit(masks, states)
+
+        self.assertEqual([0, 3, 0, 3, 3, 3], resolved.tolist())
+
+    def test_round_subject_refinement_removes_thin_attached_tether(self) -> None:
+        tracking = self._tracking_api()
+        cv2 = __import__("cv2")
+        masks = np.zeros((3, 80, 80), np.uint8)
+        for index, center_x in enumerate((30, 36, 42)):
+            cv2.circle(masks[index], (center_x, 52), 9, 1, -1)
+            cv2.line(masks[index], (center_x, 8), (center_x, 43), 1, 3)
+        states = np.zeros(3, np.uint8)
+
+        refined, refined_states = tracking.isolate_compact_round_subject(
+            masks, states
+        )
+
+        self.assertTrue(all(refined[i, 52, x] == 1 for i, x in enumerate((30, 36, 42))))
+        self.assertEqual(0, int(refined[:, :35].sum()))
+        self.assertTrue(np.all(refined.reshape(3, -1).sum(axis=1) < 350))
+        self.assertEqual([0, 0, 0], refined_states.tolist())
+
+    def test_round_subject_refinement_fills_only_short_internal_gap(self) -> None:
+        tracking = self._tracking_api()
+        cv2 = __import__("cv2")
+        masks = np.zeros((5, 64, 64), np.uint8)
+        cv2.circle(masks[0], (20, 32), 7, 1, -1)
+        cv2.circle(masks[1], (24, 32), 7, 1, -1)
+        cv2.circle(masks[3], (32, 32), 7, 1, -1)
+        cv2.circle(masks[4], (36, 32), 7, 1, -1)
+        states = np.asarray([0, 0, 3, 0, 0], np.uint8)
+
+        refined, refined_states = tracking.isolate_compact_round_subject(
+            masks, states, maximum_internal_gap=1
+        )
+
+        self.assertGreater(int(refined[2].sum()), 100)
+        self.assertAlmostEqual(28.0, float(np.nonzero(refined[2])[1].mean()), delta=1.0)
+        self.assertEqual([0, 0, 0, 0, 0], refined_states.tolist())
 
 
 if __name__ == "__main__":

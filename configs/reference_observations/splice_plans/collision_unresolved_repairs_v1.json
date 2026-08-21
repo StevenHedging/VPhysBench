@@ -1,0 +1,31 @@
+{
+  "collision_supp_20260729_img_0988_two_ball_single_incident": {
+    "full_candidate_entities": ["object_1", "object_2"]
+  },
+  "collision_supp_20260729_img_1116_two_ball_single_incident": {
+    "full_candidate_entities": ["object_1", "object_2"]
+  },
+  "collision_supp_20260729_img_1117_two_ball_single_incident": {
+    "full_candidate_entities": ["object_1", "object_2"]
+  },
+  "collision_supp_20260729_img_1120_two_ball_single_incident": {
+    "full_candidate_entities": ["object_1", "object_2"]
+  },
+  "collision_supp_20260729_img_1184_two_ball_single_incident": {
+    "full_candidate_entities": ["object_1", "object_2"]
+  },
+  "collision_supp_20260729_img_1197_two_ball_single_incident": {
+    "full_candidate_entities": ["object_1", "object_2"]
+  },
+  "collision_supp_20260729_img_1205_two_ball_single_incident": {
+    "full_candidate_entities": ["object_1", "object_2"],
+    "lifecycle": [
+      {
+        "end_index": 101,
+        "object_id": "object_2",
+        "start_index": 90,
+        "state": 2
+      }
+    ]
+  }
+}

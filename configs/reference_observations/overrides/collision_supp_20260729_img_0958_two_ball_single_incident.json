@@ -1,0 +1,11 @@
+{
+  "anchor_prompts": [
+    {"box_xyxy": [742, 340, 781, 379], "frame_index": 0, "object_id": "object_1", "point_labels": [1], "points_xy": [[762, 359]]},
+    {"box_xyxy": [794, 340, 832, 380], "frame_index": 0, "object_id": "object_2", "point_labels": [1], "points_xy": [[813, 360]]}
+  ],
+  "case_id": "collision_supp_20260729_img_0958_two_ball_single_incident",
+  "corrections": [],
+  "lifecycle": [],
+  "scene_refinement": "reviewed_first_frame_ball_prompts_after_ruler_anchor_failure",
+  "schema_version": "1.0"
+}

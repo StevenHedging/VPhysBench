@@ -28,7 +28,10 @@ from physbench.reference_observations.curation.anchors import (
     build_independent_anchor_candidates,
 )
 from physbench.reference_observations.curation.install import install_candidate_bundle
-from physbench.reference_observations.curation.overrides import validate_override
+from physbench.reference_observations.curation.overrides import (
+    CorrectionPrompt,
+    validate_override,
+)
 from physbench.reference_observations.curation.tracking import CuratedSam2Tracker
 
 
@@ -96,13 +99,13 @@ def _decode_video(
 ) -> list[np.ndarray]:
     requested = tuple(int(value) for value in source_frame_indices)
     if not requested or requested[0] < 0 or any(
-        right <= left for left, right in zip(requested, requested[1:])
+        right < left for left, right in zip(requested, requested[1:])
     ):
-        raise ValueError("timeline source frame indices must be strictly increasing")
+        raise ValueError("timeline source frame indices must be nondecreasing")
     capture = cv2.VideoCapture(str(path))
     if not capture.isOpened():
         raise ValueError(f"cannot open reference video: {path}")
-    frames: list[np.ndarray] = []
+    decoded: dict[int, np.ndarray] = {}
     requested_set = set(requested)
     last = requested[-1]
     try:
@@ -112,18 +115,18 @@ def _decode_video(
             if not okay:
                 break
             if index in requested_set:
-                frames.append(frame)
+                decoded[index] = frame
             if index >= last:
                 break
             index += 1
     finally:
         capture.release()
-    if len(frames) != len(requested):
+    if len(decoded) != len(requested_set):
         raise ValueError(
             f"reference video does not cover timeline frames: requested "
-            f"{len(requested)}, decoded {len(frames)}"
+            f"{len(requested_set)} unique frames, decoded {len(decoded)}"
         )
-    return frames
+    return [decoded[index].copy() for index in requested]
 
 
 def _existing_anchors(case: Any) -> tuple[AnchorCandidate, ...]:
@@ -131,6 +134,44 @@ def _existing_anchors(case: Any) -> tuple[AnchorCandidate, ...]:
         AnchorCandidate.from_mask(entity.identity.object_id, _load_anchor(entity.anchor_npz_path))
         for entity in case.entities
     )
+
+
+def _apply_anchor_prompts(
+    anchors: tuple[AnchorCandidate, ...],
+    prompts: tuple[CorrectionPrompt, ...],
+    *,
+    frame_shape: tuple[int, int],
+) -> tuple[AnchorCandidate, ...]:
+    """Replace reviewed first-frame anchors while preserving object identity."""
+    if not prompts:
+        return anchors
+    height, width = frame_shape
+    anchor_by_id = {anchor.object_id: anchor for anchor in anchors}
+    if len(anchor_by_id) != len(anchors):
+        raise ValueError("anchor candidates must have unique object ids")
+    replacements: dict[str, AnchorCandidate] = {}
+    for prompt in prompts:
+        if prompt.frame_index != 0:
+            raise ValueError("reviewed anchor prompts must target frame zero")
+        if prompt.object_id not in anchor_by_id:
+            raise ValueError(f"reviewed anchor prompt references unknown object {prompt.object_id}")
+        if prompt.object_id in replacements:
+            raise ValueError(f"duplicate reviewed anchor prompt for {prompt.object_id}")
+        x0, y0, x1, y1 = prompt.box_xyxy
+        left = max(0, int(np.floor(x0)))
+        top = max(0, int(np.floor(y0)))
+        right = min(width - 1, int(np.ceil(x1)))
+        bottom = min(height - 1, int(np.ceil(y1)))
+        if left > right or top > bottom:
+            raise ValueError(f"reviewed anchor prompt for {prompt.object_id} is outside frame")
+        mask = np.zeros((height, width), np.uint8)
+        mask[top : bottom + 1, left : right + 1] = 1
+        replacements[prompt.object_id] = AnchorCandidate.from_mask(
+            prompt.object_id,
+            mask,
+            comparison_mask=anchor_by_id[prompt.object_id].mask,
+        )
+    return tuple(replacements.get(anchor.object_id, anchor) for anchor in anchors)
 
 
 def _trajectory(masks: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -179,6 +220,14 @@ def rebuild_case(
         path = override_root / f"{case.case_id}.json"
         if path.exists():
             override = validate_override(json.loads(path.read_text(encoding="utf-8")))
+            if override.case_id != case.case_id:
+                raise ValueError(f"override case id does not match {case.case_id}")
+    if override is not None:
+        anchors = _apply_anchor_prompts(
+            anchors,
+            override.anchor_prompts,
+            frame_shape=frames[0].shape[:2],
+        )
     tracker = CuratedSam2Tracker(segmenter or Sam2VideoSegmenter(config))
     result = tracker.track(
         frames,
