@@ -15,7 +15,11 @@ from .v7_open_world import ConditionStructureDecision
 from .v8_identity import PendulumSubjectAnchor
 
 
-PENDULUM_V8_OBSERVER_VERSION = "frozen_subject_anchor_fused_v1"
+PENDULUM_V8_OBSERVER_VERSION = "frozen_subject_anchor_fused_v2"
+
+_GEOMETRY_SELECTION_WEIGHT = 0.75
+_IDENTITY_SELECTION_WEIGHT = 0.10
+_VISUAL_SELECTION_WEIGHT = 0.15
 
 
 @dataclass(frozen=True)
@@ -50,7 +54,7 @@ def select_annotated_condition_structure_v8(
 
     The v7 score remains useful visual evidence, but cannot establish semantic
     identity.  Absolute anchor, geometry, and source-agreement gates run before
-    ranking, and a spatially distinct near-tie invalidates the reference.
+    ranking, and a structurally distinct near-tie invalidates the reference.
     """
 
     anchor_mask = np.asarray(anchor.mask) > 0
@@ -215,7 +219,11 @@ def select_annotated_condition_structure_v8(
     distinct = [
         candidate
         for candidate in geometry_supported[1:]
-        if _spatially_distinct(winner, candidate)
+        if _anchor_owned_structures_distinct(
+            winner,
+            candidate,
+            anchor_radius_px=anchor.equivalent_radius_px,
+        )
     ]
     runner_score = max(
         (float(candidate["selection_score"]) for candidate in distinct),
@@ -225,7 +233,7 @@ def select_annotated_condition_structure_v8(
     if distinct and winning_margin < ambiguity_margin:
         raise ReferenceAnalysisError(
             "reference_condition_pendulum_subject_ambiguous_v8",
-            "spatially distinct annotation-supported bob proposals are tied "
+            "distinct annotation-supported pendulum structures are tied "
             f"within {winning_margin:.4f}",
         )
 
@@ -250,7 +258,7 @@ def select_annotated_condition_structure_v8(
         bob_mask=bob_mask,
         subject_mask=subject_mask,
         confidence=float(np.clip(winner["selection_score"], 0.0, 1.0)),
-        source="condition_v8_frozen_subject_anchor_fused_v1",
+        source="condition_v8_frozen_subject_anchor_fused_v2",
     )
     return AnnotatedConditionDecision(
         structure=structure,
@@ -259,10 +267,18 @@ def select_annotated_condition_structure_v8(
         winning_margin=winning_margin,
         provenance={
             "observer_version": PENDULUM_V8_OBSERVER_VERSION,
-            "selection_policy": "absolute_gates_then_unique_identity_rank_v1",
+            "selection_policy": (
+                "absolute_gates_then_visual_geometry_rank_and_unique_"
+                "anchor_owned_structure_v3"
+            ),
             "selected_hypothesis_index": int(winner["hypothesis_index"]),
             "anchor_guided_string_evidence": anchor_line_evidence,
             "anchor_dilation_px": dilation_px,
+            "selection_score_weights": {
+                "anchor_geometry_ratio": _GEOMETRY_SELECTION_WEIGHT,
+                "anchor_identity": _IDENTITY_SELECTION_WEIGHT,
+                "v7_visual_evidence": _VISUAL_SELECTION_WEIGHT,
+            },
             "thresholds": {
                 "minimum_circle_anchor_containment": minimum_containment,
                 "maximum_anchor_center_distance_radii": maximum_distance,
@@ -646,12 +662,15 @@ def _audit_candidate(
             )
         )
     )
-    # Geometry dominates the choice among proposals already supported by the
-    # frozen bob mask.  This prevents a bright spot inside the bob from
-    # supplying a short local pseudo-pivot merely because its circle has
-    # perfect containment.
+    # Geometry remains the primary signal among proposals already supported by
+    # the frozen bob mask, while independent v7 visual evidence must still
+    # contribute.  A geometry-only false circle can otherwise nearly tie a
+    # visually well-supported structure merely because its extrapolated length
+    # happens to match the Case prior.
     selection_score = float(
-        0.90 * geometry_ratio_score + 0.10 * identity_score
+        _GEOMETRY_SELECTION_WEIGHT * geometry_ratio_score
+        + _IDENTITY_SELECTION_WEIGHT * identity_score
+        + _VISUAL_SELECTION_WEIGHT * v7_score
     )
     gates = {
         "anchor_containment": containment >= minimum_containment,
@@ -684,21 +703,25 @@ def _audit_candidate(
     }
 
 
-def _spatially_distinct(
+def _anchor_owned_structures_distinct(
     first: Mapping[str, object],
     second: Mapping[str, object],
+    *,
+    anchor_radius_px: float,
 ) -> bool:
+    """Compare the structures that remain after the frozen bob is bound.
+
+    Candidate circle centres are only evidence for the absolute anchor gates.
+    The final structure always uses the frozen anchor's bob centre and radius,
+    so two accepted candidates with the same pivot describe one structure.
+    """
     distance = float(
         np.linalg.norm(
-            np.asarray(first["center_xy"], dtype=np.float64)
-            - np.asarray(second["center_xy"], dtype=np.float64)
+            np.asarray(first["pivot_xy"], dtype=np.float64)
+            - np.asarray(second["pivot_xy"], dtype=np.float64)
         )
     )
-    return distance > 1.5 * max(
-        float(first["radius_px"]),
-        float(second["radius_px"]),
-        1.0,
-    )
+    return distance > 1.5 * max(float(anchor_radius_px), 1.0)
 
 
 def _point(value: object, *, name: str) -> np.ndarray:

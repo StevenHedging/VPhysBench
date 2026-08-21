@@ -112,6 +112,13 @@ Spring evaluator 还保持明确的失败来源：reference mask/identity/trace 
 该预检是 Dataset/evaluator 的发布门，不是 Baseline 分数。它用于保证 reference 侧缺陷在
 昂贵推理开始前暴露；绝不能通过把 reference 异常改记为 prediction 零分来通过预检。
 
+除 canonical-reference 预检外，发布回归还应覆盖与每个 job 画布、帧率和帧数契约一致的
+全黑视频。对这种可解码但视觉质量极差的合法 prediction，主体缺失或 observation 失败必须
+返回 `evaluated` 与有限低分；若出现 `unavailable`，说明 reference observer 仍有缺陷，不能
+将其吞并成 prediction 零分。摆锤 V8 在冻结 bob annotation 后以 pivot 判断最终结构是否
+重复，并在候选排序中同时保留物理几何、冻结身份和视觉证据，避免临时 circle centre 或
+单一长度先验制造伪歧义。
+
 ## Artifacts and audit
 
 成功的 scene evaluator 可以写入逐帧 CSV、诊断曲线和 JSON audit；artifact 写入失败只进入

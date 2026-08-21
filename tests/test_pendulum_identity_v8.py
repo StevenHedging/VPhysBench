@@ -26,6 +26,7 @@ from physbench.evaluation.common.entities import (
 )
 from physbench.evaluation.common.csti import CSTIConfig, evaluate_csti
 from physbench.evaluation.common.errors import ReferenceAnalysisError
+from physbench.evaluation.common.media import sample_video
 from physbench.evaluation.contracts import CaseEvaluationRequest
 from physbench.evaluation.scenes.pendulum.v8_identity import (
     PendulumSubjectAnchor,
@@ -814,6 +815,62 @@ class PendulumAnnotatedStructureSelectionTests(unittest.TestCase):
             rejection_counts={},
         )
 
+    @staticmethod
+    def _select_decoded_real_case(
+        *,
+        case_id: str,
+        expected_radius_length_ratio: float,
+        expected_initial_angle_deg: float,
+    ):
+        dataset = load_dataset(LATEST_DATASET, check_assets=False)
+        cases = {case["case_id"]: case for case in dataset.cases}
+        case = cases[case_id]
+        protocol = json.loads(
+            (
+                Path(__file__).parents[1]
+                / "configs/evaluation/protocols/scene_default_v1.json"
+            ).read_text(encoding="utf-8")
+        )
+        config = protocol["scenes"]["pendulum"]["open_world_observation"]
+        sampled = sample_video(
+            dataset.asset_root / case["assets"]["reference_video"],
+            sample_times_s=[0.0],
+            width=468,
+            height=832,
+            decode_policy="sequential_forward",
+            spatial_policy="reference_content_crop_resize_no_pad",
+            crop_xywh=(0, 0, 1080, 1920),
+        )
+        request = CaseEvaluationRequest(
+            job={"job_id": case_id},
+            case=case,
+            case_catalog=cases,
+            prediction=None,
+            asset_root=dataset.asset_root,
+            artifact_dir=Path("/tmp") / case_id,
+            evaluator_config={},
+        )
+        anchor = load_pendulum_subject_anchor(
+            request,
+            entity_id="bob",
+            spatial_transform=sampled.spatial_transform,
+        )
+        proposals = detect_condition_structure_v7(
+            sampled.frames[0],
+            config=config,
+            expected_radius_length_ratio=expected_radius_length_ratio,
+            expected_initial_angle_deg=expected_initial_angle_deg,
+            defer_ambiguity=True,
+        )
+        return select_annotated_condition_structure_v8(
+            proposals,
+            anchor=anchor,
+            expected_radius_length_ratio=expected_radius_length_ratio,
+            condition_frame=sampled.frames[0],
+            expected_initial_angle_deg=expected_initial_angle_deg,
+            config=config,
+        )
+
     def test_annotation_selects_real_bob_over_higher_scoring_apparatus(
         self,
     ) -> None:
@@ -835,7 +892,7 @@ class PendulumAnnotatedStructureSelectionTests(unittest.TestCase):
 
         np.testing.assert_allclose([90.0, 80.0], selected.structure.bob_xy)
         self.assertEqual(
-            "condition_v8_frozen_subject_anchor_fused_v1",
+            "condition_v8_frozen_subject_anchor_fused_v2",
             selected.structure.source,
         )
         self.assertEqual(2, len(selected.candidates))
@@ -1189,6 +1246,68 @@ class PendulumAnnotatedStructureSelectionTests(unittest.TestCase):
         self.assertEqual(
             "reference_condition_pendulum_subject_ambiguous_v8",
             raised.exception.code,
+        )
+
+    def test_anchor_owned_candidates_with_same_pivot_are_not_ambiguous(
+        self,
+    ) -> None:
+        first = self._hypothesis(80.0, 80.0, score=0.80)
+        second = self._hypothesis(100.0, 80.0, score=0.79)
+        first["pivot_xy"] = [90.0, 35.0]
+        second["pivot_xy"] = [90.0, 35.0]
+        first["length_px"] = second["length_px"] = 45.0
+
+        selected = select_annotated_condition_structure_v8(
+            self._decision((first, second)),
+            anchor=self._anchor(circles=((80, 80, 8), (100, 80, 8))),
+            expected_radius_length_ratio=(
+                self.EXPECTED_RADIUS_LENGTH_RATIO
+            ),
+            config=self.CONFIG,
+        )
+
+        np.testing.assert_allclose(
+            [90.0, 35.0],
+            selected.structure.pivot_xy,
+        )
+
+    def test_real_img1369_reference_frame_merges_same_pivot_candidates(
+        self,
+    ) -> None:
+        case_id = (
+            "pendulum_s3_ltot0060mm_lrope0050mm_m031p5g_"
+            "r010mm_a025deg_img1369"
+        )
+        selected = self._select_decoded_real_case(
+            case_id=case_id,
+            expected_radius_length_ratio=0.01 / 0.06,
+            expected_initial_angle_deg=25.0,
+        )
+
+        np.testing.assert_allclose(
+            [229.0, 339.0],
+            selected.structure.pivot_xy,
+            atol=2.0,
+        )
+
+    def test_real_img1412_visual_evidence_rejects_geometry_only_runner(
+        self,
+    ) -> None:
+        case_id = (
+            "pendulum_s3_ltot0175mm_lrope0165mm_m031p5g_"
+            "r010mm_a025deg_img1412"
+        )
+
+        selected = self._select_decoded_real_case(
+            case_id=case_id,
+            expected_radius_length_ratio=0.01 / 0.175,
+            expected_initial_angle_deg=25.0,
+        )
+
+        np.testing.assert_allclose(
+            [224.0, 362.0],
+            selected.structure.pivot_xy,
+            atol=3.0,
         )
 
     def test_anchor_geometry_rejects_a_local_highlight_pseudo_pivot(

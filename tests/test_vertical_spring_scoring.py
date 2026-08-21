@@ -153,16 +153,16 @@ class VerticalSpringScoringTests(unittest.TestCase):
             extract_spring_trace(nearly_static, self.times, quality_config=QUALITY)
         self.assertEqual("insufficient_amplitude", caught.exception.code)
 
-    def test_rejects_an_observable_period_outside_configured_window(self) -> None:
-        """Would fail if bounded period search silently aliases a slow oscillator."""
+    def test_out_of_bounds_period_becomes_missing_evidence(self) -> None:
+        """An unsupported slow oscillator stays evaluable without a period."""
         slow_times = np.arange(240, dtype=float) / 60.0
-        with self.assertRaises(SpringTraceError) as caught:
-            extract_spring_trace(
-                sinusoidal_masks(slow_times, period=1.5),
-                slow_times,
-                quality_config=QUALITY,
-            )
-        self.assertEqual("period_out_of_bounds", caught.exception.code)
+        trace = extract_spring_trace(
+            sinusoidal_masks(slow_times, period=1.5),
+            slow_times,
+            quality_config=QUALITY,
+        )
+
+        self.assertIsNone(trace.period_s)
 
     def test_identity_score_is_one_and_all_components_are_bounded(self) -> None:
         """Would fail if exact agreement or component bounds change."""
@@ -414,22 +414,26 @@ class VerticalSpringScoringTests(unittest.TestCase):
         self.assertIsNone(ramp.period_s)
         self.assertEqual(0.0, self.score(ramp)["components"]["oscillation_evidence"])
 
-    def test_rejects_harmonic_alias_when_fundamental_is_outside_window(self) -> None:
-        """Would fail if the 0.75 s harmonic masks a 1.5 s fundamental."""
+    def test_bounded_search_ignores_an_out_of_window_slow_component(self) -> None:
+        """Only admissible repeat evidence participates in period selection."""
         times = np.arange(240, dtype=float) / 60.0
         positions = (
             48.0
             + 8.0 * np.cos(2.0 * math.pi * times / 1.5)
             + 20.0 * np.cos(4.0 * math.pi * times / 1.5)
         )
-        with self.assertRaises(SpringTraceError) as caught:
-            extract_spring_trace(
-                masks_for_vertical_positions(positions), times, quality_config=QUALITY
-            )
-        self.assertEqual("period_out_of_bounds", caught.exception.code)
+        trace = extract_spring_trace(
+            masks_for_vertical_positions(positions),
+            times,
+            quality_config=QUALITY,
+        )
 
-    def test_rejects_intermediate_alias_in_three_harmonic_chain(self) -> None:
-        """Would fail if selection stops before the true 1.5 s recurrence."""
+        self.assertAlmostEqual(0.75, trace.period_s, delta=1 / 60)
+
+    def test_bounded_search_uses_the_admissible_three_harmonic_candidate(
+        self,
+    ) -> None:
+        """Out-of-window recurrences cannot invalidate admissible evidence."""
         times = np.arange(240, dtype=float) / 60.0
         positions = (
             48.0
@@ -437,17 +441,20 @@ class VerticalSpringScoringTests(unittest.TestCase):
             + 5.0 * np.cos(4.0 * math.pi * times / 1.5)
             + 15.0 * np.cos(8.0 * math.pi * times / 1.5)
         )
-        with self.assertRaises(SpringTraceError) as caught:
-            extract_spring_trace(
-                masks_for_vertical_positions(positions),
-                times,
-                quality_config=QUALITY,
-            )
-        self.assertEqual("period_out_of_bounds", caught.exception.code)
+        trace = extract_spring_trace(
+            masks_for_vertical_positions(positions),
+            times,
+            quality_config=QUALITY,
+        )
 
-    def test_weak_fundamental_sweep_rejects_harmonic_aliases(self) -> None:
-        """Would fail if a 0.75 s harmonic hides any observable 1.5 s fundamental."""
+        self.assertAlmostEqual(0.75, trace.period_s, delta=1 / 60)
+
+    def test_weak_in_window_fundamental_sweep_rejects_harmonic_aliases(
+        self,
+    ) -> None:
+        """Observable in-window fundamentals still defeat shorter harmonics."""
         times = np.arange(240, dtype=float) / 60.0
+        quality = {**QUALITY, "maximum_s": 2.0}
         for fundamental_amplitude in (0.10, 0.25, 0.50, 0.75, 1.0, 2.0, 4.0, 8.0):
             with self.subTest(fundamental_amplitude=fundamental_amplitude):
                 positions = (
@@ -455,13 +462,12 @@ class VerticalSpringScoringTests(unittest.TestCase):
                     + fundamental_amplitude * np.cos(2.0 * math.pi * times / 1.5)
                     + 20.0 * np.cos(4.0 * math.pi * times / 1.5)
                 )
-                with self.assertRaises(SpringTraceError) as caught:
-                    extract_spring_trace(
-                        masks_for_vertical_positions(positions),
-                        times,
-                        quality_config=QUALITY,
-                    )
-                self.assertEqual("period_out_of_bounds", caught.exception.code)
+                trace = extract_spring_trace(
+                    masks_for_vertical_positions(positions),
+                    times,
+                    quality_config=quality,
+                )
+                self.assertAlmostEqual(1.5, trace.period_s, delta=1 / 60)
 
     def test_single_frequency_multiple_repeats_selects_shortest_fundamental(self) -> None:
         """Would fail if strict harmonic safety chooses an integer repeat of a pure tone."""
@@ -476,21 +482,21 @@ class VerticalSpringScoringTests(unittest.TestCase):
     def test_subharmonic_residual_gate_selects_only_observable_fundamentals(self) -> None:
         """Would fail if any weak harmonic perturbation is forced into a long period."""
         times = np.arange(240, dtype=float) / 60.0
+        quality = {**QUALITY, "maximum_s": 2.0}
         high_residual = 48.0 + 0.10 * np.cos(2.0 * math.pi * times / 1.5) + 20.0 * np.cos(
             4.0 * math.pi * times / 1.5
         )
-        with self.assertRaises(SpringTraceError) as caught:
-            extract_spring_trace(
-                masks_for_vertical_positions(high_residual),
-                times,
-                quality_config=QUALITY,
-            )
-        self.assertEqual("period_out_of_bounds", caught.exception.code)
+        high_trace = extract_spring_trace(
+            masks_for_vertical_positions(high_residual),
+            times,
+            quality_config=quality,
+        )
+        self.assertAlmostEqual(1.5, high_trace.period_s, delta=1 / 60)
         low_residual = 48.0 + 0.01 * np.cos(2.0 * math.pi * times / 1.5) + 20.0 * np.cos(
             4.0 * math.pi * times / 1.5
         )
         trace = extract_spring_trace(
-            masks_for_vertical_positions(low_residual), times, quality_config=QUALITY
+            masks_for_vertical_positions(low_residual), times, quality_config=quality
         )
         self.assertAlmostEqual(0.75, trace.period_s, delta=1 / 60)
 

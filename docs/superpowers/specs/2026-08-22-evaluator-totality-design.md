@@ -42,6 +42,23 @@ but the residual-based selector preferred a fourth or fifth harmonic and only
 then rejected it as out of bounds.  Period bounds were therefore being used as
 a late error check instead of as part of candidate selection.
 
+A subsequent adversarial preflight, using contract-valid all-black videos for
+all 96 jobs, exposed two more reference-only pendulum defects that a canonical
+reference preflight did not reliably exercise:
+
+1. two circle proposals with different centres but the same pivot survived the
+   anchor gates in `img1369`; because the frozen annotation owns the final bob
+   centre and radius, they describe the same final pendulum structure but were
+   incorrectly treated as ambiguous; and
+2. a weak visual proposal in `img1412` nearly tied the correct structure only
+   because its extrapolated length happened to match the physical prior.  The
+   internal candidate score assigned 90% to this geometry prior and omitted
+   the V7 visual score, allowing geometry-only evidence to manufacture a
+   reference failure.
+
+The videos, first-frame masks, and frozen tubes for both Cases are valid.  The
+failures are deterministic observer errors, not Dataset annotation defects.
+
 The six official scene configurations already use `robust_subject_v3`.
 Prediction media/observation failures are conservatively converted to an
 evaluated zero.  The observed holes are reference-analysis failures, not a
@@ -107,6 +124,18 @@ The true long string in `img1511` is then distinct from short bob highlights
 and from support/background edges.  Provenance records the selected cluster,
 supporting segments, coverage, angle spread, and geometry score.
 
+After binding the frozen bob annotation, compare final candidate structures by
+their pivots rather than by the detector's provisional circle centres.  The
+anchor owns the final bob centre and radius, so same-pivot candidates are
+duplicate evidence; genuinely different pivots remain subject to the
+fail-closed ambiguity margin.
+
+Rank eligible candidates with 75% physical geometry agreement, 10% frozen
+anchor identity evidence, and 15% V7 visual evidence.  Geometry remains the
+largest signal, but a low-identity, low-visual proposal can no longer create a
+near tie merely by matching the expected length.  These internal observer
+weights and the selection policy are recorded in provenance.
+
 ### 4. Bound spring period selection before harmonic ranking
 
 Constrain spring period selection to the configured physical interval before
@@ -114,7 +143,10 @@ ranking the fundamental/harmonic recurrence chain.  If the shortest
 repeat-supported peak (the fundamental) itself is outside the interval, return
 no period evidence; never relabel one of its harmonics as the fundamental.
 This keeps a valid trace evaluable while allowing the period component to
-score zero when no admissible repeat is observable.
+score zero when no admissible repeat is observable.  Spring scoring tests must
+therefore assert `period_s is None` for an unsupported slow trace rather than
+expecting a `period_out_of_bounds` exception; harmonic-selection tests that
+exercise the residual gate keep every candidate inside the configured window.
 
 ### 5. Preserve the fault boundary
 
@@ -147,14 +179,18 @@ completion gate.
 2. Pendulum unit and integration suites pass after the repair.
 3. Existing evaluator, dataset-contract, and task-protocol suites pass.
 4. The official six-scene preflight returns 96/96 `evaluated`, all finite.
-5. Historical pure-LoRA and foreground-sweep predictions are re-evaluated with
+5. A 96-job adversarial preflight using contract-valid all-black videos also
+   returns 96/96 `evaluated`, all finite.  This explicitly separates visual
+   quality degradation from evaluator/reference failure.
+6. Historical pure-LoRA and foreground-sweep predictions are re-evaluated with
    current Dataset/code; each run returns 96/96 `evaluated` and no
    `unavailable`, `error`, or non-finite score.
 
 ## Non-Goals
 
-- Do not change score weights or improve generated-video quality in this
-  repair.
+- Do not change published scene/CSTI metric weights or improve generated-video
+  quality in this repair.  Internal reference-observer evidence weights may be
+  corrected when they cause deterministic reference failures.
 - Do not map malformed Dataset/reference assets to zero.
 - Do not add Case-ID-specific branches or coordinates.
 - Do not rewrite canonical GT tubes that have already passed the V14 audit.
