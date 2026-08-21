@@ -41,6 +41,7 @@ class SourceFile:
     path: str
     size_bytes: int
     identity: tuple[int, int, int, int, int]
+    sha256: str
 
 
 @dataclass
@@ -269,14 +270,40 @@ def _distribution_asset_paths(snapshot) -> list[str]:
     return sorted(paths)
 
 
+def _source_hashes(snapshot) -> dict[str, str]:
+    if snapshot.asset_lock is None:
+        return {}
+    return {
+        _require_asset_path(record["path"]): str(record["sha256"])
+        for record in snapshot.asset_lock["files"]
+    }
+
+
+def _hash_open_source(source: BinaryIO) -> str:
+    digest = hashlib.sha256()
+    for block in iter(lambda: source.read(1024 * 1024), b""):
+        digest.update(block)
+    return digest.hexdigest()
+
+
 def _source_files(snapshot, asset_root_descriptor: int) -> list[SourceFile]:
     files: list[SourceFile] = []
+    locked_hashes = _source_hashes(snapshot)
     for relative in _distribution_asset_paths(snapshot):
         descriptor = _open_source_descriptor(asset_root_descriptor, relative)
         with os.fdopen(descriptor, "rb") as source:
-            metadata = os.fstat(source.fileno())
+            before = os.fstat(source.fileno())
+            expected_sha256 = locked_hashes.get(relative)
+            if expected_sha256 is None:
+                expected_sha256 = _hash_open_source(source)
+            after = os.fstat(source.fileno())
+        identity = _stat_identity(before)
+        if identity != _stat_identity(after):
+            raise ValueError(
+                f"indexed Dataset asset changed during inventory: {relative}"
+            )
         files.append(
-            SourceFile(relative, metadata.st_size, _stat_identity(metadata))
+            SourceFile(relative, before.st_size, identity, expected_sha256)
         )
     return files
 
@@ -360,7 +387,12 @@ def _write_member(
         raise ValueError(
             f"indexed Dataset asset changed while building: {file_record.path}"
         )
-    return digest.hexdigest()
+    actual_sha256 = digest.hexdigest()
+    if actual_sha256 != file_record.sha256:
+        raise ValueError(
+            f"indexed Dataset asset content changed: {file_record.path}"
+        )
+    return actual_sha256
 
 
 def _write_shard(
