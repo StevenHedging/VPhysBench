@@ -122,7 +122,13 @@ def _source_indices(
             "evaluator physical-time grid is not represented unambiguously "
             "by the frozen reference observation"
         )
-    if len(set(indices.tolist())) != len(indices):
+    unique_prefix = len(set(indices[:-1].tolist())) == len(indices[:-1])
+    terminal_endpoint_reuse = (
+        indices.size >= 2
+        and unique_prefix
+        and int(indices[-1]) == int(indices[-2])
+    )
+    if len(set(indices.tolist())) != len(indices) and not terminal_endpoint_reuse:
         raise ValueError(
             "evaluator physical-time grid maps duplicate frozen observations"
         )

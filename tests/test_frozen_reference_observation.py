@@ -74,6 +74,25 @@ class FrozenReferenceObservationTests(unittest.TestCase):
         self.assertEqual([0, 1], result.source_observation_indices.tolist())
         self.assertEqual("frozen_dataset_reference_observation_v1", result.policy)
 
+    def test_allows_only_an_off_grid_terminal_sample_to_reuse_nearest_gt(self) -> None:
+        from physbench.evaluation.common.frozen_reference import _source_indices
+
+        source = np.arange(5, dtype=np.float64) / 24.0
+        requested = np.asarray([0.0, 1.0 / 24.0, 0.05], dtype=np.float64)
+
+        indices = _source_indices(source, requested, sampling_rate_hz=24.0)
+
+        self.assertEqual([0, 1, 1], indices.tolist())
+
+    def test_still_rejects_duplicate_nonterminal_gt_mapping(self) -> None:
+        from physbench.evaluation.common.frozen_reference import _source_indices
+
+        source = np.arange(5, dtype=np.float64) / 24.0
+        requested = np.asarray([0.0, 0.01, 1.0 / 24.0], dtype=np.float64)
+
+        with self.assertRaisesRegex(ValueError, "duplicate frozen"):
+            _source_indices(source, requested, sampling_rate_hz=24.0)
+
     def test_rejects_case_identity_mismatch(self) -> None:
         from physbench.evaluation.common.frozen_reference import (
             load_frozen_reference_observation,
