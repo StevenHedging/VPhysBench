@@ -198,6 +198,17 @@ class ReleaseDocumentationTests(unittest.TestCase):
             for requirement in requirements
         ))
 
+    def test_evaluator_extras_exclude_opencv_5(self) -> None:
+        project = tomllib.loads((ROOT / "pyproject.toml").read_text())
+        extras = project["project"]["optional-dependencies"]
+
+        for extra in ("scene-evaluation", "pendulum-evaluation"):
+            with self.subTest(extra=extra):
+                self.assertIn(
+                    "opencv-python-headless>=4.10,<5",
+                    extras[extra],
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
