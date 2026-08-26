@@ -130,10 +130,10 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
             "collision_1d": ("small round object", ["ball"]),
             "inclined_plane_slide": ("sliding block", ["block"]),
             "uniform_circular_motion": (
-                "metal cube",
+                "small object",
                 ["orbiter"],
             ),
-            "parabolic_motion": ("round metal object", ["ball"]),
+            "parabolic_motion": ("small object", ["ball"]),
             "vertical_spring_oscillator": ("metal ball", ["steel_ball"]),
         }
         for scene_id, (text, entity_classes) in expected.items():

@@ -340,7 +340,7 @@ Run evaluation protocol and release documentation tests.
 Start from semantic role prompts, then certify the concrete nouns against real
 VPhysBench first frames. The certified public prompts are collision `small
 round object`; pendulum `metal ball`; inclined plane `sliding block`; circular
-motion `metal cube`; parabolic `round metal object`; spring `metal ball`.
+motion `small object`; parabolic `small object`; spring `metal ball`.
 Counts come from manifest classes. Set the common checkpoint environment
 variable, bfloat16 precision, configurable thresholds, patience three, and
 debug output false.

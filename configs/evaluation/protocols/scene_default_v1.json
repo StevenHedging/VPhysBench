@@ -741,7 +741,7 @@
       "type": "uniform_circular_motion_v1",
       "csti_observer": {
         "prompt_groups": [
-          {"id": "subject", "text": "metal cube", "entity_classes": ["orbiter"]}
+          {"id": "subject", "text": "small object", "entity_classes": ["orbiter"]}
         ],
         "initial_match_iou_threshold": 0.25,
         "initial_match_ambiguity_margin": 0.02,
@@ -892,7 +892,7 @@
       "type": "parabolic_motion_v1",
       "csti_observer": {
         "prompt_groups": [
-          {"id": "subject", "text": "round metal object", "entity_classes": ["ball"]}
+          {"id": "subject", "text": "small object", "entity_classes": ["ball"]}
         ],
         "initial_match_iou_threshold": 0.25,
         "initial_match_ambiguity_margin": 0.02,
