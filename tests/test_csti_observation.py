@@ -133,6 +133,28 @@ def _metric_config() -> CSTIConfig:
 
 
 class CSTIInitialMatchingTest(unittest.TestCase):
+    def test_config_rejects_entity_class_shared_by_prompt_groups(self) -> None:
+        mapping = {
+            "prompt_groups": [
+                {"id": "round", "text": "ball", "entity_classes": ["ball"]},
+                {
+                    "id": "metal",
+                    "text": "metal ball",
+                    "entity_classes": ["ball"],
+                },
+            ],
+            "initial_match_iou_threshold": 0.25,
+            "initial_match_ambiguity_margin": 0.02,
+            "termination_patience": 3,
+            "minimum_mask_pixels": 4,
+            "minimum_observation_confidence": 0.0,
+        }
+
+        with self.assertRaisesRegex(
+            CSTIContractError, "exactly one prompt group"
+        ):
+            CSTIObserverConfig.from_mapping(mapping)
+
     def test_hungarian_matching_uses_first_frame_iou_not_candidate_order(self) -> None:
         left = _mask(1, 2, 4, 5)
         right = _mask(8, 2, 11, 5)

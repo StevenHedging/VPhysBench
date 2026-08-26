@@ -66,7 +66,31 @@ Evaluator 是唯一允许读取 reference video、reference masks 和评分注�
 
 ## CSTI
 
-CSTI 使用 `exact_full_tube_edt`。它的精确输入是：冻结 entity manifest 中的 GT
+CSTI 的 prediction Tube 由官方 SAM 3.1 stateful video predictor 生成。每个语义组只在
+`frame_index=0` 使用 text-only prompt 初始化，随后仅向前传播；冻结 GT mask 从不作为
+SAM prompt。评估器只用冻结 GT Tube 的首帧 mask 与 SAM 首帧实例构造 IoU 矩阵，在语义
+兼容候选中执行一次 Hungarian 一对一匹配。每类预期数量由 Case 的冻结 entity manifest
+推导，匹配后的 `entity_id -> SAM obj_id` 立即锁定，后续不重匹配、不重识别；后来出现的
+幽灵主体被记录为额外候选，但不进入 CSTI。
+
+锁定对象的观测有效性集中由 mask 格式、非空像素数和可配置置信度判断。连续无效帧数由
+`termination_patience` 控制，公开配置为 3：不足三帧后恢复则继续原身份；连续三帧无效
+时回溯到第一次无效帧并从该帧到视频结束填空 mask，终止后不恢复。视频末尾不足三帧的
+未决区间也保守地保留为空 mask，但标为 `VIDEO_END` 而不是伪造一个已确认终止帧。生成
+视频和 GT 视频仍只在两者较短的共同物理时长上采样，预测终止后的空帧不能再被裁掉。
+
+SAM 3.1 是独立可选依赖，可用 `pip install '.[scene-evaluation,sam31-evaluation]'`
+安装。checkpoint 路径不写入协议或仓库；运行前通过
+`VPHYSBENCH_SAM31_CHECKPOINT` 提供。公开协议固定 checkpoint 摘要、官方源码 revision、
+推理精度、首帧匹配阈值、mask 阈值和传播方向；predictor 在进程内复用，每个视频结束后
+关闭 session。
+
+若首帧实例数不足、不能形成完整一对一映射、IoU 低于阈值或匹配歧义不可接受，该视频
+产生显式 `evaluator_init_failure`，CSTI 为 null 而不是 0。Task 级 CSTI 对全部初始化成功
+视频做等权平均，并另外报告 `init_coverage`、有效视频数、初始化失败数和失败原因；初始化
+失败不会被静默丢弃。额外主体既不改变主体数，也不进入分子或分母。
+
+CSTI 数学本体仍使用 `exact_full_tube_edt`，本次追踪替换没有改写它。它的精确输入是：冻结 entity manifest 中的 GT
 `entity_id`、`role_id` 和 `same_case_gt` reference capability；scene evaluator 已验证并对齐
 到同一物理时间轴、同一原生分析画布的 reference/prediction mask tubes；以及只有通过冻结
 身份门后才写入的 matched prediction track IDs。当前公开 v1 只在完整 tube 评分前排除
@@ -84,8 +108,8 @@ CSTI 使用 `exact_full_tube_edt`。它的精确输入是：冻结 entity manife
 既有结果继续绑定其原 protocol fingerprint，不会被当前配置静默重解释；要获得新分数必须
 以当前 fingerprint 重新执行或导入预测。
 
-case 层按全部 GT entities 求均值，Task 层作为独立维度汇总；CSTI 不替代 scene expert
-score。
+case 层按全部合法 GT entities 做主体等权宏平均；Task 层按初始化成功视频等权平均并作为
+独立维度汇总。CSTI 不替代 scene expert score。
 
 ## Failure semantics
 

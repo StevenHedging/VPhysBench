@@ -118,16 +118,110 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "cstiObserver": {
+      "type": "object",
+      "required": [
+        "prompt_groups",
+        "initial_match_iou_threshold",
+        "initial_match_ambiguity_margin",
+        "termination_patience",
+        "minimum_mask_pixels",
+        "minimum_observation_confidence",
+        "segmenter",
+        "debug_outputs"
+      ],
+      "properties": {
+        "prompt_groups": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "required": ["id", "text", "entity_classes"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "text": {"type": "string", "minLength": 1},
+              "entity_classes": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {"type": "string", "minLength": 1}
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "initial_match_iou_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "initial_match_ambiguity_margin": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "termination_patience": {"type": "integer", "minimum": 1},
+        "minimum_mask_pixels": {"type": "integer", "minimum": 1},
+        "minimum_observation_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "segmenter": {
+          "type": "object",
+          "required": [
+            "checkpoint_path_env",
+            "checkpoint_sha256",
+            "device",
+            "precision",
+            "output_probability_threshold",
+            "max_num_objects",
+            "multiplex_count",
+            "compile",
+            "warm_up",
+            "use_fa3",
+            "use_rope_real",
+            "async_loading_frames"
+          ],
+          "properties": {
+            "checkpoint_path_env": {"const": "VPHYSBENCH_SAM31_CHECKPOINT"},
+            "checkpoint_sha256": {
+              "const": "0567debeec80ba4ac6369540c6c248025283cb3ff2b92827509e57e2b3541cb6"
+            },
+            "device": {"enum": ["auto", "cuda"]},
+            "precision": {"enum": ["bfloat16", "float16", "float32"]},
+            "output_probability_threshold": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "max_num_objects": {"type": "integer", "minimum": 1},
+            "multiplex_count": {"type": "integer", "minimum": 1},
+            "compile": {"type": "boolean"},
+            "warm_up": {"type": "boolean"},
+            "use_fa3": {"type": "boolean"},
+            "use_rope_real": {"type": "boolean"},
+            "async_loading_frames": {"type": "boolean"}
+          },
+          "additionalProperties": false
+        },
+        "debug_outputs": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
     "sceneBase": {
       "type": "object",
       "required": [
         "type",
+        "csti_observer",
         "reference_observation_policy",
         "timeline",
         "spatial",
         "scoring"
       ],
       "properties": {
+        "csti_observer": {"$ref": "#/$defs/cstiObserver"},
         "reference_observation_policy": {
           "const": "frozen_dataset_reference_observation_v1"
         }
@@ -184,6 +278,7 @@
           "type": "object",
           "required": [
             "type",
+            "csti_observer",
             "evaluator_contract",
             "reference_observation_policy",
             "timeline",
@@ -199,6 +294,7 @@
           ],
           "properties": {
             "type": {"const": "vertical_spring_oscillator_v1"},
+            "csti_observer": {"$ref": "#/$defs/cstiObserver"},
             "evaluator_contract": {"const": "robust_subject_v3"},
             "reference_observation_policy": {
               "const": "frozen_dataset_reference_observation_v1"

@@ -198,6 +198,45 @@ class ReleaseDocumentationTests(unittest.TestCase):
             for requirement in requirements
         ))
 
+    def test_csti_manual_documents_sam31_identity_and_failure_semantics(self) -> None:
+        evaluation = (ROOT / "docs" / "EVALUATION.md").read_text(
+            encoding="utf-8"
+        )
+        run_layout = (ROOT / "docs" / "RUN_LAYOUT.md").read_text(
+            encoding="utf-8"
+        )
+        for field in (
+            "VPHYSBENCH_SAM31_CHECKPOINT",
+            "text-only",
+            "Hungarian",
+            "termination_patience",
+            "evaluator_init_failure",
+            "init_coverage",
+            "exact_full_tube_edt",
+        ):
+            self.assertIn(field, evaluation)
+        for field in (
+            "csti_video",
+            "csti_per_subject",
+            "initial_matching",
+            "termination_frame_per_subject",
+            "evaluator_init_failure",
+            "init_coverage",
+        ):
+            self.assertIn(field, run_layout)
+
+    def test_sam31_extra_pins_the_official_source_revision(self) -> None:
+        project = tomllib.loads((ROOT / "pyproject.toml").read_text())
+        requirements = project["project"]["optional-dependencies"][
+            "sam31-evaluation"
+        ]
+        self.assertTrue(
+            any(
+                "8f0b7f4d4e7eda2ed606ebde6702c93359ad01da" in requirement
+                for requirement in requirements
+            )
+        )
+
     def test_evaluator_extras_exclude_opencv_5(self) -> None:
         project = tomllib.loads((ROOT / "pyproject.toml").read_text())
         extras = project["project"]["optional-dependencies"]

@@ -76,6 +76,22 @@ derived only from the reference Tube after excluding the condition frame at
 sample index zero; that is also the only initial sample excluded from the
 score.
 
+Prediction-side CSTI identity is initialized by SAM 3.1 text tracking and a
+single frame-zero Hungarian match against the frozen GT masks. A successful
+case record includes `csti_video`, `csti_per_subject`, `subject_count`,
+`initial_matching`, `initial_matching_iou`, and
+`termination_frame_per_subject`, plus locked-track diagnostics. A failed
+initial match remains visible with `status=evaluator_init_failure`, a null
+score, `evaluator_init_success=false`, and a structured
+`evaluator_init_failure_reason`; it is never converted to zero or silently
+removed.
+
+At Task level, `dimensions.csti.score` is the equal-video mean over initialized
+cases. The same record separately reports `init_coverage`,
+`valid_video_count`, `evaluator_init_failure_video_count`, and grouped failure
+reason counts. These fields distinguish model quality from evaluator
+initialization coverage.
+
 - `evaluated`: the case contributes a finite score; `quality.degraded=true`
   identifies prediction failures deliberately counted as zero.
 - `unavailable`: a required reference asset or reference observation could

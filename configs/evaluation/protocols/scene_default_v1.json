@@ -34,6 +34,31 @@
   "scenes": {
     "pendulum": {
       "type": "pendulum_v1",
+      "csti_observer": {
+        "prompt_groups": [
+          {"id": "subject", "text": "pendulum bob", "entity_classes": ["pendulum_bob"]}
+        ],
+        "initial_match_iou_threshold": 0.25,
+        "initial_match_ambiguity_margin": 0.02,
+        "termination_patience": 3,
+        "minimum_mask_pixels": 4,
+        "minimum_observation_confidence": 0,
+        "segmenter": {
+          "checkpoint_path_env": "VPHYSBENCH_SAM31_CHECKPOINT",
+          "checkpoint_sha256": "0567debeec80ba4ac6369540c6c248025283cb3ff2b92827509e57e2b3541cb6",
+          "device": "auto",
+          "precision": "bfloat16",
+          "output_probability_threshold": 0.3,
+          "max_num_objects": 16,
+          "multiplex_count": 16,
+          "compile": false,
+          "warm_up": false,
+          "use_fa3": false,
+          "use_rope_real": true,
+          "async_loading_frames": false
+        },
+        "debug_outputs": false
+      },
       "observer_protocol": "open_world_v2",
       "evaluator_contract": "robust_subject_v3",
       "reference_observation_policy": "frozen_dataset_reference_observation_v1",
@@ -264,6 +289,31 @@
     },
     "collision_1d": {
       "type": "collision_1d_v1",
+      "csti_observer": {
+        "prompt_groups": [
+          {"id": "subject", "text": "ball", "entity_classes": ["ball"]}
+        ],
+        "initial_match_iou_threshold": 0.25,
+        "initial_match_ambiguity_margin": 0.02,
+        "termination_patience": 3,
+        "minimum_mask_pixels": 4,
+        "minimum_observation_confidence": 0,
+        "segmenter": {
+          "checkpoint_path_env": "VPHYSBENCH_SAM31_CHECKPOINT",
+          "checkpoint_sha256": "0567debeec80ba4ac6369540c6c248025283cb3ff2b92827509e57e2b3541cb6",
+          "device": "auto",
+          "precision": "bfloat16",
+          "output_probability_threshold": 0.3,
+          "max_num_objects": 16,
+          "multiplex_count": 16,
+          "compile": false,
+          "warm_up": false,
+          "use_fa3": false,
+          "use_rope_real": true,
+          "async_loading_frames": false
+        },
+        "debug_outputs": false
+      },
       "evaluator_contract": "robust_subject_v3",
       "reference_observation_policy": "frozen_dataset_reference_observation_v1",
       "timeline": {
@@ -451,6 +501,31 @@
     },
     "inclined_plane_slide": {
       "type": "inclined_plane_slide_v1",
+      "csti_observer": {
+        "prompt_groups": [
+          {"id": "subject", "text": "sliding block", "entity_classes": ["block"]}
+        ],
+        "initial_match_iou_threshold": 0.25,
+        "initial_match_ambiguity_margin": 0.02,
+        "termination_patience": 3,
+        "minimum_mask_pixels": 4,
+        "minimum_observation_confidence": 0,
+        "segmenter": {
+          "checkpoint_path_env": "VPHYSBENCH_SAM31_CHECKPOINT",
+          "checkpoint_sha256": "0567debeec80ba4ac6369540c6c248025283cb3ff2b92827509e57e2b3541cb6",
+          "device": "auto",
+          "precision": "bfloat16",
+          "output_probability_threshold": 0.3,
+          "max_num_objects": 16,
+          "multiplex_count": 16,
+          "compile": false,
+          "warm_up": false,
+          "use_fa3": false,
+          "use_rope_real": true,
+          "async_loading_frames": false
+        },
+        "debug_outputs": false
+      },
       "observer_protocol": "open_world_v2",
       "evaluator_contract": "robust_subject_v3",
       "reference_observation_policy": "frozen_dataset_reference_observation_v1",
@@ -664,6 +739,31 @@
     },
     "uniform_circular_motion": {
       "type": "uniform_circular_motion_v1",
+      "csti_observer": {
+        "prompt_groups": [
+          {"id": "subject", "text": "orbiting metal block", "entity_classes": ["orbiter"]}
+        ],
+        "initial_match_iou_threshold": 0.25,
+        "initial_match_ambiguity_margin": 0.02,
+        "termination_patience": 3,
+        "minimum_mask_pixels": 4,
+        "minimum_observation_confidence": 0,
+        "segmenter": {
+          "checkpoint_path_env": "VPHYSBENCH_SAM31_CHECKPOINT",
+          "checkpoint_sha256": "0567debeec80ba4ac6369540c6c248025283cb3ff2b92827509e57e2b3541cb6",
+          "device": "auto",
+          "precision": "bfloat16",
+          "output_probability_threshold": 0.3,
+          "max_num_objects": 16,
+          "multiplex_count": 16,
+          "compile": false,
+          "warm_up": false,
+          "use_fa3": false,
+          "use_rope_real": true,
+          "async_loading_frames": false
+        },
+        "debug_outputs": false
+      },
       "observer_protocol": "open_world_v2",
       "evaluator_contract": "robust_subject_v3",
       "reference_observation_policy": "frozen_dataset_reference_observation_v1",
@@ -790,6 +890,31 @@
     },
     "parabolic_motion": {
       "type": "parabolic_motion_v1",
+      "csti_observer": {
+        "prompt_groups": [
+          {"id": "subject", "text": "ball", "entity_classes": ["ball"]}
+        ],
+        "initial_match_iou_threshold": 0.25,
+        "initial_match_ambiguity_margin": 0.02,
+        "termination_patience": 3,
+        "minimum_mask_pixels": 4,
+        "minimum_observation_confidence": 0,
+        "segmenter": {
+          "checkpoint_path_env": "VPHYSBENCH_SAM31_CHECKPOINT",
+          "checkpoint_sha256": "0567debeec80ba4ac6369540c6c248025283cb3ff2b92827509e57e2b3541cb6",
+          "device": "auto",
+          "precision": "bfloat16",
+          "output_probability_threshold": 0.3,
+          "max_num_objects": 16,
+          "multiplex_count": 16,
+          "compile": false,
+          "warm_up": false,
+          "use_fa3": false,
+          "use_rope_real": true,
+          "async_loading_frames": false
+        },
+        "debug_outputs": false
+      },
       "observer_protocol": "open_world_v2",
       "evaluator_contract": "robust_subject_v3",
       "reference_observation_policy": "frozen_dataset_reference_observation_v1",
@@ -929,6 +1054,31 @@
     },
     "vertical_spring_oscillator": {
       "type": "vertical_spring_oscillator_v1",
+      "csti_observer": {
+        "prompt_groups": [
+          {"id": "subject", "text": "steel ball", "entity_classes": ["steel_ball"]}
+        ],
+        "initial_match_iou_threshold": 0.25,
+        "initial_match_ambiguity_margin": 0.02,
+        "termination_patience": 3,
+        "minimum_mask_pixels": 4,
+        "minimum_observation_confidence": 0,
+        "segmenter": {
+          "checkpoint_path_env": "VPHYSBENCH_SAM31_CHECKPOINT",
+          "checkpoint_sha256": "0567debeec80ba4ac6369540c6c248025283cb3ff2b92827509e57e2b3541cb6",
+          "device": "auto",
+          "precision": "bfloat16",
+          "output_probability_threshold": 0.3,
+          "max_num_objects": 16,
+          "multiplex_count": 16,
+          "compile": false,
+          "warm_up": false,
+          "use_fa3": false,
+          "use_rope_real": true,
+          "async_loading_frames": false
+        },
+        "debug_outputs": false
+      },
       "evaluator_contract": "robust_subject_v3",
       "reference_observation_policy": "frozen_dataset_reference_observation_v1",
       "timeline": {

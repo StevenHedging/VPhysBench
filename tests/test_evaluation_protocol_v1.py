@@ -124,6 +124,73 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
         )
         self.assertAlmostEqual(1.0, sum(spring["content_weights"].values()))
 
+    def test_every_scene_declares_text_only_sam31_csti_observation(self) -> None:
+        expected = {
+            "pendulum": ("pendulum bob", ["pendulum_bob"]),
+            "collision_1d": ("ball", ["ball"]),
+            "inclined_plane_slide": ("sliding block", ["block"]),
+            "uniform_circular_motion": (
+                "orbiting metal block",
+                ["orbiter"],
+            ),
+            "parabolic_motion": ("ball", ["ball"]),
+            "vertical_spring_oscillator": ("steel ball", ["steel_ball"]),
+        }
+        for scene_id, (text, entity_classes) in expected.items():
+            with self.subTest(scene_id=scene_id):
+                observer = self.protocol["scenes"][scene_id]["csti_observer"]
+                self.assertEqual(3, observer["termination_patience"])
+                self.assertEqual(
+                    [{"id": "subject", "text": text, "entity_classes": entity_classes}],
+                    observer["prompt_groups"],
+                )
+                segmenter = observer["segmenter"]
+                self.assertEqual(
+                    "VPHYSBENCH_SAM31_CHECKPOINT",
+                    segmenter["checkpoint_path_env"],
+                )
+                self.assertEqual("auto", segmenter["device"])
+                self.assertEqual("bfloat16", segmenter["precision"])
+                self.assertNotIn("checkpoint_path", segmenter)
+                self.assertFalse(observer["debug_outputs"])
+
+    @unittest.skipIf(
+        Draft202012Validator is None,
+        "jsonschema unavailable: install a Draft 2020-12 consumer",
+    )
+    def test_schema_rejects_invalid_csti_observer_settings(self) -> None:
+        schema = json.loads(
+            (ROOT / "schemas/evaluation_protocol.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        candidate = deepcopy(self.protocol)
+        candidate.pop("path")
+        candidate.pop("fingerprint")
+        assert Draft202012Validator is not None
+        validator = Draft202012Validator(schema)
+
+        self.assertEqual([], list(validator.iter_errors(candidate)))
+        for key, invalid_value in (
+            ("termination_patience", 0),
+            ("initial_match_iou_threshold", 1.1),
+            ("minimum_observation_confidence", -0.1),
+        ):
+            with self.subTest(key=key):
+                invalid = deepcopy(candidate)
+                invalid["scenes"]["collision_1d"]["csti_observer"][key] = (
+                    invalid_value
+                )
+                self.assertTrue(list(validator.iter_errors(invalid)))
+        duplicate = deepcopy(candidate)
+        group = duplicate["scenes"]["collision_1d"]["csti_observer"][
+            "prompt_groups"
+        ][0]
+        duplicate["scenes"]["collision_1d"]["csti_observer"][
+            "prompt_groups"
+        ].append(deepcopy(group))
+        self.assertTrue(list(validator.iter_errors(duplicate)))
+
     @unittest.skipIf(
         Draft202012Validator is None,
         "jsonschema unavailable: install a Draft 2020-12 consumer",
@@ -214,6 +281,7 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
         self.assertEqual(
             {
                 "type",
+                "csti_observer",
                 "evaluator_contract",
                 "reference_observation_policy",
                 "timeline",
