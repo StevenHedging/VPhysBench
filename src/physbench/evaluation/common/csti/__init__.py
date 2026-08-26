@@ -13,6 +13,14 @@ from .metric import (
     score_postcondition_tube_reference,
     zero_csti_metric,
 )
+from .observation import (
+    CSTIObserverConfig,
+    EvaluatorInitFailure,
+    InitialIdentityMatch,
+    PromptGroupConfig,
+    SemanticCandidateTube,
+    match_initial_identities,
+)
 
 __all__ = [
     "CSTIConfig",
@@ -27,4 +35,10 @@ __all__ = [
     "score_postcondition_tube",
     "score_postcondition_tube_reference",
     "zero_csti_metric",
+    "CSTIObserverConfig",
+    "EvaluatorInitFailure",
+    "InitialIdentityMatch",
+    "PromptGroupConfig",
+    "SemanticCandidateTube",
+    "match_initial_identities",
 ]
