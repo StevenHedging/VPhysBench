@@ -10,8 +10,16 @@ from unittest.mock import patch
 import numpy as np
 
 from physbench.evaluation.common.base import ReferenceCaseEvaluator, SceneAnalysis
-from physbench.evaluation.common.csti import CSTIEntityTube, CSTIInput
+from physbench.evaluation.common.csti import (
+    CSTIEntityTube,
+    CSTIInput,
+    SemanticCandidateTube,
+)
 from physbench.evaluation.common.entities import ReferenceCapability
+from physbench.evaluation.common.errors import (
+    ReferenceAnalysisError,
+    SceneAnalysisError,
+)
 from physbench.evaluation.contracts import CaseEvaluationRequest
 from physbench.evaluation.registry import SceneEvaluatorRegistry
 from physbench.evaluation.task_evaluator import aggregate_task_results
@@ -32,7 +40,9 @@ FIXED_CSTI = {
 }
 
 
-def evaluator_config(*, csti: bool = True) -> dict[str, object]:
+def evaluator_config(
+    *, csti: bool = True, csti_observer: bool = False
+) -> dict[str, object]:
     value: dict[str, object] = {
         "type": "fake_v1",
         "evaluator_contract": "robust_subject_v3",
@@ -52,7 +62,50 @@ def evaluator_config(*, csti: bool = True) -> dict[str, object]:
     }
     if csti:
         value["general_metrics"] = {"csti": FIXED_CSTI}
+    if csti_observer:
+        value["csti_observer"] = {
+            "prompt_groups": [
+                {
+                    "id": "subject",
+                    "text": "rigid body",
+                    "entity_classes": ["rigid_body"],
+                }
+            ],
+            "initial_match_iou_threshold": 0.5,
+            "initial_match_ambiguity_margin": 0.0,
+            "termination_patience": 3,
+            "minimum_mask_pixels": 1,
+            "minimum_observation_confidence": 0.0,
+            "segmenter": {},
+            "debug_outputs": False,
+        }
     return value
+
+
+class _FakeTextSegmenter:
+    def __init__(self, *, initialize: bool = True) -> None:
+        self.initialize = initialize
+        self.calls = 0
+
+    def segment(self, frames, prompt_groups):
+        self.calls += 1
+        if not self.initialize:
+            return ()
+        frame_count = len(frames)
+        masks = np.ones((frame_count, 3, 4), dtype=bool)
+        return (
+            SemanticCandidateTube(
+                candidate_id="subject:7",
+                prompt_group_id="subject",
+                backend_object_id=7,
+                masks=masks,
+                boxes_xywh=np.zeros((frame_count, 4), dtype=np.float32),
+                confidences=np.ones(frame_count, dtype=np.float32),
+            ),
+        )
+
+    def describe(self):
+        return {"backend": "fake_sam31_text"}
 
 
 class _FakeCSTIEvaluator(ReferenceCaseEvaluator):
@@ -62,6 +115,11 @@ class _FakeCSTIEvaluator(ReferenceCaseEvaluator):
     primary_score = "expert"
 
     def analyze(self, request, *, times_s, reference_video, prediction_video):
+        if request.case.get("test_scene_prediction_failure", False):
+            raise SceneAnalysisError(
+                "synthetic_prediction_observation_failure",
+                "synthetic scene observer failed",
+            )
         masks = tuple(np.ones((3, 4), dtype=bool) for _ in times_s)
         capability = ReferenceCapability(
             request.case.get("test_reference_capability", "same_case_gt")
@@ -262,6 +320,95 @@ class CSTICaseIntegrationTest(unittest.TestCase):
 
         self.assertIs(value, analysis.csti_input)
 
+    def test_text_observer_replaces_csti_prediction_without_changing_expert_score(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request, reference_path = self._request(root)
+            segmenter = _FakeTextSegmenter()
+            evaluator = _FakeCSTIEvaluator(
+                evaluator_config(csti_observer=True),
+                csti_segmenter=segmenter,
+            )
+
+            result = self._evaluate(evaluator, request, reference_path)
+
+        self.assertEqual("evaluated", result.status)
+        self.assertEqual(0.625, result.score)
+        self.assertEqual(1.0, result.metrics["csti"]["score"])
+        self.assertEqual(
+            {"body": "subject:7"},
+            result.metrics["csti"]["initial_matching"],
+        )
+        self.assertTrue(result.metrics["csti"]["evaluator_init_success"])
+        self.assertEqual(
+            "exact_full_tube_edt", result.provenance["csti"]["algorithm"]
+        )
+        self.assertIn("entity_manifest_digest", result.provenance["csti"])
+        self.assertEqual(
+            "sam31_text_frame_zero_hungarian_locked_v1",
+            result.provenance["csti_observer"]["policy"],
+        )
+        self.assertEqual(1, segmenter.calls)
+
+    def test_scene_prediction_failure_keeps_independently_observed_csti(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request, reference_path = self._request(root)
+            request.case["test_scene_prediction_failure"] = True
+            evaluator = _FakeCSTIEvaluator(
+                evaluator_config(csti_observer=True),
+                csti_segmenter=_FakeTextSegmenter(),
+            )
+
+            result = self._evaluate(evaluator, request, reference_path)
+
+        self.assertEqual("evaluated", result.status)
+        self.assertEqual(0.0, result.score)
+        self.assertEqual(1.0, result.metrics["csti"]["score"])
+        self.assertEqual(
+            "synthetic_prediction_observation_failure", result.reason_code
+        )
+
+    def test_text_observer_init_failure_is_null_csti_not_zero(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request, reference_path = self._request(root)
+            evaluator = _FakeCSTIEvaluator(
+                evaluator_config(csti_observer=True),
+                csti_segmenter=_FakeTextSegmenter(initialize=False),
+            )
+
+            result = self._evaluate(evaluator, request, reference_path)
+
+        self.assertEqual("evaluated", result.status)
+        self.assertEqual(0.625, result.score)
+        self.assertEqual(
+            "evaluator_init_failure", result.metrics["csti"]["status"]
+        )
+        self.assertIsNone(result.metrics["csti"]["score"])
+        self.assertFalse(result.metrics["csti"]["evaluator_init_success"])
+
+    def test_text_observer_reference_failure_remains_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request, reference_path = self._request(root)
+            evaluator = _FakeCSTIEvaluator(
+                evaluator_config(csti_observer=True),
+                csti_segmenter=_FakeTextSegmenter(),
+            )
+
+            result = self._evaluate(
+                evaluator,
+                request,
+                reference_path,
+                frozen_reference_error=ReferenceAnalysisError(
+                    "synthetic_reference_failure", "frozen GT is invalid"
+                ),
+            )
+
+        self.assertEqual("unavailable", result.status)
+        self.assertEqual("synthetic_reference_failure", result.reason_code)
+
     @staticmethod
     def _case(*, reference_capability: ReferenceCapability = ReferenceCapability.SAME_CASE_GT) -> dict:
         case = {
@@ -319,15 +466,29 @@ class CSTICaseIntegrationTest(unittest.TestCase):
         evaluator: _FakeCSTIEvaluator,
         request: CaseEvaluationRequest,
         reference_path: Path,
+        frozen_reference_error: Exception | None = None,
     ):
         info = SimpleNamespace(to_dict=lambda: {"width": 4, "height": 3})
         video = SimpleNamespace(
             info=info,
+            frames=[
+                np.zeros((3, 4, 3), dtype=np.uint8),
+                np.zeros((3, 4, 3), dtype=np.uint8),
+            ],
             source_indices=[0, 1],
             spatial_transform={},
             temporal_transform={},
             available=[True, True],
         )
+        frozen = SimpleNamespace(
+            entities={
+                "body": SimpleNamespace(
+                    masks=np.ones((2, 3, 4), dtype=np.uint8)
+                )
+            },
+            provenance={"policy": "synthetic_frozen_reference"},
+        )
+        frozen_side_effect = frozen_reference_error or frozen
         with (
             patch(
                 "physbench.evaluation.common.base.resolve_physics_reference",
@@ -340,6 +501,19 @@ class CSTICaseIntegrationTest(unittest.TestCase):
             patch(
                 "physbench.evaluation.common.base.sample_video",
                 side_effect=[video, video],
+            ),
+            patch(
+                "physbench.evaluation.common.base.load_frozen_reference_observation",
+                side_effect=(
+                    frozen_side_effect
+                    if isinstance(frozen_side_effect, Exception)
+                    else None
+                ),
+                return_value=(
+                    None
+                    if isinstance(frozen_side_effect, Exception)
+                    else frozen_side_effect
+                ),
             ),
         ):
             return evaluator.evaluate(request)
