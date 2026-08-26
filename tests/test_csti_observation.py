@@ -9,11 +9,20 @@ from physbench.evaluation.common.csti.observation import (
     InitialIdentityMatch,
     SemanticCandidateTube,
     build_locked_prediction_tubes,
+    decorate_csti_metric,
+    evaluator_init_failure_metric,
     is_valid_track_observation,
     match_initial_identities,
+    observe_csti_tubes,
 )
-from physbench.evaluation.common.csti import CSTIContractError
-from physbench.evaluation.common.entities import EntitySpec
+from physbench.evaluation.common.csti import (
+    CSTIConfig,
+    CSTIContractError,
+    CSTIEntityTube,
+    CSTIInput,
+    evaluate_csti,
+)
+from physbench.evaluation.common.entities import EntitySpec, ReferenceCapability
 
 
 def _mask(
@@ -100,6 +109,25 @@ def _config(
             "termination_patience": 3,
             "minimum_mask_pixels": 1,
             "minimum_observation_confidence": 0.0,
+        }
+    )
+
+
+def _metric_config() -> CSTIConfig:
+    return CSTIConfig.from_mapping(
+        {
+            "enabled": True,
+            "algorithm": "exact_full_tube_edt",
+            "spatial_tolerance_policy": "reference_tube_equivalent_diameter_v1",
+            "spatial_tolerance_radius_ratio": 0.5,
+            "temporal_tolerance_s": 0.025,
+            "condition_frame_policy": "exclude_initial_samples",
+            "initial_frames_excluded": 1,
+            "score_aggregation": "full_tube",
+            "diagnostic_prefix_fractions": [0.25, 0.5, 0.75, 1.0],
+            "case_aggregation": "mean_gt_entities",
+            "timeline_policy": "physical_overlap",
+            "mask_resolution": "scene_analysis_native",
         }
     )
 
@@ -354,6 +382,180 @@ class CSTILockedTubeLifecycleTest(unittest.TestCase):
                 frame_shape=valid.shape,
                 config=_config(),
             )
+
+
+class CSTIObservationAdapterTest(unittest.TestCase):
+    def _aligned_input(self) -> tuple[CSTIInput, tuple[EntitySpec, ...]]:
+        first = _mask(1, 2, 4, 5)
+        second = _mask(7, 1, 11, 6)
+        first_tube = tuple(
+            np.roll(first, shift=index, axis=1) for index in range(4)
+        )
+        second_tube = tuple(second.copy() for _ in range(4))
+        entities = (_entity("small", "ball"), _entity("large", "block"))
+        value = CSTIInput(
+            reference_capability=ReferenceCapability.SAME_CASE_GT,
+            times_s=(0.0, 1 / 24, 2 / 24, 3 / 24),
+            frame_shape=first.shape,
+            entities=(
+                CSTIEntityTube(
+                    entity_id="small",
+                    role_id="small",
+                    reference_masks=first_tube,
+                    prediction_masks=first_tube,
+                    matched_prediction_track_ids=("legacy-small",),
+                ),
+                CSTIEntityTube(
+                    entity_id="large",
+                    role_id="large",
+                    reference_masks=second_tube,
+                    prediction_masks=second_tube,
+                    matched_prediction_track_ids=("legacy-large",),
+                ),
+            ),
+        )
+        return value, entities
+
+    def test_adapter_preserves_reference_contract_and_replaces_only_prediction(self) -> None:
+        value, entities = self._aligned_input()
+        candidates = (
+            _candidate_frames(
+                "ball:1",
+                "ball",
+                [mask.copy() for mask in value.entities[0].reference_masks],
+            ),
+            _candidate_frames(
+                "block:2",
+                "block",
+                [mask.copy() for mask in value.entities[1].reference_masks],
+            ),
+        )
+
+        observed = observe_csti_tubes(
+            aligned_input=value,
+            entities=entities,
+            candidates=candidates,
+            config=_config(),
+        )
+
+        self.assertTrue(observed.evaluator_init_success)
+        self.assertEqual(value.times_s, observed.csti_input.times_s)
+        self.assertEqual(value.frame_shape, observed.csti_input.frame_shape)
+        self.assertIs(
+            value.reference_capability,
+            observed.csti_input.reference_capability,
+        )
+        self.assertEqual(
+            [entity.reference_masks for entity in value.entities],
+            [entity.reference_masks for entity in observed.csti_input.entities],
+        )
+        self.assertEqual(
+            [("ball:1",), ("block:2",)],
+            [
+                entity.matched_prediction_track_ids
+                for entity in observed.csti_input.entities
+            ],
+        )
+
+    def test_adapter_keeps_improved_csti_scores_bit_identical_for_same_tubes(self) -> None:
+        value, entities = self._aligned_input()
+        candidates = (
+            _candidate_frames(
+                "ball:1", "ball", list(value.entities[0].prediction_masks)
+            ),
+            _candidate_frames(
+                "block:2", "block", list(value.entities[1].prediction_masks)
+            ),
+        )
+        observed = observe_csti_tubes(
+            aligned_input=value,
+            entities=entities,
+            candidates=candidates,
+            config=_config(),
+        )
+        expected_entities = (("small", "small"), ("large", "large"))
+
+        before = evaluate_csti(
+            value,
+            expected_entities=expected_entities,
+            config=_metric_config(),
+        )
+        after = evaluate_csti(
+            observed.csti_input,
+            expected_entities=expected_entities,
+            config=_metric_config(),
+        )
+
+        self.assertEqual(before["score"], after["score"])
+        self.assertEqual(
+            [item["score"] for item in before["objects"]],
+            [item["score"] for item in after["objects"]],
+        )
+
+    def test_result_decoration_exposes_subject_macro_and_identity_audit(self) -> None:
+        value, entities = self._aligned_input()
+        candidates = (
+            _candidate_frames(
+                "ball:1", "ball", list(value.entities[0].prediction_masks)
+            ),
+            _candidate_frames(
+                "block:2", "block", list(value.entities[1].prediction_masks)
+            ),
+        )
+        observed = observe_csti_tubes(
+            aligned_input=value,
+            entities=entities,
+            candidates=candidates,
+            config=_config(),
+        )
+        raw = evaluate_csti(
+            observed.csti_input,
+            expected_entities=(("small", "small"), ("large", "large")),
+            config=_metric_config(),
+        )
+
+        result = decorate_csti_metric(raw, observation=observed)
+
+        self.assertEqual(result["score"], result["csti_video"])
+        self.assertEqual(
+            result["score"],
+            np.mean(list(result["csti_per_subject"].values())),
+        )
+        self.assertEqual(2, result["subject_count"])
+        self.assertTrue(result["evaluator_init_success"])
+        self.assertIsNone(result["evaluator_init_failure_reason"])
+        self.assertEqual(
+            {"small": "ball:1", "large": "block:2"},
+            result["initial_matching"],
+        )
+
+    def test_initialization_failure_metric_is_null_and_auditable_not_zero(self) -> None:
+        value, entities = self._aligned_input()
+        observed = observe_csti_tubes(
+            aligned_input=value,
+            entities=entities,
+            candidates=(
+                _candidate_frames(
+                    "ball:1", "ball", list(value.entities[0].reference_masks)
+                ),
+            ),
+            config=_config(),
+        )
+
+        result = evaluator_init_failure_metric(
+            observation=observed,
+            expected_entities=(("small", "small"), ("large", "large")),
+            config=_metric_config(),
+        )
+
+        self.assertEqual("evaluator_init_failure", result["status"])
+        self.assertIsNone(result["score"])
+        self.assertFalse(result["evaluator_init_success"])
+        self.assertEqual(2, result["subject_count"])
+        self.assertEqual(
+            "insufficient_semantic_candidates",
+            result["evaluator_init_failure_reason"]["code"],
+        )
 
 
 if __name__ == "__main__":

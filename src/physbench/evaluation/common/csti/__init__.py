@@ -15,6 +15,7 @@ from .metric import (
 )
 from .observation import (
     CSTIObserverConfig,
+    CSTIObservationResult,
     EvaluatorInitFailure,
     InitialIdentityMatch,
     LockedPredictionTubes,
@@ -22,8 +23,11 @@ from .observation import (
     SemanticCandidateTube,
     TrackObservationValidity,
     build_locked_prediction_tubes,
+    decorate_csti_metric,
+    evaluator_init_failure_metric,
     is_valid_track_observation,
     match_initial_identities,
+    observe_csti_tubes,
 )
 
 __all__ = [
@@ -40,6 +44,7 @@ __all__ = [
     "score_postcondition_tube_reference",
     "zero_csti_metric",
     "CSTIObserverConfig",
+    "CSTIObservationResult",
     "EvaluatorInitFailure",
     "InitialIdentityMatch",
     "LockedPredictionTubes",
@@ -47,6 +52,9 @@ __all__ = [
     "SemanticCandidateTube",
     "TrackObservationValidity",
     "build_locked_prediction_tubes",
+    "decorate_csti_metric",
+    "evaluator_init_failure_metric",
     "is_valid_track_observation",
     "match_initial_identities",
+    "observe_csti_tubes",
 ]

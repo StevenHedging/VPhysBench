@@ -12,7 +12,13 @@ from scipy.optimize import linear_sum_assignment
 
 from physbench.evaluation.common.entities import EntitySpec
 
-from .contracts import CSTIContractError
+from .contracts import (
+    CSTIConfig,
+    CSTIContractError,
+    CSTIEntityTube,
+    CSTIInput,
+)
+from .metric import zero_csti_metric
 
 
 @dataclass(frozen=True)
@@ -335,6 +341,15 @@ class LockedPredictionTubes:
     final_state_per_subject: Mapping[str, str]
     pending_invalid_frames_per_subject: Mapping[str, int]
     invalid_reason_per_frame: Mapping[str, tuple[str | None, ...]]
+
+
+@dataclass(frozen=True)
+class CSTIObservationResult:
+    evaluator_init_success: bool
+    csti_input: CSTIInput | None
+    initial_match: InitialIdentityMatch
+    locked_tubes: LockedPredictionTubes | None
+    candidate_count: int
 
 
 def _mask_iou(left: np.ndarray, right: np.ndarray) -> float:
@@ -750,8 +765,232 @@ def build_locked_prediction_tubes(
     )
 
 
+def observe_csti_tubes(
+    *,
+    aligned_input: CSTIInput,
+    entities: Sequence[EntitySpec],
+    candidates: Sequence[SemanticCandidateTube],
+    config: CSTIObserverConfig,
+) -> CSTIObservationResult:
+    """Replace only aligned CSTI prediction Tubes after one initial match."""
+
+    if not isinstance(aligned_input, CSTIInput):
+        raise CSTIContractError(
+            "csti_observer_input_invalid",
+            "CSTI observer requires an aligned CSTIInput",
+        )
+    entity_tuple = tuple(entities)
+    specs_by_id = {entity.entity_id: entity for entity in entity_tuple}
+    aligned_by_id = {
+        entity.entity_id: entity for entity in aligned_input.entities
+    }
+    if (
+        len(specs_by_id) != len(entity_tuple)
+        or len(aligned_by_id) != len(aligned_input.entities)
+        or set(specs_by_id) != set(aligned_by_id)
+    ):
+        raise CSTIContractError(
+            "csti_observer_entity_coverage_mismatch",
+            "CSTI observer entities must exactly cover the aligned input",
+        )
+    for entity_id, spec in specs_by_id.items():
+        if aligned_by_id[entity_id].role_id != spec.role_id:
+            raise CSTIContractError(
+                "csti_observer_role_mismatch",
+                f"CSTI observer role differs for {entity_id!r}",
+            )
+    candidate_tuple = tuple(candidates)
+    initial = match_initial_identities(
+        entities=entity_tuple,
+        reference_masks_by_entity={
+            entity.entity_id: entity.reference_masks[0]
+            for entity in aligned_input.entities
+        },
+        candidates=candidate_tuple,
+        config=config,
+    )
+    if not initial.success:
+        return CSTIObservationResult(
+            evaluator_init_success=False,
+            csti_input=None,
+            initial_match=initial,
+            locked_tubes=None,
+            candidate_count=len(candidate_tuple),
+        )
+    locked = build_locked_prediction_tubes(
+        entities=entity_tuple,
+        candidates=candidate_tuple,
+        initial_match=initial,
+        frame_count=len(aligned_input.times_s),
+        frame_shape=aligned_input.frame_shape,
+        config=config,
+    )
+    observed_entities = tuple(
+        CSTIEntityTube(
+            entity_id=entity.entity_id,
+            role_id=entity.role_id,
+            reference_masks=entity.reference_masks,
+            prediction_masks=locked.prediction_masks_by_entity[
+                entity.entity_id
+            ],
+            matched_prediction_track_ids=(
+                initial.initial_matching[entity.entity_id],
+            ),
+        )
+        for entity in aligned_input.entities
+    )
+    return CSTIObservationResult(
+        evaluator_init_success=True,
+        csti_input=CSTIInput(
+            reference_capability=aligned_input.reference_capability,
+            times_s=aligned_input.times_s,
+            frame_shape=aligned_input.frame_shape,
+            entities=observed_entities,
+        ),
+        initial_match=initial,
+        locked_tubes=locked,
+        candidate_count=len(candidate_tuple),
+    )
+
+
+def _failure_reason_mapping(
+    failure: EvaluatorInitFailure | None,
+) -> dict[str, Any] | None:
+    if failure is None:
+        return None
+    return {
+        "code": failure.code,
+        "message": failure.message,
+        "details": dict(failure.details),
+    }
+
+
+def decorate_csti_metric(
+    metric: Mapping[str, Any],
+    *,
+    observation: CSTIObservationResult,
+) -> dict[str, Any]:
+    """Add observer audit fields around an already-computed CSTI metric."""
+
+    if not observation.evaluator_init_success or observation.locked_tubes is None:
+        raise CSTIContractError(
+            "csti_observer_not_initialized",
+            "Cannot decorate CSTI from a failed observer initialization",
+        )
+    value = dict(metric)
+    if value.get("status") != "evaluated" or not isinstance(
+        value.get("objects"), list
+    ):
+        raise CSTIContractError(
+            "csti_metric_decoration_invalid",
+            "Only an evaluated CSTI metric can receive observer diagnostics",
+        )
+    per_subject = {
+        str(item["entity_id"]): float(item["score"])
+        for item in value["objects"]
+    }
+    value.update(
+        {
+            "csti_video": float(value["score"]),
+            "csti_per_subject": per_subject,
+            "subject_count": len(per_subject),
+            "evaluator_init_success": True,
+            "evaluator_init_failure_reason": None,
+            "initial_matching": dict(
+                observation.initial_match.initial_matching
+            ),
+            "initial_matching_iou": dict(
+                observation.initial_match.matching_iou
+            ),
+            "termination_frame_per_subject": dict(
+                observation.locked_tubes.termination_frame_per_subject
+            ),
+            "observer": {
+                "candidate_count": observation.candidate_count,
+                "ignored_candidate_ids": list(
+                    observation.initial_match.ignored_candidate_ids
+                ),
+                "final_state_per_subject": dict(
+                    observation.locked_tubes.final_state_per_subject
+                ),
+                "pending_invalid_frames_per_subject": dict(
+                    observation.locked_tubes.pending_invalid_frames_per_subject
+                ),
+                "invalid_reason_per_frame": {
+                    entity_id: list(reasons)
+                    for entity_id, reasons in (
+                        observation.locked_tubes.invalid_reason_per_frame.items()
+                    )
+                },
+            },
+        }
+    )
+    return value
+
+
+def evaluator_init_failure_metric(
+    *,
+    observation: CSTIObservationResult,
+    expected_entities: Sequence[tuple[str, str]],
+    config: CSTIConfig,
+) -> dict[str, Any]:
+    """Build a visible null-score record for evaluator initialization loss."""
+
+    if observation.evaluator_init_success:
+        raise CSTIContractError(
+            "csti_observer_initialized",
+            "Successful CSTI observation is not an initialization failure",
+        )
+    value = zero_csti_metric(
+        expected_entities=expected_entities,
+        config=config,
+        degradation_code="evaluator_init_failure",
+        degradation_reason=(
+            observation.initial_match.failure.message
+            if observation.initial_match.failure is not None
+            else "CSTI evaluator initialization failed"
+        ),
+    )
+    value["status"] = "evaluator_init_failure"
+    value["score"] = None
+    value.pop("degradation", None)
+    for item in value["objects"]:
+        item["score"] = None
+    expected = tuple(expected_entities)
+    value.update(
+        {
+            "csti_video": None,
+            "csti_per_subject": {
+                entity_id: None for entity_id, _ in expected
+            },
+            "subject_count": len(expected),
+            "evaluator_init_success": False,
+            "evaluator_init_failure_reason": _failure_reason_mapping(
+                observation.initial_match.failure
+            ),
+            "initial_matching": dict(
+                observation.initial_match.initial_matching
+            ),
+            "initial_matching_iou": dict(
+                observation.initial_match.matching_iou
+            ),
+            "termination_frame_per_subject": {
+                entity_id: None for entity_id, _ in expected
+            },
+            "observer": {
+                "candidate_count": observation.candidate_count,
+                "ignored_candidate_ids": list(
+                    observation.initial_match.ignored_candidate_ids
+                ),
+            },
+        }
+    )
+    return value
+
+
 __all__ = [
     "CSTIObserverConfig",
+    "CSTIObservationResult",
     "EvaluatorInitFailure",
     "InitialIdentityMatch",
     "LockedPredictionTubes",
@@ -759,6 +998,9 @@ __all__ = [
     "SemanticCandidateTube",
     "TrackObservationValidity",
     "build_locked_prediction_tubes",
+    "decorate_csti_metric",
+    "evaluator_init_failure_metric",
     "is_valid_track_observation",
     "match_initial_identities",
+    "observe_csti_tubes",
 ]
