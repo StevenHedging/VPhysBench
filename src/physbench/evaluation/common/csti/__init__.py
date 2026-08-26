@@ -17,8 +17,12 @@ from .observation import (
     CSTIObserverConfig,
     EvaluatorInitFailure,
     InitialIdentityMatch,
+    LockedPredictionTubes,
     PromptGroupConfig,
     SemanticCandidateTube,
+    TrackObservationValidity,
+    build_locked_prediction_tubes,
+    is_valid_track_observation,
     match_initial_identities,
 )
 
@@ -38,7 +42,11 @@ __all__ = [
     "CSTIObserverConfig",
     "EvaluatorInitFailure",
     "InitialIdentityMatch",
+    "LockedPredictionTubes",
     "PromptGroupConfig",
     "SemanticCandidateTube",
+    "TrackObservationValidity",
+    "build_locked_prediction_tubes",
+    "is_valid_track_observation",
     "match_initial_identities",
 ]

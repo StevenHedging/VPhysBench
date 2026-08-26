@@ -6,9 +6,13 @@ import numpy as np
 
 from physbench.evaluation.common.csti.observation import (
     CSTIObserverConfig,
+    InitialIdentityMatch,
     SemanticCandidateTube,
+    build_locked_prediction_tubes,
+    is_valid_track_observation,
     match_initial_identities,
 )
+from physbench.evaluation.common.csti import CSTIContractError
 from physbench.evaluation.common.entities import EntitySpec
 
 
@@ -48,6 +52,27 @@ def _candidate(
         masks=masks,
         boxes_xywh=np.zeros((frame_count, 4), dtype=np.float32),
         confidences=np.ones(frame_count, dtype=np.float32),
+    )
+
+
+def _candidate_frames(
+    candidate_id: str,
+    prompt_group_id: str,
+    frames: list[np.ndarray],
+    *,
+    confidences: list[float] | None = None,
+) -> SemanticCandidateTube:
+    frame_count = len(frames)
+    return SemanticCandidateTube(
+        candidate_id=candidate_id,
+        prompt_group_id=prompt_group_id,
+        backend_object_id=int(candidate_id.rsplit(":", 1)[-1]),
+        masks=np.stack(frames),
+        boxes_xywh=np.zeros((frame_count, 4), dtype=np.float32),
+        confidences=np.asarray(
+            confidences if confidences is not None else [1.0] * frame_count,
+            dtype=np.float32,
+        ),
     )
 
 
@@ -173,6 +198,162 @@ class CSTIInitialMatchingTest(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertEqual("initial_assignment_ambiguous", result.failure.code)
         self.assertEqual(0.0, result.failure.details["assignment_margin"])
+
+
+class CSTILockedTubeLifecycleTest(unittest.TestCase):
+    def _build(
+        self,
+        frames: list[np.ndarray],
+        *,
+        patience: int = 3,
+    ):
+        candidate = _candidate_frames("ball:1", "ball", frames)
+        config = CSTIObserverConfig.from_mapping(
+            {
+                "prompt_groups": [
+                    {
+                        "id": "ball",
+                        "text": "ball",
+                        "entity_classes": ["ball"],
+                    }
+                ],
+                "initial_match_iou_threshold": 0.5,
+                "initial_match_ambiguity_margin": 0.0,
+                "termination_patience": patience,
+                "minimum_mask_pixels": 1,
+                "minimum_observation_confidence": 0.0,
+            }
+        )
+        initial = InitialIdentityMatch(
+            success=True,
+            initial_matching={"body": "ball:1"},
+            matching_iou={"body": 1.0},
+            ignored_candidate_ids=(),
+        )
+        return build_locked_prediction_tubes(
+            entities=(_entity("body", "ball"),),
+            candidates=(candidate,),
+            initial_match=initial,
+            frame_count=len(frames),
+            frame_shape=frames[0].shape,
+            config=config,
+        )
+
+    def test_one_invalid_frame_then_recovery_does_not_terminate(self) -> None:
+        valid = _mask(2, 2, 5, 5)
+        empty = np.zeros_like(valid)
+        result = self._build([valid, empty, valid, valid])
+
+        self.assertIsNone(result.termination_frame_per_subject["body"])
+        self.assertFalse(np.any(result.prediction_masks_by_entity["body"][1]))
+        self.assertTrue(np.array_equal(valid, result.prediction_masks_by_entity["body"][2]))
+        self.assertEqual("VIDEO_END", result.final_state_per_subject["body"])
+
+    def test_two_invalid_frames_then_recovery_does_not_terminate(self) -> None:
+        valid = _mask(2, 2, 5, 5)
+        empty = np.zeros_like(valid)
+        result = self._build([valid, empty, empty, valid, valid])
+
+        self.assertIsNone(result.termination_frame_per_subject["body"])
+        self.assertTrue(np.array_equal(valid, result.prediction_masks_by_entity["body"][3]))
+
+    def test_three_invalid_frames_confirm_and_backdate_termination(self) -> None:
+        valid = _mask(2, 2, 5, 5)
+        empty = np.zeros_like(valid)
+        result = self._build([valid, valid, empty, empty, empty, valid])
+
+        self.assertEqual(2, result.termination_frame_per_subject["body"])
+        self.assertEqual("TERMINATED", result.final_state_per_subject["body"])
+        self.assertFalse(
+            np.any(np.stack(result.prediction_masks_by_entity["body"])[2:])
+        )
+
+    def test_pending_invalid_tail_stays_empty_without_claiming_termination(self) -> None:
+        valid = _mask(2, 2, 5, 5)
+        empty = np.zeros_like(valid)
+        result = self._build([valid, valid, empty, empty])
+
+        self.assertIsNone(result.termination_frame_per_subject["body"])
+        self.assertEqual("VIDEO_END", result.final_state_per_subject["body"])
+        self.assertFalse(
+            np.any(np.stack(result.prediction_masks_by_entity["body"])[2:])
+        )
+        self.assertEqual(2, result.pending_invalid_frames_per_subject["body"])
+
+    def test_locked_backend_id_is_not_rematched_when_same_class_positions_swap(self) -> None:
+        left = _mask(1, 2, 4, 5)
+        right = _mask(8, 2, 11, 5)
+        candidates = (
+            _candidate_frames("ball:1", "ball", [left, right, right]),
+            _candidate_frames("ball:2", "ball", [right, left, left]),
+        )
+        initial = match_initial_identities(
+            entities=(_entity("left", "ball"), _entity("right", "ball")),
+            reference_masks_by_entity={"left": left, "right": right},
+            candidates=candidates,
+            config=_config(),
+        )
+
+        result = build_locked_prediction_tubes(
+            entities=(_entity("left", "ball"), _entity("right", "ball")),
+            candidates=candidates,
+            initial_match=initial,
+            frame_count=3,
+            frame_shape=left.shape,
+            config=_config(),
+        )
+
+        self.assertTrue(np.array_equal(right, result.prediction_masks_by_entity["left"][1]))
+        self.assertTrue(np.array_equal(left, result.prediction_masks_by_entity["right"][1]))
+        self.assertEqual({"left": "ball:1", "right": "ball:2"}, initial.initial_matching)
+
+    def test_validity_checks_shape_area_and_confidence(self) -> None:
+        valid = _mask(2, 2, 5, 5)
+        config = _config()
+
+        self.assertTrue(
+            is_valid_track_observation(
+                valid,
+                confidence=1.0,
+                frame_shape=valid.shape,
+                config=config,
+            ).valid
+        )
+        self.assertEqual(
+            "mask_empty",
+            is_valid_track_observation(
+                np.zeros_like(valid),
+                confidence=1.0,
+                frame_shape=valid.shape,
+                config=config,
+            ).reason,
+        )
+        self.assertEqual(
+            "mask_shape_invalid",
+            is_valid_track_observation(
+                np.zeros((2, 2), dtype=bool),
+                confidence=1.0,
+                frame_shape=valid.shape,
+                config=config,
+            ).reason,
+        )
+
+    def test_incomplete_locked_mapping_is_an_explicit_contract_error(self) -> None:
+        valid = _mask(2, 2, 5, 5)
+        with self.assertRaisesRegex(CSTIContractError, "cover every entity"):
+            build_locked_prediction_tubes(
+                entities=(_entity("body", "ball"),),
+                candidates=(_candidate_frames("ball:1", "ball", [valid]),),
+                initial_match=InitialIdentityMatch(
+                    success=True,
+                    initial_matching={},
+                    matching_iou={},
+                    ignored_candidate_ids=("ball:1",),
+                ),
+                frame_count=1,
+                frame_shape=valid.shape,
+                config=_config(),
+            )
 
 
 if __name__ == "__main__":

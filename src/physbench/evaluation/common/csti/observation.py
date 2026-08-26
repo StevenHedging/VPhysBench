@@ -321,6 +321,22 @@ class InitialIdentityMatch:
     failure: EvaluatorInitFailure | None = None
 
 
+@dataclass(frozen=True)
+class TrackObservationValidity:
+    valid: bool
+    reason: str | None
+    area_pixels: int
+
+
+@dataclass(frozen=True)
+class LockedPredictionTubes:
+    prediction_masks_by_entity: Mapping[str, tuple[np.ndarray, ...]]
+    termination_frame_per_subject: Mapping[str, int | None]
+    final_state_per_subject: Mapping[str, str]
+    pending_invalid_frames_per_subject: Mapping[str, int]
+    invalid_reason_per_frame: Mapping[str, tuple[str | None, ...]]
+
+
 def _mask_iou(left: np.ndarray, right: np.ndarray) -> float:
     intersection = int(np.count_nonzero(left & right))
     union = int(np.count_nonzero(left | right))
@@ -554,11 +570,195 @@ def match_initial_identities(
     )
 
 
+def is_valid_track_observation(
+    mask: object,
+    *,
+    confidence: object,
+    frame_shape: tuple[int, int],
+    config: CSTIObserverConfig,
+) -> TrackObservationValidity:
+    """Validate only documented backend mask and confidence evidence."""
+
+    value = np.asarray(mask)
+    if value.ndim != 2 or value.shape != frame_shape:
+        return TrackObservationValidity(False, "mask_shape_invalid", 0)
+    if value.dtype == np.bool_:
+        binary = value
+    elif np.issubdtype(value.dtype, np.integer) and bool(
+        np.all((value == 0) | (value == 1))
+    ):
+        binary = value > 0
+    else:
+        return TrackObservationValidity(False, "mask_format_invalid", 0)
+    area = int(np.count_nonzero(binary))
+    if area == 0:
+        return TrackObservationValidity(False, "mask_empty", 0)
+    if area < config.minimum_mask_pixels:
+        return TrackObservationValidity(False, "mask_area_below_minimum", area)
+    if isinstance(confidence, bool) or not isinstance(
+        confidence, (int, float, np.integer, np.floating)
+    ):
+        return TrackObservationValidity(False, "confidence_invalid", area)
+    confidence_value = float(confidence)
+    if not math.isfinite(confidence_value) or not 0.0 <= confidence_value <= 1.0:
+        return TrackObservationValidity(False, "confidence_invalid", area)
+    if confidence_value < config.minimum_observation_confidence:
+        return TrackObservationValidity(False, "confidence_below_minimum", area)
+    return TrackObservationValidity(True, None, area)
+
+
+def _read_only_mask(mask: np.ndarray, *, frame_shape: tuple[int, int]) -> np.ndarray:
+    value = np.array(mask, dtype=bool, copy=True)
+    if value.shape != frame_shape:
+        raise CSTIContractError(
+            "csti_candidate_shape_mismatch",
+            "CSTI prediction mask does not match the evaluator frame shape",
+        )
+    value.setflags(write=False)
+    return value
+
+
+def _empty_mask(frame_shape: tuple[int, int]) -> np.ndarray:
+    return _read_only_mask(np.zeros(frame_shape, dtype=bool), frame_shape=frame_shape)
+
+
+def build_locked_prediction_tubes(
+    *,
+    entities: Sequence[EntitySpec],
+    candidates: Sequence[SemanticCandidateTube],
+    initial_match: InitialIdentityMatch,
+    frame_count: int,
+    frame_shape: tuple[int, int],
+    config: CSTIObserverConfig,
+) -> LockedPredictionTubes:
+    """Build full-length Tubes without changing the frame-zero identity map."""
+
+    entity_tuple = tuple(entities)
+    entity_ids = tuple(entity.entity_id for entity in entity_tuple)
+    if not initial_match.success:
+        raise CSTIContractError(
+            "csti_initial_match_unsuccessful",
+            "Cannot build locked Tubes from an unsuccessful initial match",
+        )
+    if set(initial_match.initial_matching) != set(entity_ids):
+        raise CSTIContractError(
+            "csti_locked_mapping_incomplete",
+            "Locked CSTI identity mapping must cover every entity",
+        )
+    if (
+        isinstance(frame_count, bool)
+        or not isinstance(frame_count, int)
+        or frame_count < 1
+    ):
+        raise CSTIContractError(
+            "csti_observer_frame_count_invalid",
+            "CSTI observer frame_count must be positive",
+        )
+    if (
+        not isinstance(frame_shape, (tuple, list))
+        or len(frame_shape) != 2
+        or any(
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or value < 1
+            for value in frame_shape
+        )
+    ):
+        raise CSTIContractError(
+            "csti_observer_frame_shape_invalid",
+            "CSTI observer frame_shape must contain two positive integers",
+        )
+    normalized_shape = (int(frame_shape[0]), int(frame_shape[1]))
+    by_candidate = {candidate.candidate_id: candidate for candidate in candidates}
+    if len(by_candidate) != len(tuple(candidates)):
+        raise CSTIContractError(
+            "csti_candidate_duplicate", "CSTI observer candidate IDs must be unique"
+        )
+
+    prediction_masks: dict[str, tuple[np.ndarray, ...]] = {}
+    termination_frames: dict[str, int | None] = {}
+    final_states: dict[str, str] = {}
+    pending_counts: dict[str, int] = {}
+    invalid_reasons: dict[str, tuple[str | None, ...]] = {}
+    for entity in entity_tuple:
+        candidate_id = initial_match.initial_matching[entity.entity_id]
+        candidate = by_candidate.get(candidate_id)
+        if candidate is None:
+            raise CSTIContractError(
+                "csti_locked_candidate_missing",
+                f"Locked SAM candidate {candidate_id!r} is absent",
+            )
+        if candidate.masks.shape != (frame_count, *normalized_shape):
+            raise CSTIContractError(
+                "csti_candidate_shape_mismatch",
+                "Locked SAM candidate Tube differs from the evaluation timeline/canvas",
+            )
+        if candidate.confidences.shape != (frame_count,):
+            raise CSTIContractError(
+                "csti_candidate_confidence_invalid",
+                "Locked SAM confidence series differs from the evaluation timeline",
+            )
+
+        output = [_empty_mask(normalized_shape) for _ in range(frame_count)]
+        reasons: list[str | None] = [None] * frame_count
+        consecutive_invalid = 0
+        candidate_termination_frame: int | None = None
+        termination_frame: int | None = None
+        terminated = False
+        for frame_index in range(frame_count):
+            if terminated:
+                reasons[frame_index] = "track_terminated"
+                continue
+            validity = is_valid_track_observation(
+                candidate.masks[frame_index],
+                confidence=float(candidate.confidences[frame_index]),
+                frame_shape=normalized_shape,
+                config=config,
+            )
+            if validity.valid:
+                output[frame_index] = _read_only_mask(
+                    candidate.masks[frame_index], frame_shape=normalized_shape
+                )
+                consecutive_invalid = 0
+                candidate_termination_frame = None
+                continue
+            reasons[frame_index] = validity.reason
+            if consecutive_invalid == 0:
+                candidate_termination_frame = frame_index
+            consecutive_invalid += 1
+            if consecutive_invalid >= config.termination_patience:
+                assert candidate_termination_frame is not None
+                termination_frame = candidate_termination_frame
+                for clear_index in range(termination_frame, frame_count):
+                    output[clear_index] = _empty_mask(normalized_shape)
+                terminated = True
+
+        prediction_masks[entity.entity_id] = tuple(output)
+        termination_frames[entity.entity_id] = termination_frame
+        final_states[entity.entity_id] = (
+            "TERMINATED" if terminated else "VIDEO_END"
+        )
+        pending_counts[entity.entity_id] = 0 if terminated else consecutive_invalid
+        invalid_reasons[entity.entity_id] = tuple(reasons)
+
+    return LockedPredictionTubes(
+        prediction_masks_by_entity=prediction_masks,
+        termination_frame_per_subject=termination_frames,
+        final_state_per_subject=final_states,
+        pending_invalid_frames_per_subject=pending_counts,
+        invalid_reason_per_frame=invalid_reasons,
+    )
+
+
 __all__ = [
     "CSTIObserverConfig",
     "EvaluatorInitFailure",
     "InitialIdentityMatch",
+    "LockedPredictionTubes",
     "PromptGroupConfig",
     "SemanticCandidateTube",
+    "TrackObservationValidity",
+    "build_locked_prediction_tubes",
+    "is_valid_track_observation",
     "match_initial_identities",
 ]
