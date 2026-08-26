@@ -337,9 +337,11 @@ Run evaluation protocol and release documentation tests.
 
 - [ ] **Step 3: Add compact scene configurations and schema definition**
 
-Use prompts: collision `ball`; pendulum `pendulum bob`; inclined plane `sliding
-block`; circular motion `orbiting metal block`; parabolic `ball`; spring `steel
-ball`. Counts come from manifest classes. Set the common checkpoint environment
+Start from semantic role prompts, then certify the concrete nouns against real
+VPhysBench first frames. The certified public prompts are collision `small
+round object`; pendulum `metal ball`; inclined plane `sliding block`; circular
+motion `metal cube`; parabolic `round metal object`; spring `metal ball`.
+Counts come from manifest classes. Set the common checkpoint environment
 variable, bfloat16 precision, configurable thresholds, patience three, and
 debug output false.
 
@@ -415,4 +417,3 @@ is untouched.
 
 Do not commit generated artifacts. Finish with a clean feature worktree and a
 linear list of commits ready for integration into the primary benchmark branch.
-

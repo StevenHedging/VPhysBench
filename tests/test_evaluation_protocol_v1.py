@@ -126,15 +126,15 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
 
     def test_every_scene_declares_text_only_sam31_csti_observation(self) -> None:
         expected = {
-            "pendulum": ("pendulum bob", ["pendulum_bob"]),
-            "collision_1d": ("ball", ["ball"]),
+            "pendulum": ("metal ball", ["pendulum_bob"]),
+            "collision_1d": ("small round object", ["ball"]),
             "inclined_plane_slide": ("sliding block", ["block"]),
             "uniform_circular_motion": (
-                "orbiting metal block",
+                "metal cube",
                 ["orbiter"],
             ),
-            "parabolic_motion": ("ball", ["ball"]),
-            "vertical_spring_oscillator": ("steel ball", ["steel_ball"]),
+            "parabolic_motion": ("round metal object", ["ball"]),
+            "vertical_spring_oscillator": ("metal ball", ["steel_ball"]),
         }
         for scene_id, (text, entity_classes) in expected.items():
             with self.subTest(scene_id=scene_id):

@@ -40,7 +40,13 @@ class Sam31TextCheckpointIntegrationTest(unittest.TestCase):
                 success, frame = capture.read()
                 if not success:
                     break
-                frames.append(cv2.resize(frame, (480, 270)))
+                width = int(
+                    os.environ.get("VPHYSBENCH_SAM31_SMOKE_WIDTH", "270")
+                )
+                height = int(
+                    os.environ.get("VPHYSBENCH_SAM31_SMOKE_HEIGHT", "480")
+                )
+                frames.append(cv2.resize(frame, (width, height)))
         finally:
             capture.release()
         self.assertEqual(3, len(frames))
@@ -69,7 +75,7 @@ class Sam31TextCheckpointIntegrationTest(unittest.TestCase):
                 PromptGroupConfig(
                     group_id="subject",
                     text=os.environ.get(
-                        "VPHYSBENCH_SAM31_SMOKE_PROMPT", "metal block"
+                        "VPHYSBENCH_SAM31_SMOKE_PROMPT", "metal cube"
                     ),
                     entity_classes=("subject",),
                 ),
@@ -79,7 +85,7 @@ class Sam31TextCheckpointIntegrationTest(unittest.TestCase):
         elapsed = time.perf_counter() - started
         self.assertGreaterEqual(len(candidates), 1)
         for candidate in candidates:
-            self.assertEqual((3, 270, 480), candidate.masks.shape)
+            self.assertEqual((3, height, width), candidate.masks.shape)
             self.assertEqual((3, 4), candidate.boxes_xywh.shape)
             self.assertEqual((3,), candidate.confidences.shape)
         diagnostics = {

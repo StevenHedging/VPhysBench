@@ -36,7 +36,7 @@
       "type": "pendulum_v1",
       "csti_observer": {
         "prompt_groups": [
-          {"id": "subject", "text": "pendulum bob", "entity_classes": ["pendulum_bob"]}
+          {"id": "subject", "text": "metal ball", "entity_classes": ["pendulum_bob"]}
         ],
         "initial_match_iou_threshold": 0.25,
         "initial_match_ambiguity_margin": 0.02,
@@ -291,7 +291,7 @@
       "type": "collision_1d_v1",
       "csti_observer": {
         "prompt_groups": [
-          {"id": "subject", "text": "ball", "entity_classes": ["ball"]}
+          {"id": "subject", "text": "small round object", "entity_classes": ["ball"]}
         ],
         "initial_match_iou_threshold": 0.25,
         "initial_match_ambiguity_margin": 0.02,
@@ -741,7 +741,7 @@
       "type": "uniform_circular_motion_v1",
       "csti_observer": {
         "prompt_groups": [
-          {"id": "subject", "text": "orbiting metal block", "entity_classes": ["orbiter"]}
+          {"id": "subject", "text": "metal cube", "entity_classes": ["orbiter"]}
         ],
         "initial_match_iou_threshold": 0.25,
         "initial_match_ambiguity_margin": 0.02,
@@ -892,7 +892,7 @@
       "type": "parabolic_motion_v1",
       "csti_observer": {
         "prompt_groups": [
-          {"id": "subject", "text": "ball", "entity_classes": ["ball"]}
+          {"id": "subject", "text": "round metal object", "entity_classes": ["ball"]}
         ],
         "initial_match_iou_threshold": 0.25,
         "initial_match_ambiguity_margin": 0.02,
@@ -1056,7 +1056,7 @@
       "type": "vertical_spring_oscillator_v1",
       "csti_observer": {
         "prompt_groups": [
-          {"id": "subject", "text": "steel ball", "entity_classes": ["steel_ball"]}
+          {"id": "subject", "text": "metal ball", "entity_classes": ["steel_ball"]}
         ],
         "initial_match_iou_threshold": 0.25,
         "initial_match_ambiguity_margin": 0.02,

@@ -387,6 +387,11 @@ def _best_alternative_score(
         alternative_cost = np.array(alternative_cost, copy=True)
         alternative_cost[forbidden_row, forbidden_column] = 1e6
         alt_rows, alt_columns = linear_sum_assignment(alternative_cost)
+        if any(
+            row == forbidden_row and column == forbidden_column
+            for row, column in zip(alt_rows, alt_columns, strict=True)
+        ):
+            continue
         if len(alt_rows) != ious.shape[0]:
             continue
         selected = ious[alt_rows, alt_columns]

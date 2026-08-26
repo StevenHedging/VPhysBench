@@ -192,6 +192,20 @@ class CSTIInitialMatchingTest(unittest.TestCase):
         self.assertEqual({"body": "ball:1"}, result.initial_matching)
         self.assertEqual(("ball:2",), result.ignored_candidate_ids)
 
+    def test_single_entity_single_candidate_has_no_false_alternative(self) -> None:
+        target = _mask(2, 2, 6, 6)
+
+        result = match_initial_identities(
+            entities=(_entity("body", "ball"),),
+            reference_masks_by_entity={"body": target},
+            candidates=(_candidate("ball:4", "ball", target),),
+            config=_config(ambiguity_margin=0.02),
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual({"body": "ball:4"}, result.initial_matching)
+        self.assertEqual({"body": 1.0}, result.matching_iou)
+
     def test_semantically_incompatible_candidate_cannot_match(self) -> None:
         target = _mask(1, 2, 4, 5)
         result = match_initial_identities(
