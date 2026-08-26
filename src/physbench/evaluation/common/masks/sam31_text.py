@@ -1,0 +1,463 @@
+"""Official SAM 3.1 text-only stateful video tracking adapter."""
+
+from __future__ import annotations
+
+import contextlib
+import hashlib
+import inspect
+import io
+import json
+import os
+from pathlib import Path
+import tempfile
+import threading
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
+
+import cv2
+import numpy as np
+
+from ..csti.observation import PromptGroupConfig, SemanticCandidateTube
+from ..errors import SceneAnalysisError
+
+
+PredictorFactory = Callable[[], Any]
+SAM31_SOURCE_REVISION = "8f0b7f4d4e7eda2ed606ebde6702c93359ad01da"
+SAM31_CHECKPOINT_SHA256 = (
+    "0567debeec80ba4ac6369540c6c248025283cb3ff2b92827509e57e2b3541cb6"
+)
+
+
+class Sam31TextVideoSegmenter:
+    """Detect on frame zero from text, then track official object IDs forward."""
+
+    def __init__(
+        self,
+        config: Mapping[str, Any],
+        *,
+        predictor_factory: PredictorFactory | None = None,
+    ) -> None:
+        if not isinstance(config, Mapping):
+            raise ValueError("SAM3.1 segmenter config must be a mapping")
+        self.config = dict(config)
+        self.checkpoint_path = str(config.get("checkpoint_path", "")).strip()
+        self.checkpoint_path_env = str(
+            config.get(
+                "checkpoint_path_env", "VPHYSBENCH_SAM31_CHECKPOINT"
+            )
+        ).strip()
+        if not self.checkpoint_path and not self.checkpoint_path_env:
+            raise ValueError(
+                "SAM3.1 checkpoint_path or checkpoint_path_env is required"
+            )
+        self.checkpoint_sha256 = str(
+            config.get("checkpoint_sha256", SAM31_CHECKPOINT_SHA256)
+        ).strip()
+        if (
+            len(self.checkpoint_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in self.checkpoint_sha256)
+        ):
+            raise ValueError("SAM3.1 checkpoint_sha256 must be lowercase hex")
+        self.requested_device = str(config.get("device", "auto"))
+        self.precision = str(config.get("precision", "bfloat16"))
+        if self.precision not in {"bfloat16", "float16", "float32"}:
+            raise ValueError("SAM3.1 precision is unsupported")
+        self.output_probability_threshold = float(
+            config.get("output_probability_threshold", 0.5)
+        )
+        if not 0.0 <= self.output_probability_threshold <= 1.0:
+            raise ValueError(
+                "SAM3.1 output_probability_threshold must lie in [0,1]"
+            )
+        self.max_num_objects = int(config.get("max_num_objects", 16))
+        self.multiplex_count = int(config.get("multiplex_count", 16))
+        if self.max_num_objects < 1 or self.multiplex_count < 1:
+            raise ValueError("SAM3.1 object limits must be positive")
+        self.compile_model = bool(config.get("compile", False))
+        self.warm_up = bool(config.get("warm_up", False))
+        self.use_fa3 = bool(config.get("use_fa3", False))
+        self.use_rope_real = bool(config.get("use_rope_real", True))
+        self.async_loading_frames = bool(
+            config.get("async_loading_frames", False)
+        )
+        self._predictor_factory = predictor_factory
+        self._predictor: Any | None = None
+        self._lock = threading.RLock()
+        self.resolved_device: str | None = None
+        self.compatibility_filtered_session_keywords: tuple[str, ...] = ()
+        self.model_load_output_summary: dict[str, Any] = {}
+
+    def _install_session_compatibility(self) -> None:
+        assert self._predictor is not None
+        model = getattr(self._predictor, "model", None)
+        init_state = getattr(model, "init_state", None)
+        if init_state is None:
+            return
+        signature = inspect.signature(init_state)
+        if any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in signature.parameters.values()
+        ):
+            return
+        accepted = frozenset(signature.parameters)
+        possible = {
+            "resource_path",
+            "offload_video_to_cpu",
+            "offload_state_to_cpu",
+            "async_loading_frames",
+            "video_loader_type",
+        }
+        filtered = tuple(sorted(possible - accepted))
+        if not filtered:
+            return
+
+        def compatible_init_state(*args: Any, **kwargs: Any) -> Any:
+            return init_state(
+                *args,
+                **{key: value for key, value in kwargs.items() if key in accepted},
+            )
+
+        model.init_state = compatible_init_state
+        self.compatibility_filtered_session_keywords = filtered
+
+    def _load(self) -> None:
+        if self._predictor is not None:
+            return
+        if self._predictor_factory is not None:
+            self._predictor = self._predictor_factory()
+            self.resolved_device = "fixture"
+            self._install_session_compatibility()
+            return
+        checkpoint_value = self.checkpoint_path
+        if not checkpoint_value:
+            checkpoint_value = os.environ.get(self.checkpoint_path_env, "").strip()
+        checkpoint = Path(checkpoint_value)
+        if not checkpoint.is_file():
+            raise SceneAnalysisError(
+                "sam31_checkpoint_missing",
+                "SAM3.1 checkpoint is missing; configure checkpoint_path or "
+                f"{self.checkpoint_path_env!r}",
+            )
+        digest = hashlib.sha256()
+        with checkpoint.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(16 * 1024 * 1024), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != self.checkpoint_sha256:
+            raise SceneAnalysisError(
+                "sam31_checkpoint_digest_mismatch",
+                "SAM3.1 checkpoint SHA-256 differs from the protocol",
+            )
+        try:
+            import torch
+            from sam3.model_builder import build_sam3_multiplex_video_predictor
+        except ImportError as exc:
+            raise SceneAnalysisError(
+                "sam31_dependency_missing",
+                "SAM3.1 evaluator dependencies are not installed",
+            ) from exc
+        if not torch.cuda.is_available():
+            raise SceneAnalysisError(
+                "sam31_cuda_required",
+                "The official SAM3.1 multiplex predictor requires CUDA",
+            )
+        device = self.requested_device
+        if device == "auto":
+            device = "cuda"
+        if not device.startswith("cuda"):
+            raise SceneAnalysisError(
+                "sam31_cuda_required",
+                "The official SAM3.1 multiplex predictor requires a CUDA device",
+            )
+        if device != "cuda":
+            torch.cuda.set_device(torch.device(device))
+        try:
+            captured = io.StringIO()
+            with contextlib.redirect_stdout(captured):
+                self._predictor = build_sam3_multiplex_video_predictor(
+                    checkpoint_path=str(checkpoint),
+                    max_num_objects=self.max_num_objects,
+                    multiplex_count=self.multiplex_count,
+                    use_fa3=self.use_fa3,
+                    use_rope_real=self.use_rope_real,
+                    compile=self.compile_model,
+                    warm_up=self.warm_up,
+                    default_output_prob_thresh=(
+                        self.output_probability_threshold
+                    ),
+                    async_loading_frames=self.async_loading_frames,
+                )
+            model_output = captured.getvalue()
+            self.model_load_output_summary = {
+                "line_count": len(model_output.splitlines()),
+                "sha256": hashlib.sha256(model_output.encode()).hexdigest(),
+                "reported_missing_keys": "Missing keys" in model_output,
+            }
+        except Exception as exc:
+            raise SceneAnalysisError(
+                "sam31_model_load_failed",
+                f"Failed to load the SAM3.1 predictor: {exc}",
+            ) from exc
+        self.checkpoint_path = str(checkpoint)
+        self.resolved_device = device
+        self._install_session_compatibility()
+
+    @staticmethod
+    def _validate_frames(
+        frames: Sequence[np.ndarray],
+    ) -> tuple[np.ndarray, ...]:
+        values = tuple(frames)
+        if not values:
+            raise ValueError("SAM3.1 video requires at least one frame")
+        shape = values[0].shape
+        if len(shape) != 3 or shape[2] != 3:
+            raise ValueError("SAM3.1 frames must use HWC three-channel layout")
+        for frame in values:
+            if (
+                not isinstance(frame, np.ndarray)
+                or frame.dtype != np.uint8
+                or frame.shape != shape
+            ):
+                raise ValueError(
+                    "SAM3.1 frames must be equal-sized uint8 HWC arrays"
+                )
+        return values
+
+    @staticmethod
+    def _write_frames(frames: tuple[np.ndarray, ...], directory: Path) -> None:
+        for index, frame in enumerate(frames):
+            path = directory / f"{index:06d}.jpg"
+            if not cv2.imwrite(str(path), frame, [cv2.IMWRITE_JPEG_QUALITY, 95]):
+                raise SceneAnalysisError(
+                    "sam31_temporary_frame_write_failed",
+                    f"Failed to write aligned SAM3.1 frame {index}",
+                )
+
+    @staticmethod
+    def _response_arrays(
+        response: Mapping[str, Any],
+        *,
+        frame_shape: tuple[int, int],
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        outputs = response.get("outputs", {})
+        if not isinstance(outputs, Mapping):
+            raise SceneAnalysisError(
+                "sam31_output_invalid", "SAM3.1 outputs must be a mapping"
+            )
+        object_ids = np.asarray(
+            outputs.get("out_obj_ids", np.zeros(0, dtype=np.int64)),
+            dtype=np.int64,
+        ).reshape(-1)
+        masks = np.asarray(
+            outputs.get(
+                "out_binary_masks",
+                np.zeros((0, *frame_shape), dtype=bool),
+            )
+        )
+        if masks.ndim == 2 and len(object_ids) == 1:
+            masks = masks[None]
+        boxes = np.asarray(
+            outputs.get(
+                "out_boxes_xywh",
+                np.zeros((len(object_ids), 4), dtype=np.float32),
+            ),
+            dtype=np.float32,
+        )
+        probabilities = np.asarray(
+            outputs.get(
+                "out_probs", np.ones(len(object_ids), dtype=np.float32)
+            ),
+            dtype=np.float32,
+        ).reshape(-1)
+        if masks.shape != (len(object_ids), *frame_shape):
+            raise SceneAnalysisError(
+                "sam31_mask_shape_invalid",
+                "SAM3.1 object IDs and masks have incompatible shapes",
+            )
+        if boxes.shape != (len(object_ids), 4) or not np.isfinite(boxes).all():
+            raise SceneAnalysisError(
+                "sam31_box_shape_invalid",
+                "SAM3.1 object IDs and boxes have incompatible shapes",
+            )
+        if (
+            probabilities.shape != (len(object_ids),)
+            or not np.isfinite(probabilities).all()
+        ):
+            raise SceneAnalysisError(
+                "sam31_probability_shape_invalid",
+                "SAM3.1 object IDs and probabilities have incompatible shapes",
+            )
+        return object_ids, masks.astype(bool), boxes, np.clip(probabilities, 0, 1)
+
+    def _run_group(
+        self,
+        *,
+        frame_directory: Path,
+        frame_count: int,
+        frame_shape: tuple[int, int],
+        group: PromptGroupConfig,
+    ) -> tuple[SemanticCandidateTube, ...]:
+        assert self._predictor is not None
+        start_response = self._predictor.handle_request(
+            {
+                "type": "start_session",
+                "resource_path": str(frame_directory),
+                "offload_video_to_cpu": True,
+                "offload_state_to_cpu": False,
+            }
+        )
+        session_id = str(start_response["session_id"])
+        object_ids: tuple[int, ...] = ()
+        masks_by_id: dict[int, np.ndarray] = {}
+        boxes_by_id: dict[int, np.ndarray] = {}
+        probabilities_by_id: dict[int, np.ndarray] = {}
+
+        def consume(response: Mapping[str, Any], *, initialize: bool = False) -> None:
+            nonlocal object_ids
+            frame_index = int(response["frame_index"])
+            if not 0 <= frame_index < frame_count:
+                raise SceneAnalysisError(
+                    "sam31_frame_index_invalid",
+                    f"SAM3.1 returned frame {frame_index} outside the video",
+                )
+            ids, masks, boxes, probabilities = self._response_arrays(
+                response, frame_shape=frame_shape
+            )
+            if initialize:
+                object_ids = tuple(sorted(int(value) for value in ids.tolist()))
+                for object_id in object_ids:
+                    masks_by_id[object_id] = np.zeros(
+                        (frame_count, *frame_shape), dtype=bool
+                    )
+                    boxes_by_id[object_id] = np.zeros(
+                        (frame_count, 4), dtype=np.float32
+                    )
+                    probabilities_by_id[object_id] = np.zeros(
+                        frame_count, dtype=np.float32
+                    )
+            indices = {int(value): index for index, value in enumerate(ids)}
+            for object_id in object_ids:
+                output_index = indices.get(object_id)
+                if output_index is None:
+                    continue
+                masks_by_id[object_id][frame_index] = masks[output_index]
+                boxes_by_id[object_id][frame_index] = boxes[output_index]
+                probabilities_by_id[object_id][frame_index] = probabilities[
+                    output_index
+                ]
+
+        try:
+            prompt_response = self._predictor.handle_request(
+                {
+                    "type": "add_prompt",
+                    "session_id": session_id,
+                    "frame_index": 0,
+                    "text": group.text,
+                    "output_prob_thresh": self.output_probability_threshold,
+                }
+            )
+            consume(prompt_response, initialize=True)
+            for response in self._predictor.handle_stream_request(
+                {
+                    "type": "propagate_in_video",
+                    "session_id": session_id,
+                    "propagation_direction": "forward",
+                    "start_frame_index": 0,
+                    "output_prob_thresh": self.output_probability_threshold,
+                }
+            ):
+                consume(response)
+        finally:
+            self._predictor.handle_request(
+                {
+                    "type": "close_session",
+                    "session_id": session_id,
+                    "run_gc_collect": True,
+                }
+            )
+        return tuple(
+            SemanticCandidateTube(
+                candidate_id=f"{group.group_id}:{object_id}",
+                prompt_group_id=group.group_id,
+                backend_object_id=object_id,
+                masks=masks_by_id[object_id],
+                boxes_xywh=boxes_by_id[object_id],
+                confidences=probabilities_by_id[object_id],
+            )
+            for object_id in object_ids
+        )
+
+    def segment(
+        self,
+        frames: Sequence[np.ndarray],
+        prompt_groups: Sequence[PromptGroupConfig],
+    ) -> tuple[SemanticCandidateTube, ...]:
+        normalized_frames = self._validate_frames(frames)
+        groups = tuple(prompt_groups)
+        if not groups or len({group.group_id for group in groups}) != len(groups):
+            raise ValueError("SAM3.1 prompt groups must be non-empty and unique")
+        with self._lock:
+            self._load()
+            with tempfile.TemporaryDirectory(prefix="vphysbench-sam31-") as value:
+                directory = Path(value)
+                self._write_frames(normalized_frames, directory)
+                candidates = tuple(
+                    candidate
+                    for group in groups
+                    for candidate in self._run_group(
+                        frame_directory=directory,
+                        frame_count=len(normalized_frames),
+                        frame_shape=normalized_frames[0].shape[:2],
+                        group=group,
+                    )
+                )
+        return tuple(sorted(candidates, key=lambda item: item.candidate_id))
+
+    def describe(self) -> dict[str, Any]:
+        return {
+            "backend": "sam3.1_multiplex_text_video",
+            "source_revision": SAM31_SOURCE_REVISION,
+            "checkpoint_path_env": self.checkpoint_path_env,
+            "checkpoint_sha256": self.checkpoint_sha256,
+            "requested_device": self.requested_device,
+            "resolved_device": self.resolved_device,
+            "precision": self.precision,
+            "output_probability_threshold": self.output_probability_threshold,
+            "prompt_policy": "text_only_frame_zero",
+            "propagation_direction": "forward",
+            "identity_policy": "external_first_frame_hungarian_locked",
+            "compatibility_filtered_session_keywords": list(
+                self.compatibility_filtered_session_keywords
+            ),
+            "model_load_output_summary": dict(self.model_load_output_summary),
+        }
+
+
+_SHARED_LOCK = threading.Lock()
+_SHARED_SEGMENTERS: dict[tuple[str, int | None], Sam31TextVideoSegmenter] = {}
+
+
+def get_shared_sam31_text_segmenter(
+    config: Mapping[str, Any],
+    *,
+    predictor_factory: PredictorFactory | None = None,
+) -> Sam31TextVideoSegmenter:
+    """Reuse the heavy predictor for one immutable process-local config."""
+
+    serialized = json.dumps(dict(config), sort_keys=True, separators=(",", ":"))
+    key = (serialized, id(predictor_factory) if predictor_factory is not None else None)
+    with _SHARED_LOCK:
+        segmenter = _SHARED_SEGMENTERS.get(key)
+        if segmenter is None:
+            segmenter = Sam31TextVideoSegmenter(
+                config, predictor_factory=predictor_factory
+            )
+            _SHARED_SEGMENTERS[key] = segmenter
+        return segmenter
+
+
+__all__ = [
+    "SAM31_CHECKPOINT_SHA256",
+    "SAM31_SOURCE_REVISION",
+    "Sam31TextVideoSegmenter",
+    "get_shared_sam31_text_segmenter",
+]

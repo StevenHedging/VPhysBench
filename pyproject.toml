@@ -14,6 +14,9 @@ scene-evaluation = [
   "torch>=2.5.1",
   "sam-2 @ git+https://github.com/facebookresearch/sam2.git@2b90b9f5ceec907a1c18123530e92e794ad901a4",
 ]
+sam31-evaluation = [
+  "sam3 @ git+https://github.com/facebookresearch/sam3.git@8f0b7f4d4e7eda2ed606ebde6702c93359ad01da",
+]
 # Backward-compatible alias retained for existing pendulum-only environments.
 pendulum-evaluation = [
   "matplotlib>=3.8",
