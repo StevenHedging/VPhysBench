@@ -42,7 +42,25 @@ def case(
     status: str = "evaluated",
     csti_status: str = "evaluated",
     partition: str = "test",
+    init_failure_reason: str | None = None,
 ) -> dict:
+    metric = {
+        "status": csti_status,
+        "score": csti,
+    }
+    if csti_status == "evaluator_init_failure":
+        metric.update(
+            {
+                "evaluator_init_success": False,
+                "evaluator_init_failure_reason": {
+                    "code": init_failure_reason or "insufficient_detections",
+                    "message": "synthetic initialization failure",
+                    "details": {},
+                },
+            }
+        )
+    elif csti_status == "evaluated":
+        metric["evaluator_init_success"] = True
     return {
         "job_id": job_id,
         "case_id": job_id,
@@ -51,10 +69,7 @@ def case(
         "status": status,
         "score": expert,
         "metrics": {
-            "csti": {
-                "status": csti_status,
-                "score": csti,
-            }
+            "csti": metric
         },
         "quality": {},
         "reason_code": None,
@@ -75,9 +90,64 @@ class CSTIAggregationTest(unittest.TestCase):
 
         self.assertAlmostEqual(0.65, aggregation["score"])
         self.assertAlmostEqual(0.65, aggregation["dimensions"]["expert"]["score"])
-        self.assertAlmostEqual(0.55, aggregation["dimensions"]["csti"]["score"])
+        self.assertAlmostEqual(
+            2.0 / 3.0, aggregation["dimensions"]["csti"]["score"]
+        )
         self.assertAlmostEqual(0.2, aggregation["dimensions"]["csti"]["by_scene"]["pendulum"]["score"])
         self.assertAlmostEqual(0.9, aggregation["dimensions"]["csti"]["by_scene"]["collision_1d"]["score"])
+
+    def test_init_failures_are_excluded_from_score_and_reported(self) -> None:
+        aggregation = aggregate_task_results(
+            plan=plan_for_scenes("collision_1d"),
+            case_results=[
+                case("good", "collision_1d", expert=0.7, csti=0.8),
+                case(
+                    "init_failed",
+                    "collision_1d",
+                    expert=0.6,
+                    csti=None,
+                    csti_status="evaluator_init_failure",
+                    init_failure_reason="initial_match_below_threshold",
+                ),
+            ],
+            general_metrics={"csti": FIXED_CSTI},
+        )
+        csti = aggregation["dimensions"]["csti"]
+
+        self.assertEqual("complete", csti["status"])
+        self.assertAlmostEqual(0.8, csti["score"])
+        self.assertEqual(1, csti["valid_video_count"])
+        self.assertEqual(1, csti["evaluator_init_failure_video_count"])
+        self.assertAlmostEqual(0.5, csti["init_coverage"])
+        self.assertEqual(
+            {"initial_match_below_threshold": 1},
+            csti["evaluator_init_failure_reason_counts"],
+        )
+        self.assertEqual(2, csti["expected_jobs"])
+        self.assertEqual(1, csti["evaluated_jobs"])
+        self.assertEqual(1.0, csti["coverage"])
+
+    def test_all_initialization_failures_have_visible_null_score(self) -> None:
+        aggregation = aggregate_task_results(
+            plan=plan_for_scenes("collision_1d"),
+            case_results=[
+                case(
+                    "failed",
+                    "collision_1d",
+                    expert=0.5,
+                    csti=None,
+                    csti_status="evaluator_init_failure",
+                )
+            ],
+            general_metrics={"csti": FIXED_CSTI},
+        )
+        csti = aggregation["dimensions"]["csti"]
+
+        self.assertEqual("evaluator_init_failure", csti["status"])
+        self.assertIsNone(csti["score"])
+        self.assertEqual(0.0, csti["init_coverage"])
+        self.assertEqual(0, csti["valid_video_count"])
+        self.assertEqual(1, csti["evaluator_init_failure_video_count"])
 
     def test_incomplete_coverage_has_null_strict_and_finite_observed_means(self) -> None:
         failed = case("c1", "collision_1d", expert=None, csti=None, status="error")

@@ -158,6 +158,8 @@ class DimensionCaseRecord:
     score: float | None
     quality: dict[str, Any]
     reason_code: str | None
+    evaluator_init_success: bool | None = None
+    evaluator_init_failure_reason_code: str | None = None
 
     def to_mapping(self) -> dict[str, Any]:
         return {
@@ -168,6 +170,10 @@ class DimensionCaseRecord:
             "score": self.score,
             "quality": self.quality,
             "reason_code": self.reason_code,
+            "evaluator_init_success": self.evaluator_init_success,
+            "evaluator_init_failure_reason_code": (
+                self.evaluator_init_failure_reason_code
+            ),
         }
 
 
@@ -453,22 +459,29 @@ def _aggregate_csti_dimension(
     plan: dict[str, Any],
     records: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    official = [
+        item
+        for item in records
+        if item["evaluation_partition"] != "train_seen"
+    ]
     applicable = [
-        item for item in records
+        item for item in official
         if item["status"] != "not_applicable"
     ]
     not_applicable = [
         item
-        for item in records
-        if (
-            item["evaluation_partition"] != "train_seen"
-            and item["status"] == "not_applicable"
-        )
+        for item in official
+        if item["status"] == "not_applicable"
+    ]
+    aggregate_input = [
+        item
+        for item in applicable
+        if item["status"] != "evaluator_init_failure"
     ]
     aggregate_plan = plan
     annotations = plan.get("evaluation_annotations")
     if isinstance(annotations, dict):
-        applicable_ids = {item["job_id"] for item in applicable}
+        applicable_ids = {item["job_id"] for item in aggregate_input}
         aggregate_plan = {
             **plan,
             "evaluation_annotations": {
@@ -479,59 +492,103 @@ def _aggregate_csti_dimension(
         }
     result = _aggregate_dimension(
         plan=aggregate_plan,
-        case_results=applicable,
+        case_results=aggregate_input,
+    )
+
+    def summarize(items: list[dict[str, Any]]) -> dict[str, Any]:
+        successes = [item for item in items if item["status"] == "evaluated"]
+        init_failures = [
+            item
+            for item in items
+            if item["status"] == "evaluator_init_failure"
+        ]
+        other_failures = [
+            item
+            for item in items
+            if item["status"] not in {"evaluated", "evaluator_init_failure"}
+        ]
+        scores = [float(item["score"]) for item in successes]
+        init_attempts = len(successes) + len(init_failures)
+        expected = len(items)
+        processed = init_attempts
+        if not items:
+            status = "not_applicable"
+        elif other_failures:
+            status = "partial"
+        elif not successes and init_failures:
+            status = "evaluator_init_failure"
+        else:
+            status = "complete"
+        return {
+            "status": status,
+            "expected_jobs": expected,
+            "evaluated_jobs": len(successes),
+            "coverage": processed / expected if expected else 0.0,
+            "score": (
+                mean(scores) if scores and not other_failures else None
+            ),
+            "observed_mean_score": mean(scores) if scores else None,
+            "status_counts": dict(
+                sorted(Counter(item["status"] for item in items).items())
+            ),
+            "valid_video_count": len(successes),
+            "evaluator_init_failure_video_count": len(init_failures),
+            "init_coverage": (
+                len(successes) / init_attempts if init_attempts else 0.0
+            ),
+            "evaluator_init_failure_reason_counts": dict(
+                sorted(
+                    Counter(
+                        item["evaluator_init_failure_reason_code"]
+                        or "unspecified"
+                        for item in init_failures
+                    ).items()
+                )
+            ),
+        }
+
+    result.update(summarize(applicable))
+    result["aggregation_policy"] = (
+        "mean_all_evaluator_init_success_videos"
     )
     result["not_applicable_jobs"] = len(not_applicable)
     not_applicable_by_scene = Counter(
         item["scene_id"] for item in not_applicable
     )
     for scene_id in plan["scene_ids"]:
+        scene_items = [
+            item for item in applicable if item["scene_id"] == scene_id
+        ]
         scene = result["by_scene"][scene_id]
+        policy = scene.get("aggregation_policy")
+        scene.update(summarize(scene_items))
+        scene["aggregation_policy"] = policy
         scene["not_applicable_jobs"] = not_applicable_by_scene[scene_id]
-        if scene["expected_jobs"] == 0 and not_applicable_by_scene[scene_id]:
+        if not scene_items and not_applicable_by_scene[scene_id]:
             scene["status"] = "not_applicable"
-        elif scene["expected_jobs"] and scene["coverage"] == 1.0:
-            scene["status"] = "complete"
-        else:
-            scene["status"] = "partial"
 
-    applicable_scenes = [
-        result["by_scene"][scene_id]
-        for scene_id in plan["scene_ids"]
-        if result["by_scene"][scene_id]["status"] != "not_applicable"
-    ]
-    if not applicable_scenes:
+    partition_groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(
+        list
+    )
+    for item in applicable:
+        partition_groups[
+            (item["scene_id"], item["evaluation_partition"])
+        ].append(item)
+    for (scene_id, partition), items in partition_groups.items():
+        result["breakdown"][f"{scene_id}/{partition}"] = summarize(items)
+
+    if not applicable:
         result["status"] = "not_applicable"
         result["score"] = None
         result["observed_mean_score"] = None
-    else:
-        strict_scores = [scene["score"] for scene in applicable_scenes]
-        result["score"] = (
-            mean(float(score) for score in strict_scores)
-            if all(score is not None for score in strict_scores)
-            else None
-        )
-        observed_scores = [
-            scene["observed_mean_score"]
-            for scene in applicable_scenes
-            if scene["observed_mean_score"] is not None
-        ]
-        result["observed_mean_score"] = (
-            mean(float(score) for score in observed_scores)
-            if observed_scores
-            else None
-        )
-        result["status"] = (
-            "complete"
-            if result["coverage"] == 1.0 and result["score"] is not None
-            else "partial"
-        )
     return result
 
 
 def _csti_dimension_record(item: Mapping[str, Any]) -> DimensionCaseRecord:
     case_status = str(item["status"])
     score: float | None
+    evaluator_init_success: bool | None = None
+    init_failure_reason_code: str | None = None
     if case_status != "evaluated":
         status = case_status
         score = None
@@ -555,12 +612,36 @@ def _csti_dimension_record(item: Mapping[str, Any]) -> DimensionCaseRecord:
                         f"CSTI score for job {item['job_id']!r} must be finite and in [0,1]"
                     )
                 score = float(raw_score)
+                raw_init_success = metric.get("evaluator_init_success")
+                if raw_init_success is not None and not isinstance(
+                    raw_init_success, bool
+                ):
+                    raise ValueError(
+                        "CSTI evaluator_init_success must be boolean when present"
+                    )
+                evaluator_init_success = (
+                    True
+                    if raw_init_success is None
+                    else raw_init_success
+                )
             else:
                 if raw_score is not None:
                     raise ValueError(
                         f"non-evaluated CSTI record {item['job_id']!r} must have a null score"
                     )
                 score = None
+                if status == "evaluator_init_failure":
+                    if metric.get("evaluator_init_success") is not False:
+                        raise ValueError(
+                            "evaluator_init_failure must explicitly record "
+                            "evaluator_init_success=false"
+                        )
+                    evaluator_init_success = False
+                    failure = metric.get("evaluator_init_failure_reason")
+                    if isinstance(failure, Mapping) and isinstance(
+                        failure.get("code"), str
+                    ):
+                        init_failure_reason_code = str(failure["code"])
     return DimensionCaseRecord(
         job_id=str(item["job_id"]),
         scene_id=str(item["scene_id"]),
@@ -577,6 +658,8 @@ def _csti_dimension_record(item: Mapping[str, Any]) -> DimensionCaseRecord:
             if item.get("reason_code") is not None
             else None
         ),
+        evaluator_init_success=evaluator_init_success,
+        evaluator_init_failure_reason_code=init_failure_reason_code,
     )
 
 
