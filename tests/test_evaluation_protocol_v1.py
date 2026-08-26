@@ -190,6 +190,11 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
             "prompt_groups"
         ].append(deepcopy(group))
         self.assertTrue(list(validator.iter_errors(duplicate)))
+        unsupported_precision = deepcopy(candidate)
+        unsupported_precision["scenes"]["collision_1d"]["csti_observer"][
+            "segmenter"
+        ]["precision"] = "float32"
+        self.assertTrue(list(validator.iter_errors(unsupported_precision)))
 
     @unittest.skipIf(
         Draft202012Validator is None,

@@ -99,6 +99,16 @@ def _config(unique: str = "default") -> dict[str, object]:
 
 
 class Sam31TextVideoAdapterTest(unittest.TestCase):
+    def test_rejects_precision_the_official_predictor_cannot_honor(self) -> None:
+        config = _config()
+        config["precision"] = "float32"
+
+        with self.assertRaisesRegex(ValueError, "bfloat16"):
+            Sam31TextVideoSegmenter(
+                config,
+                predictor_factory=lambda: _FakePredictor(),
+            )
+
     def test_uses_text_only_frame_zero_prompt_and_forward_propagation(self) -> None:
         predictor = _FakePredictor()
         segmenter = Sam31TextVideoSegmenter(

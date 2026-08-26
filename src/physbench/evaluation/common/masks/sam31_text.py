@@ -60,8 +60,11 @@ class Sam31TextVideoSegmenter:
             raise ValueError("SAM3.1 checkpoint_sha256 must be lowercase hex")
         self.requested_device = str(config.get("device", "auto"))
         self.precision = str(config.get("precision", "bfloat16"))
-        if self.precision not in {"bfloat16", "float16", "float32"}:
-            raise ValueError("SAM3.1 precision is unsupported")
+        if self.precision != "bfloat16":
+            raise ValueError(
+                "The official SAM3.1 multiplex predictor currently supports "
+                "bfloat16 inference only"
+            )
         self.output_probability_threshold = float(
             config.get("output_probability_threshold", 0.5)
         )
