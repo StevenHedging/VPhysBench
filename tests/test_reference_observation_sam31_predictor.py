@@ -191,6 +191,37 @@ class Sam31GtPredictorTests(unittest.TestCase):
                 ),
             )
 
+    def test_box_tracking_uses_independent_text_box_sessions_and_locks_best_mask(self) -> None:
+        api = self._api()
+        predictor = _FakePredictor()
+        adapter = api.Sam31GtPredictor(
+            _config(), predictor_factory=lambda: predictor
+        )
+        outputs = predictor._outputs([5, 8], 0)
+        seeds = (
+            api.Sam31BoxSeed(
+                semantic_id="object_1",
+                text="small round object",
+                reference_mask=outputs["out_binary_masks"][0],
+                box_xywh=(0.35, 0.2, 0.45, 0.6),
+            ),
+            api.Sam31BoxSeed(
+                semantic_id="object_2",
+                text="small round object",
+                reference_mask=outputs["out_binary_masks"][1],
+                box_xywh=(0.65, 0.2, 0.35, 0.6),
+            ),
+        )
+
+        result = adapter.track_boxes(_frames(), seeds, initial_iou_threshold=0.5)
+
+        self.assertEqual((5, 8), tuple(track.backend_object_id for track in result.values()))
+        requests = [request for request in predictor.requests if request["type"] == "add_prompt"]
+        self.assertEqual(2, len(requests))
+        self.assertTrue(all(request["text"] == "small round object" for request in requests))
+        self.assertEqual([[1, 0], [1, 0]], [request["bounding_box_labels"] for request in requests])
+        self.assertEqual(2, predictor.session_counter)
+
 
 if __name__ == "__main__":
     unittest.main()

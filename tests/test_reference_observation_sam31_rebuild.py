@@ -94,7 +94,7 @@ class _Predictor:
         self.responses = list(responses)
         self.calls: list[tuple[tuple[int, int], tuple[str, ...]]] = []
         self.discovered_tracks = []
-        self.point_seeds = ()
+        self.box_seeds = ()
 
     def discover(self, frames, *, prompts):
         self.calls.append((frames[0].shape[:2], tuple(prompts)))
@@ -104,24 +104,30 @@ class _Predictor:
         self.discovered_tracks.extend(result)
         return result
 
-    def track_points(self, frames, seeds):
+    def track_boxes(self, frames, seeds, *, initial_iou_threshold):
         from physbench.reference_observations.curation.sam31_predictor import Sam31GtTrack
 
-        self.point_seeds = tuple(seeds)
+        self.box_seeds = tuple(seeds)
         result = {}
         for seed in seeds:
-            x, y = (int(round(value)) for value in seed.point_xy)
-            source = next(track for track in self.discovered_tracks if track.masks[0, y, x])
+            scored = []
+            for track in self.discovered_tracks:
+                frame_zero = np.zeros(frames[0].shape[:2], dtype=bool)
+                frame_zero[: track.masks.shape[1], : track.masks.shape[2]] = track.masks[0]
+                intersection = np.logical_and(frame_zero, seed.reference_mask).sum()
+                union = np.logical_or(frame_zero, seed.reference_mask).sum()
+                scored.append((intersection / union if union else 0.0, track))
+            source = max(scored, key=lambda value: value[0])[1]
             masks = np.zeros((len(frames), *frames[0].shape[:2]), dtype=bool)
             masks[:, : source.masks.shape[1], : source.masks.shape[2]] = source.masks
             result[seed.semantic_id] = Sam31GtTrack(
                 semantic_id=seed.semantic_id,
-                backend_object_id=seed.backend_object_id,
+                backend_object_id=source.backend_object_id,
                 masks=masks,
                 boxes_xywh=source.boxes_xywh.copy(),
                 confidences=source.confidences.copy(),
-                prompt="point",
-                source="full_frame_point",
+                prompt=seed.text,
+                source="fixture_text_box",
             )
         return result
 
@@ -162,11 +168,11 @@ class Sam31GtRebuildTests(unittest.TestCase):
         self.assertEqual((4, 40, 80), result.masks_by_object["object_1"].shape)
         self.assertEqual(("object_1", "object_2"), tuple(result.masks_by_object))
         self.assertEqual(
-            (("object_1", 1), ("object_2", 2)),
-            tuple((seed.semantic_id, seed.backend_object_id) for seed in predictor.point_seeds),
+            ("object_1", "object_2"),
+            tuple(seed.semantic_id for seed in predictor.box_seeds),
         )
 
-    def test_rebuild_uses_locked_point_tracks_instead_of_text_track_ids(self) -> None:
+    def test_rebuild_uses_locked_box_tracks_instead_of_text_track_ids(self) -> None:
         api = self._api()
         discovery_left = _track("sam-text-91", 91, [(15, 25)] * 4)
         discovery_right = _track("sam-text-7", 7, [(55, 25)] * 4)
@@ -180,7 +186,7 @@ class Sam31GtRebuildTests(unittest.TestCase):
         )
 
         self.assertTrue(result.accepted)
-        self.assertEqual((1, 2), tuple(seed.backend_object_id for seed in predictor.point_seeds))
+        self.assertEqual(("object_1", "object_2"), tuple(seed.semantic_id for seed in predictor.box_seeds))
 
     def test_rebuild_uses_fallback_prompt_after_primary_shortage(self) -> None:
         api = self._api()

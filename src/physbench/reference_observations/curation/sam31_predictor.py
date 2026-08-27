@@ -24,6 +24,14 @@ class Sam31PointSeed:
 
 
 @dataclass(frozen=True)
+class Sam31BoxSeed:
+    semantic_id: str
+    text: str
+    reference_mask: np.ndarray
+    box_xywh: tuple[float, float, float, float]
+
+
+@dataclass(frozen=True)
 class Sam31GtTrack:
     semantic_id: str
     backend_object_id: int
@@ -230,6 +238,183 @@ class Sam31GtPredictor:
             raise ValueError(f"SAM3.1 GT point initialization missed {missing}")
         return result
 
+    @staticmethod
+    def _validate_box_seeds(
+        seeds: Sequence[Sam31BoxSeed],
+        *,
+        frame_shape: tuple[int, int],
+    ) -> tuple[Sam31BoxSeed, ...]:
+        values = tuple(seeds)
+        if not values:
+            raise ValueError("SAM3.1 GT box tracking requires at least one seed")
+        semantic_ids = tuple(value.semantic_id for value in values)
+        if any(not value for value in semantic_ids) or len(set(semantic_ids)) != len(values):
+            raise ValueError("SAM3.1 GT box seeds require unique identities")
+        for seed in values:
+            if not seed.text.strip():
+                raise ValueError("SAM3.1 GT box seed text must be non-empty")
+            mask = np.asarray(seed.reference_mask)
+            if mask.shape != frame_shape or not np.asarray(mask, dtype=bool).any():
+                raise ValueError("SAM3.1 GT box seed reference mask is invalid")
+            box = np.asarray(seed.box_xywh, dtype=np.float64)
+            if box.shape != (4,) or not np.isfinite(box).all():
+                raise ValueError("SAM3.1 GT box seed must be finite XYWH")
+            x, y, width, height = box
+            if (
+                x < 0
+                or y < 0
+                or width <= 0
+                or height <= 0
+                or x + width > 1 + 1e-6
+                or y + height > 1 + 1e-6
+            ):
+                raise ValueError("SAM3.1 GT box seed must fit normalized frame bounds")
+        return values
+
+    def track_boxes(
+        self,
+        frames: Sequence[np.ndarray],
+        seeds: Sequence[Sam31BoxSeed],
+        *,
+        initial_iou_threshold: float,
+    ) -> dict[str, Sam31GtTrack]:
+        """Track each locked subject in an independent text-plus-box session."""
+
+        if not 0 <= initial_iou_threshold <= 1:
+            raise ValueError("SAM3.1 GT initial box IoU threshold must lie in [0,1]")
+        normalized = self._segmenter._validate_frames(frames)
+        frame_shape = normalized[0].shape[:2]
+        seed_values = self._validate_box_seeds(seeds, frame_shape=frame_shape)
+        frame_count = len(normalized)
+        with self._segmenter._lock:
+            self._segmenter._load()
+            predictor = self._segmenter._predictor
+            assert predictor is not None
+            with tempfile.TemporaryDirectory(prefix="vphysbench-sam31-gt-box-") as value:
+                directory = Path(value)
+                self._segmenter._write_frames(normalized, directory)
+                result: dict[str, Sam31GtTrack] = {}
+                for seed in seed_values:
+                    response = predictor.handle_request(
+                        {
+                            "type": "start_session",
+                            "resource_path": str(directory),
+                            "offload_video_to_cpu": True,
+                            "offload_state_to_cpu": False,
+                        }
+                    )
+                    session_id = str(response["session_id"])
+                    masks = np.zeros((frame_count, *frame_shape), dtype=bool)
+                    boxes = np.zeros((frame_count, 4), dtype=np.float32)
+                    probabilities = np.zeros(frame_count, dtype=np.float32)
+                    selected_backend_id: int | None = None
+
+                    def consume(output: Mapping[str, Any], *, initialize: bool = False) -> None:
+                        nonlocal selected_backend_id
+                        frame_index = int(output["frame_index"])
+                        if not 0 <= frame_index < frame_count:
+                            raise ValueError(
+                                f"SAM3.1 GT returned frame {frame_index} outside the video"
+                            )
+                        ids, output_masks, output_boxes, output_probabilities = (
+                            self._segmenter._response_arrays(
+                                output,
+                                frame_shape=frame_shape,
+                            )
+                        )
+                        if initialize:
+                            if frame_index != 0 or not len(ids):
+                                raise ValueError(
+                                    f"SAM3.1 GT box initialization missed {seed.semantic_id}"
+                                )
+                            reference = np.asarray(seed.reference_mask, dtype=bool)
+                            intersections = np.logical_and(output_masks, reference).reshape(
+                                len(ids), -1
+                            ).sum(axis=1)
+                            unions = np.logical_or(output_masks, reference).reshape(
+                                len(ids), -1
+                            ).sum(axis=1)
+                            ious = np.divide(
+                                intersections,
+                                unions,
+                                out=np.zeros(len(ids), dtype=np.float64),
+                                where=unions > 0,
+                            )
+                            best = int(np.argmax(ious))
+                            if float(ious[best]) < initial_iou_threshold:
+                                raise ValueError(
+                                    f"SAM3.1 GT box initialization IoU for {seed.semantic_id} "
+                                    f"is {float(ious[best]):.6f}, below {initial_iou_threshold:.6f}"
+                                )
+                            selected_backend_id = int(ids[best])
+                        if selected_backend_id is None:
+                            raise RuntimeError("SAM3.1 GT box identity was not initialized")
+                        matches = np.flatnonzero(ids == selected_backend_id)
+                        if len(matches) > 1:
+                            raise ValueError(
+                                f"SAM3.1 GT duplicated backend object {selected_backend_id}"
+                            )
+                        if not len(matches):
+                            return
+                        source_index = int(matches[0])
+                        masks[frame_index] = output_masks[source_index]
+                        boxes[frame_index] = output_boxes[source_index]
+                        probabilities[frame_index] = output_probabilities[source_index]
+
+                    other_boxes = [
+                        list(other.box_xywh)
+                        for other in seed_values
+                        if other.semantic_id != seed.semantic_id
+                    ]
+                    try:
+                        consume(
+                            predictor.handle_request(
+                                {
+                                    "type": "add_prompt",
+                                    "session_id": session_id,
+                                    "frame_index": 0,
+                                    "text": seed.text,
+                                    "bounding_boxes": [list(seed.box_xywh), *other_boxes],
+                                    "bounding_box_labels": [1, *([0] * len(other_boxes))],
+                                    "output_prob_thresh": (
+                                        self._segmenter.output_probability_threshold
+                                    ),
+                                }
+                            ),
+                            initialize=True,
+                        )
+                        for output in predictor.handle_stream_request(
+                            {
+                                "type": "propagate_in_video",
+                                "session_id": session_id,
+                                "propagation_direction": "forward",
+                                "start_frame_index": 0,
+                                "output_prob_thresh": (
+                                    self._segmenter.output_probability_threshold
+                                ),
+                            }
+                        ):
+                            consume(output)
+                    finally:
+                        predictor.handle_request(
+                            {
+                                "type": "close_session",
+                                "session_id": session_id,
+                                "run_gc_collect": True,
+                            }
+                        )
+                    assert selected_backend_id is not None
+                    result[seed.semantic_id] = Sam31GtTrack(
+                        semantic_id=seed.semantic_id,
+                        backend_object_id=selected_backend_id,
+                        masks=masks,
+                        boxes_xywh=boxes,
+                        confidences=probabilities,
+                        prompt=seed.text,
+                        source="independent_full_frame_text_box_session",
+                    )
+        return result
+
     def describe(self) -> dict[str, Any]:
         value = self._segmenter.describe()
         value.update(
@@ -241,4 +426,9 @@ class Sam31GtPredictor:
         return value
 
 
-__all__ = ["Sam31GtPredictor", "Sam31GtTrack", "Sam31PointSeed"]
+__all__ = [
+    "Sam31BoxSeed",
+    "Sam31GtPredictor",
+    "Sam31GtTrack",
+    "Sam31PointSeed",
+]

@@ -23,6 +23,8 @@
     ],
     "ambiguity_margin": 0.03,
     "border_crop_fraction": 0.6,
+    "box_padding_fraction": 0.15,
+    "initial_box_iou_threshold": 0.3,
     "near_duplicate_tube_iou": 0.85
   }
 }

@@ -15,7 +15,7 @@ from .sam31_gt import (
     select_collision_candidates,
     validate_physics_caption_binding,
 )
-from .sam31_predictor import Sam31GtPredictor, Sam31GtTrack, Sam31PointSeed
+from .sam31_predictor import Sam31BoxSeed, Sam31GtPredictor, Sam31GtTrack
 
 
 @dataclass(frozen=True)
@@ -25,6 +25,8 @@ class Sam31GtConfig:
     ambiguity_margin: float = 0.03
     border_crop_fraction: float = 0.6
     near_duplicate_tube_iou: float = 0.85
+    box_padding_fraction: float = 0.15
+    initial_box_iou_threshold: float = 0.3
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "Sam31GtConfig":
@@ -42,6 +44,12 @@ class Sam31GtConfig:
             near_duplicate_tube_iou=float(
                 value.get("near_duplicate_tube_iou", cls.near_duplicate_tube_iou)
             ),
+            box_padding_fraction=float(
+                value.get("box_padding_fraction", cls.box_padding_fraction)
+            ),
+            initial_box_iou_threshold=float(
+                value.get("initial_box_iou_threshold", cls.initial_box_iou_threshold)
+            ),
         )
 
     def __post_init__(self) -> None:
@@ -55,6 +63,10 @@ class Sam31GtConfig:
             raise ValueError("SAM3.1 GT border crop fraction must lie in [0.5,1)")
         if not 0 < self.near_duplicate_tube_iou <= 1:
             raise ValueError("SAM3.1 GT duplicate Tube IoU must lie in (0,1]")
+        if not 0 <= self.box_padding_fraction <= 1:
+            raise ValueError("SAM3.1 GT box padding fraction must lie in [0,1]")
+        if not 0 <= self.initial_box_iou_threshold <= 1:
+            raise ValueError("SAM3.1 GT initial box IoU threshold must lie in [0,1]")
 
 
 @dataclass(frozen=True)
@@ -149,17 +161,31 @@ def _candidate_from_track(
     )
 
 
-def _interior_seed_point(mask: np.ndarray) -> tuple[float, float]:
-    """Choose a deterministic positive point near the instance centroid."""
-
-    binary = np.asarray(mask, dtype=bool)
-    if binary.ndim != 2 or not binary.any():
-        raise ValueError("SAM3.1 GT point seed requires a non-empty 2D mask")
-    ys, xs = np.nonzero(binary)
-    center_x = float(xs.mean())
-    center_y = float(ys.mean())
-    index = int(np.argmin((xs - center_x) ** 2 + (ys - center_y) ** 2))
-    return float(xs[index]), float(ys[index])
+def _box_seed(
+    identity: OrderedGtIdentity,
+    *,
+    frame_shape: tuple[int, int],
+    padding_fraction: float,
+) -> Sam31BoxSeed:
+    height, width = frame_shape
+    left, top, right, bottom = identity.candidate.bbox_xyxy
+    pad_x = padding_fraction * max(1, right - left)
+    pad_y = padding_fraction * max(1, bottom - top)
+    padded_left = max(0.0, left - pad_x)
+    padded_top = max(0.0, top - pad_y)
+    padded_right = min(float(width), right + pad_x)
+    padded_bottom = min(float(height), bottom + pad_y)
+    return Sam31BoxSeed(
+        semantic_id=identity.object_id,
+        text=identity.candidate.prompt,
+        reference_mask=identity.candidate.mask.copy(),
+        box_xywh=(
+            padded_left / width,
+            padded_top / height,
+            (padded_right - padded_left) / width,
+            (padded_bottom - padded_top) / height,
+        ),
+    )
 
 
 def _try_select(
@@ -413,31 +439,32 @@ def rebuild_collision_case(
     ):
         raise ValueError("SAM3.1 collision GT timeline indices must be contiguous")
     binding = validate_physics_caption_binding(case.physics, case.caption)
-    selected, tracks, attempts = _discover_tracks(
+    selected, _tracks, attempts = _discover_tracks(
         frame_values,
         predictor=predictor,
         config=config,
         expected_radii=binding.radii_m,
     )
     identities = bind_row_major_identities(selected, binding)
-    point_tracks = predictor.track_points(
+    box_tracks = predictor.track_boxes(
         frame_values,
         tuple(
-            Sam31PointSeed(
-                semantic_id=identity.object_id,
-                backend_object_id=index,
-                point_xy=_interior_seed_point(identity.candidate.mask),
+            _box_seed(
+                identity,
+                frame_shape=frame_values[0].shape[:2],
+                padding_fraction=config.box_padding_fraction,
             )
-            for index, identity in enumerate(identities, start=1)
+            for identity in identities
         ),
+        initial_iou_threshold=config.initial_box_iou_threshold,
     )
-    if tuple(point_tracks) != tuple(identity.object_id for identity in identities):
-        raise ValueError("SAM3.1 GT point tracks do not match locked physics identities")
+    if tuple(box_tracks) != tuple(identity.object_id for identity in identities):
+        raise ValueError("SAM3.1 GT box tracks do not match locked physics identities")
     masks_by_object: dict[str, np.ndarray] = {}
     states_by_object: dict[str, np.ndarray] = {}
     findings: list[GtQualityFinding] = []
     for identity in identities:
-        track = point_tracks[identity.object_id]
+        track = box_tracks[identity.object_id]
         _validate_track(
             track,
             frame_count=len(frame_values),
