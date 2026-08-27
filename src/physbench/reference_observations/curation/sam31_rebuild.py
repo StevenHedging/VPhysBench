@@ -15,7 +15,7 @@ from .sam31_gt import (
     select_collision_candidates,
     validate_physics_caption_binding,
 )
-from .sam31_predictor import Sam31GtPredictor, Sam31GtTrack
+from .sam31_predictor import Sam31GtPredictor, Sam31GtTrack, Sam31PointSeed
 
 
 @dataclass(frozen=True)
@@ -147,6 +147,19 @@ def _candidate_from_track(
         confidence=float(track.confidences[0]),
         source=track.source,
     )
+
+
+def _interior_seed_point(mask: np.ndarray) -> tuple[float, float]:
+    """Choose a deterministic positive point near the instance centroid."""
+
+    binary = np.asarray(mask, dtype=bool)
+    if binary.ndim != 2 or not binary.any():
+        raise ValueError("SAM3.1 GT point seed requires a non-empty 2D mask")
+    ys, xs = np.nonzero(binary)
+    center_x = float(xs.mean())
+    center_y = float(ys.mean())
+    index = int(np.argmin((xs - center_x) ** 2 + (ys - center_y) ** 2))
+    return float(xs[index]), float(ys[index])
 
 
 def _try_select(
@@ -407,11 +420,30 @@ def rebuild_collision_case(
         expected_radii=binding.radii_m,
     )
     identities = bind_row_major_identities(selected, binding)
+    point_tracks = predictor.track_points(
+        frame_values,
+        tuple(
+            Sam31PointSeed(
+                semantic_id=identity.object_id,
+                backend_object_id=index,
+                point_xy=_interior_seed_point(identity.candidate.mask),
+            )
+            for index, identity in enumerate(identities, start=1)
+        ),
+    )
+    if tuple(point_tracks) != tuple(identity.object_id for identity in identities):
+        raise ValueError("SAM3.1 GT point tracks do not match locked physics identities")
     masks_by_object: dict[str, np.ndarray] = {}
     states_by_object: dict[str, np.ndarray] = {}
     findings: list[GtQualityFinding] = []
     for identity in identities:
-        masks = tracks[identity.candidate.candidate_id].masks.astype(bool, copy=True)
+        track = point_tracks[identity.object_id]
+        _validate_track(
+            track,
+            frame_count=len(frame_values),
+            frame_shape=frame_values[0].shape[:2],
+        )
+        masks = track.masks.astype(bool, copy=True)
         masks_by_object[identity.object_id] = masks
         states, entity_findings = _states_and_findings(identity.object_id, masks)
         states_by_object[identity.object_id] = states
