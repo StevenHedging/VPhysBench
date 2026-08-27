@@ -277,11 +277,14 @@ class Sam31GtPredictor:
         seeds: Sequence[Sam31BoxSeed],
         *,
         initial_iou_threshold: float,
+        output_probability_threshold: float,
     ) -> dict[str, Sam31GtTrack]:
         """Track each locked subject in an independent text-plus-box session."""
 
         if not 0 <= initial_iou_threshold <= 1:
             raise ValueError("SAM3.1 GT initial box IoU threshold must lie in [0,1]")
+        if not 0 <= output_probability_threshold <= 1:
+            raise ValueError("SAM3.1 GT tracking probability threshold must lie in [0,1]")
         normalized = self._segmenter._validate_frames(frames)
         frame_shape = normalized[0].shape[:2]
         seed_values = self._validate_box_seeds(seeds, frame_shape=frame_shape)
@@ -377,7 +380,7 @@ class Sam31GtPredictor:
                                     "bounding_boxes": [list(seed.box_xywh), *other_boxes],
                                     "bounding_box_labels": [1, *([0] * len(other_boxes))],
                                     "output_prob_thresh": (
-                                        self._segmenter.output_probability_threshold
+                                        output_probability_threshold
                                     ),
                                 }
                             ),
@@ -390,7 +393,7 @@ class Sam31GtPredictor:
                                 "propagation_direction": "forward",
                                 "start_frame_index": 0,
                                 "output_prob_thresh": (
-                                    self._segmenter.output_probability_threshold
+                                    output_probability_threshold
                                 ),
                             }
                         ):

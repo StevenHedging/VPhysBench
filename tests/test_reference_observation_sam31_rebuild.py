@@ -104,7 +104,14 @@ class _Predictor:
         self.discovered_tracks.extend(result)
         return result
 
-    def track_boxes(self, frames, seeds, *, initial_iou_threshold):
+    def track_boxes(
+        self,
+        frames,
+        seeds,
+        *,
+        initial_iou_threshold,
+        output_probability_threshold,
+    ):
         from physbench.reference_observations.curation.sam31_predictor import Sam31GtTrack
 
         self.box_seeds = tuple(seeds)

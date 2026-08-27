@@ -213,13 +213,19 @@ class Sam31GtPredictorTests(unittest.TestCase):
             ),
         )
 
-        result = adapter.track_boxes(_frames(), seeds, initial_iou_threshold=0.5)
+        result = adapter.track_boxes(
+            _frames(),
+            seeds,
+            initial_iou_threshold=0.5,
+            output_probability_threshold=0.05,
+        )
 
         self.assertEqual((5, 8), tuple(track.backend_object_id for track in result.values()))
         requests = [request for request in predictor.requests if request["type"] == "add_prompt"]
         self.assertEqual(2, len(requests))
         self.assertTrue(all(request["text"] == "small round object" for request in requests))
         self.assertEqual([[1, 0], [1, 0]], [request["bounding_box_labels"] for request in requests])
+        self.assertTrue(all(request["output_prob_thresh"] == 0.05 for request in requests))
         self.assertEqual(2, predictor.session_counter)
 
 

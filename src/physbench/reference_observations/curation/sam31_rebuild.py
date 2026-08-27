@@ -27,6 +27,7 @@ class Sam31GtConfig:
     near_duplicate_tube_iou: float = 0.85
     box_padding_fraction: float = 0.15
     initial_box_iou_threshold: float = 0.3
+    tracking_output_probability_threshold: float = 0.0
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "Sam31GtConfig":
@@ -50,6 +51,12 @@ class Sam31GtConfig:
             initial_box_iou_threshold=float(
                 value.get("initial_box_iou_threshold", cls.initial_box_iou_threshold)
             ),
+            tracking_output_probability_threshold=float(
+                value.get(
+                    "tracking_output_probability_threshold",
+                    cls.tracking_output_probability_threshold,
+                )
+            ),
         )
 
     def __post_init__(self) -> None:
@@ -67,6 +74,8 @@ class Sam31GtConfig:
             raise ValueError("SAM3.1 GT box padding fraction must lie in [0,1]")
         if not 0 <= self.initial_box_iou_threshold <= 1:
             raise ValueError("SAM3.1 GT initial box IoU threshold must lie in [0,1]")
+        if not 0 <= self.tracking_output_probability_threshold <= 1:
+            raise ValueError("SAM3.1 GT tracking probability threshold must lie in [0,1]")
 
 
 @dataclass(frozen=True)
@@ -457,6 +466,7 @@ def rebuild_collision_case(
             for identity in identities
         ),
         initial_iou_threshold=config.initial_box_iou_threshold,
+        output_probability_threshold=config.tracking_output_probability_threshold,
     )
     if tuple(box_tracks) != tuple(identity.object_id for identity in identities):
         raise ValueError("SAM3.1 GT box tracks do not match locked physics identities")

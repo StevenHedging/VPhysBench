@@ -25,6 +25,7 @@
     "border_crop_fraction": 0.6,
     "box_padding_fraction": 0.15,
     "initial_box_iou_threshold": 0.3,
+    "tracking_output_probability_threshold": 0.0,
     "near_duplicate_tube_iou": 0.85
   }
 }
