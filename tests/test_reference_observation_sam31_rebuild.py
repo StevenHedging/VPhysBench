@@ -281,7 +281,7 @@ class Sam31GtRebuildTests(unittest.TestCase):
         self.assertIn("internal_track_gap", [finding.code for finding in result.findings])
         self.assertEqual(3, int(result.states_by_object["object_1"][1]))
 
-    def test_identity_order_inversion_is_rejected(self) -> None:
+    def test_collision_identity_swaps_are_canonicalized_by_physical_order(self) -> None:
         api = self._api()
         left = _track("left", 1, [(20, 25), (35, 25), (50, 25), (60, 25)])
         right = _track("right", 2, [(60, 25), (50, 25), (35, 25), (20, 25)])
@@ -293,8 +293,11 @@ class Sam31GtRebuildTests(unittest.TestCase):
             config=api.Sam31GtConfig(),
         )
 
-        self.assertFalse(result.accepted)
-        self.assertIn("identity_order_inversion", [item.code for item in result.findings])
+        self.assertTrue(result.accepted)
+        for frame_index in range(4):
+            left_x = np.nonzero(result.masks_by_object["object_1"][frame_index])[1].mean()
+            right_x = np.nonzero(result.masks_by_object["object_2"][frame_index])[1].mean()
+            self.assertLess(left_x, right_x)
 
     def test_near_duplicate_tubes_are_rejected_but_contact_overlap_is_allowed(self) -> None:
         api = self._api()

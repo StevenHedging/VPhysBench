@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import itertools
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -304,6 +305,66 @@ def _centroid_x(mask: np.ndarray) -> float:
     return float(xs.mean())
 
 
+def _canonicalize_collision_order(
+    identities: Sequence[OrderedGtIdentity],
+    tracks_by_object: Mapping[str, Sam31GtTrack],
+) -> dict[str, np.ndarray]:
+    """Enforce the invariant left-to-right topology of non-penetrating 1D bodies."""
+
+    identity_values = tuple(identities)
+    if not identity_values:
+        raise ValueError("collision identity canonicalization requires subjects")
+    tracks = tuple(tracks_by_object[item.object_id] for item in identity_values)
+    frame_count, height, width = tracks[0].masks.shape
+    if any(track.masks.shape != (frame_count, height, width) for track in tracks):
+        raise ValueError("collision tracks must share one tube shape")
+    result = {
+        identity.object_id: np.zeros((frame_count, height, width), dtype=bool)
+        for identity in identity_values
+    }
+    histories: list[list[float]] = [
+        [float(identity.candidate.centroid_xy[0])] for identity in identity_values
+    ]
+    for frame_index in range(frame_count):
+        observations = sorted(
+            (
+                (_centroid_x(track.masks[frame_index]), track.masks[frame_index])
+                for track in tracks
+                if track.masks[frame_index].any()
+            ),
+            key=lambda item: item[0],
+        )
+        if not observations:
+            continue
+        if len(observations) == len(identity_values):
+            slots = tuple(range(len(identity_values)))
+        else:
+            predicted = []
+            for history in histories:
+                if len(history) >= 2:
+                    predicted.append(history[-1] + (history[-1] - history[-2]))
+                else:
+                    predicted.append(history[-1])
+            choices = tuple(
+                itertools.combinations(range(len(identity_values)), len(observations))
+            )
+            slots = min(
+                choices,
+                key=lambda choice: (
+                    sum(
+                        abs(observation[0] - predicted[slot])
+                        for slot, observation in zip(choice, observations, strict=True)
+                    ),
+                    choice,
+                ),
+            )
+        for slot, (_, mask) in zip(slots, observations, strict=True):
+            object_id = identity_values[slot].object_id
+            result[object_id][frame_index] = mask
+            histories[slot].append(_centroid_x(mask))
+    return result
+
+
 def _states_and_findings(
     object_id: str,
     masks: np.ndarray,
@@ -470,9 +531,7 @@ def rebuild_collision_case(
     )
     if tuple(box_tracks) != tuple(identity.object_id for identity in identities):
         raise ValueError("SAM3.1 GT box tracks do not match locked physics identities")
-    masks_by_object: dict[str, np.ndarray] = {}
-    states_by_object: dict[str, np.ndarray] = {}
-    findings: list[GtQualityFinding] = []
+    raw_tracks_by_object: dict[str, Sam31GtTrack] = {}
     for identity in identities:
         track = box_tracks[identity.object_id]
         _validate_track(
@@ -480,8 +539,15 @@ def rebuild_collision_case(
             frame_count=len(frame_values),
             frame_shape=frame_values[0].shape[:2],
         )
-        masks = track.masks.astype(bool, copy=True)
-        masks_by_object[identity.object_id] = masks
+        raw_tracks_by_object[identity.object_id] = track
+    masks_by_object = _canonicalize_collision_order(
+        identities,
+        raw_tracks_by_object,
+    )
+    states_by_object: dict[str, np.ndarray] = {}
+    findings: list[GtQualityFinding] = []
+    for identity in identities:
+        masks = masks_by_object[identity.object_id]
         states, entity_findings = _states_and_findings(identity.object_id, masks)
         states_by_object[identity.object_id] = states
         findings.extend(entity_findings)
