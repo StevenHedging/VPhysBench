@@ -133,6 +133,12 @@ class Sam31GtPredictorTests(unittest.TestCase):
         ]
         self.assertEqual([1, 2], [request["obj_id"] for request in point_requests])
         self.assertTrue(all(request["rel_coordinates"] is False for request in point_requests))
+        self.assertEqual(2, predictor.session_counter)
+        self.assertEqual([[1, 0], [1, 0]], [request["point_labels"] for request in point_requests])
+        self.assertNotEqual(
+            point_requests[0]["session_id"],
+            point_requests[1]["session_id"],
+        )
         propagate = next(
             request
             for request in predictor.requests

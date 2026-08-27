@@ -124,65 +124,65 @@ class Sam31GtPredictor:
             with tempfile.TemporaryDirectory(prefix="vphysbench-sam31-gt-") as value:
                 directory = Path(value)
                 self._segmenter._write_frames(normalized, directory)
-                response = predictor.handle_request(
-                    {
-                        "type": "start_session",
-                        "resource_path": str(directory),
-                        "offload_video_to_cpu": True,
-                        "offload_state_to_cpu": False,
-                    }
-                )
-                session_id = str(response["session_id"])
-                backend_ids = tuple(seed.backend_object_id for seed in seed_values)
-                masks_by_id = {
-                    object_id: np.zeros((frame_count, *frame_shape), dtype=bool)
-                    for object_id in backend_ids
-                }
-                boxes_by_id = {
-                    object_id: np.zeros((frame_count, 4), dtype=np.float32)
-                    for object_id in backend_ids
-                }
-                probabilities_by_id = {
-                    object_id: np.zeros(frame_count, dtype=np.float32)
-                    for object_id in backend_ids
-                }
-
-                def consume(output: Mapping[str, Any]) -> None:
-                    frame_index = int(output["frame_index"])
-                    if not 0 <= frame_index < frame_count:
-                        raise ValueError(
-                            f"SAM3.1 GT returned frame {frame_index} outside the video"
-                        )
-                    ids, masks, boxes, probabilities = self._segmenter._response_arrays(
-                        output,
-                        frame_shape=frame_shape,
+                result: dict[str, Sam31GtTrack] = {}
+                for seed in seed_values:
+                    response = predictor.handle_request(
+                        {
+                            "type": "start_session",
+                            "resource_path": str(directory),
+                            "offload_video_to_cpu": True,
+                            "offload_state_to_cpu": False,
+                        }
                     )
-                    index_by_id = {
-                        int(object_id): index for index, object_id in enumerate(ids)
-                    }
-                    for object_id in backend_ids:
-                        source_index = index_by_id.get(object_id)
-                        if source_index is None:
-                            continue
-                        masks_by_id[object_id][frame_index] = masks[source_index]
-                        boxes_by_id[object_id][frame_index] = boxes[source_index]
-                        probabilities_by_id[object_id][frame_index] = probabilities[
-                            source_index
-                        ]
+                    session_id = str(response["session_id"])
+                    masks = np.zeros((frame_count, *frame_shape), dtype=bool)
+                    boxes = np.zeros((frame_count, 4), dtype=np.float32)
+                    probabilities = np.zeros(frame_count, dtype=np.float32)
 
-                try:
-                    for seed in seed_values:
+                    def consume(output: Mapping[str, Any]) -> None:
+                        frame_index = int(output["frame_index"])
+                        if not 0 <= frame_index < frame_count:
+                            raise ValueError(
+                                f"SAM3.1 GT returned frame {frame_index} outside the video"
+                            )
+                        ids, output_masks, output_boxes, output_probabilities = (
+                            self._segmenter._response_arrays(
+                                output,
+                                frame_shape=frame_shape,
+                            )
+                        )
+                        matches = np.flatnonzero(ids == int(seed.backend_object_id))
+                        if len(matches) > 1:
+                            raise ValueError(
+                                f"SAM3.1 GT duplicated backend object {seed.backend_object_id}"
+                            )
+                        if not len(matches):
+                            return
+                        source_index = int(matches[0])
+                        masks[frame_index] = output_masks[source_index]
+                        boxes[frame_index] = output_boxes[source_index]
+                        probabilities[frame_index] = output_probabilities[source_index]
+
+                    negative_points = [
+                        [float(other.point_xy[0]), float(other.point_xy[1])]
+                        for other in seed_values
+                        if other.semantic_id != seed.semantic_id
+                    ]
+                    try:
                         consume(
                             predictor.handle_request(
                                 {
                                     "type": "add_prompt",
                                     "session_id": session_id,
                                     "frame_index": 0,
-                                    "points": [[
-                                        float(seed.point_xy[0]),
-                                        float(seed.point_xy[1]),
-                                    ]],
-                                    "point_labels": [1],
+                                    "points": [
+                                        [
+                                            float(seed.point_xy[0]),
+                                            float(seed.point_xy[1]),
+                                        ],
+                                        *negative_points,
+                                    ],
+                                    "point_labels": [1, *([0] * len(negative_points))],
                                     "clear_old_points": True,
                                     "obj_id": int(seed.backend_object_id),
                                     "rel_coordinates": False,
@@ -192,38 +192,35 @@ class Sam31GtPredictor:
                                 }
                             )
                         )
-                    for output in predictor.handle_stream_request(
-                        {
-                            "type": "propagate_in_video",
-                            "session_id": session_id,
-                            "propagation_direction": "forward",
-                            "start_frame_index": 0,
-                            "output_prob_thresh": (
-                                self._segmenter.output_probability_threshold
-                            ),
-                        }
-                    ):
-                        consume(output)
-                finally:
-                    predictor.handle_request(
-                        {
-                            "type": "close_session",
-                            "session_id": session_id,
-                            "run_gc_collect": True,
-                        }
+                        for output in predictor.handle_stream_request(
+                            {
+                                "type": "propagate_in_video",
+                                "session_id": session_id,
+                                "propagation_direction": "forward",
+                                "start_frame_index": 0,
+                                "output_prob_thresh": (
+                                    self._segmenter.output_probability_threshold
+                                ),
+                            }
+                        ):
+                            consume(output)
+                    finally:
+                        predictor.handle_request(
+                            {
+                                "type": "close_session",
+                                "session_id": session_id,
+                                "run_gc_collect": True,
+                            }
+                        )
+                    result[seed.semantic_id] = Sam31GtTrack(
+                        semantic_id=seed.semantic_id,
+                        backend_object_id=seed.backend_object_id,
+                        masks=masks,
+                        boxes_xywh=boxes,
+                        confidences=probabilities,
+                        prompt="positive_point_with_other_subject_negatives",
+                        source="independent_full_frame_point_session",
                     )
-        result = {
-            seed.semantic_id: Sam31GtTrack(
-                semantic_id=seed.semantic_id,
-                backend_object_id=seed.backend_object_id,
-                masks=masks_by_id[seed.backend_object_id],
-                boxes_xywh=boxes_by_id[seed.backend_object_id],
-                confidences=probabilities_by_id[seed.backend_object_id],
-                prompt="point",
-                source="full_frame_point",
-            )
-            for seed in seed_values
-        }
         if any(not track.masks[0].any() for track in result.values()):
             missing = sorted(
                 semantic_id
