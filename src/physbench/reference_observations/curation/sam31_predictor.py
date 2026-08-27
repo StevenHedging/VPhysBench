@@ -271,6 +271,106 @@ class Sam31GtPredictor:
                 raise ValueError("SAM3.1 GT box seed must fit normalized frame bounds")
         return values
 
+    def _repair_internal_box_gaps(
+        self,
+        *,
+        predictor: Any,
+        session_id: str,
+        seed: Sam31BoxSeed,
+        masks: np.ndarray,
+        boxes: np.ndarray,
+        probabilities: np.ndarray,
+        frame_shape: tuple[int, int],
+        output_probability_threshold: float,
+    ) -> None:
+        present = masks.reshape(len(masks), -1).any(axis=1)
+        present_indices = np.flatnonzero(present)
+        if len(present_indices) < 2:
+            return
+        first_present = int(present_indices[0])
+        last_present = int(present_indices[-1])
+        missing_indices = (
+            np.flatnonzero(~present[first_present : last_present + 1]) + first_present
+        )
+        for missing_index in missing_indices:
+            previous_index = int(np.flatnonzero(present[:missing_index])[-1])
+            next_index = int(
+                missing_index
+                + 1
+                + np.flatnonzero(present[missing_index + 1 :])[0]
+            )
+
+            def pixel_box(mask: np.ndarray) -> np.ndarray:
+                ys, xs = np.nonzero(mask)
+                return np.asarray(
+                    [xs.min(), ys.min(), xs.max() + 1, ys.max() + 1],
+                    dtype=np.float64,
+                )
+
+            fraction = (missing_index - previous_index) / (
+                next_index - previous_index
+            )
+            predicted = pixel_box(masks[previous_index]) + fraction * (
+                pixel_box(masks[next_index]) - pixel_box(masks[previous_index])
+            )
+            box_width = max(1.0, predicted[2] - predicted[0])
+            box_height = max(1.0, predicted[3] - predicted[1])
+            predicted[0] = max(0.0, predicted[0] - 0.25 * box_width)
+            predicted[1] = max(0.0, predicted[1] - 0.25 * box_height)
+            predicted[2] = min(
+                float(frame_shape[1]), predicted[2] + 0.25 * box_width
+            )
+            predicted[3] = min(
+                float(frame_shape[0]), predicted[3] + 0.25 * box_height
+            )
+            normalized_box = [
+                predicted[0] / frame_shape[1],
+                predicted[1] / frame_shape[0],
+                (predicted[2] - predicted[0]) / frame_shape[1],
+                (predicted[3] - predicted[1]) / frame_shape[0],
+            ]
+            recovery = predictor.handle_request(
+                {
+                    "type": "add_prompt",
+                    "session_id": session_id,
+                    "frame_index": int(missing_index),
+                    "text": seed.text,
+                    "bounding_boxes": [normalized_box],
+                    "bounding_box_labels": [1],
+                    "output_prob_thresh": output_probability_threshold,
+                }
+            )
+            recovery_ids, recovery_masks, recovery_boxes, recovery_probabilities = (
+                self._segmenter._response_arrays(
+                    recovery,
+                    frame_shape=frame_shape,
+                )
+            )
+            if not len(recovery_ids):
+                continue
+            region = np.zeros(frame_shape, dtype=bool)
+            region[
+                int(np.floor(predicted[1])) : int(np.ceil(predicted[3])),
+                int(np.floor(predicted[0])) : int(np.ceil(predicted[2])),
+            ] = True
+            mask_areas = recovery_masks.reshape(len(recovery_ids), -1).sum(axis=1)
+            intersections = np.logical_and(recovery_masks, region).reshape(
+                len(recovery_ids), -1
+            ).sum(axis=1)
+            overlap = np.divide(
+                intersections,
+                mask_areas,
+                out=np.zeros(len(recovery_ids), dtype=np.float64),
+                where=mask_areas > 0,
+            )
+            best = int(np.argmax(overlap))
+            if float(overlap[best]) < 0.5:
+                continue
+            masks[missing_index] = recovery_masks[best]
+            boxes[missing_index] = recovery_boxes[best]
+            probabilities[missing_index] = recovery_probabilities[best]
+            present[missing_index] = True
+
     def track_boxes(
         self,
         frames: Sequence[np.ndarray],
@@ -398,6 +498,16 @@ class Sam31GtPredictor:
                             }
                         ):
                             consume(output)
+                        self._repair_internal_box_gaps(
+                            predictor=predictor,
+                            session_id=session_id,
+                            seed=seed,
+                            masks=masks,
+                            boxes=boxes,
+                            probabilities=probabilities,
+                            frame_shape=frame_shape,
+                            output_probability_threshold=output_probability_threshold,
+                        )
                     finally:
                         predictor.handle_request(
                             {
@@ -422,7 +532,9 @@ class Sam31GtPredictor:
         value = self._segmenter.describe()
         value.update(
             {
-                "curation_policy": "text_discovery_then_locked_point_tracking",
+                "curation_policy": (
+                    "text_discovery_then_independent_text_box_tracking_with_gap_repair"
+                ),
                 "mask_overlap_policy": "independent_nonexclusive",
             }
         )

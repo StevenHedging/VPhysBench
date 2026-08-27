@@ -6,8 +6,14 @@ import numpy as np
 
 
 class _FakePredictor:
-    def __init__(self, *, fail_propagation: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        fail_propagation: bool = False,
+        dropped_object_frames: dict[int, set[int]] | None = None,
+    ) -> None:
         self.fail_propagation = fail_propagation
+        self.dropped_object_frames = dropped_object_frames or {}
         self.requests: list[dict[str, object]] = []
         self.session_objects: dict[str, list[int]] = {}
         self.session_counter = 0
@@ -49,7 +55,8 @@ class _FakePredictor:
                 if object_id not in self.session_objects[session_id]:
                     self.session_objects[session_id].append(object_id)
                 ids = self.session_objects[session_id]
-            return {"frame_index": 0, "outputs": self._outputs(ids, 0)}
+            frame_index = int(request["frame_index"])
+            return {"frame_index": frame_index, "outputs": self._outputs(ids, frame_index)}
         if request_type == "close_session":
             return {"is_success": True}
         raise AssertionError(f"unexpected request {request}")
@@ -60,9 +67,14 @@ class _FakePredictor:
             raise RuntimeError("synthetic point propagation failure")
         ids = self.session_objects[str(request["session_id"])]
         for frame_index in (1, 2):
+            visible_ids = [
+                object_id
+                for object_id in ids
+                if frame_index not in self.dropped_object_frames.get(object_id, set())
+            ]
             yield {
                 "frame_index": frame_index,
-                "outputs": self._outputs(ids, frame_index),
+                "outputs": self._outputs(visible_ids, frame_index),
             }
 
 
@@ -227,6 +239,36 @@ class Sam31GtPredictorTests(unittest.TestCase):
         self.assertEqual([[1, 0], [1, 0]], [request["bounding_box_labels"] for request in requests])
         self.assertTrue(all(request["output_prob_thresh"] == 0.05 for request in requests))
         self.assertEqual(2, predictor.session_counter)
+
+    def test_box_tracking_repairs_internal_drop_with_targeted_frame_prompt(self) -> None:
+        api = self._api()
+        predictor = _FakePredictor(dropped_object_frames={5: {1}})
+        adapter = api.Sam31GtPredictor(
+            _config(), predictor_factory=lambda: predictor
+        )
+        outputs = predictor._outputs([5, 8], 0)
+        seed = api.Sam31BoxSeed(
+            semantic_id="object_1",
+            text="small round object",
+            reference_mask=outputs["out_binary_masks"][0],
+            box_xywh=(0.35, 0.2, 0.45, 0.6),
+        )
+
+        result = adapter.track_boxes(
+            _frames(),
+            (seed,),
+            initial_iou_threshold=0.5,
+            output_probability_threshold=0.05,
+        )
+
+        self.assertTrue(result["object_1"].masks[1].any())
+        recovery = [
+            request
+            for request in predictor.requests
+            if request["type"] == "add_prompt" and request["frame_index"] == 1
+        ]
+        self.assertEqual(1, len(recovery))
+        self.assertEqual([1], recovery[0]["bounding_box_labels"])
 
 
 if __name__ == "__main__":
