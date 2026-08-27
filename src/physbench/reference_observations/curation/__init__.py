@@ -1,6 +1,6 @@
 """Dataset-owned reference-observation audit and repair helpers."""
 
-from . import anchors, bundle, finalize, install, overrides, tracking
+from . import anchors, bundle, finalize, install, overrides, sam31_gt, tracking
 
 from .catalog import (
     CurationCase,
@@ -61,5 +61,6 @@ __all__ = [
     "render_dense_event_sheet",
     "write_review_ledger",
     "overrides",
+    "sam31_gt",
     "tracking",
 ]
