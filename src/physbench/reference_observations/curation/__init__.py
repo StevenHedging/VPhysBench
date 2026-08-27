@@ -8,6 +8,7 @@ from . import (
     overrides,
     sam31_gt,
     sam31_predictor,
+    sam31_rebuild,
     tracking,
 )
 
@@ -72,5 +73,6 @@ __all__ = [
     "overrides",
     "sam31_gt",
     "sam31_predictor",
+    "sam31_rebuild",
     "tracking",
 ]
