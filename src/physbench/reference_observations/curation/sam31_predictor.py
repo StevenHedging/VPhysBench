@@ -1,0 +1,247 @@
+"""Official SAM 3.1 sessions used by offline GT curation."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+import tempfile
+from typing import Any, Callable, Mapping, Sequence
+
+import numpy as np
+
+from ...evaluation.common.csti.observation import PromptGroupConfig
+from ...evaluation.common.masks.sam31_text import Sam31TextVideoSegmenter
+
+
+PredictorFactory = Callable[[], Any]
+
+
+@dataclass(frozen=True)
+class Sam31PointSeed:
+    semantic_id: str
+    backend_object_id: int
+    point_xy: tuple[float, float]
+
+
+@dataclass(frozen=True)
+class Sam31GtTrack:
+    semantic_id: str
+    backend_object_id: int
+    masks: np.ndarray
+    boxes_xywh: np.ndarray
+    confidences: np.ndarray
+    prompt: str
+    source: str
+
+
+class Sam31GtPredictor:
+    """Reuse the evaluator's pinned model loader with curation-only prompts."""
+
+    def __init__(
+        self,
+        config: Mapping[str, Any],
+        *,
+        predictor_factory: PredictorFactory | None = None,
+    ) -> None:
+        self._segmenter = Sam31TextVideoSegmenter(
+            config,
+            predictor_factory=predictor_factory,
+        )
+
+    def discover(
+        self,
+        frames: Sequence[np.ndarray],
+        *,
+        prompts: Sequence[str],
+    ) -> tuple[Sam31GtTrack, ...]:
+        prompt_values = tuple(str(value).strip() for value in prompts)
+        if not prompt_values or any(not value for value in prompt_values):
+            raise ValueError("SAM3.1 GT discovery prompts must be non-empty")
+        if len(set(prompt_values)) != len(prompt_values):
+            raise ValueError("SAM3.1 GT discovery prompts must be unique")
+        groups = tuple(
+            PromptGroupConfig(
+                group_id=f"prompt_{index:02d}",
+                text=prompt,
+                entity_classes=("ball",),
+            )
+            for index, prompt in enumerate(prompt_values)
+        )
+        candidates = self._segmenter.segment(frames, groups)
+        prompt_by_group = {group.group_id: group.text for group in groups}
+        return tuple(
+            Sam31GtTrack(
+                semantic_id=candidate.candidate_id,
+                backend_object_id=candidate.backend_object_id,
+                masks=candidate.masks,
+                boxes_xywh=candidate.boxes_xywh,
+                confidences=candidate.confidences,
+                prompt=prompt_by_group[candidate.prompt_group_id],
+                source="full_frame_text",
+            )
+            for candidate in candidates
+        )
+
+    @staticmethod
+    def _validate_seeds(
+        seeds: Sequence[Sam31PointSeed],
+        *,
+        frame_shape: tuple[int, int],
+    ) -> tuple[Sam31PointSeed, ...]:
+        values = tuple(seeds)
+        if not values:
+            raise ValueError("SAM3.1 GT point tracking requires at least one seed")
+        semantic_ids = tuple(value.semantic_id for value in values)
+        backend_ids = tuple(int(value.backend_object_id) for value in values)
+        if (
+            any(not value for value in semantic_ids)
+            or len(set(semantic_ids)) != len(values)
+            or len(set(backend_ids)) != len(values)
+        ):
+            raise ValueError("SAM3.1 GT point seeds require unique identities")
+        height, width = frame_shape
+        for seed in values:
+            point = np.asarray(seed.point_xy, dtype=np.float64)
+            if point.shape != (2,) or not np.isfinite(point).all():
+                raise ValueError("SAM3.1 GT point seed must be finite XY")
+            if not (0 <= point[0] < width and 0 <= point[1] < height):
+                raise ValueError("SAM3.1 GT point seed lies outside the video frame")
+        return values
+
+    def track_points(
+        self,
+        frames: Sequence[np.ndarray],
+        seeds: Sequence[Sam31PointSeed],
+    ) -> dict[str, Sam31GtTrack]:
+        normalized = self._segmenter._validate_frames(frames)
+        frame_shape = normalized[0].shape[:2]
+        seed_values = self._validate_seeds(seeds, frame_shape=frame_shape)
+        frame_count = len(normalized)
+        with self._segmenter._lock:
+            self._segmenter._load()
+            predictor = self._segmenter._predictor
+            assert predictor is not None
+            with tempfile.TemporaryDirectory(prefix="vphysbench-sam31-gt-") as value:
+                directory = Path(value)
+                self._segmenter._write_frames(normalized, directory)
+                response = predictor.handle_request(
+                    {
+                        "type": "start_session",
+                        "resource_path": str(directory),
+                        "offload_video_to_cpu": True,
+                        "offload_state_to_cpu": False,
+                    }
+                )
+                session_id = str(response["session_id"])
+                backend_ids = tuple(seed.backend_object_id for seed in seed_values)
+                masks_by_id = {
+                    object_id: np.zeros((frame_count, *frame_shape), dtype=bool)
+                    for object_id in backend_ids
+                }
+                boxes_by_id = {
+                    object_id: np.zeros((frame_count, 4), dtype=np.float32)
+                    for object_id in backend_ids
+                }
+                probabilities_by_id = {
+                    object_id: np.zeros(frame_count, dtype=np.float32)
+                    for object_id in backend_ids
+                }
+
+                def consume(output: Mapping[str, Any]) -> None:
+                    frame_index = int(output["frame_index"])
+                    if not 0 <= frame_index < frame_count:
+                        raise ValueError(
+                            f"SAM3.1 GT returned frame {frame_index} outside the video"
+                        )
+                    ids, masks, boxes, probabilities = self._segmenter._response_arrays(
+                        output,
+                        frame_shape=frame_shape,
+                    )
+                    index_by_id = {
+                        int(object_id): index for index, object_id in enumerate(ids)
+                    }
+                    for object_id in backend_ids:
+                        source_index = index_by_id.get(object_id)
+                        if source_index is None:
+                            continue
+                        masks_by_id[object_id][frame_index] = masks[source_index]
+                        boxes_by_id[object_id][frame_index] = boxes[source_index]
+                        probabilities_by_id[object_id][frame_index] = probabilities[
+                            source_index
+                        ]
+
+                try:
+                    for seed in seed_values:
+                        consume(
+                            predictor.handle_request(
+                                {
+                                    "type": "add_prompt",
+                                    "session_id": session_id,
+                                    "frame_index": 0,
+                                    "points": [[
+                                        float(seed.point_xy[0]),
+                                        float(seed.point_xy[1]),
+                                    ]],
+                                    "point_labels": [1],
+                                    "clear_old_points": True,
+                                    "obj_id": int(seed.backend_object_id),
+                                    "rel_coordinates": False,
+                                    "output_prob_thresh": (
+                                        self._segmenter.output_probability_threshold
+                                    ),
+                                }
+                            )
+                        )
+                    for output in predictor.handle_stream_request(
+                        {
+                            "type": "propagate_in_video",
+                            "session_id": session_id,
+                            "propagation_direction": "forward",
+                            "start_frame_index": 0,
+                            "output_prob_thresh": (
+                                self._segmenter.output_probability_threshold
+                            ),
+                        }
+                    ):
+                        consume(output)
+                finally:
+                    predictor.handle_request(
+                        {
+                            "type": "close_session",
+                            "session_id": session_id,
+                            "run_gc_collect": True,
+                        }
+                    )
+        result = {
+            seed.semantic_id: Sam31GtTrack(
+                semantic_id=seed.semantic_id,
+                backend_object_id=seed.backend_object_id,
+                masks=masks_by_id[seed.backend_object_id],
+                boxes_xywh=boxes_by_id[seed.backend_object_id],
+                confidences=probabilities_by_id[seed.backend_object_id],
+                prompt="point",
+                source="full_frame_point",
+            )
+            for seed in seed_values
+        }
+        if any(not track.masks[0].any() for track in result.values()):
+            missing = sorted(
+                semantic_id
+                for semantic_id, track in result.items()
+                if not track.masks[0].any()
+            )
+            raise ValueError(f"SAM3.1 GT point initialization missed {missing}")
+        return result
+
+    def describe(self) -> dict[str, Any]:
+        value = self._segmenter.describe()
+        value.update(
+            {
+                "curation_policy": "text_discovery_then_locked_point_tracking",
+                "mask_overlap_policy": "independent_nonexclusive",
+            }
+        )
+        return value
+
+
+__all__ = ["Sam31GtPredictor", "Sam31GtTrack", "Sam31PointSeed"]
