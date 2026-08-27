@@ -371,6 +371,124 @@ class Sam31GtPredictor:
             probabilities[missing_index] = recovery_probabilities[best]
             present[missing_index] = True
 
+    def _repair_trailing_box_gap(
+        self,
+        *,
+        predictor: Any,
+        session_id: str,
+        seed: Sam31BoxSeed,
+        masks: np.ndarray,
+        boxes: np.ndarray,
+        probabilities: np.ndarray,
+        frame_shape: tuple[int, int],
+        output_probability_threshold: float,
+    ) -> None:
+        present = masks.reshape(len(masks), -1).any(axis=1)
+        present_indices = np.flatnonzero(present)
+        if not len(present_indices):
+            return
+        last_present = int(present_indices[-1])
+        if last_present == len(masks) - 1:
+            return
+        last_mask = masks[last_present]
+        if (
+            last_mask[0].any()
+            or last_mask[-1].any()
+            or last_mask[:, 0].any()
+            or last_mask[:, -1].any()
+        ):
+            return
+
+        def pixel_box(mask: np.ndarray) -> np.ndarray:
+            ys, xs = np.nonzero(mask)
+            return np.asarray(
+                [xs.min(), ys.min(), xs.max() + 1, ys.max() + 1],
+                dtype=np.float64,
+            )
+
+        predicted = pixel_box(last_mask)
+        if len(present_indices) >= 2:
+            previous_present = int(present_indices[-2])
+            elapsed = max(1, last_present - previous_present)
+            velocity = (predicted - pixel_box(masks[previous_present])) / elapsed
+            predicted = predicted + velocity
+        box_width = max(1.0, predicted[2] - predicted[0])
+        box_height = max(1.0, predicted[3] - predicted[1])
+        predicted[0] = max(0.0, predicted[0] - 0.5 * box_width)
+        predicted[1] = max(0.0, predicted[1] - 0.5 * box_height)
+        predicted[2] = min(float(frame_shape[1]), predicted[2] + 0.5 * box_width)
+        predicted[3] = min(float(frame_shape[0]), predicted[3] + 0.5 * box_height)
+        normalized_box = [
+            predicted[0] / frame_shape[1],
+            predicted[1] / frame_shape[0],
+            (predicted[2] - predicted[0]) / frame_shape[1],
+            (predicted[3] - predicted[1]) / frame_shape[0],
+        ]
+        first_missing = last_present + 1
+        recovery = predictor.handle_request(
+            {
+                "type": "add_prompt",
+                "session_id": session_id,
+                "frame_index": first_missing,
+                "text": seed.text,
+                "bounding_boxes": [normalized_box],
+                "bounding_box_labels": [1],
+                "output_prob_thresh": output_probability_threshold,
+            }
+        )
+        recovery_ids, recovery_masks, recovery_boxes, recovery_probabilities = (
+            self._segmenter._response_arrays(
+                recovery,
+                frame_shape=frame_shape,
+            )
+        )
+        if not len(recovery_ids):
+            return
+        region = np.zeros(frame_shape, dtype=bool)
+        region[
+            int(np.floor(predicted[1])) : int(np.ceil(predicted[3])),
+            int(np.floor(predicted[0])) : int(np.ceil(predicted[2])),
+        ] = True
+        mask_areas = recovery_masks.reshape(len(recovery_ids), -1).sum(axis=1)
+        intersections = np.logical_and(recovery_masks, region).reshape(
+            len(recovery_ids), -1
+        ).sum(axis=1)
+        overlap = np.divide(
+            intersections,
+            mask_areas,
+            out=np.zeros(len(recovery_ids), dtype=np.float64),
+            where=mask_areas > 0,
+        )
+        best = int(np.argmax(overlap))
+        if float(overlap[best]) < 0.5:
+            return
+        selected_backend_id = int(recovery_ids[best])
+        masks[first_missing] = recovery_masks[best]
+        boxes[first_missing] = recovery_boxes[best]
+        probabilities[first_missing] = recovery_probabilities[best]
+        for output in predictor.handle_stream_request(
+            {
+                "type": "propagate_in_video",
+                "session_id": session_id,
+                "propagation_direction": "forward",
+                "start_frame_index": first_missing,
+                "output_prob_thresh": output_probability_threshold,
+            }
+        ):
+            frame_index = int(output["frame_index"])
+            if not first_missing <= frame_index < len(masks):
+                continue
+            ids, output_masks, output_boxes, output_probabilities = (
+                self._segmenter._response_arrays(output, frame_shape=frame_shape)
+            )
+            matches = np.flatnonzero(ids == selected_backend_id)
+            if len(matches) != 1:
+                continue
+            source_index = int(matches[0])
+            masks[frame_index] = output_masks[source_index]
+            boxes[frame_index] = output_boxes[source_index]
+            probabilities[frame_index] = output_probabilities[source_index]
+
     def track_boxes(
         self,
         frames: Sequence[np.ndarray],
@@ -498,6 +616,16 @@ class Sam31GtPredictor:
                             }
                         ):
                             consume(output)
+                        self._repair_trailing_box_gap(
+                            predictor=predictor,
+                            session_id=session_id,
+                            seed=seed,
+                            masks=masks,
+                            boxes=boxes,
+                            probabilities=probabilities,
+                            frame_shape=frame_shape,
+                            output_probability_threshold=output_probability_threshold,
+                        )
                         self._repair_internal_box_gaps(
                             predictor=predictor,
                             session_id=session_id,

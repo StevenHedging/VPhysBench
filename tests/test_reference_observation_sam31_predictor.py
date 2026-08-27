@@ -16,6 +16,7 @@ class _FakePredictor:
         self.dropped_object_frames = dropped_object_frames or {}
         self.requests: list[dict[str, object]] = []
         self.session_objects: dict[str, list[int]] = {}
+        self.recovered_sessions: set[str] = set()
         self.session_counter = 0
 
     @staticmethod
@@ -56,6 +57,8 @@ class _FakePredictor:
                     self.session_objects[session_id].append(object_id)
                 ids = self.session_objects[session_id]
             frame_index = int(request["frame_index"])
+            if frame_index > 0:
+                self.recovered_sessions.add(session_id)
             return {"frame_index": frame_index, "outputs": self._outputs(ids, frame_index)}
         if request_type == "close_session":
             return {"is_success": True}
@@ -70,7 +73,8 @@ class _FakePredictor:
             visible_ids = [
                 object_id
                 for object_id in ids
-                if frame_index not in self.dropped_object_frames.get(object_id, set())
+                if str(request["session_id"]) in self.recovered_sessions
+                or frame_index not in self.dropped_object_frames.get(object_id, set())
             ]
             yield {
                 "frame_index": frame_index,
@@ -269,6 +273,37 @@ class Sam31GtPredictorTests(unittest.TestCase):
         ]
         self.assertEqual(1, len(recovery))
         self.assertEqual([1], recovery[0]["bounding_box_labels"])
+
+    def test_box_tracking_reinitializes_unexplained_trailing_drop(self) -> None:
+        api = self._api()
+        predictor = _FakePredictor(dropped_object_frames={5: {1, 2}})
+        adapter = api.Sam31GtPredictor(
+            _config(), predictor_factory=lambda: predictor
+        )
+        outputs = predictor._outputs([5, 8], 0)
+        seed = api.Sam31BoxSeed(
+            semantic_id="object_1",
+            text="small round object",
+            reference_mask=outputs["out_binary_masks"][0],
+            box_xywh=(0.35, 0.2, 0.45, 0.6),
+        )
+
+        result = adapter.track_boxes(
+            _frames(),
+            (seed,),
+            initial_iou_threshold=0.5,
+            output_probability_threshold=0.05,
+        )
+
+        self.assertTrue(
+            result["object_1"].masks[1:].reshape(2, -1).any(axis=1).all()
+        )
+        reinitialization = [
+            request
+            for request in predictor.requests
+            if request["type"] == "add_prompt" and request["frame_index"] == 1
+        ]
+        self.assertEqual(1, len(reinitialization))
 
 
 if __name__ == "__main__":
