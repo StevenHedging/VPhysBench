@@ -322,6 +322,31 @@ class Sam31GtRebuildTests(unittest.TestCase):
         self.assertFalse(duplicate.accepted)
         self.assertIn("near_duplicate_tubes", [item.code for item in duplicate.findings])
 
+    def test_disconnected_second_subject_is_reduced_to_temporally_consistent_ball(self) -> None:
+        api = self._api()
+        left = _track("left", 1, [(20, 25), (22, 25), (24, 25), (26, 25)])
+        right = _track("right", 2, [(60, 25), (58, 25), (56, 25), (54, 25)])
+        right.masks[2] = np.logical_or(right.masks[2], _disk((30, 10), radius=5))
+
+        result = api.rebuild_collision_case(
+            _case(),
+            frames=self._frames(),
+            predictor=_Predictor([(left, right)]),
+            config=api.Sam31GtConfig(),
+        )
+
+        import cv2
+
+        component_count, _ = cv2.connectedComponents(
+            result.masks_by_object["object_2"][2].astype(np.uint8),
+            connectivity=8,
+        )
+        self.assertEqual(2, component_count)
+        self.assertGreater(
+            np.nonzero(result.masks_by_object["object_2"][2])[1].mean(),
+            45,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

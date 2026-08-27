@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import itertools
 from typing import Any, Mapping, Sequence
 
+import cv2
 import numpy as np
 
 from ..contracts import ObservationState
@@ -365,6 +366,50 @@ def _canonicalize_collision_order(
     return result
 
 
+def _keep_temporally_consistent_component(masks: np.ndarray) -> np.ndarray:
+    """Remove a second disconnected ball accidentally included in one subject mask."""
+
+    result = np.asarray(masks, dtype=bool).copy()
+    history: list[float] = []
+    for frame_index, mask in enumerate(result):
+        if not mask.any():
+            continue
+        component_count, labels, statistics, centroids = cv2.connectedComponentsWithStats(
+            mask.astype(np.uint8),
+            connectivity=8,
+        )
+        component_areas = statistics[1:, cv2.CC_STAT_AREA]
+        if not len(component_areas):
+            continue
+        largest = int(component_areas.max())
+        material_labels = [
+            label
+            for label in range(1, component_count)
+            if int(statistics[label, cv2.CC_STAT_AREA]) >= max(4, 0.05 * largest)
+        ]
+        if len(material_labels) > 1:
+            predicted = history[-1] if history else float("nan")
+            if len(history) >= 2:
+                predicted = history[-1] + (history[-1] - history[-2])
+            if np.isfinite(predicted):
+                selected = min(
+                    material_labels,
+                    key=lambda label: (
+                        abs(float(centroids[label, 0]) - predicted),
+                        -int(statistics[label, cv2.CC_STAT_AREA]),
+                        label,
+                    ),
+                )
+            else:
+                selected = max(
+                    material_labels,
+                    key=lambda label: (int(statistics[label, cv2.CC_STAT_AREA]), -label),
+                )
+            result[frame_index] = labels == selected
+        history.append(_centroid_x(result[frame_index]))
+    return result
+
+
 def _states_and_findings(
     object_id: str,
     masks: np.ndarray,
@@ -544,6 +589,10 @@ def rebuild_collision_case(
         identities,
         raw_tracks_by_object,
     )
+    masks_by_object = {
+        object_id: _keep_temporally_consistent_component(masks)
+        for object_id, masks in masks_by_object.items()
+    }
     states_by_object: dict[str, np.ndarray] = {}
     findings: list[GtQualityFinding] = []
     for identity in identities:
