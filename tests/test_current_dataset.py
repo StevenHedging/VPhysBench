@@ -171,15 +171,14 @@ class CurrentDatasetTests(unittest.TestCase):
             self.assertEqual("approved", review["decision"], case_id)
             self.assertEqual("full_video", review["scope"], case_id)
             self.assertEqual(
-                "codex_collision_full_video_audit_2026-08-18",
+                "codex_sam31_collision_gt_full330_audit_20260827",
                 review["reviewer"],
                 case_id,
             )
 
     def test_all_v14_curated_anchor_ids_follow_the_frozen_scene_contract(self) -> None:
         expected_counts = {
-            ("collision_1d", "human_reviewed_sam2_1_hiera_large_collision_anchor_v1"): 7,
-            ("collision_1d", "v14_full_reference_observation_audit"): 142,
+            ("collision_1d", "sam31_collision_gt_curation_v1"): 330,
             ("inclined_plane_slide", "v14_full_reference_observation_audit"): 5,
             ("parabolic_motion", "v14_full_reference_observation_audit"): 69,
             ("pendulum", "v14_full_reference_observation_audit"): 20,
@@ -203,18 +202,12 @@ class CurrentDatasetTests(unittest.TestCase):
             generator_id = manifest.get("generator", {}).get("id")
             if generator_id not in {
                 "v14_full_reference_observation_audit",
-                "human_reviewed_sam2_1_hiera_large_collision_anchor_v1",
+                "sam31_collision_gt_curation_v1",
             }:
                 continue
             observed[(case["scene_id"], generator_id)] += 1
             instance_count = len(manifest["instances"])
-            if generator_id == (
-                "human_reviewed_sam2_1_hiera_large_collision_anchor_v1"
-            ):
-                expected_ids = tuple(
-                    instance["object_id"] for instance in manifest["instances"]
-                )
-            elif case["scene_id"] == "collision_1d":
+            if case["scene_id"] == "collision_1d":
                 expected_ids = tuple(
                     f"ball_{index}" for index in range(1, instance_count + 1)
                 )
@@ -291,9 +284,9 @@ class CurrentDatasetTests(unittest.TestCase):
                 / "datasets/releases/14.0.0/reference_observation_curation.json"
             ).read_text(encoding="utf-8")
         )
-        self.assertEqual(265, tracking["curated_case_count"])
-        self.assertEqual(478, tracking["anchor_file_count"])
-        self.assertEqual(1273, tracking["hash_closed_file_count"])
+        self.assertEqual(446, tracking["curated_case_count"])
+        self.assertEqual(842, tracking["anchor_file_count"])
+        self.assertEqual(2180, tracking["hash_closed_file_count"])
         self.assertEqual(
             self.dataset.asset_lock["files_digest"],
             tracking["asset_lock_files_digest"],

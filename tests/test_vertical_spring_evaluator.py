@@ -937,6 +937,10 @@ class VerticalSpringEvaluatorTests(unittest.TestCase):
         protocol["scenes"]["vertical_spring_oscillator"].pop(
             "reference_observation_policy", None
         )
+        protocol["scenes"]["vertical_spring_oscillator"].pop(
+            "csti_observer", None
+        )
+        protocol["general_metrics"].pop("csti", None)
         plan = {
             "task_id": "spring_internal_error_task",
             "family": "direct_eval",

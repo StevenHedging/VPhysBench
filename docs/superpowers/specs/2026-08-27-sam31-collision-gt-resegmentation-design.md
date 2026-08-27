@@ -52,19 +52,27 @@ The mapping is fixed at frame zero.  Later frames cannot reassign identities.
 
 ### Stateful tube generation
 
-The official multiplex video predictor is reused per worker.  Each Case opens
-one or more stateful sessions, initializes on frame zero, and propagates
-forward over the existing 24 Hz reference timeline.  Selected backend object
-IDs are copied into separate binary tubes.  Masks are not made exclusive:
-different subjects may share pixels during contact.
+The official multiplex video predictor is reused per worker.  After text-only
+discovery, each selected subject receives its own stateful session.  Frame zero
+is initialized with the same text plus one positive tight box; the other
+selected subjects are supplied as negative boxes.  This isolates same-class
+balls without making their persisted masks mutually exclusive.  Each session
+then propagates forward over the existing 24 Hz reference timeline.
 
-An observation is invalid when its locked object ID is absent, the mask is
-empty while not at an image boundary, or its geometry is malformed.  A short
-internal failure may be corrected by a SAM 3.1 point prompt applied to the same
-backend identity using a position predicted from adjacent valid observations.
-No correction can create a new semantic identity.  A trailing disappearance
-is accepted only when the last valid masks and trajectory support a boundary
-exit; reappearance after a confirmed exit is rejected.
+Short internal gaps are repaired by a frame-local SAM 3.1 box request derived
+from the subject's adjacent valid observations.  An unexplained trailing drop
+is reinitialized once and propagated forward; a verified boundary exit remains
+empty and is labelled `OUT_OF_FRAME`.  All repairs remain inside the locked
+semantic subject session.
+
+SAM backend IDs can swap at ball contact even when their masks remain visually
+correct.  Collision identities therefore use the physical non-penetration
+invariant: at every frame, visible material components are assigned to the
+fixed left-to-right slots in an order-preserving manner, with short missing
+sets assigned by predicted centroids.  Finally, if one subject mask contains
+two disconnected ball-sized components, temporal continuity retains exactly
+the component belonging to that subject.  Pixel overlap between touching
+subjects is still allowed.
 
 ### Quality gates
 
@@ -109,5 +117,6 @@ SAM-to-SAM agreement.
   `0567debeec80ba4ac6369540c6c248025283cb3ff2b92827509e57e2b3541cb6`
 - Checkpoint path is supplied by configuration/environment, never published as
   a Dataset absolute path.
-- Production generation uses eight local A100 GPUs, one shard per GPU.
-
+- Production generation used 54 idle A100 GPUs across seven hosts.  GPU 0 on
+  `n30237` and `n30241` and all of `n30238` were excluded because they were in
+  use by unrelated jobs.

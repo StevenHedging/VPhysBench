@@ -1,19 +1,18 @@
 {
-  "anchor_file_count": 478,
-  "asset_lock_files_digest": "94c691c5f7848631ae9bcde452f9f51b01ee2df7a30e3c18e3feeea47021e072",
+  "anchor_file_count": 842,
+  "asset_lock_files_digest": "3efbd1d2327f465efdceb9fe05b7bcbbbc700fc9092077b448d287d1d9611cd8",
   "content_contract": {
     "anchor_geometry": "exact_binary_mask_reduction_v1",
-    "anchor_identity": "frozen_scene_anchor_ids_v1",
+    "anchor_identity": "physics_caption_row_major_v1",
     "hash_closure": "anchor_to_observation_to_visualization_manifest_v1"
   },
-  "curated_case_count": 265,
+  "curated_case_count": 446,
   "dataset_id": "physics_video_seven_scene_v14",
   "generator_case_counts": {
-    "human_reviewed_sam2_1_hiera_large_collision_anchor_v1": {
-      "collision_1d": 7
+    "sam31_collision_gt_curation_v1": {
+      "collision_1d": 330
     },
     "v14_full_reference_observation_audit": {
-      "collision_1d": 142,
       "inclined_plane_slide": 5,
       "parabolic_motion": 69,
       "pendulum": 20,
@@ -22,8 +21,16 @@
       "vertical_spring_oscillator": 5
     }
   },
-  "hash_closed_file_count": 1273,
+  "hash_closed_file_count": 2180,
   "release": "14.0.0",
-  "repair_tool": "scripts/reference_observations/repair_curated_anchor_ids.py",
+  "repair_tool": "scripts/reference_observations/rebuild_collision_sam31.py",
+  "sam31_collision_curation": {
+    "candidate_count": 330,
+    "candidate_review_ledger_sha256": "b48f0f872b91c2f2663a9f583bb59c59762ce2c4fc55fe8c502e4c3ee737beb4",
+    "checkpoint_sha256": "0567debeec80ba4ac6369540c6c248025283cb3ff2b92827509e57e2b3541cb6",
+    "code_revision": "cb68f92",
+    "config_fingerprint": "7cc93dc79d9ae621e754eaa8719c95c845b4e0ebce477bf60e745d49920ae656",
+    "source_revision": "8f0b7f4d4e7eda2ed606ebde6702c93359ad01da"
+  },
   "schema_version": "1.0"
 }

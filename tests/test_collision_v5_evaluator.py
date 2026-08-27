@@ -220,6 +220,7 @@ class CollisionV5EvaluatorTests(unittest.TestCase):
         # implementation in isolation.  The public V14 protocol is covered by
         # frozen-reference routing tests instead.
         cls.config.pop("reference_observation_policy", None)
+        cls.config.pop("csti_observer", None)
 
     def _evaluator(
         self,
