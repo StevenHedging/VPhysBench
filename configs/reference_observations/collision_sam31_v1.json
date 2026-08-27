@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "model": {
+    "checkpoint_path_env": "VPHYSBENCH_SAM31_CHECKPOINT",
+    "checkpoint_sha256": "0567debeec80ba4ac6369540c6c248025283cb3ff2b92827509e57e2b3541cb6",
+    "device": "cuda",
+    "precision": "bfloat16",
+    "output_probability_threshold": 0.25,
+    "max_num_objects": 16,
+    "multiplex_count": 16,
+    "compile": false,
+    "warm_up": false,
+    "use_fa3": false,
+    "use_rope_real": true,
+    "async_loading_frames": false
+  },
+  "curation": {
+    "primary_prompt": "small round object",
+    "fallback_prompts": [
+      "ball",
+      "steel ball",
+      "glass ball"
+    ],
+    "ambiguity_margin": 0.03,
+    "border_crop_fraction": 0.6,
+    "near_duplicate_tube_iou": 0.85
+  }
+}
