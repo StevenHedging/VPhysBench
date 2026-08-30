@@ -223,4 +223,3 @@ protocol's text-only initialization and locked identity semantics.
 The generated first frame is the exact condition frame. Failing to initialize
 its declared legal subjects is therefore an evaluator coverage failure, which
 must be reported rather than silently penalizing the model.
-

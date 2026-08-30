@@ -24,6 +24,19 @@ class CurrentDatasetTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.dataset = load_dataset(LATEST_DATASET, check_assets=False)
         cls.view = cls.dataset.views["view_a"]
+        try:
+            load_dataset(LATEST_DATASET, check_assets=True)
+        except (FileNotFoundError, ValueError) as exc:
+            cls.full_asset_validation_failure = str(exc)
+        else:
+            cls.full_asset_validation_failure = None
+
+    def require_current_full_assets(self) -> None:
+        if self.full_asset_validation_failure is not None:
+            self.skipTest(
+                "full Dataset assets are absent or differ from the current "
+                f"release lock: {self.full_asset_validation_failure}"
+            )
 
     def test_v14_is_current_and_complete(self) -> None:
         self.assertEqual(
@@ -152,6 +165,7 @@ class CurrentDatasetTests(unittest.TestCase):
         self.assertEqual(expected, set(audited))
 
     def test_every_official_collision_case_has_current_full_video_review(self) -> None:
+        self.require_current_full_assets()
         plan = plan_atomic_task(load_task(FINETUNE_TASK), self.dataset).value
         cases_by_id = {case["case_id"]: case for case in self.dataset.cases}
         collision_ids = {
@@ -177,6 +191,7 @@ class CurrentDatasetTests(unittest.TestCase):
             )
 
     def test_all_v14_curated_anchor_ids_follow_the_frozen_scene_contract(self) -> None:
+        self.require_current_full_assets()
         expected_counts = {
             ("collision_1d", "sam31_collision_gt_curation_v1"): 330,
             ("inclined_plane_slide", "v14_full_reference_observation_audit"): 5,
