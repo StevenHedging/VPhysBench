@@ -20,7 +20,7 @@ Dataset 中仍保留 `push_bottle` 的全部 127 个训练 case 和 14 个 test 
 
 需要 Python 3.11、Git 和 ffmpeg/ffprobe。Dataset 在 Hugging Face 公开发布。
 `.[hub]` 只提供 Hub 下载和轻量接口；真实场景评测和 `atomic-run` 还需要
-`.[scene-evaluation]`。
+`.[scene-evaluation,sam31-evaluation]`。
 首次下载建议预留至少 40 GB 空间。
 
 ```bash
@@ -34,6 +34,9 @@ python3.11 -m venv .venv
 
 python -m pip install --upgrade pip
 python -m pip install -e ".[hub]"
+
+# 拉取后的一键完整环境诊断；未就绪项会附带修复命令
+physbench doctor
 
 # Hub 下载、元数据检查和接口 smoke 只需要 .[hub]
 physbench doctor --level metadata
@@ -66,9 +69,17 @@ Baseline 可以在自己的目录内实现训练和推理脚本，但不能重�
 stack，并在下载完整 Dataset 后确认 evaluation readiness：
 
 ```bash
-python -m pip install -e ".[scene-evaluation]"
+python -m pip install -e ".[scene-evaluation,sam31-evaluation]"
+export VPHYSBENCH_SAM31_CHECKPOINT=SAM31_CHECKPOINT_ABSOLUTE_PATH
+physbench doctor
 physbench doctor --level evaluation
 ```
+
+默认的 `physbench doctor` 会检查仓库/Dataset 绑定、系统命令、Python 依赖、
+PyTorch/CUDA、SAM3.1 checkpoint 及其协议摘要，并以非零状态码报告未就绪环境。
+它是只读操作，不会自动安装依赖、下载 Dataset 或加载大模型。CI 可使用
+`physbench doctor --json` 获取单个结构化 JSON 报告。
+将 `SAM31_CHECKPOINT_ABSOLUTE_PATH` 替换为本机 checkpoint 的绝对路径。
 
 然后运行：
 

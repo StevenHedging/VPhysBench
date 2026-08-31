@@ -22,15 +22,12 @@ from .dataset_distribution import (
     verify_and_extract_shard,
 )
 from .datasets import load_dataset
+from .environment_doctor import (
+    Diagnostic,
+    SCENE_EVALUATION_DEPENDENCIES,
+    diagnose_runtime,
+)
 from .huggingface_binding import load_huggingface_dataset_binding
-
-
-@dataclass(frozen=True)
-class Diagnostic:
-    name: str
-    status: str
-    detail: str
-
 
 Runner = Callable[..., object]
 _MANIFEST_REMOTE_PATH = "distribution/v1/manifest.json"
@@ -39,16 +36,6 @@ _RENAME_EXCHANGE = 2
 _O_CLOEXEC = getattr(os, "O_CLOEXEC", 0)
 _O_DIRECTORY = getattr(os, "O_DIRECTORY", 0)
 _O_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
-_SCENE_EVALUATION_DEPENDENCIES = (
-    "cv2",
-    "matplotlib",
-    "numpy",
-    "sam2",
-    "scipy",
-    "torch",
-)
-
-
 @dataclass
 class _AssetTree:
     parent_descriptor: int
@@ -872,21 +859,24 @@ def diagnose_project(
     *,
     level: str = "metadata",
 ) -> list[Diagnostic]:
-    if level not in {"metadata", "evaluation"}:
-        raise ValueError("doctor level must be metadata or evaluation")
+    if level not in {"metadata", "evaluation", "full"}:
+        raise ValueError("doctor level must be metadata, evaluation, or full")
     root = Path(project_root).resolve()
     datasets_root = root / "datasets"
     binding_path = datasets_root / "huggingface.json"
+    python_ready = sys.version_info >= (3, 11)
     diagnostics = [Diagnostic(
         "python",
-        "ok" if sys.version_info >= (3, 11) else "error",
+        "ok" if python_ready else "error",
         f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        None if python_ready else "create and activate a Python 3.11+ environment",
     )]
     executable = shutil.which("hf")
     diagnostics.append(Diagnostic(
         "hf_cli",
         "ok" if executable else "warning",
         executable or "install the `hub` extra before downloading data",
+        None if executable else 'python -m pip install -e ".[hub]"',
     ))
     try:
         binding = load_huggingface_dataset_binding(binding_path)
@@ -899,18 +889,26 @@ def diagnose_project(
             "ok",
             f"{binding.repo_id}@{binding.revision}",
         ))
-    except (FileNotFoundError, ValueError) as exc:
-        diagnostics.append(Diagnostic("dataset_binding", "error", str(exc)))
+    except (OSError, ValueError) as exc:
+        diagnostics.append(Diagnostic(
+            "dataset_binding",
+            "error",
+            str(exc),
+            "restore the tracked datasets/huggingface.json and release metadata",
+        ))
+        if level == "full":
+            diagnostics.extend(diagnose_runtime())
         return diagnostics
 
     try:
         load_dataset(descriptor, check_assets=True)
-    except (FileNotFoundError, ValueError) as exc:
+    except (OSError, ValueError) as exc:
         status = "warning" if level == "metadata" else "error"
         diagnostics.append(Diagnostic(
             "dataset_assets",
             status,
             f"not ready: {exc}; run `physbench dataset pull`",
+            "physbench dataset pull",
         ))
     else:
         diagnostics.append(Diagnostic(
@@ -921,7 +919,7 @@ def diagnose_project(
     if level == "evaluation":
         missing_dependencies = [
             name
-            for name in _SCENE_EVALUATION_DEPENDENCIES
+            for name in SCENE_EVALUATION_DEPENDENCIES
             if importlib.util.find_spec(name) is None
         ]
         diagnostics.append(Diagnostic(
@@ -934,7 +932,14 @@ def diagnose_project(
                 if missing_dependencies
                 else "all optional scene-evaluation modules are importable"
             ),
+            (
+                'python -m pip install -e ".[scene-evaluation]"'
+                if missing_dependencies
+                else None
+            ),
         ))
+    elif level == "full":
+        diagnostics.extend(diagnose_runtime())
     return diagnostics
 
 

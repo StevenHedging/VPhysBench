@@ -14,7 +14,12 @@ from .baseline_api import (
 )
 from .io import load_json, load_jsonl, write_json
 from .datasets import load_dataset
-from .dataset_hub import diagnose_project, diagnostics_succeeded, pull_dataset
+from .dataset_hub import (
+    Diagnostic,
+    diagnose_project,
+    diagnostics_succeeded,
+    pull_dataset,
+)
 from .runner import reevaluate_run
 from .splitters import build_view_a, build_view_b
 from .validation import errors, load_scene_configs, validate_cases
@@ -138,14 +143,48 @@ def _dataset_pull(args: argparse.Namespace) -> int:
 
 
 def _doctor(args: argparse.Namespace) -> int:
-    diagnostics = diagnose_project(args.project_root, level=args.level)
-    for item in diagnostics:
-        print(json.dumps({
+    try:
+        diagnostics = diagnose_project(args.project_root, level=args.level)
+    except Exception as exc:
+        diagnostics = [Diagnostic(
+            "doctor_internal",
+            "error",
+            f"environment probe failed: {type(exc).__name__}: {exc}",
+            "fix the reported access/runtime problem and rerun `physbench doctor`",
+        )]
+    checks = [{
             "name": item.name,
             "status": item.status,
             "detail": item.detail,
-        }, ensure_ascii=False, sort_keys=True))
-    return 0 if diagnostics_succeeded(diagnostics) else 1
+            **({"hint": item.hint} if item.hint else {}),
+        } for item in diagnostics]
+    succeeded = diagnostics_succeeded(diagnostics)
+    if args.json:
+        print(json.dumps({
+            "schema_version": "1.0",
+            "level": args.level,
+            "ready": succeeded,
+            "summary": {
+                "ok": sum(item.status == "ok" for item in diagnostics),
+                "warnings": sum(item.status == "warning" for item in diagnostics),
+                "errors": sum(item.status == "error" for item in diagnostics),
+            },
+            "checks": checks,
+        }, ensure_ascii=False, indent=2, sort_keys=True))
+    else:
+        print(f"VPhysBench environment doctor ({args.level})")
+        for item in diagnostics:
+            print(f"[{item.status.upper()}] {item.name}: {item.detail}")
+            if item.hint:
+                print(f"        fix: {item.hint}")
+        print(
+            "summary: "
+            f"ok={sum(item.status == 'ok' for item in diagnostics)} "
+            f"warnings={sum(item.status == 'warning' for item in diagnostics)} "
+            f"errors={sum(item.status == 'error' for item in diagnostics)} "
+            f"ready: {'yes' if succeeded else 'no'}"
+        )
+    return 0 if succeeded else 1
 
 
 def _atomic_run(args: argparse.Namespace) -> int:
@@ -366,8 +405,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     doctor.add_argument(
         "--level",
-        choices=["metadata", "evaluation"],
-        default="metadata",
+        choices=["metadata", "evaluation", "full"],
+        default="full",
+    )
+    doctor.add_argument(
+        "--json",
+        action="store_true",
+        help="emit one machine-readable JSON report",
     )
     doctor.add_argument("--project-root", default=str(PROJECT_ROOT))
     doctor.set_defaults(func=_doctor)

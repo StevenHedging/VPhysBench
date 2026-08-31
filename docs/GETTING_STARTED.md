@@ -90,6 +90,28 @@ that the NumPy/OpenCV/SciPy/Torch/SAM2 evaluator modules are importable. The
 first real one-case run additionally verifies CUDA execution and SAM 2 model
 access for that scene.
 
+## One-command full readiness check
+
+After installing both evaluator extras and downloading the Dataset, configure
+the protocol-pinned SAM3.1 checkpoint and run the default full doctor:
+
+```bash
+python -m pip install -e ".[scene-evaluation,sam31-evaluation]"
+export VPHYSBENCH_SAM31_CHECKPOINT=SAM31_CHECKPOINT_ABSOLUTE_PATH
+physbench doctor
+```
+
+Replace `SAM31_CHECKPOINT_ABSOLUTE_PATH` with the checkpoint's absolute path on
+the current machine.
+
+The command checks Python, Git, ffmpeg/ffprobe, the frozen Dataset binding and
+assets, evaluator modules, PyTorch/CUDA visibility, and the SAM3.1 checkpoint
+SHA-256. It does not install, download, or load a model. Every failure includes
+an actionable repair hint and produces a non-zero exit status. Use
+`physbench doctor --json` for one machine-readable report. The explicit
+`metadata` and `evaluation` levels remain available for lightweight and legacy
+workflows.
+
 ## 4. Create a custom baseline
 
 ```bash

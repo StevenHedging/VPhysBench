@@ -3,6 +3,7 @@
 ## Routine checks
 
 ```bash
+physbench doctor
 physbench doctor --level metadata
 make test
 make smoke-interface
@@ -16,9 +17,12 @@ physbench doctor --level evaluation
 make data-test
 ```
 
-The evaluation doctor checks Dataset assets and importability of the optional
-scene-evaluation modules. CUDA execution and SAM 2 model retrieval are verified
-by the first real one-case run.
+The default full doctor is the deployment preflight. It checks Dataset assets,
+Git and media tools, both evaluator extras, CUDA visibility, and the
+protocol-pinned SAM3.1 checkpoint digest. It remains read-only and does not load
+the model. `--level evaluation` preserves the earlier dependency-light SAM2
+check, while the first real one-case run still verifies actual model execution.
+Use `--json` when consuming the report from automation.
 
 ## Baseline workflow
 
