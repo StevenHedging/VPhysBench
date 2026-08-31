@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a one-command, self-locating VPhysBench environment bootstrap and certify that the tracked checkout runs after relocation.
+**Goal:** Add a one-command, self-locating VPhysBench environment bootstrap with deterministic planning and certify that the tracked checkout runs after relocation.
 
 **Architecture:** A tiny shell launcher discovers the checkout and selects Python; `physbench.bootstrap` owns deterministic command planning and execution. The existing doctor remains the readiness authority, with a new Dataset-independent runtime level, while release tests execute the exported checkout from a path containing spaces.
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Metadata bootstrap requires Python 3.11 or newer.
-- Evaluation bootstrap requires Python 3.12 or newer and installs PyTorch 2.10.0 from the CUDA 12.8 wheel index.
+- Evaluation bootstrap accepts Python 3.12 or newer, installs PyTorch 2.10.0 from the CUDA 12.8 wheel index, and is CI-certified on Python 3.12 only.
 - Dataset media, checkpoints, credentials, Baselines, caches, and Runs must remain untracked.
 - Every repository-owned path must derive from the checkout or an explicit option.
 - Bootstrap must be idempotent, side-effect-free under `--dry-run`, and must not download Dataset assets or checkpoints.

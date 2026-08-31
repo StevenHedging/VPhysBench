@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import tomllib
 import unittest
 from pathlib import Path
@@ -160,6 +161,10 @@ class ReleaseDocumentationTests(unittest.TestCase):
         release = json.loads((ROOT / "RELEASE_MANIFEST.json").read_text())
         binding = json.loads((ROOT / "datasets" / "huggingface.json").read_text())
         self.assertEqual("2026-08-31", release["branch"])
+        self.assertEqual(
+            "56585745c3ee05d99502f5fe2e21d280dc5a789e",
+            release["source_commit"],
+        )
         self.assertEqual("1.0", release["task_schema"])
         self.assertEqual("scene_default_v1", release["evaluation_protocol"])
         self.assertEqual(
@@ -228,6 +233,18 @@ class ReleaseDocumentationTests(unittest.TestCase):
         self.assertNotIn("sam31-evaluation", content)
         self.assertNotIn("physbench dataset pull", content)
         self.assertNotIn("VPHYSBENCH_SAM31_CHECKPOINT", content)
+
+    def test_ci_owned_interface_target_runs_bootstrap_safety_suite(self) -> None:
+        """Dropping bootstrap regressions from the Make target must fail."""
+        completed = subprocess.run(
+            ["make", "--dry-run", "test-interface"],
+            cwd=ROOT,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertIn("tests.test_bootstrap_env", completed.stdout)
 
     def test_reproducibility_guide_agrees_with_release_manifest_branch(self) -> None:
         release = json.loads((ROOT / "RELEASE_MANIFEST.json").read_text())

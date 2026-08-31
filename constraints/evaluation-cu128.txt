@@ -1,4 +1,4 @@
-# Validated CUDA 12.8 evaluation dependency set.
+# Pinned direct inputs for the validated CUDA 12.8 evaluation plan.
 huggingface-hub==1.28.0
 matplotlib==3.11.1
 numpy==1.26.4

@@ -2,8 +2,9 @@
 
 ## Goal
 
-Make a clean VPhysBench checkout self-locating and reproducibly installable on
-a supported machine, while keeping Dataset media, evaluator checkpoints,
+Make a clean VPhysBench checkout self-locating and provide deterministic
+one-command installation planning with pinned direct inputs and frozen SAM
+source revisions, while keeping Dataset media, evaluator checkpoints,
 credentials, Baseline implementations, and machine-local paths outside the
 tracked benchmark release.
 
@@ -17,10 +18,11 @@ binding, SAM3.1 uses `VPHYSBENCH_SAM31_CHECKPOINT`, and custom Baseline model
 paths remain in ignored `baseline.local.json` files.
 
 The metadata profile supports Python 3.11 or newer. The validated evaluation
-profile uses Python 3.12, PyTorch 2.10.0 with CUDA 12.8 wheels, and the already
-frozen SAM2/SAM3 source revisions. NVIDIA driver compatibility, network access,
-and sufficient storage remain host prerequisites and must be diagnosed rather
-than silently guessed.
+interpreter is Python 3.12, with PyTorch 2.10.0 CUDA 12.8 wheels and the already
+frozen SAM2/SAM3 source revisions. The launcher may accept newer Python minors,
+but CI does not certify them. NVIDIA driver compatibility, network access, and
+sufficient storage remain host prerequisites and must be diagnosed rather than
+silently guessed.
 
 ## Bootstrap interface
 
@@ -31,10 +33,12 @@ pre-install entry point. The shell wrapper derives the checkout root from
 bootstrap module from `src/`.
 
 The Python bootstrap creates or reuses `.venv`, installs the selected pinned
-constraints and editable extras, then runs the matching doctor level. It is
-idempotent and refuses to reuse an incompatible virtual environment. A
+direct constraints and editable extras, then runs the matching doctor level.
+It is idempotent and refuses to reuse an incompatible virtual environment. A
 `--dry-run` mode emits the exact plan without creating files or accessing the
-network. It never downloads Dataset assets or evaluator checkpoints.
+network. Transitive packages are resolved at installation time and captured
+per run; this is not a bit-for-bit fully resolved dependency lock. It never
+downloads Dataset assets or evaluator checkpoints.
 
 ## Verification interface
 

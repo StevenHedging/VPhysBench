@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import contextlib
+import importlib.abc
+import importlib.machinery
 import io
 import json
+import sys
 import tempfile
 import unittest
 from collections import namedtuple
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from physbench.cli import build_parser, main
@@ -111,6 +115,62 @@ class EnvironmentDoctorTests(unittest.TestCase):
         sam31 = next(item for item in checks if item.name == "sam31_dependency")
         self.assertEqual("error", sam31.status)
         self.assertIn("broken native extension", sam31.detail)
+
+    def test_evaluation_rejects_dependency_spec_with_broken_import(self) -> None:
+        """Replacing a real evaluation import with find_spec must fail."""
+        module_name = "vphysbench_test_broken_native"
+
+        class BrokenLoader(importlib.abc.Loader):
+            def create_module(self, spec: object) -> None:
+                return None
+
+            def exec_module(self, module: object) -> None:
+                raise ImportError("broken native extension")
+
+        class BrokenFinder(importlib.abc.MetaPathFinder):
+            def find_spec(
+                self,
+                fullname: str,
+                path: object = None,
+                target: object = None,
+            ) -> importlib.machinery.ModuleSpec | None:
+                if fullname != module_name:
+                    return None
+                return importlib.machinery.ModuleSpec(fullname, BrokenLoader())
+
+        binding = SimpleNamespace(
+            release="14.0.0",
+            repo_id="example/VPhysData",
+            revision="0" * 40,
+        )
+        finder = BrokenFinder()
+        sys.meta_path.insert(0, finder)
+        try:
+            with tempfile.TemporaryDirectory() as directory, patch(
+                "physbench.dataset_hub.load_huggingface_dataset_binding",
+                return_value=binding,
+            ), patch(
+                "physbench.dataset_hub.load_dataset",
+                return_value=object(),
+            ), patch(
+                "physbench.dataset_hub.SCENE_EVALUATION_DEPENDENCIES",
+                (module_name,),
+            ):
+                checks = diagnose_project(directory, level="evaluation")
+        finally:
+            sys.meta_path.remove(finder)
+            sys.modules.pop(module_name, None)
+
+        dependency = next(
+            item
+            for item in checks
+            if item.name == "scene_evaluation_dependencies"
+        )
+        self.assertEqual("error", dependency.status)
+        self.assertIn("failed imports", dependency.detail)
+        self.assertIn("broken native extension", dependency.detail)
+        self.assertNotIn("sam31_dependency", {item.name for item in checks})
+        self.assertNotIn("cuda", {item.name for item in checks})
 
     def test_checkpoint_path_and_digest_are_verified(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

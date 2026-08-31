@@ -1,2 +1,2 @@
-# Metadata bootstrap dependencies.
+# Pinned direct input for the metadata bootstrap.
 huggingface-hub==1.28.0

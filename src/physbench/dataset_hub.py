@@ -3,7 +3,6 @@ from __future__ import annotations
 import ctypes
 import errno
 import hashlib
-import importlib.util
 import json
 import os
 import secrets
@@ -25,6 +24,7 @@ from .datasets import load_dataset
 from .environment_doctor import (
     Diagnostic,
     SCENE_EVALUATION_DEPENDENCIES,
+    diagnose_imports,
     diagnose_runtime,
 )
 from .huggingface_binding import load_huggingface_dataset_binding
@@ -930,26 +930,14 @@ def diagnose_project(
             "all referenced assets are present",
         ))
     if level == "evaluation":
-        missing_dependencies = [
-            name
+        modules = tuple(
+            "sam2.sam2_video_predictor" if name == "sam2" else name
             for name in SCENE_EVALUATION_DEPENDENCIES
-            if importlib.util.find_spec(name) is None
-        ]
-        diagnostics.append(Diagnostic(
+        )
+        diagnostics.append(diagnose_imports(
             "scene_evaluation_dependencies",
-            "error" if missing_dependencies else "ok",
-            (
-                "missing optional modules: "
-                + ", ".join(missing_dependencies)
-                + "; install `.[scene-evaluation]`"
-                if missing_dependencies
-                else "all optional scene-evaluation modules are importable"
-            ),
-            (
-                'python -m pip install -e ".[scene-evaluation]"'
-                if missing_dependencies
-                else None
-            ),
+            modules,
+            install_hint='python -m pip install -e ".[scene-evaluation]"',
         ))
     elif level == "full":
         diagnostics.extend(diagnose_runtime())

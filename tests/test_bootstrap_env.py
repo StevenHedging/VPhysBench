@@ -175,7 +175,10 @@ class BootstrapEnvironmentTests(unittest.TestCase):
         """Replacing an existing Python 3.11 venv for Python 3.12 must fail."""
         with tempfile.TemporaryDirectory() as directory:
             root = self._project_root(directory)
-            venv = self._venv_with_current_python(root)
+            venv = root / ".venv"
+            (venv / "bin").mkdir(parents=True)
+            (venv / "pyvenv.cfg").write_text("version = 3.11.9\n")
+            (venv / "bin" / "python").symlink_to(sys.executable)
             with self.assertRaisesRegex(bootstrap.BootstrapError, "incompatible"):
                 bootstrap.plan_bootstrap(
                     project_root=root,

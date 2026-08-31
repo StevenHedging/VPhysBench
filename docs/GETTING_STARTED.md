@@ -2,9 +2,9 @@
 
 This guide takes a fresh checkout to a validated custom-baseline scaffold. A
 GPU is not required for metadata checks or the interface smoke test. Full
-scene evaluation needs the optional evaluator stack, a Python 3.12+ runtime,
-the validated PyTorch 2.10.0/CUDA 12.8 combination, SAM2/SAM3, a compatible
-NVIDIA driver, and the complete Dataset assets.
+scene evaluation is CI-certified with Python 3.12 and the validated PyTorch
+2.10.0/CUDA 12.8 combination; it also needs the optional evaluator stack,
+SAM2/SAM3, a compatible NVIDIA driver, and the complete Dataset assets.
 
 ## 1. Bootstrap the Hub and interface environment
 
@@ -14,7 +14,7 @@ bash scripts/bootstrap_env.sh --profile metadata
 ```
 
 The metadata profile requires Python 3.11 or newer. It creates or safely
-reuses `.venv`, installs the pinned `hub` dependencies, and runs the metadata
+reuses `.venv`, installs the pinned direct `hub` input, and runs the metadata
 doctor. `.[hub]` is sufficient for Hugging Face Dataset access, metadata
 checks, and the lightweight interface smoke; it deliberately does not install
 scene evaluator dependencies.
@@ -73,13 +73,16 @@ VPHYSBENCH_BOOTSTRAP_PYTHON=python3.12 \
 physbench doctor --level runtime
 ```
 
-The evaluation profile requires Python 3.12 or newer and installs the validated
-PyTorch 2.10.0/CUDA 12.8 wheels plus the pinned evaluator dependencies. It
-runs the Dataset-independent `runtime` doctor after installation. It needs
-network access for packages and the pinned source dependencies, but it never
-downloads Dataset media or model checkpoints. Set
-`VPHYSBENCH_BOOTSTRAP_PYTHON` only when the desired Python 3.12+ interpreter is
-not the one auto-selected from `PATH`.
+The evaluation profile accepts Python 3.12 or newer, but Python 3.12 is the
+validated interpreter and newer minors are not certified by CI. Its
+deterministic command plan pins the direct evaluator inputs, PyTorch
+2.10.0/CUDA 12.8 wheels, and frozen SAM source commits. Transitive packages
+are resolved at installation time and must be captured for each Run with the
+commands in [REPRODUCIBILITY.md](REPRODUCIBILITY.md); this is not a bit-for-bit
+fully resolved lock. The bootstrap runs the Dataset-independent `runtime`
+doctor after installation and never downloads Dataset media or model
+checkpoints. Set `VPHYSBENCH_BOOTSTRAP_PYTHON` only when the desired interpreter
+is not the one auto-selected from `PATH`.
 
 Run the evaluation-level doctor again after installation.
 

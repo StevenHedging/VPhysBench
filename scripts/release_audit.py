@@ -17,7 +17,51 @@ WEIGHT_SUFFIXES = {
     ".pth",
     ".safetensors",
 }
-FORBIDDEN_ROOTS = {"cache", "results"}
+MEDIA_SUFFIXES = {
+    ".avi",
+    ".bmp",
+    ".gif",
+    ".jpeg",
+    ".jpg",
+    ".mkv",
+    ".mov",
+    ".mp3",
+    ".mp4",
+    ".png",
+    ".tif",
+    ".tiff",
+    ".wav",
+    ".webm",
+    ".webp",
+}
+FORBIDDEN_ROOTS = {
+    "artifacts",
+    "cache",
+    "generated",
+    "output",
+    "outputs",
+    "results",
+    "runs",
+}
+CACHE_VENV_DIRECTORIES = {
+    ".cache",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "__pycache__",
+    "cache",
+    "caches",
+    "venv",
+}
+TRAINING_DIRECTORIES = {
+    "fine_tune",
+    "finetune",
+    "train",
+    "trainer",
+    "trainers",
+    "training",
+}
 FORBIDDEN_MODEL_MARKERS = {
     "wan22",
     "cosmos3",
@@ -67,6 +111,20 @@ def _read_text(path: Path) -> str | None:
         return None
 
 
+def _is_training_implementation(parts: tuple[str, ...], path: Path) -> bool:
+    if parts[0].casefold() in {"docs", "tests"}:
+        return False
+    directories = {part.casefold() for part in parts[:-1]}
+    if directories.intersection(TRAINING_DIRECTORIES):
+        return True
+    stem = path.stem.casefold()
+    return (
+        stem in TRAINING_DIRECTORIES
+        or stem.startswith(("fine_tune_", "finetune_", "train_", "trainer_", "training_"))
+        or stem.endswith(("_trainer", "_training"))
+    )
+
+
 def audit_release(
     root: str | Path,
     *,
@@ -113,9 +171,16 @@ def audit_release(
         if not parts:
             continue
         if parts[0] in FORBIDDEN_ROOTS:
-            issues.append(f"forbidden tracked output root: {normalized}")
+            issues.append(f"tracked generated output root: {normalized}")
         if parts[0] == "run" and normalized != "run/README.md":
             issues.append(f"tracked runtime output: {normalized}")
+        if any(
+            part.casefold() in CACHE_VENV_DIRECTORIES
+            for part in parts[:-1]
+        ):
+            issues.append(f"tracked cache or virtual environment artifact: {normalized}")
+        if _is_training_implementation(parts, Path(normalized)):
+            issues.append(f"tracked training implementation: {normalized}")
         if (
             parts[0] == "baselines"
             and len(parts) > 1
@@ -126,6 +191,8 @@ def audit_release(
             issues.append(f"local-only file is tracked: {normalized}")
         if Path(normalized).suffix.casefold() in WEIGHT_SUFFIXES:
             issues.append(f"model weight or checkpoint is tracked: {normalized}")
+        if Path(normalized).suffix.casefold() in MEDIA_SUFFIXES:
+            issues.append(f"generated or Dataset media is tracked: {normalized}")
         checks_model_markers = normalized not in CONTENT_POLICY_FILES
         if checks_model_markers and any(
             marker in lowered for marker in FORBIDDEN_MODEL_MARKERS

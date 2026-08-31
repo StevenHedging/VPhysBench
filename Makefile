@@ -10,6 +10,7 @@ test-interface:
 		tests.test_dataset_contract_v4 \
 		tests.test_huggingface_dataset_binding \
 		tests.test_environment_doctor \
+		tests.test_bootstrap_env \
 		tests.test_dataset_hub_cli \
 		tests.test_dataset_distribution \
 		tests.test_managed_baselines \
@@ -70,11 +71,7 @@ portable-release-check:
 	if [ -z "$$bootstrap_python" ]; then \
 		echo "no Python 3.11+ interpreter found for bootstrap dry-run" >&2; exit 1; \
 	fi; \
-	PYTHONPATH=src:tests:. "$$bootstrap_python" scripts/verify_release_archive.py; \
-	gate_root="$$(mktemp -d -t vphysbench-portable.XXXXXX)"; \
-	trap 'rm -rf "$$gate_root"' EXIT; \
-	(cd "$$gate_root" && VPHYSBENCH_BOOTSTRAP_PYTHON="$$bootstrap_python" \
-		bash "$(CURDIR)/scripts/bootstrap_env.sh" --profile metadata --dry-run)
+	PYTHONPATH=src:tests:. "$$bootstrap_python" scripts/verify_release_archive.py
 
 reference-observation-audit:
 	PYTHONPATH=src:tests:. python3 scripts/reference_observations/audit_v14.py \

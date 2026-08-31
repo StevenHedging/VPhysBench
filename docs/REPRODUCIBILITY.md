@@ -14,9 +14,14 @@ A reproducible VPhysBench result needs all of the following identities:
 8. Python/PyTorch/CUDA package environment and hardware description.
 9. The complete `run/<run_id>/frozen/` and `task_instance/` trees.
 
-The near-release pins SAM 2 source revision
-`2b90b9f5ceec907a1c18123530e92e794ad901a4`. PyTorch wheels remain
-platform-specific; record the exact installed versions with:
+The bootstrap provides deterministic one-command planning, pins selected direct
+distribution inputs, and freezes SAM 2 at
+`2b90b9f5ceec907a1c18123530e92e794ad901a4` and SAM 3 at
+`8f0b7f4d4e7eda2ed606ebde6702c93359ad01da`. It is not a bit-for-bit fully
+resolved dependency lock: unlisted transitive packages are resolved at
+installation time. Python 3.12 is the CI-validated evaluation interpreter;
+newer minors are not certified. PyTorch wheels remain platform-specific.
+Capture the resolved environment for every Run with:
 
 ```bash
 python -m pip freeze > run/<run_id>/artifacts/environment.txt

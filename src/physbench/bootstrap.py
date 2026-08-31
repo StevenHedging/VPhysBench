@@ -291,7 +291,10 @@ def _print_plan(plan: BootstrapPlan) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Create or reuse a deterministic VPhysBench environment."
+        description=(
+            "Create or reuse a VPhysBench environment from a deterministic "
+            "command plan."
+        )
     )
     parser.add_argument("--project-root", required=True)
     parser.add_argument("--profile", choices=sorted(_PROFILES), required=True)

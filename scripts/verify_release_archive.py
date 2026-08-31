@@ -15,12 +15,17 @@ from scripts.release_audit import audit_release
 REQUIRED_FILES = {
     "README.md",
     "RELEASE_MANIFEST.json",
+    "constraints/evaluation-cu128.txt",
+    "constraints/metadata.txt",
     "datasets/huggingface.json",
     "datasets/releases/14.0.0/dataset.json",
     "docs/GETTING_STARTED.md",
     "docs/CUSTOM_BASELINE_QUICKSTART.md",
+    "pyproject.toml",
     "run/README.md",
     "baselines/README.md",
+    "scripts/bootstrap_env.sh",
+    "src/physbench/bootstrap.py",
     "src/physbench/cli.py",
 }
 DOCTOR_JSON_FIELDS = {
@@ -29,6 +34,12 @@ DOCTOR_JSON_FIELDS = {
     "ready",
     "summary",
     "checks",
+}
+EXPECTED_METADATA_CHECKS = {
+    "python": {"ok"},
+    "hf_cli": {"ok", "warning"},
+    "dataset_binding": {"ok"},
+    "dataset_assets": {"ok", "warning"},
 }
 
 
@@ -82,6 +93,27 @@ def verify_archive(repository: Path, temporary_root: Path) -> list[str]:
 
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(extracted / "src")
+    bootstrap_environment = environment.copy()
+    bootstrap_environment["VPHYSBENCH_BOOTSTRAP_PYTHON"] = sys.executable
+    bootstrap = _run_archived(
+        [
+            "/bin/bash",
+            str(extracted / "scripts" / "bootstrap_env.sh"),
+            "--profile",
+            "metadata",
+            "--dry-run",
+        ],
+        cwd=outside_checkout,
+        environment=bootstrap_environment,
+    )
+    if bootstrap.returncode:
+        issues.append(
+            "archived metadata bootstrap dry-run failed: "
+            f"{bootstrap.stderr.strip()}"
+        )
+    if (extracted / ".venv").exists():
+        issues.append("archived metadata bootstrap dry-run created .venv")
+
     help_smoke = _run_archived(
         [sys.executable, "-m", "physbench", "--help"],
         cwd=outside_checkout,
@@ -170,10 +202,10 @@ def _run_archived(
 def _metadata_doctor_issues(
     completed: subprocess.CompletedProcess[str],
 ) -> list[str]:
-    if completed.returncode not in {0, 1}:
+    if completed.returncode != 0:
         return [
-            "archived metadata doctor failed: "
-            f"{completed.stderr.strip()}"
+            "archived metadata doctor was not ready: "
+            f"exit {completed.returncode}; {completed.stderr.strip()}"
         ]
     try:
         report = json.loads(completed.stdout)
@@ -185,13 +217,57 @@ def _metadata_doctor_issues(
         return ["archived metadata doctor reported the wrong readiness level"]
     if not isinstance(report["ready"], bool) or not isinstance(report["checks"], list):
         return ["archived metadata doctor emitted malformed readiness fields"]
+    if not report["ready"]:
+        return ["archived metadata doctor reported ready=false"]
     summary = report["summary"]
     if (
         not isinstance(summary, dict)
         or set(summary) != {"ok", "warnings", "errors"}
-        or any(not isinstance(value, int) for value in summary.values())
+        or any(type(value) is not int for value in summary.values())
+        or any(value < 0 for value in summary.values())
     ):
         return ["archived metadata doctor emitted a malformed summary"]
+    check_statuses: dict[str, str] = {}
+    for check in report["checks"]:
+        if (
+            not isinstance(check, dict)
+            or not isinstance(check.get("name"), str)
+            or check.get("status") not in {"ok", "warning", "error"}
+            or not isinstance(check.get("detail"), str)
+        ):
+            return ["archived metadata doctor emitted a malformed check"]
+        name = check["name"]
+        if name in check_statuses:
+            return [f"archived metadata doctor repeated check: {name}"]
+        check_statuses[name] = check["status"]
+    missing = sorted(EXPECTED_METADATA_CHECKS.keys() - check_statuses.keys())
+    if missing:
+        return [
+            "archived metadata doctor omitted expected checks: "
+            + ", ".join(missing)
+        ]
+    invalid = sorted(
+        name
+        for name, statuses in EXPECTED_METADATA_CHECKS.items()
+        if check_statuses[name] not in statuses
+    )
+    if invalid:
+        return [
+            "archived metadata doctor reported invalid expected check statuses: "
+            + ", ".join(invalid)
+        ]
+    observed_summary = {
+        "ok": sum(status == "ok" for status in check_statuses.values()),
+        "warnings": sum(status == "warning" for status in check_statuses.values()),
+        "errors": sum(status == "error" for status in check_statuses.values()),
+    }
+    if summary != observed_summary:
+        return [
+            "archived metadata doctor summary does not match check statuses: "
+            f"expected {observed_summary}, got {summary}"
+        ]
+    if summary["errors"]:
+        return ["archived metadata doctor reported required check errors"]
     return []
 
 

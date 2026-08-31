@@ -18,8 +18,9 @@ Dataset 中仍保留 `push_bottle` 的全部 127 个训练 case 和 14 个 test 
 
 ## 快速开始
 
-需要 Git 和 ffmpeg/ffprobe。元数据环境需要 Python 3.11 或更高版本；完整评测环境
-需要 Python 3.12 或更高版本，发行版验证的组合是 PyTorch 2.10.0 与 CUDA 12.8 wheel。
+需要 Git 和 ffmpeg/ffprobe。元数据环境需要 Python 3.11 或更高版本；完整评测入口
+接受 Python 3.12 或更高版本，但发行版 CI 只认证 Python 3.12，验证的组合是
+PyTorch 2.10.0 与 CUDA 12.8 wheel。
 Dataset 在 Hugging Face 公开发布，首次下载建议预留至少 40 GB 空间。
 
 元数据、Hub 下载和接口 smoke 的可复制粘贴安装方式如下。bootstrap 从脚本自身定位
@@ -42,9 +43,10 @@ physbench baseline list
 bash scripts/bootstrap_env.sh --profile metadata --dry-run
 ```
 
-真实场景评测使用独立的 Python 3.12+ 环境。该 profile 固定安装 Torch 2.10.0/
-CUDA 12.8、冻结的 SAM2/SAM3 源码和 evaluator extras，随后运行不要求 Dataset
-媒体或 checkpoint 的 `runtime` doctor：
+真实场景评测使用独立的 Python 3.12 环境。该 profile 的命令计划固定 Torch 2.10.0/
+CUDA 12.8、直接依赖输入和 SAM2/SAM3 源码 commit，随后运行不要求 Dataset 媒体或
+checkpoint 的 `runtime` doctor。其他 Python minor 可通过入口兼容性检查，但未被
+发行版 CI 认证：
 
 ```bash
 VPHYSBENCH_BOOTSTRAP_PYTHON=python3.12 \
@@ -55,7 +57,9 @@ physbench doctor --level runtime
 
 如果 `python3.12` 已在 `PATH`，可以省略 `VPHYSBENCH_BOOTSTRAP_PYTHON`。bootstrap
 会拒绝复用不兼容的虚拟环境；重复运行同一 profile 是安全的。它从不下载 Dataset
-媒体或 evaluator checkpoint。
+媒体或 evaluator checkpoint。未在 constraints 中列出的传递依赖在每次安装时解析，
+应按 `docs/REPRODUCIBILITY.md` 为每次 Run 保存 `pip freeze`；这不是 bit-for-bit 的完整
+依赖锁。
 
 `dataset pull` 只从 binding 锁定的 40 位 Hub commit 直接下载
 `assets/**`，并恢复到本地 `datasets/assets/`。下载中断或遇到 Hub

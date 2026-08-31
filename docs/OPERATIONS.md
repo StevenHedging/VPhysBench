@@ -16,8 +16,9 @@ make portable-release-check
 and runs the metadata bootstrap in dry-run mode from outside the checkout. It
 does not install SAM3, download Dataset media, or fetch model weights.
 
-For a real evaluation host, bootstrap with Python 3.12+ and the validated
-PyTorch 2.10.0/CUDA 12.8 wheel set:
+For a real evaluation host, use the CI-certified Python 3.12 interpreter and
+the validated PyTorch 2.10.0/CUDA 12.8 wheel set. The launcher accepts newer
+minors, but CI does not certify them:
 
 ```bash
 VPHYSBENCH_BOOTSTRAP_PYTHON=python3.12 \
@@ -25,6 +26,11 @@ VPHYSBENCH_BOOTSTRAP_PYTHON=python3.12 \
 . .venv/bin/activate
 physbench doctor --level runtime
 ```
+
+The bootstrap has a deterministic command plan with pinned direct inputs and
+frozen SAM source commits. Transitive packages resolve during installation;
+capture them per Run as documented in `REPRODUCIBILITY.md`. The profile is not
+a bit-for-bit fully resolved dependency lock.
 
 After downloading the complete Dataset and configuring the local checkpoint:
 

@@ -46,6 +46,36 @@ class ReleaseAuditTests(unittest.TestCase):
         self.assert_issue("tracked runtime output")
         self.assert_issue("local-only file")
 
+    def test_rejects_force_added_media_cache_venv_and_generated_outputs(self) -> None:
+        """Gitignore rules must not let tracked release artifacts pass."""
+        self.write(
+            ".gitignore",
+            "*.mp4\n*.png\n**/__pycache__/\n**/.venv/\noutputs/\n",
+        )
+        self.write("datasets/assets/example/reference.mp4", "media")
+        self.write("previews/generated/frame.png", "image")
+        self.write("tools/__pycache__/module.pyc", "cache")
+        self.write("vendor/.venv/pyvenv.cfg", "version = 3.12")
+        self.write("outputs/report.json", "{}")
+
+        issues = self.issues()
+
+        self.assertTrue(any("generated or Dataset media" in item for item in issues))
+        self.assertTrue(any("cache or virtual environment" in item for item in issues))
+        self.assertTrue(any("generated output root" in item for item in issues))
+
+    def test_rejects_obvious_training_implementation_paths(self) -> None:
+        self.write("training/model.py", "def fit(): pass\n")
+        self.write("src/physbench/trainer.py", "class Trainer: pass\n")
+        self.write("scripts/train_model.py", "def main(): pass\n")
+
+        issues = self.issues()
+
+        self.assertEqual(
+            3,
+            sum("training implementation" in item for item in issues),
+        )
+
     def test_rejects_model_markers_absolute_paths_and_credentials(self) -> None:
         self.write("docs/model.md", "wan22 lives at /root/models")
         self.write("config.json", '{"token": "hf_' + "a" * 32 + '"}')
@@ -57,6 +87,19 @@ class ReleaseAuditTests(unittest.TestCase):
         self.write("baselines/README.md", "# Baseline integrations\n")
         self.write("run/README.md", "# AtomicRun outputs\n")
         self.write("src/physbench/core.py", "VALUE = 'generic'\n")
+        self.write(
+            "datasets/assets/example/caption.json",
+            '{"caption": "metadata sidecar"}\n',
+        )
+        self.write("datasets/assets/example/physics.json", "{}\n")
+        self.write(
+            "src/physbench/evaluation/common/artifacts/video.py",
+            "def render(): pass\n",
+        )
+        self.write("tests/fixtures/generated/result.json", "{}\n")
+        self.write("docs/training.md", "# Baseline training guidance\n")
+        self.write("scripts/evaluation_preflight.py", "def main(): pass\n")
+        self.write("scripts/build_dataset_distribution.py", "def main(): pass\n")
         self.assertEqual([], self.issues())
 
     def test_policy_files_may_name_forbidden_markers(self) -> None:

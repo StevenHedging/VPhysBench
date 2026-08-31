@@ -128,14 +128,18 @@ def _default_torch_probe() -> Mapping[str, Any]:
     }
 
 
-def _dependency_diagnostic(
+def diagnose_imports(
     name: str,
     modules: tuple[str, ...],
     *,
-    find_spec: FindSpec,
-    importer: Importer,
+    find_spec: FindSpec | None = None,
+    importer: Importer | None = None,
     install_hint: str,
 ) -> Diagnostic:
+    """Import each named module and report missing or broken dependencies."""
+
+    find_spec = find_spec or importlib.util.find_spec
+    importer = importer or importlib.import_module
     missing: list[str] = []
     broken: list[str] = []
     for module in modules:
@@ -189,14 +193,14 @@ def diagnose_runtime(
             None if resolved else hint,
         ))
 
-    diagnostics.append(_dependency_diagnostic(
+    diagnostics.append(diagnose_imports(
         "scene_evaluation_dependencies",
         SCENE_EVALUATION_IMPORTS,
         find_spec=find_spec,
         importer=importer,
         install_hint='python -m pip install -e ".[scene-evaluation]"',
     ))
-    diagnostics.append(_dependency_diagnostic(
+    diagnostics.append(diagnose_imports(
         "sam31_dependency",
         ("sam3.model_builder",),
         find_spec=find_spec,
@@ -256,5 +260,6 @@ __all__ = [
     "SAM31_CHECKPOINT_SHA256",
     "SCENE_EVALUATION_DEPENDENCIES",
     "diagnose_checkpoint",
+    "diagnose_imports",
     "diagnose_runtime",
 ]
