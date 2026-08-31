@@ -1,4 +1,4 @@
-.PHONY: test test-interface test-evaluation data-test smoke smoke-interface smoke-data release-check release-archive-check reference-observation-audit evaluation-preflight
+.PHONY: test test-interface test-evaluation data-test smoke smoke-interface smoke-data release-check release-archive-check portable-release-check reference-observation-audit evaluation-preflight
 
 test: test-interface
 
@@ -55,6 +55,26 @@ release-check:
 
 release-archive-check:
 	PYTHONPATH=src:tests:. python3 scripts/verify_release_archive.py
+
+portable-release-check:
+	@set -eu; \
+	bootstrap_python="$${VPHYSBENCH_BOOTSTRAP_PYTHON:-}"; \
+	if [ -z "$$bootstrap_python" ]; then \
+		for candidate in python3.12 python3.11 python3; do \
+			if command -v "$$candidate" >/dev/null 2>&1 \
+				&& "$$candidate" -c 'import sys; raise SystemExit(sys.version_info < (3, 11))'; then \
+				bootstrap_python="$$candidate"; break; \
+			fi; \
+		done; \
+	fi; \
+	if [ -z "$$bootstrap_python" ]; then \
+		echo "no Python 3.11+ interpreter found for bootstrap dry-run" >&2; exit 1; \
+	fi; \
+	PYTHONPATH=src:tests:. "$$bootstrap_python" scripts/verify_release_archive.py; \
+	gate_root="$$(mktemp -d -t vphysbench-portable.XXXXXX)"; \
+	trap 'rm -rf "$$gate_root"' EXIT; \
+	(cd "$$gate_root" && VPHYSBENCH_BOOTSTRAP_PYTHON="$$bootstrap_python" \
+		bash "$(CURDIR)/scripts/bootstrap_env.sh" --profile metadata --dry-run)
 
 reference-observation-audit:
 	PYTHONPATH=src:tests:. python3 scripts/reference_observations/audit_v14.py \

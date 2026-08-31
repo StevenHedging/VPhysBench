@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -22,6 +23,13 @@ REQUIRED_FILES = {
     "baselines/README.md",
     "src/physbench/cli.py",
 }
+DOCTOR_JSON_FIELDS = {
+    "schema_version",
+    "level",
+    "ready",
+    "summary",
+    "checks",
+}
 
 
 def _safe_members(archive: tarfile.TarFile) -> tuple[list[tarfile.TarInfo], list[str]]:
@@ -40,8 +48,10 @@ def verify_archive(repository: Path, temporary_root: Path) -> list[str]:
     repository = repository.resolve()
     temporary_root.mkdir(parents=True, exist_ok=True)
     archive_path = temporary_root / "vphysbench-release.tar"
-    extracted = temporary_root / "checkout"
+    extracted = temporary_root / "relocated checkout"
+    outside_checkout = temporary_root / "outside checkout"
     extracted.mkdir()
+    outside_checkout.mkdir()
 
     completed = subprocess.run(
         ["git", "archive", "--format=tar", "--output", str(archive_path), "HEAD"],
@@ -72,17 +82,117 @@ def verify_archive(repository: Path, temporary_root: Path) -> list[str]:
 
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(extracted / "src")
-    smoke = subprocess.run(
+    help_smoke = _run_archived(
         [sys.executable, "-m", "physbench", "--help"],
-        cwd=extracted,
+        cwd=outside_checkout,
+        environment=environment,
+    )
+    if help_smoke.returncode:
+        issues.append(f"archived CLI help failed: {help_smoke.stderr.strip()}")
+
+    doctor = _run_archived(
+        [
+            sys.executable,
+            "-m",
+            "physbench",
+            "doctor",
+            "--level",
+            "metadata",
+            "--json",
+            "--project-root",
+            str(extracted),
+        ],
+        cwd=outside_checkout,
+        environment=environment,
+    )
+    issues.extend(_metadata_doctor_issues(doctor))
+
+    baseline_list = _run_archived(
+        [
+            sys.executable,
+            "-m",
+            "physbench",
+            "baseline",
+            "list",
+            "--root",
+            str(extracted / "baselines"),
+        ],
+        cwd=outside_checkout,
+        environment=environment,
+    )
+    if baseline_list.returncode:
+        issues.append(
+            "archived Baseline discovery failed: "
+            f"{baseline_list.stderr.strip()}"
+        )
+    else:
+        try:
+            listed = json.loads(baseline_list.stdout)
+        except json.JSONDecodeError as exc:
+            issues.append(f"archived Baseline list emitted invalid JSON: {exc}")
+        else:
+            if not isinstance(listed, list):
+                issues.append("archived Baseline list did not emit a JSON list")
+
+    interface_smoke = _run_archived(
+        [
+            sys.executable,
+            str(extracted / "scripts" / "smoke_custom_baseline.py"),
+            "--metadata-only",
+        ],
+        cwd=outside_checkout,
+        environment=environment,
+    )
+    if interface_smoke.returncode:
+        issues.append(
+            "archived metadata interface smoke failed: "
+            f"{interface_smoke.stderr.strip()}"
+        )
+    return issues
+
+
+def _run_archived(
+    command: list[str],
+    *,
+    cwd: Path,
+    environment: dict[str, str],
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        cwd=cwd,
         env=environment,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    if smoke.returncode:
-        issues.append(f"archived CLI smoke failed: {smoke.stderr.strip()}")
-    return issues
+
+
+def _metadata_doctor_issues(
+    completed: subprocess.CompletedProcess[str],
+) -> list[str]:
+    if completed.returncode not in {0, 1}:
+        return [
+            "archived metadata doctor failed: "
+            f"{completed.stderr.strip()}"
+        ]
+    try:
+        report = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        return [f"archived metadata doctor emitted invalid JSON: {exc}"]
+    if not isinstance(report, dict) or not DOCTOR_JSON_FIELDS.issubset(report):
+        return ["archived metadata doctor emitted an incomplete JSON report"]
+    if report["level"] != "metadata":
+        return ["archived metadata doctor reported the wrong readiness level"]
+    if not isinstance(report["ready"], bool) or not isinstance(report["checks"], list):
+        return ["archived metadata doctor emitted malformed readiness fields"]
+    summary = report["summary"]
+    if (
+        not isinstance(summary, dict)
+        or set(summary) != {"ok", "warnings", "errors"}
+        or any(not isinstance(value, int) for value in summary.values())
+    ):
+        return ["archived metadata doctor emitted a malformed summary"]
+    return []
 
 
 def main() -> int:
