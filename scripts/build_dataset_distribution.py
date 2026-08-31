@@ -22,7 +22,6 @@ from physbench.dataset_distribution import (
     verify_and_extract_shard,
 )
 from physbench.datasets import load_dataset
-from physbench.reference_observations.curation.install import refresh_locked_files
 
 
 DEFAULT_MAX_SHARD_BYTES = 2_000_000_000

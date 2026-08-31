@@ -132,6 +132,53 @@ for export_name in ("SpringTrace", "VerticalSpringOscillatorCaseEvaluator"):
         raise AssertionError(export_name + " did not load its real dependency graph")
 """.format(blocked_module_roots=BLOCKED_MODULE_ROOTS)
 
+CURRENT_DATASET_TEST_IMPORT_SCRIPT = """
+import importlib.abc
+import sys
+
+
+class BlockedNumpyFinder(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.', 1)[0] == "numpy":
+            raise ModuleNotFoundError(
+                "blocked optional module: {}".format(fullname), name=fullname
+            )
+        return None
+
+
+sys.meta_path.insert(0, BlockedNumpyFinder())
+
+import tests.test_current_dataset
+"""
+
+DISTRIBUTION_BUILDER_IMPORT_SCRIPT = """
+import importlib.abc
+import sys
+
+BLOCKED_MODULE_ROOTS = {blocked_module_roots!r}
+
+
+class BlockedOptionalModuleFinder(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.', 1)[0] in BLOCKED_MODULE_ROOTS:
+            raise ModuleNotFoundError(
+                "blocked optional module: {{}}".format(fullname), name=fullname
+            )
+        return None
+
+
+sys.meta_path.insert(0, BlockedOptionalModuleFinder())
+
+import scripts.build_dataset_distribution
+
+loaded_blocked_roots = {{
+    name.split('.', 1)[0]
+    for name in sys.modules
+    if name.split('.', 1)[0] in BLOCKED_MODULE_ROOTS
+}}
+assert not loaded_blocked_roots, loaded_blocked_roots
+""".format(blocked_module_roots=BLOCKED_MODULE_ROOTS)
+
 
 class LightweightPublicImportBoundaryTests(unittest.TestCase):
     def _run_subprocess(self, script: str) -> subprocess.CompletedProcess[str]:
@@ -157,6 +204,20 @@ class LightweightPublicImportBoundaryTests(unittest.TestCase):
     def test_spring_scene_package_defers_all_heavy_exports(self) -> None:
         """Catch eager imports from the public spring scene package itself."""
         result = self._run_subprocess(SPRING_PACKAGE_IMPORT_SCRIPT)
+
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_metadata_interface_tests_do_not_require_numpy(self) -> None:
+        """Catch eager NumPy imports from metadata-only interface tests."""
+        result = self._run_subprocess(CURRENT_DATASET_TEST_IMPORT_SCRIPT)
+
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_dataset_distribution_builder_avoids_optional_runtime_modules(
+        self,
+    ) -> None:
+        """Catch dead imports that pull evaluator extras into release tooling."""
+        result = self._run_subprocess(DISTRIBUTION_BUILDER_IMPORT_SCRIPT)
 
         self.assertEqual(0, result.returncode, result.stderr)
 

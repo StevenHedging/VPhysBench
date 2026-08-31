@@ -7,8 +7,6 @@ from pathlib import Path
 import re
 import unittest
 
-import numpy as np
-
 from physbench.data_layout import LATEST_DATASET
 from physbench.datasets import load_dataset
 from physbench.tasks import load_task, plan_atomic_task
@@ -192,6 +190,8 @@ class CurrentDatasetTests(unittest.TestCase):
 
     def test_all_v14_curated_anchor_ids_follow_the_frozen_scene_contract(self) -> None:
         self.require_current_full_assets()
+        import numpy as np
+
         expected_counts = {
             ("collision_1d", "sam31_collision_gt_curation_v1"): 330,
             ("inclined_plane_slide", "v14_full_reference_observation_audit"): 5,
