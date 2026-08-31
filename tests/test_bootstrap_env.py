@@ -1,0 +1,198 @@
+from __future__ import annotations
+
+import contextlib
+import io
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from physbench import bootstrap
+
+
+class BootstrapEnvironmentTests(unittest.TestCase):
+    def _project_root(self, directory: str) -> Path:
+        root = Path(directory) / "checkout with spaces"
+        (root / "constraints").mkdir(parents=True)
+        (root / "pyproject.toml").write_text("[project]\nname = 'fixture'\n")
+        (root / "constraints" / "metadata.txt").write_text("\n")
+        (root / "constraints" / "evaluation-cu128.txt").write_text("\n")
+        return root
+
+    def test_metadata_plan_is_literal_and_uses_default_venv(self) -> None:
+        """A missing hub install or metadata doctor command must fail this test."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._project_root(directory)
+            plan = bootstrap.plan_bootstrap(
+                project_root=root,
+                profile="metadata",
+                python=Path("/opt/python/bin/python3.11"),
+                python_version=(3, 11),
+            )
+
+        self.assertEqual(
+            [
+                "/opt/python/bin/python3.11 -m venv '" + str(root / ".venv") + "'",
+                "'" + str(root / ".venv" / "bin" / "python")
+                + "' -m pip install --constraint '"
+                + str(root / "constraints" / "metadata.txt")
+                + "' -e '"
+                + str(root)
+                + "[hub]'",
+                "'" + str(root / ".venv" / "bin" / "python")
+                + "' -m physbench doctor --project-root '"
+                + str(root)
+                + "' --level metadata",
+            ],
+            [command.render() for command in plan.commands],
+        )
+
+    def test_evaluation_plan_installs_cuda_torch_before_constrained_extras(self) -> None:
+        """Reordering CUDA torch after evaluator extras must fail this test."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._project_root(directory)
+            plan = bootstrap.plan_bootstrap(
+                project_root=root,
+                profile="evaluation",
+                python=Path("/opt/python/bin/python3.12"),
+                python_version=(3, 12),
+            )
+
+        rendered = [command.render() for command in plan.commands]
+        self.assertIn(
+            "-m pip install --index-url https://download.pytorch.org/whl/cu128 "
+            "torch==2.10.0 torchvision==0.25.0",
+            rendered[1],
+        )
+        self.assertIn("--constraint", rendered[2])
+        self.assertIn("[hub,scene-evaluation,sam31-evaluation]", rendered[2])
+        self.assertTrue(rendered[3].endswith("--level runtime"))
+
+    def test_incompatible_python_is_rejected_before_any_command(self) -> None:
+        """Accepting Python 3.11 for evaluation must fail this test."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._project_root(directory)
+            with self.assertRaisesRegex(bootstrap.BootstrapError, "Python 3.12"):
+                bootstrap.plan_bootstrap(
+                    project_root=root,
+                    profile="evaluation",
+                    python=Path("/opt/python/bin/python3.11"),
+                    python_version=(3, 11),
+                )
+
+    def test_existing_compatible_venv_is_reused_without_creation(self) -> None:
+        """Adding a venv creation command for an existing compatible venv fails."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._project_root(directory)
+            venv = root / "already there"
+            venv.mkdir()
+            (venv / "pyvenv.cfg").write_text("version = 3.11.9\n")
+            plan = bootstrap.plan_bootstrap(
+                project_root=root,
+                profile="metadata",
+                python=Path("/opt/python/bin/python3.11"),
+                python_version=(3, 11),
+                venv=venv,
+            )
+
+        self.assertEqual("reuse venv", plan.actions[0])
+        self.assertNotIn(" -m venv ", "\n".join(
+            command.render() for command in plan.commands
+        ))
+
+    def test_incompatible_existing_venv_is_refused_without_recreation(self) -> None:
+        """Replacing an existing Python 3.11 venv for Python 3.12 must fail."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._project_root(directory)
+            venv = root / ".venv"
+            venv.mkdir()
+            (venv / "pyvenv.cfg").write_text("version = 3.11.9\n")
+            with self.assertRaisesRegex(bootstrap.BootstrapError, "incompatible"):
+                bootstrap.plan_bootstrap(
+                    project_root=root,
+                    profile="evaluation",
+                    python=Path("/opt/python/bin/python3.12"),
+                    python_version=(3, 12),
+                    venv=venv,
+                )
+
+    def test_dry_run_prints_plan_and_mutates_nothing(self) -> None:
+        """Creating the venv or invoking the runner in dry-run must fail."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._project_root(directory)
+            stdout = io.StringIO()
+            with patch.object(bootstrap, "_run_command") as run_command, contextlib.redirect_stdout(stdout):
+                status = bootstrap.main([
+                    "--project-root", str(root),
+                    "--profile", "metadata",
+                    "--dry-run",
+                ])
+
+            self.assertEqual(0, status)
+            self.assertFalse((root / ".venv").exists())
+            run_command.assert_not_called()
+            self.assertEqual(
+                "VPhysBench bootstrap plan (metadata)\n"
+                "action: create venv\n"
+                + sys.executable
+                + " -m venv '"
+                + str(root / ".venv")
+                + "'\n",
+                stdout.getvalue()[:len(
+                    "VPhysBench bootstrap plan (metadata)\n"
+                    "action: create venv\n"
+                    + sys.executable
+                    + " -m venv '"
+                    + str(root / ".venv")
+                    + "'\n"
+                )],
+            )
+
+    def test_shell_launcher_runs_dry_plan_from_outside_checkout(self) -> None:
+        """Using the caller's directory rather than BASH_SOURCE must fail."""
+        root = Path(__file__).resolve().parents[1]
+        launcher = root / "scripts" / "bootstrap_env.sh"
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                ["/bin/bash", str(launcher), "--profile", "metadata", "--dry-run"],
+                cwd=Path(directory),
+                env={**os.environ, "VPHYSBENCH_BOOTSTRAP_PYTHON": sys.executable},
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("VPhysBench bootstrap plan (metadata)", result.stdout)
+        self.assertIn(str(root / ".venv"), result.stdout)
+
+    def test_shell_launcher_auto_selects_a_compatible_interpreter(self) -> None:
+        """A launcher that cannot select Python 3.11+ must fail this test."""
+        root = Path(__file__).resolve().parents[1]
+        launcher = root / "scripts" / "bootstrap_env.sh"
+        with tempfile.TemporaryDirectory() as directory:
+            tools = Path(directory) / "tools"
+            tools.mkdir()
+            (tools / "python3.11").symlink_to(sys.executable)
+            result = subprocess.run(
+                ["bash", str(launcher), "--profile", "metadata", "--dry-run"],
+                cwd=Path(directory),
+                env={
+                    **os.environ,
+                    "PATH": str(tools) + ":/usr/bin:/bin",
+                    "VPHYSBENCH_BOOTSTRAP_PYTHON": "",
+                },
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("VPhysBench bootstrap plan (metadata)", result.stdout)
+
+
+if __name__ == "__main__":
+    unittest.main()

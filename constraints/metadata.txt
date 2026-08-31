@@ -1,0 +1,2 @@
+# Metadata bootstrap dependencies.
+huggingface-hub==1.28.0

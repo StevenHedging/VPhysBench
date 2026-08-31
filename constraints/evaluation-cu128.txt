@@ -1,0 +1,8 @@
+# Validated CUDA 12.8 evaluation dependency set.
+huggingface-hub==1.28.0
+matplotlib==3.11.1
+numpy==1.26.4
+opencv-python-headless==4.11.0.86
+scipy==1.17.1
+torch==2.10.0
+torchvision==0.25.0
