@@ -127,8 +127,8 @@ class BootstrapEnvironmentTests(unittest.TestCase):
                     venv=venv,
                 )
 
-    def test_existing_venv_with_mismatched_interpreter_is_refused(self) -> None:
-        """Reusing an executable reporting another Python version must fail."""
+    def test_existing_venv_mismatch_is_rejected_before_install_commands(self) -> None:
+        """Running pip before detecting a swapped interpreter must fail this test."""
         with tempfile.TemporaryDirectory() as directory:
             root = self._project_root(directory)
             venv = root / ".venv"
@@ -140,14 +140,36 @@ class BootstrapEnvironmentTests(unittest.TestCase):
             interpreter.write_text("#!/bin/sh\nprintf '9.9\\n'\n")
             interpreter.chmod(0o755)
 
-            with self.assertRaisesRegex(bootstrap.BootstrapError, "incompatible"):
-                bootstrap.plan_bootstrap(
-                    project_root=root,
-                    profile="metadata",
-                    python=Path(sys.executable),
-                    python_version=(sys.version_info.major, sys.version_info.minor),
-                    venv=venv,
-                )
+            plan = bootstrap.plan_bootstrap(
+                project_root=root,
+                profile="metadata",
+                python=Path(sys.executable),
+                python_version=(sys.version_info.major, sys.version_info.minor),
+                venv=venv,
+            )
+            with patch.object(bootstrap, "_run_command") as run_command:
+                with self.assertRaisesRegex(bootstrap.BootstrapError, "incompatible"):
+                    bootstrap.execute_plan(plan)
+
+        run_command.assert_not_called()
+
+    def test_existing_venv_need_not_match_bootstrap_minor_version(self) -> None:
+        """Rejecting two metadata-compatible Python minors must fail this test."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._project_root(directory)
+            venv = self._venv_with_current_python(root)
+            bootstrap_minor = sys.version_info.minor + 1
+            plan = bootstrap.plan_bootstrap(
+                project_root=root,
+                profile="metadata",
+                python=Path(f"/opt/python/bin/python3.{bootstrap_minor}"),
+                python_version=(3, bootstrap_minor),
+                venv=venv,
+            )
+            with patch.object(bootstrap, "_run_command") as run_command:
+                bootstrap.execute_plan(plan)
+
+        self.assertEqual(2, run_command.call_count)
 
     def test_incompatible_existing_venv_is_refused_without_recreation(self) -> None:
         """Replacing an existing Python 3.11 venv for Python 3.12 must fail."""
@@ -194,6 +216,37 @@ class BootstrapEnvironmentTests(unittest.TestCase):
                     + "'\n"
                 )],
             )
+
+    def test_dry_run_does_not_execute_an_existing_venv_interpreter(self) -> None:
+        """A reused venv interpreter side effect during dry-run must fail this test."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._project_root(directory)
+            venv = root / ".venv"
+            (venv / "bin").mkdir(parents=True)
+            (venv / "pyvenv.cfg").write_text(
+                f"version = {sys.version_info.major}.{sys.version_info.minor}.0\n"
+            )
+            marker = Path(directory) / "interpreter-was-run"
+            interpreter = venv / "bin" / "python"
+            interpreter.write_text(
+                "#!/bin/sh\n"
+                ": > \"$VPHYSBENCH_TEST_MARKER\"\n"
+                f"printf '{sys.version_info.major}.{sys.version_info.minor}\\n'\n"
+            )
+            interpreter.chmod(0o755)
+
+            with patch.dict(
+                os.environ, {"VPHYSBENCH_TEST_MARKER": str(marker)}
+            ), contextlib.redirect_stdout(io.StringIO()):
+                status = bootstrap.main([
+                    "--project-root", str(root),
+                    "--profile", "metadata",
+                    "--venv", str(venv),
+                    "--dry-run",
+                ])
+
+            self.assertEqual(0, status)
+            self.assertFalse(marker.exists())
 
     def test_shell_launcher_runs_dry_plan_from_outside_checkout(self) -> None:
         """Using the caller's directory rather than BASH_SOURCE must fail."""
@@ -249,12 +302,13 @@ class BootstrapEnvironmentTests(unittest.TestCase):
             candidate = tools / "python3"
             candidate.write_text("#!/bin/sh\nexit 1\n")
             candidate.chmod(0o755)
+            (tools / "dirname").symlink_to("/usr/bin/dirname")
             result = subprocess.run(
                 ["/bin/bash", str(launcher), "--profile", "evaluation", "--dry-run"],
                 cwd=Path(directory),
                 env={
                     **os.environ,
-                    "PATH": str(tools) + ":/usr/bin:/bin",
+                    "PATH": str(tools),
                     "VPHYSBENCH_BOOTSTRAP_PYTHON": "",
                 },
                 text=True,

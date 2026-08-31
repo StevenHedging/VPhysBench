@@ -31,6 +31,15 @@ class Command:
 
 
 @dataclass(frozen=True)
+class ExistingVenvPreflight:
+    """Runtime validation required before reusing an existing environment."""
+
+    profile: str
+    interpreter: Path
+    configured_version: tuple[int, int]
+
+
+@dataclass(frozen=True)
 class BootstrapPlan:
     """The side-effect-free plan for a selected dependency profile."""
 
@@ -38,6 +47,7 @@ class BootstrapPlan:
     venv: Path
     actions: tuple[str, ...]
     commands: tuple[Command, ...]
+    preflight: ExistingVenvPreflight | None = None
 
 
 @dataclass(frozen=True)
@@ -97,18 +107,30 @@ def _venv_version(venv: Path) -> tuple[int, int]:
     )
 
 
-def _venv_interpreter_version(venv: Path) -> tuple[int, int]:
-    """Read the existing venv interpreter's actual major/minor version."""
+def _venv_interpreter_version(interpreter: Path) -> tuple[int, int]:
+    """Read the existing venv interpreter's actual major/minor version.
 
-    interpreter = _venv_python(venv)
+    This intentionally executes the selected executable and therefore belongs
+    only to execution preflight, never to side-effect-free planning or dry-run.
+    Isolation reduces Python startup hooks, but cannot make a swapped executable
+    itself trustworthy.
+    """
+
     if not interpreter.is_file() or not os.access(interpreter, os.X_OK):
         raise BootstrapError(
             f"existing venv interpreter is missing or not executable: {interpreter}"
         )
+    environment = {
+        key: value
+        for key in ("SYSTEMROOT", "SystemRoot", "WINDIR")
+        if (value := os.environ.get(key))
+    }
     try:
         result = subprocess.run(
             [
                 str(interpreter),
+                "-I",
+                "-S",
                 "-c",
                 "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')",
             ],
@@ -116,6 +138,7 @@ def _venv_interpreter_version(venv: Path) -> tuple[int, int]:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            env=environment,
         )
     except (OSError, subprocess.CalledProcessError) as exc:
         raise BootstrapError(
@@ -127,6 +150,44 @@ def _venv_interpreter_version(venv: Path) -> tuple[int, int]:
             f"existing venv interpreter returned an invalid version: {interpreter}"
         )
     return (int(match.group(1)), int(match.group(2)))
+
+
+def _existing_venv_preflight(
+    *, venv: Path, profile: str, selected: _Profile
+) -> ExistingVenvPreflight:
+    """Perform static, non-executing checks for an existing venv."""
+
+    configured_version = _venv_version(venv)
+    interpreter = _venv_python(venv)
+    if not interpreter.is_file() or not os.access(interpreter, os.X_OK):
+        raise BootstrapError(
+            f"existing venv interpreter is missing or not executable: {interpreter}"
+        )
+    _require_python(
+        profile=selected, python_version=configured_version, venv=venv
+    )
+    return ExistingVenvPreflight(
+        profile=profile,
+        interpreter=interpreter,
+        configured_version=configured_version,
+    )
+
+
+def _validate_existing_venv(preflight: ExistingVenvPreflight) -> None:
+    """Validate an existing venv immediately before install commands run."""
+
+    actual_version = _venv_interpreter_version(preflight.interpreter)
+    if preflight.configured_version != actual_version:
+        raise BootstrapError(
+            "existing venv is incompatible: pyvenv.cfg declares Python "
+            f"{preflight.configured_version[0]}.{preflight.configured_version[1]}, "
+            f"but its interpreter reports Python {actual_version[0]}.{actual_version[1]}"
+        )
+    _require_python(
+        profile=_PROFILES[preflight.profile],
+        python_version=actual_version,
+        venv=preflight.interpreter.parent.parent,
+    )
 
 
 def _require_python(
@@ -169,26 +230,15 @@ def plan_bootstrap(
     target_venv = (venv or root / ".venv").expanduser().resolve()
 
     if target_venv.exists():
-        configured_version = _venv_version(target_venv)
-        existing_version = _venv_interpreter_version(target_venv)
-        if configured_version != existing_version:
-            raise BootstrapError(
-                "existing venv is incompatible: pyvenv.cfg declares Python "
-                f"{configured_version[0]}.{configured_version[1]}, but its "
-                f"interpreter reports Python {existing_version[0]}.{existing_version[1]}"
-            )
-        _require_python(profile=selected, python_version=existing_version, venv=target_venv)
-        if existing_version != version:
-            raise BootstrapError(
-                "existing venv is incompatible with bootstrap interpreter: "
-                f"{target_venv} uses Python {existing_version[0]}.{existing_version[1]}, "
-                f"but {interpreter} uses Python {version[0]}.{version[1]}"
-            )
-        actions = ("reuse venv",)
+        preflight = _existing_venv_preflight(
+            venv=target_venv, profile=profile, selected=selected
+        )
+        actions = ("reuse venv", "preflight: validate existing venv interpreter")
         commands: list[Command] = []
     else:
         actions = ("create venv",)
         commands = [Command((str(interpreter), "-m", "venv", str(target_venv)))]
+        preflight = None
 
     environment_python = _venv_python(target_venv)
     constraints = root / "constraints" / selected.constraints_name
@@ -214,6 +264,7 @@ def plan_bootstrap(
         venv=target_venv,
         actions=actions,
         commands=tuple(commands),
+        preflight=preflight,
     )
 
 
@@ -224,6 +275,8 @@ def _run_command(command: Command) -> None:
 def execute_plan(plan: BootstrapPlan) -> None:
     """Execute a plan exactly as rendered by :func:`plan_bootstrap`."""
 
+    if plan.preflight is not None:
+        _validate_existing_venv(plan.preflight)
     for command in plan.commands:
         _run_command(command)
 
