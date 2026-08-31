@@ -68,7 +68,7 @@ def diagnose_checkpoint(
 
     value = environ.get(SAM31_CHECKPOINT_ENV, "").strip()
     hint = (
-        f"export {SAM31_CHECKPOINT_ENV}=/absolute/path/to/sam3.1_multiplex.pt"
+        f"export {SAM31_CHECKPOINT_ENV}=SAM31_CHECKPOINT_ABSOLUTE_PATH"
     )
     if not value:
         return Diagnostic(
@@ -171,6 +171,7 @@ def diagnose_runtime(
     environ: Mapping[str, str] = os.environ,
     torch_probe: TorchProbe = _default_torch_probe,
     importer: Importer = importlib.import_module,
+    include_checkpoint: bool = True,
 ) -> list[Diagnostic]:
     """Diagnose the system and model runtime needed by official evaluation."""
 
@@ -229,7 +230,8 @@ def diagnose_runtime(
             ),
         ))
 
-    diagnostics.append(diagnose_checkpoint(environ=environ))
+    if include_checkpoint:
+        diagnostics.append(diagnose_checkpoint(environ=environ))
     try:
         importer("physbench.evaluation.common.csti.metric")
     except Exception as exc:  # diagnostic boundary: preserve the actual cause

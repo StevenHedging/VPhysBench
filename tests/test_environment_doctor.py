@@ -142,6 +142,34 @@ class EnvironmentDoctorTests(unittest.TestCase):
             parser.parse_args(["doctor", "--level", "evaluation"]).level,
         )
 
+    def test_runtime_level_checks_runtime_without_dataset_or_checkpoint(self) -> None:
+        parser = build_parser()
+        self.assertEqual(
+            "runtime",
+            parser.parse_args(["doctor", "--level", "runtime"]).level,
+        )
+
+        evaluator_smoke = Diagnostic(
+            "evaluator_smoke",
+            "ok",
+            "CSTI evaluator import smoke passed",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            with patch(
+                "physbench.dataset_hub.diagnose_runtime",
+                return_value=[evaluator_smoke],
+            ) as diagnose_runtime_mock:
+                checks = diagnose_project(directory, level="runtime")
+
+        self.assertEqual(
+            ["python", "hf_cli", "evaluator_smoke"],
+            [item.name for item in checks],
+        )
+        self.assertNotIn("dataset_binding", {item.name for item in checks})
+        self.assertNotIn("dataset_assets", {item.name for item in checks})
+        self.assertNotIn("sam31_checkpoint", {item.name for item in checks})
+        diagnose_runtime_mock.assert_called_once_with(include_checkpoint=False)
+
     def test_full_doctor_keeps_diagnosing_after_broken_dataset_binding(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             runtime = Diagnostic("git", "ok", "/usr/bin/git")

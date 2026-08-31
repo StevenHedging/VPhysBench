@@ -859,8 +859,10 @@ def diagnose_project(
     *,
     level: str = "metadata",
 ) -> list[Diagnostic]:
-    if level not in {"metadata", "evaluation", "full"}:
-        raise ValueError("doctor level must be metadata, evaluation, or full")
+    if level not in {"metadata", "evaluation", "runtime", "full"}:
+        raise ValueError(
+            "doctor level must be metadata, evaluation, runtime, or full"
+        )
     root = Path(project_root).resolve()
     datasets_root = root / "datasets"
     binding_path = datasets_root / "huggingface.json"
@@ -878,6 +880,9 @@ def diagnose_project(
         executable or "install the `hub` extra before downloading data",
         None if executable else 'python -m pip install -e ".[hub]"',
     ))
+    if level == "runtime":
+        diagnostics.extend(diagnose_runtime(include_checkpoint=False))
+        return diagnostics
     try:
         binding = load_huggingface_dataset_binding(binding_path)
         descriptor = (

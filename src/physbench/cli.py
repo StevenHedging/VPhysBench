@@ -401,11 +401,11 @@ def build_parser() -> argparse.ArgumentParser:
     dataset_pull.set_defaults(func=_dataset_pull)
 
     doctor = sub.add_parser(
-        "doctor", help="diagnose metadata or full evaluation readiness"
+        "doctor", help="diagnose metadata, runtime, or full evaluation readiness"
     )
     doctor.add_argument(
         "--level",
-        choices=["metadata", "evaluation", "full"],
+        choices=["metadata", "evaluation", "runtime", "full"],
         default="full",
     )
     doctor.add_argument(
