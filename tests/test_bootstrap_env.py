@@ -22,6 +22,15 @@ class BootstrapEnvironmentTests(unittest.TestCase):
         (root / "constraints" / "evaluation-cu128.txt").write_text("\n")
         return root
 
+    def _venv_with_current_python(self, root: Path, name: str = ".venv") -> Path:
+        venv = root / name
+        (venv / "bin").mkdir(parents=True)
+        (venv / "pyvenv.cfg").write_text(
+            f"version = {sys.version_info.major}.{sys.version_info.minor}.0\n"
+        )
+        (venv / "bin" / "python").symlink_to(sys.executable)
+        return venv
+
     def test_metadata_plan_is_literal_and_uses_default_venv(self) -> None:
         """A missing hub install or metadata doctor command must fail this test."""
         with tempfile.TemporaryDirectory() as directory:
@@ -87,14 +96,12 @@ class BootstrapEnvironmentTests(unittest.TestCase):
         """Adding a venv creation command for an existing compatible venv fails."""
         with tempfile.TemporaryDirectory() as directory:
             root = self._project_root(directory)
-            venv = root / "already there"
-            venv.mkdir()
-            (venv / "pyvenv.cfg").write_text("version = 3.11.9\n")
+            venv = self._venv_with_current_python(root, "already there")
             plan = bootstrap.plan_bootstrap(
                 project_root=root,
                 profile="metadata",
-                python=Path("/opt/python/bin/python3.11"),
-                python_version=(3, 11),
+                python=Path(sys.executable),
+                python_version=(sys.version_info.major, sys.version_info.minor),
                 venv=venv,
             )
 
@@ -103,13 +110,50 @@ class BootstrapEnvironmentTests(unittest.TestCase):
             command.render() for command in plan.commands
         ))
 
-    def test_incompatible_existing_venv_is_refused_without_recreation(self) -> None:
-        """Replacing an existing Python 3.11 venv for Python 3.12 must fail."""
+    def test_existing_venv_without_interpreter_is_refused_before_planning(self) -> None:
+        """Trusting pyvenv.cfg when bin/python is absent must fail this test."""
         with tempfile.TemporaryDirectory() as directory:
             root = self._project_root(directory)
             venv = root / ".venv"
             venv.mkdir()
             (venv / "pyvenv.cfg").write_text("version = 3.11.9\n")
+
+            with self.assertRaisesRegex(bootstrap.BootstrapError, "interpreter"):
+                bootstrap.plan_bootstrap(
+                    project_root=root,
+                    profile="metadata",
+                    python=Path(sys.executable),
+                    python_version=(sys.version_info.major, sys.version_info.minor),
+                    venv=venv,
+                )
+
+    def test_existing_venv_with_mismatched_interpreter_is_refused(self) -> None:
+        """Reusing an executable reporting another Python version must fail."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._project_root(directory)
+            venv = root / ".venv"
+            (venv / "bin").mkdir(parents=True)
+            (venv / "pyvenv.cfg").write_text(
+                f"version = {sys.version_info.major}.{sys.version_info.minor}.0\n"
+            )
+            interpreter = venv / "bin" / "python"
+            interpreter.write_text("#!/bin/sh\nprintf '9.9\\n'\n")
+            interpreter.chmod(0o755)
+
+            with self.assertRaisesRegex(bootstrap.BootstrapError, "incompatible"):
+                bootstrap.plan_bootstrap(
+                    project_root=root,
+                    profile="metadata",
+                    python=Path(sys.executable),
+                    python_version=(sys.version_info.major, sys.version_info.minor),
+                    venv=venv,
+                )
+
+    def test_incompatible_existing_venv_is_refused_without_recreation(self) -> None:
+        """Replacing an existing Python 3.11 venv for Python 3.12 must fail."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._project_root(directory)
+            venv = self._venv_with_current_python(root)
             with self.assertRaisesRegex(bootstrap.BootstrapError, "incompatible"):
                 bootstrap.plan_bootstrap(
                     project_root=root,
@@ -192,6 +236,34 @@ class BootstrapEnvironmentTests(unittest.TestCase):
 
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("VPhysBench bootstrap plan (metadata)", result.stdout)
+
+    def test_shell_launcher_rejects_python_311_for_evaluation(self) -> None:
+        """Selecting Python 3.11 for evaluation must fail this test."""
+        root = Path(__file__).resolve().parents[1]
+        launcher = root / "scripts" / "bootstrap_env.sh"
+        with tempfile.TemporaryDirectory() as directory:
+            tools = Path(directory) / "tools"
+            tools.mkdir()
+            # The launcher asks candidates to prove their version with `-c`;
+            # this shim models a Python 3.11 candidate failing that 3.12 gate.
+            candidate = tools / "python3"
+            candidate.write_text("#!/bin/sh\nexit 1\n")
+            candidate.chmod(0o755)
+            result = subprocess.run(
+                ["/bin/bash", str(launcher), "--profile", "evaluation", "--dry-run"],
+                cwd=Path(directory),
+                env={
+                    **os.environ,
+                    "PATH": str(tools) + ":/usr/bin:/bin",
+                    "VPHYSBENCH_BOOTSTRAP_PYTHON": "",
+                },
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        self.assertEqual(2, result.returncode)
+        self.assertIn("no Python 3.12+ interpreter found", result.stderr)
 
 
 if __name__ == "__main__":

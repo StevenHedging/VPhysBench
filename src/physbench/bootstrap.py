@@ -97,6 +97,38 @@ def _venv_version(venv: Path) -> tuple[int, int]:
     )
 
 
+def _venv_interpreter_version(venv: Path) -> tuple[int, int]:
+    """Read the existing venv interpreter's actual major/minor version."""
+
+    interpreter = _venv_python(venv)
+    if not interpreter.is_file() or not os.access(interpreter, os.X_OK):
+        raise BootstrapError(
+            f"existing venv interpreter is missing or not executable: {interpreter}"
+        )
+    try:
+        result = subprocess.run(
+            [
+                str(interpreter),
+                "-c",
+                "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')",
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise BootstrapError(
+            f"existing venv interpreter cannot run: {interpreter}"
+        ) from exc
+    match = _VERSION_RE.match(result.stdout.strip())
+    if not match:
+        raise BootstrapError(
+            f"existing venv interpreter returned an invalid version: {interpreter}"
+        )
+    return (int(match.group(1)), int(match.group(2)))
+
+
 def _require_python(
     *, profile: _Profile, python_version: tuple[int, int], venv: Path | None = None
 ) -> None:
@@ -137,7 +169,14 @@ def plan_bootstrap(
     target_venv = (venv or root / ".venv").expanduser().resolve()
 
     if target_venv.exists():
-        existing_version = _venv_version(target_venv)
+        configured_version = _venv_version(target_venv)
+        existing_version = _venv_interpreter_version(target_venv)
+        if configured_version != existing_version:
+            raise BootstrapError(
+                "existing venv is incompatible: pyvenv.cfg declares Python "
+                f"{configured_version[0]}.{configured_version[1]}, but its "
+                f"interpreter reports Python {existing_version[0]}.{existing_version[1]}"
+            )
         _require_python(profile=selected, python_version=existing_version, venv=target_venv)
         if existing_version != version:
             raise BootstrapError(
