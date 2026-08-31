@@ -3,26 +3,60 @@
 ## Routine checks
 
 ```bash
-physbench doctor
+bash scripts/bootstrap_env.sh --profile metadata --dry-run
 physbench doctor --level metadata
 make test
 make smoke-interface
 make release-check
+make release-archive-check
+make portable-release-check
 ```
 
-After downloading the complete Dataset:
+`make portable-release-check` extracts a tracked archive under a relocated path
+and runs the metadata bootstrap in dry-run mode from outside the checkout. It
+does not install SAM3, download Dataset media, or fetch model weights.
+
+For a real evaluation host, bootstrap with Python 3.12+ and the validated
+PyTorch 2.10.0/CUDA 12.8 wheel set:
 
 ```bash
-physbench doctor --level evaluation
-make data-test
+VPHYSBENCH_BOOTSTRAP_PYTHON=python3.12 \
+  bash scripts/bootstrap_env.sh --profile evaluation
+. .venv/bin/activate
+physbench doctor --level runtime
 ```
 
-The default full doctor is the deployment preflight. It checks Dataset assets,
-Git and media tools, both evaluator extras, CUDA visibility, and the
-protocol-pinned SAM3.1 checkpoint digest. It remains read-only and does not load
-the model. `--level evaluation` preserves the earlier dependency-light SAM2
-check, while the first real one-case run still verifies actual model execution.
-Use `--json` when consuming the report from automation.
+After downloading the complete Dataset and configuring the local checkpoint:
+
+```bash
+export VPHYSBENCH_SAM31_CHECKPOINT=SAM31_CHECKPOINT_ABSOLUTE_PATH
+physbench doctor --level evaluation
+physbench doctor
+make data-test
+make test-evaluation
+```
+
+The default full doctor is the deployment preflight. `metadata` checks the
+tracked binding and allows missing Dataset media as a warning; `runtime` checks
+executables, evaluator imports, PyTorch/CUDA, and the lightweight evaluator
+smoke without Dataset or checkpoint; `evaluation` requires Dataset media and
+the SAM2 evaluator; `full` also verifies the SAM3.1 checkpoint digest. Doctor
+remains read-only and never installs dependencies, downloads Dataset media or
+weights, or loads a model. `physbench doctor --json` emits exactly one
+versioned JSON document and exits 0 only when all required checks pass; a
+not-ready external-asset host therefore correctly returns exit 1 with
+`"ready": false`.
+
+## Release portability boundary
+
+Only a clean tracked checkout is portable. It can be relocated independently
+of its original machine, but copied `.venv` directories, package caches,
+Dataset media, local Baseline overrides, checkpoints, credentials, and Run
+outputs are explicitly outside that contract. Configure those assets anew:
+pull Dataset media from the frozen Hub binding, set
+`VPHYSBENCH_SAM31_CHECKPOINT` to an absolute local checkpoint path, and place
+machine-local Baseline settings in ignored `baseline.local.json` files. Do not
+commit any of them.
 
 ## Baseline workflow
 

@@ -2,27 +2,28 @@
 
 This guide takes a fresh checkout to a validated custom-baseline scaffold. A
 GPU is not required for metadata checks or the interface smoke test. Full
-scene evaluation needs the optional evaluator stack, compatible CUDA/PyTorch,
-SAM 2, and the complete Dataset assets.
+scene evaluation needs the optional evaluator stack, a Python 3.12+ runtime,
+the validated PyTorch 2.10.0/CUDA 12.8 combination, SAM2/SAM3, a compatible
+NVIDIA driver, and the complete Dataset assets.
 
-## 1. Install the Hub and interface environment
+## 1. Bootstrap the Hub and interface environment
 
 ```bash
-# Option A: python3.11 is available on PATH.
-python3.11 -m venv .venv
+bash scripts/bootstrap_env.sh --profile metadata
 . .venv/bin/activate
-
-# Option B: use Conda when the host has no python3.11 executable.
-# conda create -n vphysbench python=3.11 -y
-# conda activate vphysbench
-
-python -m pip install --upgrade pip
-python -m pip install -e ".[hub]"
 ```
 
-`.[hub]` is sufficient for Hugging Face Dataset access, metadata checks, and
-the lightweight interface smoke. It deliberately does not install scene
-evaluator dependencies.
+The metadata profile requires Python 3.11 or newer. It creates or safely
+reuses `.venv`, installs the pinned `hub` dependencies, and runs the metadata
+doctor. `.[hub]` is sufficient for Hugging Face Dataset access, metadata
+checks, and the lightweight interface smoke; it deliberately does not install
+scene evaluator dependencies.
+
+Preview the exact plan without creating files or accessing the network:
+
+```bash
+bash scripts/bootstrap_env.sh --profile metadata --dry-run
+```
 
 Confirm that the tracked release surface is internally consistent:
 
@@ -63,18 +64,22 @@ readiness check.
 
 `doctor --level metadata` reports missing media as a warning.
 
-## 3. Install the evaluator stack
+## 3. Bootstrap the evaluator stack
 
 ```bash
-python -m pip install -e ".[scene-evaluation]"
+VPHYSBENCH_BOOTSTRAP_PYTHON=python3.12 \
+  bash scripts/bootstrap_env.sh --profile evaluation
+. .venv/bin/activate
+physbench doctor --level runtime
 ```
 
-The scene-evaluation extra pins the SAM 2 source revision used by this
-release. Install PyTorch for the local CUDA version before the extra when the
-machine requires a platform-specific wheel. Installing this extra clones SAM 2
-from GitHub; configure working GitHub access or preinstall that exact pinned
-revision in an offline environment. The official SAM 2 install notes are at
-<https://github.com/facebookresearch/sam2/blob/main/INSTALL.md>.
+The evaluation profile requires Python 3.12 or newer and installs the validated
+PyTorch 2.10.0/CUDA 12.8 wheels plus the pinned evaluator dependencies. It
+runs the Dataset-independent `runtime` doctor after installation. It needs
+network access for packages and the pinned source dependencies, but it never
+downloads Dataset media or model checkpoints. Set
+`VPHYSBENCH_BOOTSTRAP_PYTHON` only when the desired Python 3.12+ interpreter is
+not the one auto-selected from `PATH`.
 
 Run the evaluation-level doctor again after installation.
 
@@ -87,16 +92,15 @@ physbench validate-dataset \
 
 `doctor --level evaluation` treats missing Dataset media as an error and checks
 that the NumPy/OpenCV/SciPy/Torch/SAM2 evaluator modules are importable. The
-first real one-case run additionally verifies CUDA execution and SAM 2 model
+first real one-case run additionally verifies CUDA execution and SAM2 model
 access for that scene.
 
 ## One-command full readiness check
 
-After installing both evaluator extras and downloading the Dataset, configure
-the protocol-pinned SAM3.1 checkpoint and run the default full doctor:
+After the evaluation bootstrap and Dataset download, configure the
+protocol-pinned SAM3.1 checkpoint and run the default full doctor:
 
 ```bash
-python -m pip install -e ".[scene-evaluation,sam31-evaluation]"
 export VPHYSBENCH_SAM31_CHECKPOINT=SAM31_CHECKPOINT_ABSOLUTE_PATH
 physbench doctor
 ```
@@ -104,13 +108,16 @@ physbench doctor
 Replace `SAM31_CHECKPOINT_ABSOLUTE_PATH` with the checkpoint's absolute path on
 the current machine.
 
-The command checks Python, Git, ffmpeg/ffprobe, the frozen Dataset binding and
-assets, evaluator modules, PyTorch/CUDA visibility, and the SAM3.1 checkpoint
-SHA-256. It does not install, download, or load a model. Every failure includes
-an actionable repair hint and produces a non-zero exit status. Use
-`physbench doctor --json` for one machine-readable report. The explicit
-`metadata` and `evaluation` levels remain available for lightweight and legacy
-workflows.
+`physbench doctor` is the only readiness authority. `metadata` requires Python
+3.11+ and treats missing Dataset media as a warning; `runtime` requires Python
+3.12+ and checks executables, evaluator imports, PyTorch/CUDA, and a lightweight
+evaluator smoke without Dataset media or checkpoint; `evaluation` checks the
+Dataset and SAM2 evaluator; `full` (the default) additionally checks the
+SAM3.1 checkpoint SHA-256. It does not install, download, or load a model.
+Every required failure has an actionable hint and returns non-zero. Use
+`physbench doctor --json` for one machine-readable, versioned report: its
+`ready` field may correctly be `false` before external assets are configured,
+and the command then exits 1.
 
 ## 4. Create a custom baseline
 
@@ -169,4 +176,15 @@ the full official Task.
 - Missing assets: rerun `physbench dataset pull`; do not change the revision.
 - Baseline schema error: run `physbench baseline validate <id>`.
 - Video rejection: inspect the sealed media contract and baseline log.
-- Evaluator dependency error: install `.[scene-evaluation]` and rerun doctor.
+- Evaluator dependency error: rerun the evaluation bootstrap and doctor.
+
+## Portability contract
+
+A clean tracked checkout is relocatable: it may be moved or extracted beneath
+another path, including one containing spaces, and bootstrap derives its root
+from the checked-out script. The portable unit is not a copied environment.
+Do not copy or publish `.venv`, package caches, Hugging Face caches, Dataset
+media, `baseline.local.json` overrides, checkpoints, credentials, or `run/`
+outputs. Pull Dataset media through the frozen Hub binding, set
+`VPHYSBENCH_SAM31_CHECKPOINT` to the local checkpoint, and keep machine-specific
+Baseline paths in ignored `baseline.local.json` files.

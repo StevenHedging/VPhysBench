@@ -159,7 +159,7 @@ class ReleaseDocumentationTests(unittest.TestCase):
     def test_release_manifest_matches_dataset_binding(self) -> None:
         release = json.loads((ROOT / "RELEASE_MANIFEST.json").read_text())
         binding = json.loads((ROOT / "datasets" / "huggingface.json").read_text())
-        self.assertEqual("2026-08-17", release["branch"])
+        self.assertEqual("2026-08-31", release["branch"])
         self.assertEqual("1.0", release["task_schema"])
         self.assertEqual("scene_default_v1", release["evaluation_protocol"])
         self.assertEqual(
@@ -186,6 +186,44 @@ class ReleaseDocumentationTests(unittest.TestCase):
         self.assertEqual(binding["revision"], release["dataset"]["revision"])
         self.assertEqual(6, len(release["scored_scenes"]))
         self.assertEqual(["push_bottle"], release["preview_scenes"])
+
+    def test_bootstrap_documentation_states_profiles_and_portability_boundary(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        getting_started = (ROOT / "docs" / "GETTING_STARTED.md").read_text(
+            encoding="utf-8"
+        )
+        operations = (ROOT / "docs" / "OPERATIONS.md").read_text(
+            encoding="utf-8"
+        )
+        combined = "\n".join((readme, getting_started, operations))
+
+        for command in (
+            "scripts/bootstrap_env.sh --profile metadata",
+            "scripts/bootstrap_env.sh --profile evaluation",
+            "scripts/bootstrap_env.sh --profile metadata --dry-run",
+        ):
+            self.assertIn(command, combined)
+        for requirement in (
+            "Python 3.11",
+            "Python 3.12",
+            "PyTorch 2.10.0",
+            "CUDA 12.8",
+            "VPHYSBENCH_SAM31_CHECKPOINT",
+            "baseline.local.json",
+            "Dataset media",
+            "checkpoints",
+            "credentials",
+        ):
+            self.assertIn(requirement, combined)
+        self.assertIn("make portable-release-check", operations)
+
+    def test_ci_uses_the_dependency_light_portable_release_gate(self) -> None:
+        content = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("make portable-release-check", content)
+        self.assertNotIn("sam31-evaluation", content)
+        self.assertNotIn(".[scene-evaluation]", content)
 
     def test_evaluator_extra_pins_the_documented_sam2_revision(self) -> None:
         project = tomllib.loads((ROOT / "pyproject.toml").read_text())

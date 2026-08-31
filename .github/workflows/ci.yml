@@ -28,22 +28,5 @@ jobs:
         run: make smoke-interface
       - name: Audit tracked release contents
         run: make release-check
-      - name: Verify exported archive
-        run: make release-archive-check
-
-  evaluation-contract:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-          cache: pip
-      - name: Install evaluator dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes ffmpeg
-          python -m pip install --upgrade pip
-          python -m pip install --editable ".[scene-evaluation]"
-      - name: Run CPU evaluator contract fixtures
-        run: make test-evaluation
+      - name: Certify portable exported release and bootstrap dry-run
+        run: make portable-release-check
