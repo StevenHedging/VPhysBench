@@ -29,5 +29,9 @@ manifest, prediction hashes, evaluation manifest, baseline descriptor,
 checkpoint hash and immutable external repository revisions.
 
 `RELEASE_MANIFEST.json` records the repository-wide anchors for this date
-branch. The Git ref `2026-08-17` is the authoritative release commit; embedding
-a commit's own hash inside that same commit would be self-referential.
+branch. The Git ref `2026-08-31` (or a publication tag made from it) identifies
+the authoritative final release commit. Its `source_commit` field is the
+pre-publication source revision: the parent/input revision used when publishing
+the release, not an attempt to embed the final self-containing release commit's
+own hash. Use the Git ref or publication tag, rather than `source_commit`, when
+selecting the released checkout.

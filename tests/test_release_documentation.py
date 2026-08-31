@@ -217,13 +217,36 @@ class ReleaseDocumentationTests(unittest.TestCase):
             self.assertIn(requirement, combined)
         self.assertIn("make portable-release-check", operations)
 
-    def test_ci_uses_the_dependency_light_portable_release_gate(self) -> None:
+    def test_ci_covers_asset_free_evaluator_and_portable_release_gates(self) -> None:
         content = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
             encoding="utf-8"
         )
         self.assertIn("make portable-release-check", content)
+        self.assertIn('python-version: "3.12"', content)
+        self.assertIn('python -m pip install --editable ".[scene-evaluation]"', content)
+        self.assertIn("make test-evaluation", content)
         self.assertNotIn("sam31-evaluation", content)
-        self.assertNotIn(".[scene-evaluation]", content)
+        self.assertNotIn("physbench dataset pull", content)
+        self.assertNotIn("VPHYSBENCH_SAM31_CHECKPOINT", content)
+
+    def test_reproducibility_guide_agrees_with_release_manifest_branch(self) -> None:
+        release = json.loads((ROOT / "RELEASE_MANIFEST.json").read_text())
+        content = (ROOT / "docs" / "REPRODUCIBILITY.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(f"`{release['branch']}`", content)
+        self.assertIn("`source_commit`", content)
+        self.assertIn("pre-publication source revision", content)
+        self.assertIn("final self-containing release commit", content)
+
+    def test_real_case_guidance_requires_full_doctor_and_checkpoint(self) -> None:
+        content = (ROOT / "docs" / "GETTING_STARTED.md").read_text(
+            encoding="utf-8"
+        )
+        real_case = content[content.index("## 5. Run one real case"):]
+        self.assertIn("VPHYSBENCH_SAM31_CHECKPOINT", real_case)
+        self.assertIn("full doctor", real_case)
+        self.assertIn("exit 0", real_case)
 
     def test_evaluator_extra_pins_the_documented_sam2_revision(self) -> None:
         project = tomllib.loads((ROOT / "pyproject.toml").read_text())

@@ -30,3 +30,20 @@ jobs:
         run: make release-check
       - name: Certify portable exported release and bootstrap dry-run
         run: make portable-release-check
+
+  evaluation-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install asset-free CPU evaluator dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ffmpeg
+          python -m pip install --upgrade pip
+          python -m pip install --editable ".[scene-evaluation]"
+      - name: Run asset-free CPU evaluator contract fixtures
+        run: make test-evaluation

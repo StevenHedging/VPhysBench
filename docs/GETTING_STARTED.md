@@ -140,9 +140,15 @@ driver contract.
 
 ## 5. Run one real case
 
-`atomic-run` resolves and runs the scene evaluator. Confirm that
-`.[scene-evaluation]` was installed in step 3 and that the complete Dataset
-passes the evaluation-level doctor before running it:
+`atomic-run` resolves and runs the scene evaluator. Before running it, configure
+the explicit SAM3.1 checkpoint and require the full doctor to exit 0; this
+confirms the complete Dataset, evaluator dependencies, CUDA, and checkpoint
+digest rather than only evaluation-level SAM2 readiness:
+
+```bash
+export VPHYSBENCH_SAM31_CHECKPOINT=SAM31_CHECKPOINT_ABSOLUTE_PATH
+physbench doctor  # must exit 0
+```
 
 ```bash
 physbench atomic-run \

@@ -76,13 +76,12 @@ Git 忽略的 `baseline.local.json` 中配置 checkpoint 与工作目录。
 Baseline 可以在自己的目录内实现训练和推理脚本，但不能重写官方 Task 的数据选择、
 种子或评分协议。基准先冻结 canonical plan，随后 Baseline 只负责适配、编译和执行。
 
-先运行一个 case 前，下载完整 Dataset、配置 protocol-pinned checkpoint，并确认 full
-readiness：
+先运行一个 case 前，下载完整 Dataset、配置 protocol-pinned SAM3.1 checkpoint，并确认
+full doctor 成功（退出 0）：
 
 ```bash
 export VPHYSBENCH_SAM31_CHECKPOINT=SAM31_CHECKPOINT_ABSOLUTE_PATH
-physbench doctor
-physbench doctor --level evaluation
+physbench doctor  # 必须退出 0
 ```
 
 `physbench doctor` 是唯一的 readiness authority。`metadata` 只检查 Python 3.11+
