@@ -5,6 +5,7 @@ import io
 import json
 import tempfile
 import unittest
+from collections import namedtuple
 from pathlib import Path
 from unittest.mock import patch
 
@@ -141,6 +142,37 @@ class EnvironmentDoctorTests(unittest.TestCase):
             "evaluation",
             parser.parse_args(["doctor", "--level", "evaluation"]).level,
         )
+
+    def test_python_requirement_is_level_sensitive(self) -> None:
+        version_info = namedtuple(
+            "VersionInfo", "major minor micro releaselevel serial"
+        )
+        expectations = {
+            version_info(3, 11, 9, "final", 0): {
+                "metadata": "ok",
+                "evaluation": "error",
+                "runtime": "error",
+                "full": "error",
+            },
+            version_info(3, 12, 0, "final", 0): {
+                "metadata": "ok",
+                "evaluation": "ok",
+                "runtime": "ok",
+                "full": "ok",
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            for version, expected_statuses in expectations.items():
+                with patch(
+                    "physbench.dataset_hub.diagnose_runtime", return_value=[]
+                ), patch("physbench.dataset_hub.sys.version_info", version):
+                    for level, expected_status in expected_statuses.items():
+                        with self.subTest(version=version[:3], level=level):
+                            checks = diagnose_project(directory, level=level)
+                            python = next(
+                                item for item in checks if item.name == "python"
+                            )
+                            self.assertEqual(expected_status, python.status)
 
     def test_runtime_level_checks_runtime_without_dataset_or_checkpoint(self) -> None:
         parser = build_parser()

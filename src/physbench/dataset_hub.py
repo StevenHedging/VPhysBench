@@ -866,12 +866,20 @@ def diagnose_project(
     root = Path(project_root).resolve()
     datasets_root = root / "datasets"
     binding_path = datasets_root / "huggingface.json"
-    python_ready = sys.version_info >= (3, 11)
+    minimum_python = (3, 11) if level == "metadata" else (3, 12)
+    python_ready = sys.version_info >= minimum_python
     diagnostics = [Diagnostic(
         "python",
         "ok" if python_ready else "error",
         f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
-        None if python_ready else "create and activate a Python 3.11+ environment",
+        (
+            None
+            if python_ready
+            else (
+                "create and activate a Python "
+                f"{minimum_python[0]}.{minimum_python[1]}+ environment"
+            )
+        ),
     )]
     executable = shutil.which("hf")
     diagnostics.append(Diagnostic(
