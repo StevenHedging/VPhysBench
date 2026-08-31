@@ -13,6 +13,7 @@ from _paths import ROOT
 PRESERVED_PREFIXES = ("docs/", "tests/")
 ACTIVE_SUFFIXES = {".bash", ".cfg", ".ini", ".json", ".mk", ".py", ".pyi", ".sh", ".toml", ".yaml", ".yml"}
 ACTIVE_FILENAMES = {"Makefile"}
+ACTIVE_TEXT_PREFIXES = ("constraints/",)
 MACHINE_PATHS = (
     re.compile(r"(?<![A-Za-z0-9_])/(?:home|Users)/[^/\\\s\"']+"),
     re.compile(r"(?<![A-Za-z0-9_])/(?:public|fsx)(?=/|\b)"),
@@ -38,7 +39,15 @@ def _active_tracked_text(root: Path = ROOT) -> list[tuple[str, str]]:
         path = root / relative
         if path.is_symlink() or not path.is_file():
             continue
-        if path.suffix not in ACTIVE_SUFFIXES and path.name not in ACTIVE_FILENAMES:
+        is_active_text = (
+            path.suffix in ACTIVE_SUFFIXES
+            or path.name in ACTIVE_FILENAMES
+            or (
+                relative.startswith(ACTIVE_TEXT_PREFIXES)
+                and path.suffix == ".txt"
+            )
+        )
+        if not is_active_text:
             continue
         try:
             text = path.read_text(encoding="utf-8")
@@ -78,6 +87,12 @@ class RepositoryPortabilityTest(unittest.TestCase):
                 'DATA_ROOT = r"C:\\Users\\Alice\\data"\n',
                 encoding="utf-8",
             )
+            constraint = root / "constraints" / "metadata.txt"
+            constraint.parent.mkdir(parents=True)
+            constraint.write_text(
+                "--find-links /home/alice/wheels\n",
+                encoding="utf-8",
+            )
             ignored = root / "local-machine-paths.json"
             ignored.write_text('{"path": "/Users/alice/private"}\n', encoding="utf-8")
             docs = root / "docs" / "portability.md"
@@ -97,6 +112,7 @@ class RepositoryPortabilityTest(unittest.TestCase):
         self.assertIn("configs/machine_paths.json: /workspace", violations)
         self.assertIn("src/machine_paths.py: /Users/alice", violations)
         self.assertIn("src/machine_paths.py: C:" + chr(92), violations)
+        self.assertIn("constraints/metadata.txt: /home/alice", violations)
         self.assertFalse(any("docs/" in item for item in violations))
         self.assertFalse(any("tests/" in item for item in violations))
         self.assertFalse(any("local-machine-paths" in item for item in violations))
