@@ -54,10 +54,11 @@ the option preserves native behavior.
 ## Provenance and failures
 
 Segmenter provenance distinguishes the configured frame-zero gates from the
-restored native propagation gates. It also records the requested, effective and
+restored native propagation gates. Its `segmenter_policy_revision` describes
+only those adapter-level policies. It also records the requested, effective and
 native discovery-confirmation setting, the requested export-probability policy,
-and the birth-conditioning policy. Observer provenance records revision 2 and
-the initial matching policy.
+and the birth-conditioning policy. Top-level observer provenance records the
+authoritative observer revision and initial matching policy.
 
 An explicitly configured policy requires the corresponding pinned backend
 attributes. Missing attributes are evaluator interface errors rather than a

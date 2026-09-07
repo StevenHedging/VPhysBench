@@ -105,7 +105,10 @@ class _FakeTextSegmenter:
         )
 
     def describe(self):
-        return {"backend": "fake_sam31_text"}
+        return {
+            "backend": "fake_sam31_text",
+            "segmenter_policy_revision": 1,
+        }
 
 
 class _FakeCSTIEvaluator(ReferenceCaseEvaluator):
@@ -360,7 +363,6 @@ class CSTICaseIntegrationTest(unittest.TestCase):
             observer = config["csti_observer"]
             assert isinstance(observer, dict)
             observer["initial_matching_policy"] = "threshold_feasible_v2"
-            observer["observer_revision"] = 2
             evaluator = _FakeCSTIEvaluator(
                 config,
                 csti_segmenter=_FakeTextSegmenter(),
@@ -380,6 +382,30 @@ class CSTICaseIntegrationTest(unittest.TestCase):
             "sam31_text_frame_zero_locked_v2",
             provenance["policy"],
         )
+        self.assertEqual(
+            1,
+            provenance["segmenter"]["segmenter_policy_revision"],
+        )
+
+    def test_gate_only_observer_derives_v2_marker_with_legacy_matcher(self) -> None:
+        config = evaluator_config(csti_observer=True)
+        observer = config["csti_observer"]
+        assert isinstance(observer, dict)
+        observer["segmenter"] = {
+            "initial_detection": {
+                "score_threshold": 0.2,
+                "new_object_threshold": 0.2,
+            }
+        }
+        evaluator = _FakeCSTIEvaluator(
+            config,
+            csti_segmenter=_FakeTextSegmenter(),
+        )
+
+        description = evaluator.describe()["csti_observer"]
+
+        self.assertEqual(2, description["observer_revision"])
+        self.assertEqual("maximum_total_iou_v1", description["matching_policy"])
 
     def test_scene_prediction_failure_keeps_independently_observed_csti(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

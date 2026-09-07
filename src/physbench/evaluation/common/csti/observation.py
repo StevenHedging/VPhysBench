@@ -61,7 +61,7 @@ class CSTIObserverConfig:
     segmenter: Mapping[str, Any] = field(default_factory=dict)
     debug_outputs: bool = False
     initial_matching_policy: str = "maximum_total_iou_v1"
-    observer_revision: int = 1
+    observer_revision: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.prompt_groups, tuple) or not self.prompt_groups:
@@ -128,7 +128,21 @@ class CSTIObserverConfig:
                 "CSTI observer initial matching policy must be "
                 "maximum_total_iou_v1 or threshold_feasible_v2",
             )
-        if (
+        uses_revision_two_policy = (
+            self.initial_matching_policy == "threshold_feasible_v2"
+            or isinstance(self.segmenter, Mapping)
+            and bool(
+                {"initial_detection", "masklet_confirmation_enable"}
+                & set(self.segmenter)
+            )
+        )
+        if self.observer_revision is None:
+            object.__setattr__(
+                self,
+                "observer_revision",
+                2 if uses_revision_two_policy else 1,
+            )
+        elif (
             isinstance(self.observer_revision, bool)
             or not isinstance(self.observer_revision, int)
             or self.observer_revision not in {1, 2}
@@ -136,6 +150,11 @@ class CSTIObserverConfig:
             raise CSTIContractError(
                 "csti_observer_revision_invalid",
                 "CSTI observer revision must be 1 or 2",
+            )
+        elif self.observer_revision == 1 and uses_revision_two_policy:
+            raise CSTIContractError(
+                "csti_observer_revision_invalid",
+                "CSTI observer revision 1 cannot declare revision 2 policies",
             )
 
     @classmethod
@@ -210,6 +229,11 @@ class CSTIObserverConfig:
                 "csti_observer_config_invalid",
                 "CSTI observer debug_outputs must be boolean",
             )
+        if "observer_revision" in value and value["observer_revision"] is None:
+            raise CSTIContractError(
+                "csti_observer_revision_invalid",
+                "CSTI observer revision must be 1 or 2",
+            )
         return cls(
             prompt_groups=tuple(groups),
             initial_match_iou_threshold=_unit_float(
@@ -233,7 +257,7 @@ class CSTIObserverConfig:
             initial_matching_policy=value.get(
                 "initial_matching_policy", "maximum_total_iou_v1"
             ),
-            observer_revision=value.get("observer_revision", 1),
+            observer_revision=value.get("observer_revision"),
             segmenter=dict(segmenter),
             debug_outputs=debug_outputs,
         )

@@ -26,6 +26,9 @@ from physbench.evaluation.common.csti import (
 from physbench.evaluation.common.entities import EntitySpec, ReferenceCapability
 
 
+_MISSING = object()
+
+
 def _mask(
     left: int,
     top: int,
@@ -125,6 +128,8 @@ def _config(
     threshold: float = 0.5,
     ambiguity_margin: float = 0.0,
     policy: str | None = None,
+    observer_revision: object = _MISSING,
+    segmenter: dict[str, object] | None = None,
 ) -> CSTIObserverConfig:
     mapping = {
         "prompt_groups": [
@@ -147,6 +152,10 @@ def _config(
     }
     if policy is not None:
         mapping["initial_matching_policy"] = policy
+    if observer_revision is not _MISSING:
+        mapping["observer_revision"] = observer_revision
+    if segmenter is not None:
+        mapping["segmenter"] = segmenter
     return CSTIObserverConfig.from_mapping(mapping)
 
 
@@ -174,6 +183,53 @@ class CSTIInitialMatchingTest(unittest.TestCase):
         self.assertEqual(
             "maximum_total_iou_v1", _config().initial_matching_policy
         )
+
+    def test_config_derives_revision_two_from_each_new_component_policy(self) -> None:
+        configs = (
+            _config(policy="threshold_feasible_v2"),
+            _config(
+                segmenter={
+                    "initial_detection": {
+                        "score_threshold": 0.2,
+                        "new_object_threshold": 0.2,
+                    }
+                }
+            ),
+            _config(segmenter={"masklet_confirmation_enable": False}),
+        )
+
+        self.assertEqual((2, 2, 2), tuple(x.observer_revision for x in configs))
+
+    def test_config_rejects_explicit_revision_one_with_new_component_policy(
+        self,
+    ) -> None:
+        configurations = (
+            {"policy": "threshold_feasible_v2"},
+            {
+                "segmenter": {
+                    "initial_detection": {
+                        "score_threshold": 0.2,
+                        "new_object_threshold": 0.2,
+                    }
+                }
+            },
+            {"segmenter": {"masklet_confirmation_enable": False}},
+        )
+        for options in configurations:
+            with self.subTest(options=options):
+                with self.assertRaisesRegex(CSTIContractError, "revision 1"):
+                    _config(observer_revision=1, **options)
+
+    def test_explicit_revision_two_allows_legacy_component_ablation(self) -> None:
+        config = _config(observer_revision=2)
+
+        self.assertEqual(2, config.observer_revision)
+        self.assertEqual("maximum_total_iou_v1", config.initial_matching_policy)
+        self.assertEqual({}, config.segmenter)
+
+    def test_mapping_rejects_explicit_null_observer_revision(self) -> None:
+        with self.assertRaisesRegex(CSTIContractError, "revision"):
+            _config(observer_revision=None)
 
     def test_config_preserves_legacy_positional_constructor_order(self) -> None:
         config = CSTIObserverConfig(

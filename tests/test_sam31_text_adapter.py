@@ -184,7 +184,8 @@ class Sam31TextVideoAdapterTest(unittest.TestCase):
         self.assertEqual(0.5, model.score_threshold_detection)
         self.assertEqual(0.6, model.new_det_thresh)
         description = segmenter.describe()
-        self.assertEqual(2, description["observer_revision"])
+        self.assertEqual(2, description["segmenter_policy_revision"])
+        self.assertNotIn("observer_revision", description)
         self.assertEqual(
             {
                 "policy": "frame_zero_override_v1",
@@ -398,6 +399,42 @@ class Sam31TextVideoAdapterTest(unittest.TestCase):
             segmenter.segment(_frames(), (_group(),))
 
         self.assertEqual("sam31_model_interface_incompatible", caught.exception.code)
+
+    def test_confirmation_assignment_failure_restores_mutated_backend_value(
+        self,
+    ) -> None:
+        class MutatingSetterModel:
+            score_threshold_detection = 0.5
+            new_det_thresh = 0.6
+
+            def __init__(self) -> None:
+                self._confirmation = True
+                self.fail_next_disable = True
+
+            @property
+            def masklet_confirmation_enable(self) -> bool:
+                return self._confirmation
+
+            @masklet_confirmation_enable.setter
+            def masklet_confirmation_enable(self, value: bool) -> None:
+                self._confirmation = value
+                if value is False and self.fail_next_disable:
+                    self.fail_next_disable = False
+                    raise RuntimeError("synthetic mutating setter failure")
+
+        model = MutatingSetterModel()
+        predictor = _FakePredictor(model=model)
+        config = _config()
+        config["masklet_confirmation_enable"] = False
+        segmenter = Sam31TextVideoSegmenter(
+            config, predictor_factory=lambda: predictor
+        )
+
+        with self.assertRaises(SceneAnalysisError) as caught:
+            segmenter.segment(_frames(), (_group(),))
+
+        self.assertEqual("sam31_model_interface_incompatible", caught.exception.code)
+        self.assertTrue(model.masklet_confirmation_enable)
 
     def test_empty_initial_detection_closes_without_propagating(self) -> None:
         class EmptyPredictor(_FakePredictor):

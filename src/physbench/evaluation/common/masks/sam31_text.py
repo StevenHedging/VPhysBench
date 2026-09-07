@@ -109,7 +109,7 @@ class Sam31TextVideoSegmenter:
                     "SAM3.1 masklet_confirmation_enable must be boolean"
                 )
             self.masklet_confirmation_enable = masklet_confirmation_enable
-        self.observer_revision = (
+        self.segmenter_policy_revision = (
             2
             if self.initial_detection is not None
             or self.masklet_confirmation_enable is not None
@@ -246,6 +246,7 @@ class Sam31TextVideoSegmenter:
                 self.masklet_confirmation_enable
             )
         except Exception as exc:
+            model.masklet_confirmation_enable = previous
             raise SceneAnalysisError(
                 "sam31_model_interface_incompatible",
                 f"Cannot apply SAM3.1 masklet confirmation policy: {exc}",
@@ -631,7 +632,7 @@ class Sam31TextVideoSegmenter:
         }
         return {
             "backend": "sam3.1_multiplex_text_video",
-            "observer_revision": self.observer_revision,
+            "segmenter_policy_revision": self.segmenter_policy_revision,
             "source_revision": SAM31_SOURCE_REVISION,
             "birth_conditioning_policy": self.birth_conditioning_policy,
             "checkpoint_path_env": self.checkpoint_path_env,
