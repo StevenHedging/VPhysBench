@@ -85,32 +85,68 @@ def _candidate_frames(
     )
 
 
+def _disjoint_hundred_pixel_masks(
+    entity_ids: tuple[str, ...],
+) -> dict[str, np.ndarray]:
+    shape = (10, 10 * len(entity_ids))
+    result: dict[str, np.ndarray] = {}
+    for index, entity_id in enumerate(entity_ids):
+        mask = np.zeros(shape, dtype=bool)
+        mask[:, index * 10 : (index + 1) * 10] = True
+        result[entity_id] = mask
+    return result
+
+
+def _candidate_from_disjoint_counts(
+    candidate_id: str,
+    counts: tuple[int, ...],
+    *,
+    prompt_group_id: str = "ball",
+) -> SemanticCandidateTube:
+    shape = (10, 10 * len(counts))
+    mask = np.zeros(shape, dtype=bool)
+    for index, count in enumerate(counts):
+        for offset in range(count):
+            row, column = divmod(offset, 10)
+            mask[row, index * 10 + column] = True
+    return SemanticCandidateTube(
+        candidate_id=candidate_id,
+        prompt_group_id=prompt_group_id,
+        backend_object_id=sum(ord(character) for character in candidate_id),
+        masks=np.repeat(mask[None], 4, axis=0),
+        boxes_xywh=np.zeros((4, 4), dtype=np.float32),
+        confidences=np.ones(4, dtype=np.float32),
+    )
+
+
 def _config(
     *,
     threshold: float = 0.5,
     ambiguity_margin: float = 0.0,
+    policy: str | None = None,
 ) -> CSTIObserverConfig:
-    return CSTIObserverConfig.from_mapping(
-        {
-            "prompt_groups": [
-                {
-                    "id": "ball",
-                    "text": "ball",
-                    "entity_classes": ["ball"],
-                },
-                {
-                    "id": "block",
-                    "text": "sliding block",
-                    "entity_classes": ["block"],
-                },
-            ],
-            "initial_match_iou_threshold": threshold,
-            "initial_match_ambiguity_margin": ambiguity_margin,
-            "termination_patience": 3,
-            "minimum_mask_pixels": 1,
-            "minimum_observation_confidence": 0.0,
-        }
-    )
+    mapping = {
+        "prompt_groups": [
+            {
+                "id": "ball",
+                "text": "ball",
+                "entity_classes": ["ball"],
+            },
+            {
+                "id": "block",
+                "text": "sliding block",
+                "entity_classes": ["block"],
+            },
+        ],
+        "initial_match_iou_threshold": threshold,
+        "initial_match_ambiguity_margin": ambiguity_margin,
+        "termination_patience": 3,
+        "minimum_mask_pixels": 1,
+        "minimum_observation_confidence": 0.0,
+    }
+    if policy is not None:
+        mapping["initial_matching_policy"] = policy
+    return CSTIObserverConfig.from_mapping(mapping)
 
 
 def _metric_config() -> CSTIConfig:
@@ -133,6 +169,15 @@ def _metric_config() -> CSTIConfig:
 
 
 class CSTIInitialMatchingTest(unittest.TestCase):
+    def test_config_preserves_legacy_matching_policy_default(self) -> None:
+        self.assertEqual(
+            "maximum_total_iou_v1", _config().initial_matching_policy
+        )
+
+    def test_config_rejects_unknown_matching_policy(self) -> None:
+        with self.assertRaisesRegex(CSTIContractError, "matching policy"):
+            _config(policy="threshold_feasible_v3")
+
     def test_config_rejects_entity_class_shared_by_prompt_groups(self) -> None:
         mapping = {
             "prompt_groups": [
@@ -263,6 +308,211 @@ class CSTIInitialMatchingTest(unittest.TestCase):
         self.assertEqual("initial_assignment_ambiguous", result.failure.code)
         self.assertEqual(0.0, result.failure.details["assignment_margin"])
 
+    def test_threshold_feasible_policy_finds_valid_assignment_legacy_misses(
+        self,
+    ) -> None:
+        references = _disjoint_hundred_pixel_masks(("a", "b"))
+        candidates = (
+            _candidate_from_disjoint_counts("x", (100, 55)),
+            _candidate_from_disjoint_counts("y", (26, 0)),
+        )
+        entities = (_entity("a", "ball"), _entity("b", "ball"))
+
+        legacy = match_initial_identities(
+            entities=entities,
+            reference_masks_by_entity=references,
+            candidates=candidates,
+            config=_config(threshold=0.25),
+        )
+        feasible = match_initial_identities(
+            entities=entities,
+            reference_masks_by_entity=references,
+            candidates=candidates,
+            config=_config(threshold=0.25, policy="threshold_feasible_v2"),
+        )
+
+        self.assertFalse(legacy.success)
+        self.assertEqual("initial_match_iou_below_threshold", legacy.failure.code)
+        self.assertTrue(feasible.success)
+        self.assertEqual({"a": "y", "b": "x"}, feasible.initial_matching)
+        self.assertEqual({"a": 0.26, "b": 0.275}, feasible.matching_iou)
+
+    def test_threshold_feasible_policy_reports_hall_conflict_as_init_failure(
+        self,
+    ) -> None:
+        references = _disjoint_hundred_pixel_masks(("a", "b"))
+        result = match_initial_identities(
+            entities=(_entity("a", "ball"), _entity("b", "ball")),
+            reference_masks_by_entity=references,
+            candidates=(
+                _candidate_from_disjoint_counts("shared", (100, 100)),
+                _candidate_from_disjoint_counts("empty", (0, 0)),
+            ),
+            config=_config(threshold=0.5, policy="threshold_feasible_v2"),
+        )
+
+        self.assertFalse(result.success)
+        self.assertEqual("no_feasible_initial_assignment", result.failure.code)
+        self.assertEqual({}, result.initial_matching)
+
+    def test_threshold_feasible_policy_rejects_an_all_zero_entity_row(self) -> None:
+        references = _disjoint_hundred_pixel_masks(("a", "b"))
+        result = match_initial_identities(
+            entities=(_entity("a", "ball"), _entity("b", "ball")),
+            reference_masks_by_entity=references,
+            candidates=(
+                _candidate_from_disjoint_counts("a-full", (100, 0)),
+                _candidate_from_disjoint_counts("a-part", (50, 0)),
+            ),
+            config=_config(threshold=0.25, policy="threshold_feasible_v2"),
+        )
+
+        self.assertFalse(result.success)
+        self.assertEqual("no_feasible_initial_assignment", result.failure.code)
+
+    def test_threshold_equality_is_a_feasible_edge(self) -> None:
+        references = _disjoint_hundred_pixel_masks(("a",))
+        result = match_initial_identities(
+            entities=(_entity("a", "ball"),),
+            reference_masks_by_entity=references,
+            candidates=(_candidate_from_disjoint_counts("quarter", (25,)),),
+            config=_config(threshold=0.25, policy="threshold_feasible_v2"),
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual({"a": "quarter"}, result.initial_matching)
+        self.assertEqual({"a": 0.25}, result.matching_iou)
+
+    def test_rectangular_feasible_matching_ignores_only_the_extra_candidate(
+        self,
+    ) -> None:
+        references = _disjoint_hundred_pixel_masks(("a", "b"))
+        candidates = (
+            _candidate_from_disjoint_counts("x", (100, 55)),
+            _candidate_from_disjoint_counts("y", (26, 0)),
+            _candidate_from_disjoint_counts("extra", (0, 0)),
+        )
+        result = match_initial_identities(
+            entities=(_entity("a", "ball"), _entity("b", "ball")),
+            reference_masks_by_entity=references,
+            candidates=candidates,
+            config=_config(threshold=0.25, policy="threshold_feasible_v2"),
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual({"a": "y", "b": "x"}, result.initial_matching)
+        self.assertEqual(("extra",), result.ignored_candidate_ids)
+
+    def test_feasible_assignment_is_invariant_to_entity_and_candidate_order(
+        self,
+    ) -> None:
+        references = _disjoint_hundred_pixel_masks(("a", "b"))
+        entities = (_entity("a", "ball"), _entity("b", "ball"))
+        candidates = (
+            _candidate_from_disjoint_counts("x", (100, 55)),
+            _candidate_from_disjoint_counts("y", (26, 0)),
+        )
+
+        for ordered_entities in (entities, tuple(reversed(entities))):
+            for ordered_candidates in (candidates, tuple(reversed(candidates))):
+                with self.subTest(
+                    entities=tuple(item.entity_id for item in ordered_entities),
+                    candidates=tuple(
+                        item.candidate_id for item in ordered_candidates
+                    ),
+                ):
+                    result = match_initial_identities(
+                        entities=ordered_entities,
+                        reference_masks_by_entity=references,
+                        candidates=ordered_candidates,
+                        config=_config(
+                            threshold=0.25,
+                            policy="threshold_feasible_v2",
+                        ),
+                    )
+                    self.assertTrue(result.success)
+                    self.assertEqual(
+                        {"a": "y", "b": "x"}, result.initial_matching
+                    )
+
+    def test_ambiguity_uses_second_best_feasible_assignment(self) -> None:
+        references = _disjoint_hundred_pixel_masks(("a", "b", "c"))
+        result = match_initial_identities(
+            entities=(
+                _entity("a", "ball"),
+                _entity("b", "ball"),
+                _entity("c", "ball"),
+            ),
+            reference_masks_by_entity=references,
+            candidates=(
+                _candidate_from_disjoint_counts("first", (85, 37, 74)),
+                _candidate_from_disjoint_counts("second", (68, 5, 63)),
+                _candidate_from_disjoint_counts("third", (19, 54, 92)),
+            ),
+            config=_config(
+                threshold=0.25,
+                ambiguity_margin=0.01,
+                policy="threshold_feasible_v2",
+            ),
+        )
+
+        self.assertFalse(result.success)
+        self.assertEqual("initial_assignment_ambiguous", result.failure.code)
+        self.assertAlmostEqual(
+            0.00963673783715977,
+            result.failure.details["assignment_margin"],
+        )
+
+    def test_full_iou_diagnostics_include_candidate_ids_on_success(self) -> None:
+        references = _disjoint_hundred_pixel_masks(("a", "b"))
+        result = match_initial_identities(
+            entities=(_entity("a", "ball"), _entity("b", "ball")),
+            reference_masks_by_entity=references,
+            candidates=(
+                _candidate_from_disjoint_counts("x", (100, 55)),
+                _candidate_from_disjoint_counts("y", (26, 0)),
+                _candidate_from_disjoint_counts("extra", (0, 0)),
+            ),
+            config=_config(threshold=0.25, policy="threshold_feasible_v2"),
+        )
+
+        self.assertEqual(
+            {
+                "ball": {
+                    "entity_ids": ("a", "b"),
+                    "candidate_ids": ("x", "y", "extra"),
+                    "iou_matrix": (
+                        (100 / 155, 0.26, 0.0),
+                        (0.275, 0.0, 0.0),
+                    ),
+                }
+            },
+            result.initial_iou_diagnostics,
+        )
+
+    def test_shortage_diagnostics_retain_rows_and_zero_candidate_columns(
+        self,
+    ) -> None:
+        references = _disjoint_hundred_pixel_masks(("a", "b"))
+        result = match_initial_identities(
+            entities=(_entity("a", "ball"), _entity("b", "ball")),
+            reference_masks_by_entity=references,
+            candidates=(),
+            config=_config(threshold=0.25, policy="threshold_feasible_v2"),
+        )
+
+        self.assertFalse(result.success)
+        self.assertEqual(
+            {
+                "ball": {
+                    "entity_ids": ("a", "b"),
+                    "candidate_ids": (),
+                    "iou_matrix": ((), ()),
+                }
+            },
+            result.initial_iou_diagnostics,
+        )
+
 
 class CSTILockedTubeLifecycleTest(unittest.TestCase):
     def _build(
@@ -355,7 +605,7 @@ class CSTILockedTubeLifecycleTest(unittest.TestCase):
             entities=(_entity("left", "ball"), _entity("right", "ball")),
             reference_masks_by_entity={"left": left, "right": right},
             candidates=candidates,
-            config=_config(),
+            config=_config(policy="threshold_feasible_v2"),
         )
 
         result = build_locked_prediction_tubes(
@@ -364,7 +614,7 @@ class CSTILockedTubeLifecycleTest(unittest.TestCase):
             initial_match=initial,
             frame_count=3,
             frame_shape=left.shape,
-            config=_config(),
+            config=_config(policy="threshold_feasible_v2"),
         )
 
         self.assertTrue(np.array_equal(right, result.prediction_masks_by_entity["left"][1]))
@@ -564,6 +814,21 @@ class CSTIObservationAdapterTest(unittest.TestCase):
             {"small": "ball:1", "large": "block:2"},
             result["initial_matching"],
         )
+        self.assertEqual(
+            {
+                "ball": {
+                    "entity_ids": ("small",),
+                    "candidate_ids": ("ball:1",),
+                    "iou_matrix": ((1.0,),),
+                },
+                "block": {
+                    "entity_ids": ("large",),
+                    "candidate_ids": ("block:2",),
+                    "iou_matrix": ((1.0,),),
+                },
+            },
+            result["observer"]["initial_iou_diagnostics"],
+        )
 
     def test_initialization_failure_metric_is_null_and_auditable_not_zero(self) -> None:
         value, entities = self._aligned_input()
@@ -591,6 +856,14 @@ class CSTIObservationAdapterTest(unittest.TestCase):
         self.assertEqual(
             "insufficient_semantic_candidates",
             result["evaluator_init_failure_reason"]["code"],
+        )
+        self.assertEqual(
+            {
+                "entity_ids": ("large",),
+                "candidate_ids": (),
+                "iou_matrix": ((),),
+            },
+            result["observer"]["initial_iou_diagnostics"]["block"],
         )
 
 

@@ -58,6 +58,7 @@ class CSTIObserverConfig:
     termination_patience: int
     minimum_mask_pixels: int
     minimum_observation_confidence: float
+    initial_matching_policy: str = "maximum_total_iou_v1"
     segmenter: Mapping[str, Any] = field(default_factory=dict)
     debug_outputs: bool = False
 
@@ -117,6 +118,15 @@ class CSTIObserverConfig:
                 "csti_observer_mask_threshold_invalid",
                 "CSTI observer minimum_mask_pixels must be positive",
             )
+        if not isinstance(self.initial_matching_policy, str) or (
+            self.initial_matching_policy
+            not in {"maximum_total_iou_v1", "threshold_feasible_v2"}
+        ):
+            raise CSTIContractError(
+                "csti_observer_matching_policy_invalid",
+                "CSTI observer initial matching policy must be "
+                "maximum_total_iou_v1 or threshold_feasible_v2",
+            )
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "CSTIObserverConfig":
@@ -133,7 +143,11 @@ class CSTIObserverConfig:
             "minimum_mask_pixels",
             "minimum_observation_confidence",
         }
-        optional = {"segmenter", "debug_outputs"}
+        optional = {
+            "initial_matching_policy",
+            "segmenter",
+            "debug_outputs",
+        }
         missing = required - set(value)
         extra = set(value) - required - optional
         if missing or extra:
@@ -204,6 +218,9 @@ class CSTIObserverConfig:
             minimum_observation_confidence=_unit_float(
                 value["minimum_observation_confidence"],
                 "minimum_observation_confidence",
+            ),
+            initial_matching_policy=value.get(
+                "initial_matching_policy", "maximum_total_iou_v1"
             ),
             segmenter=dict(segmenter),
             debug_outputs=debug_outputs,
@@ -325,6 +342,9 @@ class InitialIdentityMatch:
     matching_iou: Mapping[str, float]
     ignored_candidate_ids: tuple[str, ...]
     failure: EvaluatorInitFailure | None = None
+    initial_iou_diagnostics: Mapping[str, Mapping[str, Any]] = field(
+        default_factory=dict
+    )
 
 
 @dataclass(frozen=True)
@@ -364,6 +384,7 @@ def _failure(
     *,
     details: Mapping[str, Any],
     candidate_ids: Sequence[str],
+    initial_iou_diagnostics: Mapping[str, Mapping[str, Any]],
 ) -> InitialIdentityMatch:
     return InitialIdentityMatch(
         success=False,
@@ -371,7 +392,37 @@ def _failure(
         matching_iou={},
         ignored_candidate_ids=tuple(sorted(candidate_ids)),
         failure=EvaluatorInitFailure(code=code, message=message, details=details),
+        initial_iou_diagnostics=initial_iou_diagnostics,
     )
+
+
+def _solve_threshold_feasible_assignment(
+    ious: np.ndarray,
+    *,
+    threshold: float,
+    forbidden_edge: tuple[int, int] | None = None,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Maximize total IoU subject to every selected edge being feasible."""
+
+    row_count, column_count = ious.shape
+    if row_count == 0:
+        return (
+            np.empty((0,), dtype=np.int64),
+            np.empty((0,), dtype=np.int64),
+        )
+    if column_count < row_count:
+        return None
+    prohibited = ious < threshold
+    if forbidden_edge is not None:
+        prohibited = np.array(prohibited, copy=True)
+        prohibited[forbidden_edge] = True
+    cost = 1.0 - ious
+    cost = np.array(cost, copy=True)
+    cost[prohibited] = float(row_count + 1)
+    rows, columns = linear_sum_assignment(cost)
+    if len(rows) != row_count or np.any(prohibited[rows, columns]):
+        return None
+    return rows, columns
 
 
 def _best_alternative_score(
@@ -380,23 +431,34 @@ def _best_alternative_score(
     columns: np.ndarray,
     *,
     threshold: float,
+    threshold_feasible: bool,
 ) -> float | None:
     best: float | None = None
     for forbidden_row, forbidden_column in zip(rows, columns, strict=True):
-        alternative_cost = 1.0 - ious
-        alternative_cost = np.array(alternative_cost, copy=True)
-        alternative_cost[forbidden_row, forbidden_column] = 1e6
-        alt_rows, alt_columns = linear_sum_assignment(alternative_cost)
-        if any(
-            row == forbidden_row and column == forbidden_column
-            for row, column in zip(alt_rows, alt_columns, strict=True)
-        ):
-            continue
-        if len(alt_rows) != ious.shape[0]:
-            continue
-        selected = ious[alt_rows, alt_columns]
-        if np.any(selected < threshold):
-            continue
+        if threshold_feasible:
+            alternative = _solve_threshold_feasible_assignment(
+                ious,
+                threshold=threshold,
+                forbidden_edge=(int(forbidden_row), int(forbidden_column)),
+            )
+            if alternative is None:
+                continue
+            alt_rows, alt_columns = alternative
+            selected = ious[alt_rows, alt_columns]
+        else:
+            alternative_cost = np.array(1.0 - ious, copy=True)
+            alternative_cost[forbidden_row, forbidden_column] = 1e6
+            alt_rows, alt_columns = linear_sum_assignment(alternative_cost)
+            if any(
+                row == forbidden_row and column == forbidden_column
+                for row, column in zip(alt_rows, alt_columns, strict=True)
+            ):
+                continue
+            if len(alt_rows) != ious.shape[0]:
+                continue
+            selected = ious[alt_rows, alt_columns]
+            if np.any(selected < threshold):
+                continue
         score = float(np.mean(selected, dtype=np.float64))
         if best is None or score > best:
             best = score
@@ -468,6 +530,15 @@ def match_initial_identities(
             )
         group_for_entity[entity.entity_id] = group
 
+    prepared_groups: list[
+        tuple[
+            PromptGroupConfig,
+            tuple[EntitySpec, ...],
+            tuple[SemanticCandidateTube, ...],
+            np.ndarray,
+        ]
+    ] = []
+    initial_iou_diagnostics: dict[str, Mapping[str, Any]] = {}
     for group in config.prompt_groups:
         group_entities = tuple(
             entity
@@ -481,17 +552,6 @@ def match_initial_identities(
             for candidate in candidate_tuple
             if candidate.prompt_group_id == group.group_id
         )
-        if len(group_candidates) < len(group_entities):
-            return _failure(
-                "insufficient_semantic_candidates",
-                "SAM detected fewer compatible instances than the manifest expects",
-                details={
-                    "prompt_group_id": group.group_id,
-                    "expected_count": len(group_entities),
-                    "detected_count": len(group_candidates),
-                },
-                candidate_ids=candidate_ids,
-            )
         assert frame_shape is not None
         for candidate in group_candidates:
             if candidate.masks.shape[1:] != frame_shape:
@@ -512,13 +572,60 @@ def match_initial_identities(
             ],
             dtype=np.float64,
         )
-        rows, columns = linear_sum_assignment(1.0 - ious)
+        initial_iou_diagnostics[group.group_id] = {
+            "entity_ids": tuple(entity.entity_id for entity in group_entities),
+            "candidate_ids": tuple(
+                candidate.candidate_id for candidate in group_candidates
+            ),
+            "iou_matrix": tuple(
+                tuple(float(value) for value in row) for row in ious
+            ),
+        }
+        prepared_groups.append((group, group_entities, group_candidates, ious))
+
+    for group, group_entities, group_candidates, ious in prepared_groups:
+        if len(group_candidates) < len(group_entities):
+            return _failure(
+                "insufficient_semantic_candidates",
+                "SAM detected fewer compatible instances than the manifest expects",
+                details={
+                    "prompt_group_id": group.group_id,
+                    "expected_count": len(group_entities),
+                    "detected_count": len(group_candidates),
+                },
+                candidate_ids=candidate_ids,
+                initial_iou_diagnostics=initial_iou_diagnostics,
+            )
+        threshold_feasible = (
+            config.initial_matching_policy == "threshold_feasible_v2"
+        )
+        if threshold_feasible:
+            assignment = _solve_threshold_feasible_assignment(
+                ious,
+                threshold=config.initial_match_iou_threshold,
+            )
+            if assignment is None:
+                return _failure(
+                    "no_feasible_initial_assignment",
+                    "SAM candidates cannot form a complete one-to-one assignment "
+                    "at the configured IoU threshold",
+                    details={
+                        "prompt_group_id": group.group_id,
+                        "threshold": config.initial_match_iou_threshold,
+                    },
+                    candidate_ids=candidate_ids,
+                    initial_iou_diagnostics=initial_iou_diagnostics,
+                )
+            rows, columns = assignment
+        else:
+            rows, columns = linear_sum_assignment(1.0 - ious)
         if len(rows) != len(group_entities):
             return _failure(
                 "incomplete_initial_assignment",
                 "SAM candidates cannot form a complete one-to-one assignment",
                 details={"prompt_group_id": group.group_id},
                 candidate_ids=candidate_ids,
+                initial_iou_diagnostics=initial_iou_diagnostics,
             )
         selected = ious[rows, columns]
         group_matching_iou = {
@@ -535,6 +642,7 @@ def match_initial_identities(
                     "matching_iou": group_matching_iou,
                 },
                 candidate_ids=candidate_ids,
+                initial_iou_diagnostics=initial_iou_diagnostics,
             )
         best_score = float(np.mean(selected, dtype=np.float64))
         alternative_score = _best_alternative_score(
@@ -542,6 +650,7 @@ def match_initial_identities(
             rows,
             columns,
             threshold=config.initial_match_iou_threshold,
+            threshold_feasible=threshold_feasible,
         )
         margin = (
             math.inf
@@ -563,6 +672,7 @@ def match_initial_identities(
                     "required_margin": config.initial_match_ambiguity_margin,
                 },
                 candidate_ids=candidate_ids,
+                initial_iou_diagnostics=initial_iou_diagnostics,
             )
         for row, column in zip(rows, columns, strict=True):
             entity_id = group_entities[row].entity_id
@@ -580,6 +690,7 @@ def match_initial_identities(
                 "matched_entities": sorted(mappings),
             },
             candidate_ids=candidate_ids,
+            initial_iou_diagnostics=initial_iou_diagnostics,
         )
     return InitialIdentityMatch(
         success=True,
@@ -587,6 +698,7 @@ def match_initial_identities(
         matching_iou=dict(matching_ious),
         ignored_candidate_ids=tuple(sorted(set(candidate_ids) - used_candidates)),
         failure=None,
+        initial_iou_diagnostics=initial_iou_diagnostics,
     )
 
 
@@ -915,6 +1027,12 @@ def decorate_csti_metric(
                 "ignored_candidate_ids": list(
                     observation.initial_match.ignored_candidate_ids
                 ),
+                "initial_iou_diagnostics": {
+                    group_id: dict(diagnostic)
+                    for group_id, diagnostic in (
+                        observation.initial_match.initial_iou_diagnostics.items()
+                    )
+                },
                 "final_state_per_subject": dict(
                     observation.locked_tubes.final_state_per_subject
                 ),
@@ -987,6 +1105,12 @@ def evaluator_init_failure_metric(
                 "ignored_candidate_ids": list(
                     observation.initial_match.ignored_candidate_ids
                 ),
+                "initial_iou_diagnostics": {
+                    group_id: dict(diagnostic)
+                    for group_id, diagnostic in (
+                        observation.initial_match.initial_iou_diagnostics.items()
+                    )
+                },
             },
         }
     )
