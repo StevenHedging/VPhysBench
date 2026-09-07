@@ -19,6 +19,7 @@ import numpy as np
 
 from ..csti.observation import PromptGroupConfig, SemanticCandidateTube
 from ..errors import SceneAnalysisError
+from .sam31_compat import BIRTH_CONDITIONING_POLICY, install_birth_conditioning_fix
 
 
 PredictorFactory = Callable[[], Any]
@@ -89,6 +90,26 @@ class Sam31TextVideoSegmenter:
         self.resolved_device: str | None = None
         self.compatibility_filtered_session_keywords: tuple[str, ...] = ()
         self.model_load_output_summary: dict[str, Any] = {}
+        self.birth_conditioning_policy = "not_loaded"
+
+    def _install_birth_conditioning_compatibility(self) -> None:
+        try:
+            installed = install_birth_conditioning_fix(self._predictor)
+        except RuntimeError as exc:
+            self._predictor = None
+            raise SceneAnalysisError(
+                "sam31_tracker_interface_incompatible", str(exc)
+            ) from exc
+        if installed:
+            self.birth_conditioning_policy = BIRTH_CONDITIONING_POLICY
+        elif self._predictor_factory is not None:
+            self.birth_conditioning_policy = "not_installed_fixture"
+        else:
+            self._predictor = None
+            raise SceneAnalysisError(
+                "sam31_tracker_interface_incompatible",
+                "SAM3.1 predictor lacks the pinned birth-conditioning tracker interface",
+            )
 
     def _install_session_compatibility(self) -> None:
         assert self._predictor is not None
@@ -130,6 +151,7 @@ class Sam31TextVideoSegmenter:
             self._predictor = self._predictor_factory()
             self.resolved_device = "fixture"
             self._install_session_compatibility()
+            self._install_birth_conditioning_compatibility()
             return
         checkpoint_value = self.checkpoint_path
         if not checkpoint_value:
@@ -203,6 +225,7 @@ class Sam31TextVideoSegmenter:
         self.checkpoint_path = str(checkpoint)
         self.resolved_device = device
         self._install_session_compatibility()
+        self._install_birth_conditioning_compatibility()
 
     @staticmethod
     def _validate_frames(
@@ -359,6 +382,8 @@ class Sam31TextVideoSegmenter:
                 }
             )
             consume(prompt_response, initialize=True)
+            if not object_ids:
+                return ()
             for response in self._predictor.handle_stream_request(
                 {
                     "type": "propagate_in_video",
@@ -419,6 +444,7 @@ class Sam31TextVideoSegmenter:
         return {
             "backend": "sam3.1_multiplex_text_video",
             "source_revision": SAM31_SOURCE_REVISION,
+            "birth_conditioning_policy": self.birth_conditioning_policy,
             "checkpoint_path_env": self.checkpoint_path_env,
             "checkpoint_sha256": self.checkpoint_sha256,
             "requested_device": self.requested_device,

@@ -5,6 +5,7 @@ import unittest
 import numpy as np
 
 from physbench.evaluation.common.csti.observation import PromptGroupConfig
+from physbench.evaluation.common.errors import SceneAnalysisError
 from physbench.evaluation.common.masks.sam31_text import (
     Sam31TextVideoSegmenter,
     get_shared_sam31_text_segmenter,
@@ -99,6 +100,43 @@ def _config(unique: str = "default") -> dict[str, object]:
 
 
 class Sam31TextVideoAdapterTest(unittest.TestCase):
+    def test_empty_initial_detection_closes_without_propagating(self) -> None:
+        class EmptyPredictor(_FakePredictor):
+            @staticmethod
+            def _outputs(frame_index, **kwargs):
+                return {"out_obj_ids": [], "out_binary_masks": np.zeros((0, 6, 10)),
+                        "out_boxes_xywh": np.zeros((0, 4)), "out_probs": []}
+
+        predictor = EmptyPredictor()
+        segmenter = Sam31TextVideoSegmenter(_config(), predictor_factory=lambda: predictor)
+        self.assertEqual((), segmenter.segment(_frames(), (_group(),)))
+        self.assertEqual(1, len(predictor.closed_sessions))
+        self.assertFalse(any(r["type"] == "propagate_in_video" for r in predictor.requests))
+
+    def test_compatible_factory_installs_and_reports_birth_policy(self) -> None:
+        from tests.test_sam31_compat import BoundaryTracker, predictor_for
+        predictor = _FakePredictor()
+        tracker = BoundaryTracker()
+        predictor.model = predictor_for(tracker).model
+        segmenter = Sam31TextVideoSegmenter(_config(), predictor_factory=lambda: predictor)
+        segmenter.segment(_frames(), (_group(),))
+        self.assertEqual((True, False, False), tracker.add_new_masks(
+            {"obj_id_to_idx": {}}, 6, [1], None))
+        self.assertEqual("new_object_conditioning_v1", segmenter.describe().get("birth_conditioning_policy"))
+
+    def test_incompatible_present_tracker_cannot_be_reused_after_load_failure(self):
+        from types import SimpleNamespace
+        from tests.test_sam31_compat import predictor_for
+        predictor = _FakePredictor()
+        predictor.model = predictor_for(SimpleNamespace(
+            add_new_masks=lambda unexpected: None,
+            add_all_frames_to_correct_as_cond=False)).model
+        segmenter = Sam31TextVideoSegmenter(_config(), predictor_factory=lambda: predictor)
+        for _ in range(2):
+            with self.assertRaises(SceneAnalysisError) as caught:
+                segmenter.segment(_frames(), (_group(),))
+            self.assertEqual("sam31_tracker_interface_incompatible", caught.exception.code)
+
     def test_rejects_precision_the_official_predictor_cannot_honor(self) -> None:
         config = _config()
         config["precision"] = "float32"
