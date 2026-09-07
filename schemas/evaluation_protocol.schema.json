@@ -124,6 +124,8 @@
         "prompt_groups",
         "initial_match_iou_threshold",
         "initial_match_ambiguity_margin",
+        "initial_matching_policy",
+        "observer_revision",
         "termination_patience",
         "minimum_mask_pixels",
         "minimum_observation_confidence",
@@ -161,6 +163,8 @@
           "minimum": 0,
           "maximum": 1
         },
+        "initial_matching_policy": {"const": "threshold_feasible_v2"},
+        "observer_revision": {"const": 2},
         "termination_patience": {"type": "integer", "minimum": 1},
         "minimum_mask_pixels": {"type": "integer", "minimum": 1},
         "minimum_observation_confidence": {
@@ -176,6 +180,8 @@
             "device",
             "precision",
             "output_probability_threshold",
+            "initial_detection",
+            "masklet_confirmation_enable",
             "max_num_objects",
             "multiplex_count",
             "compile",
@@ -196,6 +202,16 @@
               "minimum": 0,
               "maximum": 1
             },
+            "initial_detection": {
+              "type": "object",
+              "required": ["score_threshold", "new_object_threshold"],
+              "properties": {
+                "score_threshold": {"const": 0.2},
+                "new_object_threshold": {"const": 0.2}
+              },
+              "additionalProperties": false
+            },
+            "masklet_confirmation_enable": {"const": false},
             "max_num_objects": {"type": "integer", "minimum": 1},
             "multiplex_count": {"type": "integer", "minimum": 1},
             "compile": {"type": "boolean"},

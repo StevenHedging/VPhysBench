@@ -7,6 +7,7 @@ import hashlib
 import inspect
 import io
 import json
+import math
 import os
 from pathlib import Path
 import tempfile
@@ -73,6 +74,47 @@ class Sam31TextVideoSegmenter:
             raise ValueError(
                 "SAM3.1 output_probability_threshold must lie in [0,1]"
             )
+        self.initial_detection: dict[str, float] | None = None
+        if "initial_detection" in config:
+            initial_detection = config["initial_detection"]
+            if not isinstance(initial_detection, Mapping) or set(
+                initial_detection
+            ) != {"score_threshold", "new_object_threshold"}:
+                raise ValueError(
+                    "SAM3.1 initial_detection must contain only "
+                    "score_threshold and new_object_threshold"
+                )
+            score_threshold = self._unit_float(
+                initial_detection["score_threshold"],
+                "initial_detection.score_threshold",
+            )
+            new_object_threshold = self._unit_float(
+                initial_detection["new_object_threshold"],
+                "initial_detection.new_object_threshold",
+            )
+            if new_object_threshold < score_threshold:
+                raise ValueError(
+                    "SAM3.1 initial_detection.new_object_threshold must be "
+                    "greater than or equal to score_threshold"
+                )
+            self.initial_detection = {
+                "score_threshold": score_threshold,
+                "new_object_threshold": new_object_threshold,
+            }
+        self.masklet_confirmation_enable: bool | None = None
+        if "masklet_confirmation_enable" in config:
+            masklet_confirmation_enable = config["masklet_confirmation_enable"]
+            if not isinstance(masklet_confirmation_enable, bool):
+                raise ValueError(
+                    "SAM3.1 masklet_confirmation_enable must be boolean"
+                )
+            self.masklet_confirmation_enable = masklet_confirmation_enable
+        self.observer_revision = (
+            2
+            if self.initial_detection is not None
+            or self.masklet_confirmation_enable is not None
+            else 1
+        )
         self.max_num_objects = int(config.get("max_num_objects", 16))
         self.multiplex_count = int(config.get("multiplex_count", 16))
         if self.max_num_objects < 1 or self.multiplex_count < 1:
@@ -91,6 +133,127 @@ class Sam31TextVideoSegmenter:
         self.compatibility_filtered_session_keywords: tuple[str, ...] = ()
         self.model_load_output_summary: dict[str, Any] = {}
         self.birth_conditioning_policy = "not_loaded"
+        self._native_detection: dict[str, float] | None = None
+        self._native_masklet_confirmation: bool | None = None
+
+    @staticmethod
+    def _unit_float(value: Any, label: str) -> float:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+            or not 0.0 <= float(value) <= 1.0
+        ):
+            raise ValueError(f"SAM3.1 {label} must be a finite number in [0,1]")
+        return float(value)
+
+    @staticmethod
+    def _backend_gate(value: Any) -> float | None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        result = float(value)
+        return result if math.isfinite(result) else None
+
+    def _record_native_detection_policy(self, model: Any) -> None:
+        if all(
+            hasattr(model, name)
+            for name in ("score_threshold_detection", "new_det_thresh")
+        ):
+            score_threshold = self._backend_gate(
+                model.score_threshold_detection
+            )
+            new_object_threshold = self._backend_gate(model.new_det_thresh)
+            if score_threshold is not None and new_object_threshold is not None:
+                self._native_detection = {
+                    "score_threshold": score_threshold,
+                    "new_object_threshold": new_object_threshold,
+                }
+
+    def _record_native_backend_policy(self) -> Any:
+        assert self._predictor is not None
+        model = getattr(self._predictor, "model", None)
+        if model is None:
+            return None
+        self._record_native_detection_policy(model)
+        if hasattr(model, "masklet_confirmation_enable") and isinstance(
+            model.masklet_confirmation_enable, bool
+        ):
+            self._native_masklet_confirmation = (
+                model.masklet_confirmation_enable
+            )
+        return model
+
+    def _required_model_attribute(self, model: Any, attribute: str) -> Any:
+        if model is None or not hasattr(model, attribute):
+            raise SceneAnalysisError(
+                "sam31_model_interface_incompatible",
+                "SAM3.1 predictor lacks required backend policy attribute "
+                f"{attribute!r}",
+            )
+        return getattr(model, attribute)
+
+    @contextlib.contextmanager
+    def _initial_detection_policy(self):
+        if self.initial_detection is None:
+            yield
+            return
+        assert self._predictor is not None
+        model = getattr(self._predictor, "model", None)
+        self._record_native_detection_policy(model)
+        previous_score = self._required_model_attribute(
+            model, "score_threshold_detection"
+        )
+        previous_new_object = self._required_model_attribute(
+            model, "new_det_thresh"
+        )
+        try:
+            model.score_threshold_detection = self.initial_detection[
+                "score_threshold"
+            ]
+            model.new_det_thresh = self.initial_detection[
+                "new_object_threshold"
+            ]
+        except Exception as exc:
+            model.score_threshold_detection = previous_score
+            model.new_det_thresh = previous_new_object
+            raise SceneAnalysisError(
+                "sam31_model_interface_incompatible",
+                f"Cannot apply SAM3.1 initial detection policy: {exc}",
+            ) from exc
+        try:
+            yield
+        finally:
+            model.score_threshold_detection = previous_score
+            model.new_det_thresh = previous_new_object
+
+    @contextlib.contextmanager
+    def _masklet_confirmation_policy(self):
+        model = self._record_native_backend_policy()
+        if self.masklet_confirmation_enable is None:
+            yield
+            return
+        previous = self._required_model_attribute(
+            model, "masklet_confirmation_enable"
+        )
+        if not isinstance(previous, bool):
+            raise SceneAnalysisError(
+                "sam31_model_interface_incompatible",
+                "SAM3.1 masklet_confirmation_enable backend attribute must "
+                "be boolean",
+            )
+        try:
+            model.masklet_confirmation_enable = (
+                self.masklet_confirmation_enable
+            )
+        except Exception as exc:
+            raise SceneAnalysisError(
+                "sam31_model_interface_incompatible",
+                f"Cannot apply SAM3.1 masklet confirmation policy: {exc}",
+            ) from exc
+        try:
+            yield
+        finally:
+            model.masklet_confirmation_enable = previous
 
     def _install_birth_conditioning_compatibility(self) -> None:
         try:
@@ -323,15 +486,6 @@ class Sam31TextVideoSegmenter:
         group: PromptGroupConfig,
     ) -> tuple[SemanticCandidateTube, ...]:
         assert self._predictor is not None
-        start_response = self._predictor.handle_request(
-            {
-                "type": "start_session",
-                "resource_path": str(frame_directory),
-                "offload_video_to_cpu": True,
-                "offload_state_to_cpu": False,
-            }
-        )
-        session_id = str(start_response["session_id"])
         object_ids: tuple[int, ...] = ()
         masks_by_id: dict[int, np.ndarray] = {}
         boxes_by_id: dict[int, np.ndarray] = {}
@@ -371,37 +525,52 @@ class Sam31TextVideoSegmenter:
                     output_index
                 ]
 
-        try:
-            prompt_response = self._predictor.handle_request(
+        with self._masklet_confirmation_policy():
+            start_response = self._predictor.handle_request(
                 {
-                    "type": "add_prompt",
-                    "session_id": session_id,
-                    "frame_index": 0,
-                    "text": group.text,
-                    "output_prob_thresh": self.output_probability_threshold,
+                    "type": "start_session",
+                    "resource_path": str(frame_directory),
+                    "offload_video_to_cpu": True,
+                    "offload_state_to_cpu": False,
                 }
             )
-            consume(prompt_response, initialize=True)
-            if not object_ids:
-                return ()
-            for response in self._predictor.handle_stream_request(
-                {
-                    "type": "propagate_in_video",
-                    "session_id": session_id,
-                    "propagation_direction": "forward",
-                    "start_frame_index": 0,
-                    "output_prob_thresh": self.output_probability_threshold,
-                }
-            ):
-                consume(response)
-        finally:
-            self._predictor.handle_request(
-                {
-                    "type": "close_session",
-                    "session_id": session_id,
-                    "run_gc_collect": True,
-                }
-            )
+            session_id = str(start_response["session_id"])
+            try:
+                with self._initial_detection_policy():
+                    prompt_response = self._predictor.handle_request(
+                        {
+                            "type": "add_prompt",
+                            "session_id": session_id,
+                            "frame_index": 0,
+                            "text": group.text,
+                            "output_prob_thresh": (
+                                self.output_probability_threshold
+                            ),
+                        }
+                    )
+                consume(prompt_response, initialize=True)
+                if not object_ids:
+                    return ()
+                for response in self._predictor.handle_stream_request(
+                    {
+                        "type": "propagate_in_video",
+                        "session_id": session_id,
+                        "propagation_direction": "forward",
+                        "start_frame_index": 0,
+                        "output_prob_thresh": (
+                            self.output_probability_threshold
+                        ),
+                    }
+                ):
+                    consume(response)
+            finally:
+                self._predictor.handle_request(
+                    {
+                        "type": "close_session",
+                        "session_id": session_id,
+                        "run_gc_collect": True,
+                    }
+                )
         return tuple(
             SemanticCandidateTube(
                 candidate_id=f"{group.group_id}:{object_id}",
@@ -441,8 +610,28 @@ class Sam31TextVideoSegmenter:
         return tuple(sorted(candidates, key=lambda item: item.candidate_id))
 
     def describe(self) -> dict[str, Any]:
+        native_detection = self._native_detection
+        initial_detection = self.initial_detection or native_detection
+        initial_detection_description = {
+            "policy": (
+                "frame_zero_override_v1"
+                if self.initial_detection is not None
+                else "backend_native_v1"
+            ),
+            "score_threshold": (
+                initial_detection["score_threshold"]
+                if initial_detection is not None
+                else None
+            ),
+            "new_object_threshold": (
+                initial_detection["new_object_threshold"]
+                if initial_detection is not None
+                else None
+            ),
+        }
         return {
             "backend": "sam3.1_multiplex_text_video",
+            "observer_revision": self.observer_revision,
             "source_revision": SAM31_SOURCE_REVISION,
             "birth_conditioning_policy": self.birth_conditioning_policy,
             "checkpoint_path_env": self.checkpoint_path_env,
@@ -451,6 +640,37 @@ class Sam31TextVideoSegmenter:
             "resolved_device": self.resolved_device,
             "precision": self.precision,
             "output_probability_threshold": self.output_probability_threshold,
+            "output_probability_threshold_policy": (
+                "backend_request_not_guaranteed_export_filter_v1"
+            ),
+            "initial_detection": initial_detection_description,
+            "propagation_detection": {
+                "policy": "backend_native_v1",
+                "score_threshold": (
+                    native_detection["score_threshold"]
+                    if native_detection is not None
+                    else None
+                ),
+                "new_object_threshold": (
+                    native_detection["new_object_threshold"]
+                    if native_detection is not None
+                    else None
+                ),
+            },
+            "masklet_confirmation": {
+                "policy": (
+                    "whole_session_override_v1"
+                    if self.masklet_confirmation_enable is not None
+                    else "backend_native_v1"
+                ),
+                "requested": self.masklet_confirmation_enable,
+                "native": self._native_masklet_confirmation,
+                "effective": (
+                    self.masklet_confirmation_enable
+                    if self.masklet_confirmation_enable is not None
+                    else self._native_masklet_confirmation
+                ),
+            },
             "prompt_policy": "text_only_frame_zero",
             "propagation_direction": "forward",
             "identity_policy": "external_first_frame_hungarian_locked",

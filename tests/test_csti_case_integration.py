@@ -350,6 +350,37 @@ class CSTICaseIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(1, segmenter.calls)
 
+    def test_versioned_observer_provenance_reports_configured_matching_policy(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request, reference_path = self._request(root)
+            config = evaluator_config(csti_observer=True)
+            observer = config["csti_observer"]
+            assert isinstance(observer, dict)
+            observer["initial_matching_policy"] = "threshold_feasible_v2"
+            observer["observer_revision"] = 2
+            evaluator = _FakeCSTIEvaluator(
+                config,
+                csti_segmenter=_FakeTextSegmenter(),
+            )
+
+            description = evaluator.describe()["csti_observer"]
+            result = self._evaluate(evaluator, request, reference_path)
+
+        self.assertEqual(2, description["observer_revision"])
+        self.assertEqual("threshold_feasible_v2", description["matching_policy"])
+        provenance = result.provenance["csti_observer"]
+        self.assertEqual(2, provenance["observer_revision"])
+        self.assertEqual(
+            "threshold_feasible_v2", provenance["initial_matching_policy"]
+        )
+        self.assertEqual(
+            "sam31_text_frame_zero_locked_v2",
+            provenance["policy"],
+        )
+
     def test_scene_prediction_failure_keeps_independently_observed_csti(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

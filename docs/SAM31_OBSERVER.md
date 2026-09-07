@@ -1,0 +1,73 @@
+# SAM3.1 prediction observer
+
+The public `scene_default_v1` protocol uses observer revision 2 for prediction
+segmentation. The protocol entrypoint is unchanged, but its configuration and
+therefore its protocol and evaluator fingerprints differ from results produced
+with the earlier observer settings. Results should retain those fingerprints in
+their provenance rather than being compared as if the observer were unchanged.
+
+## Frame-zero candidates
+
+The observer sends each declared semantic text prompt on frame zero. It never
+sends a ground-truth mask, box, point, crop, case identifier, or match result to
+SAM. Ground truth is used only after prediction candidates exist, to bind their
+frame-zero masks to the declared benchmark entities.
+
+`initial_detection.score_threshold` is the detector proposal gate.
+`initial_detection.new_object_threshold` is the new-object birth gate and must
+be at least the detector gate. Both are finite floating-point values in
+`[0, 1]`. Revision 2 sets both to `0.2`. These overrides exist only during the
+initial text request; the native backend values are restored before propagation
+and after failures. Omitting `initial_detection` preserves the backend gates.
+
+`output_probability_threshold` is a separate argument supplied to the backend
+for prompt and propagation requests. The pinned multiplex path accepts this
+argument but does not guarantee that it filters exported probabilities, so it
+must not be interpreted as an enforced confidence floor. The IoU threshold used
+for identity acceptance is separate again.
+
+## Identity and temporal output
+
+Revision 2 uses `threshold_feasible_v2` matching. It chooses a complete,
+one-to-one frame-zero assignment only among candidate/entity edges that meet the
+configured IoU threshold. Shortage, infeasibility, or ambiguity produces an
+explicit initialization failure; it does not trigger another prompt. Once
+accepted, the backend object ID is fixed for the common physical timeline and
+is never rebound from later ground truth.
+
+The instance compatibility policy records every newly born object as a
+conditioning input when the pinned tracker would otherwise classify its birth
+as a non-conditioning correction. The wrapper leaves the native state update,
+memory encoding, frame history, and index maintenance in place and restores the
+backend flag after each call.
+
+Revision 2 also sets `masklet_confirmation_enable` to `false` for the whole
+prompt-group session. Discovery confirmation can hide a nonempty mask until the
+same discovery is confirmed across frames, which conflicts with a benchmark
+that already fixed identity on frame zero. Disabling that output filter exposes
+the backend's real mask for the fixed ID; it does not synthesize or interpolate
+masks, disable removal, expose suppressed unmatched objects, rebind IDs, or
+change CSTI termination. Truly empty, removed, or suppressed outputs remain so.
+The native setting is restored after session completion or failure. Omitting
+the option preserves native behavior.
+
+## Provenance and failures
+
+Segmenter provenance distinguishes the configured frame-zero gates from the
+restored native propagation gates. It also records the requested, effective and
+native discovery-confirmation setting, the requested export-probability policy,
+and the birth-conditioning policy. Observer provenance records revision 2 and
+the initial matching policy.
+
+An explicitly configured policy requires the corresponding pinned backend
+attributes. Missing attributes are evaluator interface errors rather than a
+silent fallback. Initialization shortage and ambiguity remain null CSTI
+outcomes, while runtime and interface faults remain evaluator errors.
+
+The public `0.2` gates were selected by comparing fixed coherent detector/birth
+floors against the previous native settings and by checking independently
+selected controls. Lowering a proposal gate can add false or ambiguous
+candidates and is not evidence of better segmentation by itself. The revised
+policy improves initial candidate availability but does not guarantee complete
+tracking when the native tracker loses or removes an object. It does not add
+multi-scale retries or any case-conditioned recovery path.

@@ -58,9 +58,10 @@ class CSTIObserverConfig:
     termination_patience: int
     minimum_mask_pixels: int
     minimum_observation_confidence: float
-    initial_matching_policy: str = "maximum_total_iou_v1"
     segmenter: Mapping[str, Any] = field(default_factory=dict)
     debug_outputs: bool = False
+    initial_matching_policy: str = "maximum_total_iou_v1"
+    observer_revision: int = 1
 
     def __post_init__(self) -> None:
         if not isinstance(self.prompt_groups, tuple) or not self.prompt_groups:
@@ -127,6 +128,15 @@ class CSTIObserverConfig:
                 "CSTI observer initial matching policy must be "
                 "maximum_total_iou_v1 or threshold_feasible_v2",
             )
+        if (
+            isinstance(self.observer_revision, bool)
+            or not isinstance(self.observer_revision, int)
+            or self.observer_revision not in {1, 2}
+        ):
+            raise CSTIContractError(
+                "csti_observer_revision_invalid",
+                "CSTI observer revision must be 1 or 2",
+            )
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "CSTIObserverConfig":
@@ -145,6 +155,7 @@ class CSTIObserverConfig:
         }
         optional = {
             "initial_matching_policy",
+            "observer_revision",
             "segmenter",
             "debug_outputs",
         }
@@ -222,6 +233,7 @@ class CSTIObserverConfig:
             initial_matching_policy=value.get(
                 "initial_matching_policy", "maximum_total_iou_v1"
             ),
+            observer_revision=value.get("observer_revision", 1),
             segmenter=dict(segmenter),
             debug_outputs=debug_outputs,
         )

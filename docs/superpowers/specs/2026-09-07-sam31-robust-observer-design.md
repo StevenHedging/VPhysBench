@@ -55,8 +55,11 @@ success and failure. Do not alter future-frame identity or termination semantics
 
 ## C. Explicit initial candidate policy
 
-Separate three existing gates: detector proposal score, new-object score and
-export probability. Expose validated, provenance-recorded frame-zero detector
+Distinguish detector proposal score, new-object score and the requested export
+probability argument. The pinned multiplex backend accepts the latter argument
+but does not apply it as an output probability filter on this path; provenance
+and documentation must not imply that it guarantees an exported score floor.
+Expose validated, provenance-recorded frame-zero detector
 and birth gates, applied only while executing the initial text prompt and
 restored before normal video propagation, including after exceptions. Keep
 export confidence and IoU acceptance separate. No GT-driven retries, extra
@@ -71,6 +74,25 @@ document the remaining limitation before proposing a separate image-only
 multi-scale subsystem. Do not introduce unvalidated multi-scale tracking in this
 change. Preserve old configurations and make the public observer revision and
 resolved candidate/matching policies explicit in configuration/provenance.
+
+## D. Separate discovery confirmation from fixed-ID visibility
+
+Full-video inspection found nonempty internal masks hidden solely because the
+backend had not yet confirmed a discovery through consecutive detections. This
+can exceed the benchmark's existing invalid-frame patience even though tracking
+continues with the same ID. Paired native probes found disabling this output
+confirmation filter preserves the underlying masks, initial identities, removal
+decisions and unmatched-object suppression while exposing those real masks.
+
+Expose an optional strictly boolean `masklet_confirmation_enable` segmenter
+setting. Legacy omission leaves the backend default intact; the revised public
+observer explicitly disables it for its fixed-frame-zero identity contract.
+Apply it to the predictor instance for the entire prompt-group session under the
+existing lock, restoring the original value even on failure. Record requested,
+effective and native values. Missing required backend support must fail clearly.
+Do not disable removal or unmatched suppression, synthesize masks, rebind IDs,
+or alter benchmark termination semantics. This does not guarantee complete
+tracking when the native tracker actually loses or removes an object.
 
 ## Validation and publication
 

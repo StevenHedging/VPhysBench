@@ -7,6 +7,7 @@ import numpy as np
 from physbench.evaluation.common.csti.observation import (
     CSTIObserverConfig,
     InitialIdentityMatch,
+    PromptGroupConfig,
     SemanticCandidateTube,
     build_locked_prediction_tubes,
     decorate_csti_metric,
@@ -174,9 +175,52 @@ class CSTIInitialMatchingTest(unittest.TestCase):
             "maximum_total_iou_v1", _config().initial_matching_policy
         )
 
+    def test_config_preserves_legacy_positional_constructor_order(self) -> None:
+        config = CSTIObserverConfig(
+            (
+                PromptGroupConfig(
+                    group_id="ball",
+                    text="ball",
+                    entity_classes=("ball",),
+                ),
+            ),
+            0.25,
+            0.02,
+            3,
+            4,
+            0.0,
+            {"backend": "legacy"},
+            True,
+        )
+
+        self.assertEqual({"backend": "legacy"}, config.segmenter)
+        self.assertTrue(config.debug_outputs)
+        self.assertEqual("maximum_total_iou_v1", config.initial_matching_policy)
+        self.assertEqual(1, config.observer_revision)
+
     def test_config_rejects_unknown_matching_policy(self) -> None:
         with self.assertRaisesRegex(CSTIContractError, "matching policy"):
             _config(policy="threshold_feasible_v3")
+
+    def test_config_rejects_unknown_observer_revision(self) -> None:
+        for invalid in (True, 0, 3, "2"):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(CSTIContractError, "revision"):
+                    CSTIObserverConfig(
+                        prompt_groups=(
+                            PromptGroupConfig(
+                                group_id="ball",
+                                text="ball",
+                                entity_classes=("ball",),
+                            ),
+                        ),
+                        initial_match_iou_threshold=0.25,
+                        initial_match_ambiguity_margin=0.02,
+                        termination_patience=3,
+                        minimum_mask_pixels=4,
+                        minimum_observation_confidence=0.0,
+                        observer_revision=invalid,  # type: ignore[arg-type]
+                    )
 
     def test_config_rejects_entity_class_shared_by_prompt_groups(self) -> None:
         mapping = {

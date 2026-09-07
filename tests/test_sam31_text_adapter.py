@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -13,10 +14,43 @@ from physbench.evaluation.common.masks.sam31_text import (
 
 
 class _FakePredictor:
-    def __init__(self, *, fail_propagation: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        fail_prompt_once: bool = False,
+        fail_propagation_once: bool = False,
+        fail_propagation: bool = False,
+        fail_close_once: bool = False,
+        model: object | None = None,
+    ) -> None:
+        self.fail_prompt_once = fail_prompt_once
+        self.fail_propagation_once = fail_propagation_once
         self.fail_propagation = fail_propagation
+        self.fail_close_once = fail_close_once
         self.requests: list[dict[str, object]] = []
+        self.backend_policy_at_request: list[tuple[str, float, float, bool]] = []
         self.closed_sessions: list[str] = []
+        if model is not None:
+            self.model = model
+
+    def _record_backend_policy(self, request_type: object) -> None:
+        model = getattr(self, "model", None)
+        if all(
+            hasattr(model, name)
+            for name in (
+                "score_threshold_detection",
+                "new_det_thresh",
+                "masklet_confirmation_enable",
+            )
+        ):
+            self.backend_policy_at_request.append(
+                (
+                    str(request_type),
+                    model.score_threshold_detection,
+                    model.new_det_thresh,
+                    model.masklet_confirmation_enable,
+                )
+            )
 
     @staticmethod
     def _outputs(
@@ -50,18 +84,27 @@ class _FakePredictor:
     def handle_request(self, request: dict[str, object]) -> dict[str, object]:
         self.requests.append(dict(request))
         request_type = request["type"]
+        self._record_backend_policy(request_type)
         if request_type == "start_session":
             return {"session_id": f"session-{len(self.requests)}"}
         if request_type == "add_prompt":
+            if self.fail_prompt_once:
+                self.fail_prompt_once = False
+                raise RuntimeError("synthetic prompt failure")
             return {"frame_index": 0, "outputs": self._outputs(0)}
         if request_type == "close_session":
             self.closed_sessions.append(str(request["session_id"]))
+            if self.fail_close_once:
+                self.fail_close_once = False
+                raise RuntimeError("synthetic close failure")
             return {"is_success": True}
         raise AssertionError(f"unexpected request: {request}")
 
     def handle_stream_request(self, request: dict[str, object]):
         self.requests.append(dict(request))
-        if self.fail_propagation:
+        self._record_backend_policy(request["type"])
+        if self.fail_propagation or self.fail_propagation_once:
+            self.fail_propagation_once = False
             raise RuntimeError("synthetic propagation failure")
         for frame_index in (1, 2):
             yield {
@@ -99,7 +142,263 @@ def _config(unique: str = "default") -> dict[str, object]:
     }
 
 
+def _backend_model(
+    *,
+    score_threshold: float = 0.5,
+    new_object_threshold: float = 0.6,
+    confirmation_enabled: bool = True,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        score_threshold_detection=score_threshold,
+        new_det_thresh=new_object_threshold,
+        masklet_confirmation_enable=confirmation_enabled,
+    )
+
+
 class Sam31TextVideoAdapterTest(unittest.TestCase):
+    def test_initial_detection_gates_apply_only_to_prompt_and_are_described(
+        self,
+    ) -> None:
+        model = _backend_model()
+        predictor = _FakePredictor(model=model)
+        config = _config()
+        config["initial_detection"] = {
+            "score_threshold": 0.2,
+            "new_object_threshold": 0.2,
+        }
+        segmenter = Sam31TextVideoSegmenter(
+            config, predictor_factory=lambda: predictor
+        )
+
+        segmenter.segment(_frames(), (_group(),))
+
+        self.assertEqual(
+            [
+                ("start_session", 0.5, 0.6, True),
+                ("add_prompt", 0.2, 0.2, True),
+                ("propagate_in_video", 0.5, 0.6, True),
+                ("close_session", 0.5, 0.6, True),
+            ],
+            predictor.backend_policy_at_request,
+        )
+        self.assertEqual(0.5, model.score_threshold_detection)
+        self.assertEqual(0.6, model.new_det_thresh)
+        description = segmenter.describe()
+        self.assertEqual(2, description["observer_revision"])
+        self.assertEqual(
+            {
+                "policy": "frame_zero_override_v1",
+                "score_threshold": 0.2,
+                "new_object_threshold": 0.2,
+            },
+            description["initial_detection"],
+        )
+        self.assertEqual(
+            {
+                "policy": "backend_native_v1",
+                "score_threshold": 0.5,
+                "new_object_threshold": 0.6,
+            },
+            description["propagation_detection"],
+        )
+
+    def test_initial_detection_restores_after_prompt_failure_and_reuse(self) -> None:
+        model = _backend_model()
+        predictor = _FakePredictor(fail_prompt_once=True, model=model)
+        config = _config()
+        config["initial_detection"] = {
+            "score_threshold": 0.2,
+            "new_object_threshold": 0.3,
+        }
+        segmenter = Sam31TextVideoSegmenter(
+            config, predictor_factory=lambda: predictor
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "synthetic prompt failure"):
+            segmenter.segment(_frames(), (_group(),))
+        self.assertEqual(0.5, model.score_threshold_detection)
+        self.assertEqual(0.6, model.new_det_thresh)
+
+        segmenter.segment(_frames(), (_group(),))
+
+        prompt_states = [
+            item
+            for item in predictor.backend_policy_at_request
+            if item[0] == "add_prompt"
+        ]
+        self.assertEqual(
+            [
+                ("add_prompt", 0.2, 0.3, True),
+                ("add_prompt", 0.2, 0.3, True),
+            ],
+            prompt_states,
+        )
+        self.assertEqual(0.5, model.score_threshold_detection)
+        self.assertEqual(0.6, model.new_det_thresh)
+
+    def test_legacy_omission_retains_backend_detection_gates(self) -> None:
+        model = _backend_model(score_threshold=0.45, new_object_threshold=0.55)
+        predictor = _FakePredictor(model=model)
+        segmenter = Sam31TextVideoSegmenter(
+            _config(), predictor_factory=lambda: predictor
+        )
+
+        segmenter.segment(_frames(), (_group(),))
+
+        self.assertTrue(
+            all(
+                item[1:3] == (0.45, 0.55)
+                for item in predictor.backend_policy_at_request
+            )
+        )
+        self.assertEqual(
+            {
+                "policy": "backend_native_v1",
+                "score_threshold": 0.45,
+                "new_object_threshold": 0.55,
+            },
+            segmenter.describe()["initial_detection"],
+        )
+
+    def test_rejects_invalid_initial_detection_mappings(self) -> None:
+        invalid_mappings = (
+            None,
+            {"score_threshold": 0.2},
+            {"score_threshold": 0.2, "new_object_threshold": 0.2, "extra": 1},
+            {"score_threshold": True, "new_object_threshold": 0.2},
+            {"score_threshold": float("nan"), "new_object_threshold": 0.2},
+            {"score_threshold": float("inf"), "new_object_threshold": 0.2},
+            {"score_threshold": -0.1, "new_object_threshold": 0.2},
+            {"score_threshold": 0.2, "new_object_threshold": 1.1},
+            {"score_threshold": 0.3, "new_object_threshold": 0.2},
+        )
+        for initial_detection in invalid_mappings:
+            with self.subTest(initial_detection=initial_detection):
+                config = _config()
+                config["initial_detection"] = initial_detection
+                with self.assertRaises(ValueError):
+                    Sam31TextVideoSegmenter(config)
+
+    def test_initial_detection_accepts_integer_unit_endpoints_as_floats(self) -> None:
+        config = _config()
+        config["initial_detection"] = {
+            "score_threshold": 0,
+            "new_object_threshold": 1,
+        }
+
+        description = Sam31TextVideoSegmenter(config).describe()[
+            "initial_detection"
+        ]
+
+        self.assertEqual(0.0, description["score_threshold"])
+        self.assertIsInstance(description["score_threshold"], float)
+        self.assertEqual(1.0, description["new_object_threshold"])
+        self.assertIsInstance(description["new_object_threshold"], float)
+
+    def test_explicit_initial_detection_requires_backend_gate_interface(self) -> None:
+        config = _config()
+        config["initial_detection"] = {
+            "score_threshold": 0.2,
+            "new_object_threshold": 0.2,
+        }
+        segmenter = Sam31TextVideoSegmenter(
+            config, predictor_factory=lambda: _FakePredictor()
+        )
+
+        with self.assertRaises(SceneAnalysisError) as caught:
+            segmenter.segment(_frames(), (_group(),))
+
+        self.assertEqual("sam31_model_interface_incompatible", caught.exception.code)
+
+    def test_confirmation_policy_spans_session_and_restores_on_reuse(self) -> None:
+        model = _backend_model()
+        predictor = _FakePredictor(fail_propagation_once=True, model=model)
+        config = _config()
+        config["masklet_confirmation_enable"] = False
+        config["initial_detection"] = {
+            "score_threshold": 0.2,
+            "new_object_threshold": 0.2,
+        }
+        segmenter = Sam31TextVideoSegmenter(
+            config, predictor_factory=lambda: predictor
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "synthetic propagation"):
+            segmenter.segment(_frames(), (_group(),))
+        self.assertTrue(model.masklet_confirmation_enable)
+
+        segmenter.segment(_frames(), (_group(),))
+
+        self.assertTrue(model.masklet_confirmation_enable)
+        self.assertTrue(
+            all(item[3] is False for item in predictor.backend_policy_at_request)
+        )
+        self.assertEqual(
+            {
+                "policy": "whole_session_override_v1",
+                "requested": False,
+                "native": True,
+                "effective": False,
+            },
+            segmenter.describe()["masklet_confirmation"],
+        )
+
+    def test_confirmation_policy_restores_after_prompt_failure(self) -> None:
+        model = _backend_model()
+        predictor = _FakePredictor(fail_prompt_once=True, model=model)
+        config = _config()
+        config["masklet_confirmation_enable"] = False
+        segmenter = Sam31TextVideoSegmenter(
+            config, predictor_factory=lambda: predictor
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "synthetic prompt failure"):
+            segmenter.segment(_frames(), (_group(),))
+
+        self.assertTrue(model.masklet_confirmation_enable)
+        self.assertTrue(
+            all(item[3] is False for item in predictor.backend_policy_at_request)
+        )
+
+    def test_confirmation_true_is_supported_and_restored_after_close_failure(
+        self,
+    ) -> None:
+        model = _backend_model(confirmation_enabled=False)
+        predictor = _FakePredictor(fail_close_once=True, model=model)
+        config = _config()
+        config["masklet_confirmation_enable"] = True
+        segmenter = Sam31TextVideoSegmenter(
+            config, predictor_factory=lambda: predictor
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "synthetic close failure"):
+            segmenter.segment(_frames(), (_group(),))
+
+        self.assertFalse(model.masklet_confirmation_enable)
+        self.assertTrue(
+            all(item[3] is True for item in predictor.backend_policy_at_request)
+        )
+
+    def test_rejects_non_boolean_confirmation_policy(self) -> None:
+        for invalid in (None, 0, 1, "false", "true"):
+            with self.subTest(invalid=invalid):
+                config = _config()
+                config["masklet_confirmation_enable"] = invalid
+                with self.assertRaisesRegex(ValueError, "boolean"):
+                    Sam31TextVideoSegmenter(config)
+
+    def test_explicit_confirmation_requires_backend_interface(self) -> None:
+        config = _config()
+        config["masklet_confirmation_enable"] = False
+        segmenter = Sam31TextVideoSegmenter(
+            config, predictor_factory=lambda: _FakePredictor()
+        )
+
+        with self.assertRaises(SceneAnalysisError) as caught:
+            segmenter.segment(_frames(), (_group(),))
+
+        self.assertEqual("sam31_model_interface_incompatible", caught.exception.code)
+
     def test_empty_initial_detection_closes_without_propagating(self) -> None:
         class EmptyPredictor(_FakePredictor):
             @staticmethod

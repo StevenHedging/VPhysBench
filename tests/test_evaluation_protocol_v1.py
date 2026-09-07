@@ -140,6 +140,11 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
             with self.subTest(scene_id=scene_id):
                 observer = self.protocol["scenes"][scene_id]["csti_observer"]
                 self.assertEqual(3, observer["termination_patience"])
+                self.assertEqual(2, observer["observer_revision"])
+                self.assertEqual(
+                    "threshold_feasible_v2",
+                    observer["initial_matching_policy"],
+                )
                 self.assertEqual(
                     [{"id": "subject", "text": text, "entity_classes": entity_classes}],
                     observer["prompt_groups"],
@@ -151,6 +156,14 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
                 )
                 self.assertEqual("auto", segmenter["device"])
                 self.assertEqual("bfloat16", segmenter["precision"])
+                self.assertEqual(
+                    {
+                        "score_threshold": 0.2,
+                        "new_object_threshold": 0.2,
+                    },
+                    segmenter["initial_detection"],
+                )
+                self.assertIs(False, segmenter["masklet_confirmation_enable"])
                 self.assertNotIn("checkpoint_path", segmenter)
                 self.assertFalse(observer["debug_outputs"])
 
@@ -195,6 +208,26 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
             "segmenter"
         ]["precision"] = "float32"
         self.assertTrue(list(validator.iter_errors(unsupported_precision)))
+        invalid_revision = deepcopy(candidate)
+        invalid_revision["scenes"]["collision_1d"]["csti_observer"][
+            "observer_revision"
+        ] = 1
+        self.assertTrue(list(validator.iter_errors(invalid_revision)))
+        invalid_matching = deepcopy(candidate)
+        invalid_matching["scenes"]["collision_1d"]["csti_observer"][
+            "initial_matching_policy"
+        ] = "maximum_total_iou_v1"
+        self.assertTrue(list(validator.iter_errors(invalid_matching)))
+        invalid_initial_detection = deepcopy(candidate)
+        invalid_initial_detection["scenes"]["collision_1d"]["csti_observer"][
+            "segmenter"
+        ]["initial_detection"]["new_object_threshold"] = 0.1
+        self.assertTrue(list(validator.iter_errors(invalid_initial_detection)))
+        invalid_confirmation = deepcopy(candidate)
+        invalid_confirmation["scenes"]["collision_1d"]["csti_observer"][
+            "segmenter"
+        ]["masklet_confirmation_enable"] = 0
+        self.assertTrue(list(validator.iter_errors(invalid_confirmation)))
 
     @unittest.skipIf(
         Draft202012Validator is None,

@@ -151,8 +151,12 @@ class ReferenceCaseEvaluator(ABC):
             }
         if self.csti_observer_config is not None:
             value["csti_observer"] = {
+                "observer_revision": self.csti_observer_config.observer_revision,
                 "prompt_policy": "text_only_frame_zero",
-                "matching_policy": "semantic_hungarian_frame_zero_locked",
+                "matching_policy": (
+                    self.csti_observer_config.initial_matching_policy
+                ),
+                "identity_policy": "semantic_frame_zero_locked_v1",
                 "termination_patience": (
                     self.csti_observer_config.termination_patience
                 ),
@@ -240,8 +244,20 @@ class ReferenceCaseEvaluator(ABC):
         segmenter_description = (
             segmenter.describe() if hasattr(segmenter, "describe") else {}
         )
+        observer_revision = self.csti_observer_config.observer_revision
+        policy = (
+            "sam31_text_frame_zero_hungarian_locked_v1"
+            if observer_revision == 1
+            and self.csti_observer_config.initial_matching_policy
+            == "maximum_total_iou_v1"
+            else f"sam31_text_frame_zero_locked_v{observer_revision}"
+        )
         return observation, {
-            "policy": "sam31_text_frame_zero_hungarian_locked_v1",
+            "policy": policy,
+            "observer_revision": observer_revision,
+            "initial_matching_policy": (
+                self.csti_observer_config.initial_matching_policy
+            ),
             "segmenter": segmenter_description,
             "reference": dict(frozen.provenance),
         }
