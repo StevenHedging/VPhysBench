@@ -69,7 +69,7 @@ Evaluator 是唯一允许读取 reference video、reference masks 和评分注�
 CSTI 的 prediction Tube 由官方 SAM 3.1 stateful video predictor 生成。每个语义组只在
 `frame_index=0` 使用 text-only prompt 初始化，随后仅向前传播；冻结 GT mask 从不作为
 SAM prompt。评估器只用冻结 GT Tube 的首帧 mask 与 SAM 首帧实例构造 IoU 矩阵，在语义
-兼容且达到 IoU 阈值的边中求一次完整的一对一最大总 IoU 匹配。每类预期数量由 Case 的
+兼容且达到 IoU 阈值的边中求一次完整的 Hungarian 一对一最大总 IoU 匹配。每类预期数量由 Case 的
 冻结 entity manifest 推导，匹配后的 `entity_id -> SAM obj_id` 立即锁定，后续不重匹配、
 不重识别；首帧未匹配候选记录为额外候选，后续新 ID 不用于重新绑定。
 
