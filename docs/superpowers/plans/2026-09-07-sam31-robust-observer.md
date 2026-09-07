@@ -105,6 +105,17 @@ assert model.new_det_thresh == original_birth_threshold
 - [ ] Run focused adapter, protocol and integration GREEN tests, then controller-run all-video and independent-control validation. A chosen gate must improve correct matching without silently accepting ambiguous identities.
 - [ ] Commit with `feat: expose calibrated first-frame SAM candidate policies` and write the task report.
 
+#### Task 3 follow-up: fixed-initial discovery pruning
+
+After review of the first Task 3 commit, execute this evidence-backed follow-up
+before freezing the source for Task 4. It uses the same owned adapter, tests,
+protocol, schema and documentation files and the constraints in spec section E.
+
+- [ ] RED: optional enum `discovery_pruning_policy` defaults to `backend_native_v1`; `fixed_initial_ids_v1` exposes native hotstart delay 0 and unmatched suppression only within hotstart during the full session. Cover invalid names, missing/incompatible attributes, prompt/stream/close/start failures, empty initialization, reuse, nested confirmation/initial-gate provenance and immutable initial IDs despite late births.
+- [ ] Implement instance-only scoped preset and restore both backend values in `finally`. Preserve actual empty/occluded masks, object budget, new-object gates after initialization, identity lock and CSTI rules. No policy decision may consume GT or a case identifier.
+- [ ] Set the explicit fixed-initial preset in all six public observer configurations; document the native/effective values and distinguish disabling discovery pruning from fabricating persistence. Update the public protocol fingerprint naturally through its configuration.
+- [ ] GREEN: focused adapter/protocol/observer/integration suites plus independent review. Commit benchmark-only changes and append Task 3 follow-up report. Task 4 uses this final frozen policy for all-video initial and complete-video regression.
+
 ### Task 4: Whole-branch verification and benchmark-only publication
 
 **Files:**

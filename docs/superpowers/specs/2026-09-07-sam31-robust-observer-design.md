@@ -94,6 +94,33 @@ Do not disable removal or unmatched suppression, synthesize masks, rebind IDs,
 or alter benchmark termination semantics. This does not guarantee complete
 tracking when the native tracker actually loses or removes an object.
 
+## E. Fixed-initial identity discovery-pruning policy
+
+Further full-video inspection distinguished a second mechanism: cumulative
+misses by the text detector can remove an already initialized object during
+hotstart even while its native tracking mask follows a visibly present object.
+This is not evidence that the object physically disappeared. Three diagnostic
+videos support separating this discovery heuristic from fixed-initial identity
+observation; genuine empty-mask terminations remained in place.
+
+Add `discovery_pruning_policy`, with legacy default `backend_native_v1` and an
+explicit public preset `fixed_initial_ids_v1`. The preset sets native
+`hotstart_delay=0` and `suppress_unmatched_only_within_hotstart=True` for the
+entire prompt-group session, restoring both values on every exit. It disables
+hotstart discovery removal and detector-unmatched output suppression; it does
+not force object-presence logits, synthesize masks, modify occlusion handling,
+change the configured object budget, bind late IDs or use GT to select objects.
+All prompt-group candidates receive the same policy before external matching.
+Keep the separately configured confirmation policy explicit.
+
+Record requested, native and effective pruning settings and reject unsupported
+policy names or missing/incompatible pinned backend attributes. Legacy omission
+leaves native pruning unchanged. Validate nested policy provenance and cleanup
+under prompt, stream and session failures, reused instances, and late births.
+Full-video regression must report genuine empty observations, identity drift,
+potential persistent false detections and object-budget limits honestly; a
+larger number of nonempty masks is not by itself proof of better segmentation.
+
 ## Validation and publication
 
 1. Individually inspect all previously failed initializations and the runtime

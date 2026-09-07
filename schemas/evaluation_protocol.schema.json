@@ -182,6 +182,7 @@
             "output_probability_threshold",
             "initial_detection",
             "masklet_confirmation_enable",
+            "discovery_pruning_policy",
             "max_num_objects",
             "multiplex_count",
             "compile",
@@ -212,6 +213,7 @@
               "additionalProperties": false
             },
             "masklet_confirmation_enable": {"const": false},
+            "discovery_pruning_policy": {"const": "fixed_initial_ids_v1"},
             "max_num_objects": {"type": "integer", "minimum": 1},
             "multiplex_count": {"type": "integer", "minimum": 1},
             "compile": {"type": "boolean"},

@@ -17,18 +17,21 @@ class _FakePredictor:
     def __init__(
         self,
         *,
+        fail_start_once: bool = False,
         fail_prompt_once: bool = False,
         fail_propagation_once: bool = False,
         fail_propagation: bool = False,
         fail_close_once: bool = False,
         model: object | None = None,
     ) -> None:
+        self.fail_start_once = fail_start_once
         self.fail_prompt_once = fail_prompt_once
         self.fail_propagation_once = fail_propagation_once
         self.fail_propagation = fail_propagation
         self.fail_close_once = fail_close_once
         self.requests: list[dict[str, object]] = []
         self.backend_policy_at_request: list[tuple[str, float, float, bool]] = []
+        self.discovery_policy_at_request: list[tuple[str, int, bool]] = []
         self.closed_sessions: list[str] = []
         if model is not None:
             self.model = model
@@ -49,6 +52,20 @@ class _FakePredictor:
                     model.score_threshold_detection,
                     model.new_det_thresh,
                     model.masklet_confirmation_enable,
+                )
+            )
+        if all(
+            hasattr(model, name)
+            for name in (
+                "hotstart_delay",
+                "suppress_unmatched_only_within_hotstart",
+            )
+        ):
+            self.discovery_policy_at_request.append(
+                (
+                    str(request_type),
+                    model.hotstart_delay,
+                    model.suppress_unmatched_only_within_hotstart,
                 )
             )
 
@@ -86,6 +103,9 @@ class _FakePredictor:
         request_type = request["type"]
         self._record_backend_policy(request_type)
         if request_type == "start_session":
+            if self.fail_start_once:
+                self.fail_start_once = False
+                raise RuntimeError("synthetic start failure")
             return {"session_id": f"session-{len(self.requests)}"}
         if request_type == "add_prompt":
             if self.fail_prompt_once:
@@ -152,10 +172,335 @@ def _backend_model(
         score_threshold_detection=score_threshold,
         new_det_thresh=new_object_threshold,
         masklet_confirmation_enable=confirmation_enabled,
+        hotstart_delay=4,
+        suppress_unmatched_only_within_hotstart=False,
     )
 
 
 class Sam31TextVideoAdapterTest(unittest.TestCase):
+    def test_fixed_initial_discovery_policy_spans_session_and_is_described(
+        self,
+    ) -> None:
+        model = _backend_model()
+        predictor = _FakePredictor(model=model)
+        config = _config()
+        config["discovery_pruning_policy"] = "fixed_initial_ids_v1"
+        segmenter = Sam31TextVideoSegmenter(
+            config, predictor_factory=lambda: predictor
+        )
+
+        segmenter.segment(_frames(), (_group(),))
+        segmenter.segment(_frames(), (_group(),))
+
+        self.assertEqual(
+            2
+            * [
+                ("start_session", 0, True),
+                ("add_prompt", 0, True),
+                ("propagate_in_video", 0, True),
+                ("close_session", 0, True),
+            ],
+            predictor.discovery_policy_at_request,
+        )
+        self.assertEqual(4, model.hotstart_delay)
+        self.assertFalse(model.suppress_unmatched_only_within_hotstart)
+        self.assertEqual(
+            {
+                "policy": "fixed_initial_ids_v1",
+                "requested": {
+                    "hotstart_delay": 0,
+                    "suppress_unmatched_only_within_hotstart": True,
+                },
+                "native": {
+                    "hotstart_delay": 4,
+                    "suppress_unmatched_only_within_hotstart": False,
+                },
+                "effective": {
+                    "hotstart_delay": 0,
+                    "suppress_unmatched_only_within_hotstart": True,
+                },
+            },
+            segmenter.describe()["discovery_pruning"],
+        )
+        self.assertEqual(2, segmenter.describe()["segmenter_policy_revision"])
+
+    def test_backend_native_discovery_policy_is_legacy_and_requires_no_interface(
+        self,
+    ) -> None:
+        config = _config()
+        config["discovery_pruning_policy"] = "backend_native_v1"
+        segmenter = Sam31TextVideoSegmenter(
+            config, predictor_factory=lambda: _FakePredictor()
+        )
+
+        segmenter.segment(_frames(), (_group(),))
+
+        self.assertEqual(1, segmenter.describe()["segmenter_policy_revision"])
+        self.assertEqual(
+            {
+                "policy": "backend_native_v1",
+                "requested": None,
+                "native": None,
+                "effective": None,
+            },
+            segmenter.describe()["discovery_pruning"],
+        )
+
+    def test_legacy_omission_retains_native_discovery_pruning_values(self) -> None:
+        model = _backend_model()
+        predictor = _FakePredictor(model=model)
+        segmenter = Sam31TextVideoSegmenter(
+            _config(), predictor_factory=lambda: predictor
+        )
+
+        segmenter.segment(_frames(), (_group(),))
+
+        self.assertTrue(
+            all(
+                item[1:] == (4, False)
+                for item in predictor.discovery_policy_at_request
+            )
+        )
+        native = {
+            "hotstart_delay": 4,
+            "suppress_unmatched_only_within_hotstart": False,
+        }
+        description = segmenter.describe()["discovery_pruning"]
+        self.assertEqual("backend_native_v1", description["policy"])
+        self.assertIsNone(description["requested"])
+        self.assertEqual(native, description["native"])
+        self.assertEqual(native, description["effective"])
+
+    def test_rejects_invalid_discovery_pruning_policy(self) -> None:
+        for invalid in (
+            None,
+            False,
+            0,
+            [],
+            {},
+            "fixed_initial_ids_v2",
+            "",
+        ):
+            with self.subTest(invalid=invalid):
+                config = _config()
+                config["discovery_pruning_policy"] = invalid
+                with self.assertRaisesRegex(ValueError, "discovery_pruning_policy"):
+                    Sam31TextVideoSegmenter(config)
+
+    def test_fixed_initial_discovery_policy_requires_compatible_backend(self) -> None:
+        invalid_models = (
+            SimpleNamespace(),
+            SimpleNamespace(
+                hotstart_delay=True,
+                suppress_unmatched_only_within_hotstart=False,
+            ),
+            SimpleNamespace(
+                hotstart_delay=4,
+                suppress_unmatched_only_within_hotstart=0,
+            ),
+        )
+        for model in invalid_models:
+            with self.subTest(model=model):
+                config = _config()
+                config["discovery_pruning_policy"] = "fixed_initial_ids_v1"
+                segmenter = Sam31TextVideoSegmenter(
+                    config,
+                    predictor_factory=lambda model=model: _FakePredictor(
+                        model=model
+                    ),
+                )
+
+                with self.assertRaises(SceneAnalysisError) as caught:
+                    segmenter.segment(_frames(), (_group(),))
+
+                self.assertEqual(
+                    "sam31_model_interface_incompatible", caught.exception.code
+                )
+
+    def test_fixed_initial_discovery_policy_restores_on_every_session_failure(
+        self,
+    ) -> None:
+        failures = (
+            ("fail_start_once", "synthetic start failure"),
+            ("fail_prompt_once", "synthetic prompt failure"),
+            ("fail_propagation_once", "synthetic propagation failure"),
+            ("fail_close_once", "synthetic close failure"),
+        )
+        for flag, message in failures:
+            with self.subTest(flag=flag):
+                model = _backend_model()
+                predictor = _FakePredictor(model=model, **{flag: True})
+                config = _config()
+                config["discovery_pruning_policy"] = "fixed_initial_ids_v1"
+                segmenter = Sam31TextVideoSegmenter(
+                    config, predictor_factory=lambda: predictor
+                )
+
+                with self.assertRaisesRegex(RuntimeError, message):
+                    segmenter.segment(_frames(), (_group(),))
+
+                self.assertEqual(4, model.hotstart_delay)
+                self.assertFalse(model.suppress_unmatched_only_within_hotstart)
+                self.assertTrue(predictor.discovery_policy_at_request)
+                self.assertTrue(
+                    all(
+                        item[1:] == (0, True)
+                        for item in predictor.discovery_policy_at_request
+                    )
+                )
+
+    def test_discovery_policy_assignment_failure_restores_both_native_values(
+        self,
+    ) -> None:
+        class MutatingSetterModel:
+            def __init__(self) -> None:
+                self._hotstart_delay = 4
+                self._suppress = False
+                self.fail_next_suppress = True
+
+            @property
+            def hotstart_delay(self) -> int:
+                return self._hotstart_delay
+
+            @hotstart_delay.setter
+            def hotstart_delay(self, value: int) -> None:
+                self._hotstart_delay = value
+
+            @property
+            def suppress_unmatched_only_within_hotstart(self) -> bool:
+                return self._suppress
+
+            @suppress_unmatched_only_within_hotstart.setter
+            def suppress_unmatched_only_within_hotstart(self, value: bool) -> None:
+                self._suppress = value
+                if value is True and self.fail_next_suppress:
+                    self.fail_next_suppress = False
+                    raise RuntimeError("synthetic pruning setter failure")
+
+        model = MutatingSetterModel()
+        predictor = _FakePredictor(model=model)
+        config = _config()
+        config["discovery_pruning_policy"] = "fixed_initial_ids_v1"
+        segmenter = Sam31TextVideoSegmenter(
+            config, predictor_factory=lambda: predictor
+        )
+
+        with self.assertRaises(SceneAnalysisError) as caught:
+            segmenter.segment(_frames(), (_group(),))
+
+        self.assertEqual("sam31_model_interface_incompatible", caught.exception.code)
+        self.assertEqual(4, model.hotstart_delay)
+        self.assertFalse(model.suppress_unmatched_only_within_hotstart)
+
+    def test_discovery_policy_nests_with_initial_and_confirmation_without_leaks(
+        self,
+    ) -> None:
+        model = _backend_model()
+        predictor = _FakePredictor(model=model)
+        config = _config()
+        config["initial_detection"] = {
+            "score_threshold": 0.2,
+            "new_object_threshold": 0.2,
+        }
+        config["masklet_confirmation_enable"] = False
+        config["discovery_pruning_policy"] = "fixed_initial_ids_v1"
+        segmenter = Sam31TextVideoSegmenter(
+            config, predictor_factory=lambda: predictor
+        )
+
+        segmenter.segment(_frames(), (_group(),))
+
+        description = segmenter.describe()
+        self.assertTrue(description["masklet_confirmation"]["native"])
+        self.assertEqual(
+            4,
+            description["discovery_pruning"]["native"]["hotstart_delay"],
+        )
+        self.assertEqual(0.5, description["propagation_detection"]["score_threshold"])
+        propagation = next(
+            item
+            for item in predictor.backend_policy_at_request
+            if item[0] == "propagate_in_video"
+        )
+        self.assertEqual((0.5, 0.6), propagation[1:3])
+        self.assertTrue(
+            all(item[1:] == (0, True) for item in predictor.discovery_policy_at_request)
+        )
+        self.assertEqual(4, model.hotstart_delay)
+        self.assertFalse(model.suppress_unmatched_only_within_hotstart)
+        self.assertTrue(model.masklet_confirmation_enable)
+
+    def test_empty_initial_detection_restores_discovery_policy(self) -> None:
+        class EmptyPredictor(_FakePredictor):
+            @staticmethod
+            def _outputs(frame_index, **kwargs):
+                return {
+                    "out_obj_ids": [],
+                    "out_binary_masks": np.zeros((0, 6, 10)),
+                    "out_boxes_xywh": np.zeros((0, 4)),
+                    "out_probs": [],
+                }
+
+        model = _backend_model()
+        predictor = EmptyPredictor(model=model)
+        config = _config()
+        config["discovery_pruning_policy"] = "fixed_initial_ids_v1"
+        segmenter = Sam31TextVideoSegmenter(
+            config, predictor_factory=lambda: predictor
+        )
+
+        self.assertEqual((), segmenter.segment(_frames(), (_group(),)))
+
+        self.assertEqual(4, model.hotstart_delay)
+        self.assertFalse(model.suppress_unmatched_only_within_hotstart)
+        self.assertFalse(
+            any(r["type"] == "propagate_in_video" for r in predictor.requests)
+        )
+        self.assertEqual(
+            [
+                ("start_session", 0, True),
+                ("add_prompt", 0, True),
+                ("close_session", 0, True),
+            ],
+            predictor.discovery_policy_at_request,
+        )
+
+    def test_late_backend_ids_do_not_join_fixed_initial_candidates(self) -> None:
+        class LateBirthPredictor(_FakePredictor):
+            @staticmethod
+            def _outputs(frame_index, **kwargs):
+                result = _FakePredictor._outputs(frame_index, **kwargs)
+                if frame_index > 0:
+                    late_mask = np.zeros((6, 10), dtype=bool)
+                    late_mask[0:2, 7:9] = True
+                    result["out_obj_ids"] = np.asarray([7, 99], dtype=np.int64)
+                    result["out_binary_masks"] = np.stack(
+                        [result["out_binary_masks"][0], late_mask]
+                    )
+                    result["out_boxes_xywh"] = np.asarray(
+                        [result["out_boxes_xywh"][0], [0.7, 0.0, 0.2, 0.2]],
+                        dtype=np.float32,
+                    )
+                    result["out_probs"] = np.asarray(
+                        [result["out_probs"][0], 0.8], dtype=np.float32
+                    )
+                return result
+
+        model = _backend_model()
+        predictor = LateBirthPredictor(model=model)
+        config = _config()
+        config["discovery_pruning_policy"] = "fixed_initial_ids_v1"
+        segmenter = Sam31TextVideoSegmenter(
+            config, predictor_factory=lambda: predictor
+        )
+
+        result = segmenter.segment(_frames(), (_group(),))
+
+        self.assertEqual(("ball:3", "ball:7"), tuple(x.candidate_id for x in result))
+        self.assertNotIn("ball:99", {x.candidate_id for x in result})
+        self.assertTrue(
+            all(item[1:] == (0, True) for item in predictor.discovery_policy_at_request)
+        )
     def test_initial_detection_gates_apply_only_to_prompt_and_are_described(
         self,
     ) -> None:

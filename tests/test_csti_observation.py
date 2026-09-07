@@ -196,9 +196,19 @@ class CSTIInitialMatchingTest(unittest.TestCase):
                 }
             ),
             _config(segmenter={"masklet_confirmation_enable": False}),
+            _config(segmenter={"discovery_pruning_policy": "fixed_initial_ids_v1"}),
         )
 
-        self.assertEqual((2, 2, 2), tuple(x.observer_revision for x in configs))
+        self.assertEqual((2, 2, 2, 2), tuple(x.observer_revision for x in configs))
+
+    def test_backend_native_discovery_policy_keeps_implicit_revision_one(
+        self,
+    ) -> None:
+        config = _config(
+            segmenter={"discovery_pruning_policy": "backend_native_v1"}
+        )
+
+        self.assertEqual(1, config.observer_revision)
 
     def test_config_rejects_explicit_revision_one_with_new_component_policy(
         self,
@@ -214,6 +224,11 @@ class CSTIInitialMatchingTest(unittest.TestCase):
                 }
             },
             {"segmenter": {"masklet_confirmation_enable": False}},
+            {
+                "segmenter": {
+                    "discovery_pruning_policy": "fixed_initial_ids_v1"
+                }
+            },
         )
         for options in configurations:
             with self.subTest(options=options):

@@ -135,6 +135,9 @@ class CSTIObserverConfig:
                 {"initial_detection", "masklet_confirmation_enable"}
                 & set(self.segmenter)
             )
+            or isinstance(self.segmenter, Mapping)
+            and self.segmenter.get("discovery_pruning_policy")
+            == "fixed_initial_ids_v1"
         )
         if self.observer_revision is None:
             object.__setattr__(

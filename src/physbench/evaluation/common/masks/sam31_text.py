@@ -109,10 +109,25 @@ class Sam31TextVideoSegmenter:
                     "SAM3.1 masklet_confirmation_enable must be boolean"
                 )
             self.masklet_confirmation_enable = masklet_confirmation_enable
+        self.discovery_pruning_policy = config.get(
+            "discovery_pruning_policy", "backend_native_v1"
+        )
+        if not isinstance(self.discovery_pruning_policy, str) or (
+            self.discovery_pruning_policy
+            not in {
+                "backend_native_v1",
+                "fixed_initial_ids_v1",
+            }
+        ):
+            raise ValueError(
+                "SAM3.1 discovery_pruning_policy must be "
+                "backend_native_v1 or fixed_initial_ids_v1"
+            )
         self.segmenter_policy_revision = (
             2
             if self.initial_detection is not None
             or self.masklet_confirmation_enable is not None
+            or self.discovery_pruning_policy == "fixed_initial_ids_v1"
             else 1
         )
         self.max_num_objects = int(config.get("max_num_objects", 16))
@@ -135,6 +150,7 @@ class Sam31TextVideoSegmenter:
         self.birth_conditioning_policy = "not_loaded"
         self._native_detection: dict[str, float] | None = None
         self._native_masklet_confirmation: bool | None = None
+        self._native_discovery_pruning: dict[str, Any] | None = None
 
     @staticmethod
     def _unit_float(value: Any, label: str) -> float:
@@ -191,6 +207,75 @@ class Sam31TextVideoSegmenter:
                 f"{attribute!r}",
             )
         return getattr(model, attribute)
+
+    def _record_native_discovery_pruning(self, model: Any) -> None:
+        if not all(
+            hasattr(model, name)
+            for name in (
+                "hotstart_delay",
+                "suppress_unmatched_only_within_hotstart",
+            )
+        ):
+            return
+        hotstart_delay = model.hotstart_delay
+        suppress_unmatched = model.suppress_unmatched_only_within_hotstart
+        if (
+            isinstance(hotstart_delay, bool)
+            or not isinstance(hotstart_delay, int)
+            or hotstart_delay < 0
+            or not isinstance(suppress_unmatched, bool)
+        ):
+            return
+        self._native_discovery_pruning = {
+            "hotstart_delay": hotstart_delay,
+            "suppress_unmatched_only_within_hotstart": suppress_unmatched,
+        }
+
+    @contextlib.contextmanager
+    def _discovery_pruning_policy(self):
+        assert self._predictor is not None
+        model = getattr(self._predictor, "model", None)
+        self._record_native_discovery_pruning(model)
+        if self.discovery_pruning_policy == "backend_native_v1":
+            yield
+            return
+        previous_hotstart = self._required_model_attribute(
+            model, "hotstart_delay"
+        )
+        previous_suppress_unmatched = self._required_model_attribute(
+            model, "suppress_unmatched_only_within_hotstart"
+        )
+        if (
+            isinstance(previous_hotstart, bool)
+            or not isinstance(previous_hotstart, int)
+            or previous_hotstart < 0
+            or not isinstance(previous_suppress_unmatched, bool)
+        ):
+            raise SceneAnalysisError(
+                "sam31_model_interface_incompatible",
+                "SAM3.1 discovery-pruning backend attributes have "
+                "incompatible types",
+            )
+
+        def restore() -> None:
+            model.suppress_unmatched_only_within_hotstart = (
+                previous_suppress_unmatched
+            )
+            model.hotstart_delay = previous_hotstart
+
+        try:
+            model.hotstart_delay = 0
+            model.suppress_unmatched_only_within_hotstart = True
+        except Exception as exc:
+            restore()
+            raise SceneAnalysisError(
+                "sam31_model_interface_incompatible",
+                f"Cannot apply SAM3.1 discovery pruning policy: {exc}",
+            ) from exc
+        try:
+            yield
+        finally:
+            restore()
 
     @contextlib.contextmanager
     def _initial_detection_policy(self):
@@ -526,7 +611,10 @@ class Sam31TextVideoSegmenter:
                     output_index
                 ]
 
-        with self._masklet_confirmation_policy():
+        with (
+            self._discovery_pruning_policy(),
+            self._masklet_confirmation_policy(),
+        ):
             start_response = self._predictor.handle_request(
                 {
                     "type": "start_session",
@@ -670,6 +758,34 @@ class Sam31TextVideoSegmenter:
                     self.masklet_confirmation_enable
                     if self.masklet_confirmation_enable is not None
                     else self._native_masklet_confirmation
+                ),
+            },
+            "discovery_pruning": {
+                "policy": self.discovery_pruning_policy,
+                "requested": (
+                    {
+                        "hotstart_delay": 0,
+                        "suppress_unmatched_only_within_hotstart": True,
+                    }
+                    if self.discovery_pruning_policy == "fixed_initial_ids_v1"
+                    else None
+                ),
+                "native": (
+                    dict(self._native_discovery_pruning)
+                    if self._native_discovery_pruning is not None
+                    else None
+                ),
+                "effective": (
+                    {
+                        "hotstart_delay": 0,
+                        "suppress_unmatched_only_within_hotstart": True,
+                    }
+                    if self.discovery_pruning_policy == "fixed_initial_ids_v1"
+                    else (
+                        dict(self._native_discovery_pruning)
+                        if self._native_discovery_pruning is not None
+                        else None
+                    )
                 ),
             },
             "prompt_policy": "text_only_frame_zero",

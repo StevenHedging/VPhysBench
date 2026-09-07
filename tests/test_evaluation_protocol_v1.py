@@ -164,6 +164,10 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
                     segmenter["initial_detection"],
                 )
                 self.assertIs(False, segmenter["masklet_confirmation_enable"])
+                self.assertEqual(
+                    "fixed_initial_ids_v1",
+                    segmenter["discovery_pruning_policy"],
+                )
                 self.assertNotIn("checkpoint_path", segmenter)
                 self.assertFalse(observer["debug_outputs"])
 
@@ -228,6 +232,11 @@ class EvaluationProtocolV1Tests(unittest.TestCase):
             "segmenter"
         ]["masklet_confirmation_enable"] = 0
         self.assertTrue(list(validator.iter_errors(invalid_confirmation)))
+        invalid_pruning = deepcopy(candidate)
+        invalid_pruning["scenes"]["collision_1d"]["csti_observer"][
+            "segmenter"
+        ]["discovery_pruning_policy"] = "backend_native_v1"
+        self.assertTrue(list(validator.iter_errors(invalid_pruning)))
 
     @unittest.skipIf(
         Draft202012Validator is None,

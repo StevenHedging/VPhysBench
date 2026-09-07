@@ -45,11 +45,26 @@ Revision 2 also sets `masklet_confirmation_enable` to `false` for the whole
 prompt-group session. Discovery confirmation can hide a nonempty mask until the
 same discovery is confirmed across frames, which conflicts with a benchmark
 that already fixed identity on frame zero. Disabling that output filter exposes
-the backend's real mask for the fixed ID; it does not synthesize or interpolate
-masks, disable removal, expose suppressed unmatched objects, rebind IDs, or
-change CSTI termination. Truly empty, removed, or suppressed outputs remain so.
-The native setting is restored after session completion or failure. Omitting
-the option preserves native behavior.
+the backend's real mask for the fixed ID. This confirmation setting itself does
+not synthesize or interpolate masks, disable removal, expose suppressed
+unmatched objects, rebind IDs, or change CSTI termination. The native setting
+is restored after session completion or failure. Omitting the option preserves
+native behavior.
+
+The public `discovery_pruning_policy` is `fixed_initial_ids_v1`. During the
+whole prompt-group session it sets the backend hotstart delay to zero and limits
+unmatched suppression to the now-empty hotstart interval. This prevents later
+text-detector misses from pruning an object whose identity was already fixed on
+frame zero. Both native settings are restored after success or failure. The
+legacy `backend_native_v1` policy makes no override and remains segmenter policy
+revision 1 when no other revised adapter policy is configured.
+
+Fixed-initial pruning does not force presence logits, synthesize masks, change
+occlusion handling or the object budget, admit late backend IDs into the locked
+candidate set, or use ground truth to select an output. Native empty masks and
+identity drift remain observable limitations; persistent false detections are
+also possible and must be reported rather than interpreted as successful
+tracking merely because a mask is nonempty.
 
 ## Provenance and failures
 
@@ -57,8 +72,9 @@ Segmenter provenance distinguishes the configured frame-zero gates from the
 restored native propagation gates. Its `segmenter_policy_revision` describes
 only those adapter-level policies. It also records the requested, effective and
 native discovery-confirmation setting, the requested export-probability policy,
-and the birth-conditioning policy. Top-level observer provenance records the
-authoritative observer revision and initial matching policy.
+the birth-conditioning policy, and requested/native/effective discovery-pruning
+settings. Top-level observer provenance records the authoritative observer
+revision and initial matching policy.
 
 An explicitly configured policy requires the corresponding pinned backend
 attributes. Missing attributes are evaluator interface errors rather than a

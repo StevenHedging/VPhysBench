@@ -56,6 +56,7 @@
             "new_object_threshold": 0.2
           },
           "masklet_confirmation_enable": false,
+          "discovery_pruning_policy": "fixed_initial_ids_v1",
           "max_num_objects": 16,
           "multiplex_count": 16,
           "compile": false,
@@ -318,6 +319,7 @@
             "new_object_threshold": 0.2
           },
           "masklet_confirmation_enable": false,
+          "discovery_pruning_policy": "fixed_initial_ids_v1",
           "max_num_objects": 16,
           "multiplex_count": 16,
           "compile": false,
@@ -537,6 +539,7 @@
             "new_object_threshold": 0.2
           },
           "masklet_confirmation_enable": false,
+          "discovery_pruning_policy": "fixed_initial_ids_v1",
           "max_num_objects": 16,
           "multiplex_count": 16,
           "compile": false,
@@ -782,6 +785,7 @@
             "new_object_threshold": 0.2
           },
           "masklet_confirmation_enable": false,
+          "discovery_pruning_policy": "fixed_initial_ids_v1",
           "max_num_objects": 16,
           "multiplex_count": 16,
           "compile": false,
@@ -940,6 +944,7 @@
             "new_object_threshold": 0.2
           },
           "masklet_confirmation_enable": false,
+          "discovery_pruning_policy": "fixed_initial_ids_v1",
           "max_num_objects": 16,
           "multiplex_count": 16,
           "compile": false,
@@ -1111,6 +1116,7 @@
             "new_object_threshold": 0.2
           },
           "masklet_confirmation_enable": false,
+          "discovery_pruning_policy": "fixed_initial_ids_v1",
           "max_num_objects": 16,
           "multiplex_count": 16,
           "compile": false,

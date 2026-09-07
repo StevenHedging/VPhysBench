@@ -69,9 +69,15 @@ Evaluator 是唯一允许读取 reference video、reference masks 和评分注�
 CSTI 的 prediction Tube 由官方 SAM 3.1 stateful video predictor 生成。每个语义组只在
 `frame_index=0` 使用 text-only prompt 初始化，随后仅向前传播；冻结 GT mask 从不作为
 SAM prompt。评估器只用冻结 GT Tube 的首帧 mask 与 SAM 首帧实例构造 IoU 矩阵，在语义
-兼容候选中执行一次 Hungarian 一对一匹配。每类预期数量由 Case 的冻结 entity manifest
-推导，匹配后的 `entity_id -> SAM obj_id` 立即锁定，后续不重匹配、不重识别；后来出现的
-幽灵主体被记录为额外候选，但不进入 CSTI。
+兼容且达到 IoU 阈值的边中求一次完整的一对一最大总 IoU 匹配。每类预期数量由 Case 的
+冻结 entity manifest 推导，匹配后的 `entity_id -> SAM obj_id` 立即锁定，后续不重匹配、
+不重识别；首帧未匹配候选记录为额外候选，后续新 ID 不用于重新绑定。
+
+公开 observer revision 2 将首帧 detector/birth gates 固定为 `0.2/0.2`，使用
+threshold-feasible matching，并以 fixed-initial discovery policy 避免后续 text-detector miss
+删除已经锁定的 ID。该 policy 只暴露 backend 的真实追踪输出，不合成 mask，也不改变真实
+空 mask、遮挡、object budget 或 CSTI 终止规则。配置、恢复规则和限制详见
+[SAM3.1 prediction observer](SAM31_OBSERVER.md)。
 
 锁定对象的观测有效性集中由 mask 格式、非空像素数和可配置置信度判断。连续无效帧数由
 `termination_patience` 控制，公开配置为 3：不足三帧后恢复则继续原身份；连续三帧无效
